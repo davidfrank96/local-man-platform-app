@@ -1,0 +1,9 @@
+:root {
+  --color-background: #f7f4ed;
+  --color-surface: #fffdf8;
+  --color-text: #252924;
+  --color-muted: #62665e;
+  --color-border: rgba(37, 41, 36, 0.14);
+  --color-accent: #b23a30;
+  --color-green: #24614f;
+}
