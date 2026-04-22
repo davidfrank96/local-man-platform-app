@@ -36,6 +36,16 @@ Let users discover nearby food vendors, see what they sell, know whether they ar
 3. Start the dev server with `npm run dev`.
 4. Run `npm test`, `npm run lint`, and `npm run typecheck` before shipping changes.
 
+## Runtime Validation
+Before broader Phase 2 work, validate the Supabase-backed nearby vendor flow:
+
+1. Apply `supabase/migrations/20260422180000_initial_schema.sql`.
+2. Apply `supabase/seed/20260422_abuja_pilot_seed.sql`.
+3. Start the app with real Supabase env vars.
+4. Run `npm run smoke:nearby`.
+
+Exact steps are in `docs/ops/RUNTIME_SETUP.md`.
+
 ## How to Work in This Repo
 1. Read the docs.
 2. Check current sprint.

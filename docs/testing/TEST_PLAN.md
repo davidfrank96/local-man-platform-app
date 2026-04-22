@@ -37,6 +37,31 @@ Current automated coverage:
 - `tests/distance.test.ts`
 - `tests/location-acquisition.test.ts`
 
+Runtime smoke coverage:
+- `npm run smoke:nearby`
+- Requires real Supabase env vars and seeded Abuja data.
+- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, nearest-first ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
+
+### Admin Foundation Logic
+Test:
+- missing admin bearer token returns `UNAUTHORIZED`
+- authenticated non-admin user returns `FORBIDDEN`
+- authenticated admin user is accepted
+- vendor listing supports pagination and filters
+- vendor create writes audit log
+- vendor update writes audit log
+- vendor soft-delete writes audit log
+- vendor hours replacement writes audit log
+- vendor image metadata insertion writes audit log
+- vendor featured dish insertion writes audit log
+- empty image and dish arrays are rejected
+- malformed Supabase payloads return controlled `UPSTREAM_ERROR` responses
+
+Current automated coverage:
+- `tests/admin-auth.test.ts`
+- `tests/admin-vendor-routes.test.ts`
+- `tests/admin-vendor-subresources.test.ts`
+
 ### Vendor Display Logic
 Test:
 - missing image fallback

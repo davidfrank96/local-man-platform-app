@@ -201,6 +201,13 @@ export const createVendorRequestSchema = z.object({
 
 export const updateVendorRequestSchema = createVendorRequestSchema.partial();
 
+export const adminVendorsQuerySchema = paginationQuerySchema.extend({
+  search: z.string().trim().max(120).optional(),
+  area: z.string().trim().max(120).optional(),
+  is_active: booleanLikeSchema.optional(),
+  price_band: priceBandSchema.optional(),
+});
+
 export const replaceVendorHoursRequestSchema = z.object({
   hours: z
     .array(
@@ -231,7 +238,7 @@ export const createVendorDishesRequestSchema = z.object({
       image_url: optionalTextSchema,
       is_featured: z.boolean().default(true),
     }),
-  ),
+  ).min(1),
 });
 
 export const vendorImageMetadataRequestSchema = z.object({
@@ -240,7 +247,7 @@ export const vendorImageMetadataRequestSchema = z.object({
       image_url: nonEmptyTextSchema,
       sort_order: z.coerce.number().int().min(0).default(0),
     }),
-  ),
+  ).min(1),
 });
 
 export const auditLogsQuerySchema = paginationQuerySchema.extend({

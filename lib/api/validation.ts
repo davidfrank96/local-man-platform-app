@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError } from "@/lib/api/responses";
+import { apiError } from "./responses.ts";
 
 type ValidationResult<T> =
   | {

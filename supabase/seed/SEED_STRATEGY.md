@@ -4,7 +4,8 @@
 
 Create realistic Abuja pilot seed data so the public map, vendor cards, filters, vendor detail pages, and admin review workflows can be tested before live vendor onboarding.
 
-This strategy defines the data shape and quality bar. It does not create fake SQL inserts yet.
+This strategy defines the data shape and quality bar. The current SQL seed implementation is:
+- `supabase/seed/20260422_abuja_pilot_seed.sql`
 
 ## Seed Target
 
@@ -188,7 +189,13 @@ For local testing:
 
 ## Seed File Plan
 
-Future seed implementation should split data by responsibility:
+Current Phase 2 runtime validation uses one idempotent seed file:
+
+```text
+supabase/seed/20260422_abuja_pilot_seed.sql
+```
+
+Future seed expansion may split data by responsibility:
 
 ```text
 supabase/seed/
@@ -218,4 +225,3 @@ Before accepting seed data:
 - Every active vendor has at least one image placeholder.
 - Phone numbers are approved real numbers or obvious non-production placeholders.
 - No seed data introduces delivery, payment, login, chat, loyalty, coupons, inventory, or other out-of-scope features.
-

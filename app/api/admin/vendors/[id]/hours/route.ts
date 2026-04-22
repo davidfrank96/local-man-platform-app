@@ -1,10 +1,15 @@
-import { apiEndpoints } from "@/lib/api/contracts";
-import { apiNotImplemented } from "@/lib/api/responses";
-import { validateInput, validateJsonBody } from "@/lib/api/validation";
+import { apiSuccess } from "../../../../../../lib/api/responses.ts";
+import {
+  validateInput,
+  validateJsonBody,
+} from "../../../../../../lib/api/validation.ts";
+import { requireAdmin } from "../../../../../../lib/admin/auth.ts";
+import { handleAdminServiceError } from "../../../../../../lib/admin/errors.ts";
+import { replaceVendorHours } from "../../../../../../lib/admin/vendor-service.ts";
 import {
   replaceVendorHoursRequestSchema,
   vendorIdParamsSchema,
-} from "@/lib/validation";
+} from "../../../../../../lib/validation/index.ts";
 
 type VendorHoursRouteContext = {
   params: Promise<{
@@ -13,6 +18,12 @@ type VendorHoursRouteContext = {
 };
 
 export async function POST(_request: Request, { params }: VendorHoursRouteContext) {
+  const admin = await requireAdmin(_request);
+
+  if (!admin.success) {
+    return admin.response;
+  }
+
   const routeParams = validateInput(vendorIdParamsSchema, await params);
 
   if (!routeParams.success) {
@@ -25,5 +36,13 @@ export async function POST(_request: Request, { params }: VendorHoursRouteContex
     return body.response;
   }
 
-  return apiNotImplemented(apiEndpoints.replaceVendorHours);
+  try {
+    const hours = await replaceVendorHours(routeParams.data, body.data, {
+      session: admin.session,
+    });
+
+    return apiSuccess({ hours });
+  } catch (error) {
+    return handleAdminServiceError(error, "Unable to replace vendor hours.");
+  }
 }

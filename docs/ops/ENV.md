@@ -20,6 +20,19 @@ The Local Man — Environment Variables
 - Map rendering is not implemented in Phase 1, so Google Maps keys are documented but not required for current tests.
 - Admin write routes are contract stubs in Phase 1, so secure admin variables are documented but not consumed by route logic yet.
 
+## Runtime Smoke Test
+- `SMOKE_NEARBY_LAT`: optional latitude override for `npm run smoke:nearby`.
+- `SMOKE_NEARBY_LNG`: optional longitude override for `npm run smoke:nearby`.
+- `SMOKE_NEARBY_RADIUS_KM`: optional radius override for `npm run smoke:nearby`.
+- `SMOKE_NEARBY_TIGHT_RADIUS_KM`: optional tight-radius override for radius filtering checks.
+
+Exact migration, seed, and nearby smoke test steps are documented in `docs/ops/RUNTIME_SETUP.md`.
+
+## Runtime Environment Checks
+- `npm run runtime:check-env` verifies `.env.local`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- `npm run runtime:check-db-env` also verifies `DATABASE_URL` for local `psql` migration and seed commands.
+- `npm run db:migrate` and `npm run db:seed:abuja` load `.env.local` before invoking `psql`.
+
 ## Rules
 - Never expose server secrets to client code.
 - Document where each variable is used.

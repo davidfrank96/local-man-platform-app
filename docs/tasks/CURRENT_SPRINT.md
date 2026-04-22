@@ -2,7 +2,7 @@
 The Local Man — Current Sprint
 
 ## Sprint Goal
-Complete Phase 1 foundation so implementation can begin without architectural drift.
+Validate the Phase 1 runtime foundation against real Supabase data before broader Phase 2 feature work begins.
 
 ## In Scope
 - finalize product definition
@@ -54,8 +54,33 @@ Phase 1 is done when:
 - Nearby vendor distance logic exists.
 - Browser geolocation, IP approximation interface, and Abuja fallback handling exist.
 - Unit tests cover distance, nearby filtering, invalid location, fallback location, category filtering, open-now override, and overnight hours.
+- Runtime setup documentation exists for migration, Abuja seed data, and nearby API smoke testing.
+- Abuja pilot seed SQL exists for 20 non-production test vendors.
+- Admin auth boundary exists for admin route protection.
+- Admin vendor list, create, update, and soft-delete routes call typed service methods.
+- Admin vendor create, update, and soft-delete routes write audit logs.
+- Admin vendor hours, image metadata, and featured dish routes call typed service methods and write audit logs.
 
 ## Remaining Phase 1 Gaps
-- Supabase migration has not been executed locally because Supabase CLI and `psql` are unavailable.
 - IP approximation provider is an interface only; no concrete provider is selected.
-- Nearby API depends on Supabase environment variables and seeded vendor data for end-to-end runtime verification.
+- Migration and seed execution still require a real Supabase project.
+- Nearby API still needs end-to-end smoke validation with real Supabase environment variables and seeded data.
+
+## Runtime Validation Gate
+Before broader Phase 2 implementation:
+- apply `supabase/migrations/20260422180000_initial_schema.sql` to the target Supabase project
+- apply `supabase/seed/20260422_abuja_pilot_seed.sql`
+- run the seed validation SQL in `docs/ops/RUNTIME_SETUP.md`
+- run `npm run smoke:nearby` against the local app with real Supabase env vars
+- document any failures before continuing
+
+## Phase 2A Admin Foundation Scope
+Allowed after runtime validation is complete or fully prepared:
+- admin auth structure
+- vendor CRUD route structure
+- form/request validation boundaries
+
+Not allowed yet:
+- broad public UI implementation
+- visual polish
+- admin sub-resource business logic before vendor CRUD runtime behavior is verified
