@@ -52,7 +52,7 @@ function createNearbyFilters(
 }
 
 function getLocationCopy(location: AcquiredUserLocation | null): string {
-  if (!location) return "Resolving location";
+  if (!location) return "Trying to get precise location";
   if (location.source === "precise") return "Using current location";
   if (location.source === "approximate") return "Using approximate location";
 
@@ -204,7 +204,10 @@ export function PublicDiscovery({
             <div>
               <strong>{getLocationCopy(location)}</strong>
               <span>
-                {resolvedLocation?.label ?? "Location access starts automatically."}
+                {resolvedLocation?.label ??
+                  (locationStatus === "resolving"
+                    ? "On mobile, precise location can take a few seconds before Abuja fallback."
+                    : "Location access starts automatically.")}
               </span>
             </div>
             <button

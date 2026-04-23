@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { acquireUserLocation } from "../lib/location/acquisition.ts";
+import {
+  BROWSER_GEOLOCATION_TIMEOUT_MS,
+  acquireUserLocation,
+} from "../lib/location/acquisition.ts";
+
+test("uses a mobile-friendly browser geolocation timeout", () => {
+  assert.equal(BROWSER_GEOLOCATION_TIMEOUT_MS, 10_000);
+});
 
 test("uses browser geolocation first when available", async () => {
   const location = await acquireUserLocation({

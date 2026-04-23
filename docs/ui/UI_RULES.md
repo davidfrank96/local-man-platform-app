@@ -29,6 +29,7 @@ The Local Man — UI Rules
 - Do not block the public app when location permission is denied.
 - Do not imply exact distance when the location source is approximate or default city.
 - Provide a clear path to retry location permission or change location later.
+- Tell mobile users that precise location can take a few seconds before fallback.
 - Use `hooks/use-user-location.ts` as the frontend location acquisition interface.
 
 ## Vendor Card Required Fields
