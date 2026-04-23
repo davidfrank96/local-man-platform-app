@@ -77,10 +77,31 @@ async function requestAdminApi<T>(
       ...init.headers,
     },
   });
-  const payload = (await response.json()) as ApiResponse<T>;
+  let payload: ApiResponse<T>;
+
+  try {
+    payload = (await response.json()) as ApiResponse<T>;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "INVALID_RESPONSE: API returned a response that could not be parsed."
+        : `HTTP_ERROR: API request failed with status ${response.status}.`,
+    );
+  }
+
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    typeof payload.success !== "boolean"
+  ) {
+    throw new Error("INVALID_RESPONSE: API returned an unexpected response shape.");
+  }
 
   if (!payload.success) {
-    throw new Error(`${payload.error.code}: ${payload.error.message}`);
+    const code = payload.error?.code ?? "UNKNOWN_ERROR";
+    const message = payload.error?.message ?? "API request failed.";
+
+    throw new Error(`${code}: ${message}`);
   }
 
   return payload.data;

@@ -191,7 +191,7 @@ export function AdminConsole({
     }
 
     setIsLoading(true);
-    setStatus("Working...");
+    setStatus("Working…");
 
     try {
       const result = await action();

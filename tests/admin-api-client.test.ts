@@ -108,3 +108,41 @@ test("admin API client throws standard API errors", async () => {
     /UNAUTHORIZED: Admin token is required\./,
   );
 });
+
+test("admin API client reports non-json failures clearly", async () => {
+  const fetchImpl = (async () =>
+    new Response("Service unavailable", {
+      status: 503,
+    })) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      listAdminVendors(
+        {},
+        {
+          accessToken: "admin-token",
+          fetchImpl,
+        },
+      ),
+    /HTTP_ERROR: API request failed with status 503/,
+  );
+});
+
+test("admin API client reports malformed API responses clearly", async () => {
+  const fetchImpl = (async () =>
+    Response.json({
+      data: null,
+    })) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      listAdminVendors(
+        {},
+        {
+          accessToken: "admin-token",
+          fetchImpl,
+        },
+      ),
+    /INVALID_RESPONSE: API returned an unexpected response shape/,
+  );
+});
