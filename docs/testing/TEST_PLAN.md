@@ -62,6 +62,18 @@ Current automated coverage:
 - `tests/admin-vendor-routes.test.ts`
 - `tests/admin-vendor-subresources.test.ts`
 
+Manual admin UI smoke coverage:
+- open `/admin`
+- paste a Supabase access token for an `admin_users` member
+- load vendors
+- create a vendor with Abuja coordinates
+- update the selected vendor
+- add one set of seven day hours
+- add image metadata
+- add one featured dish
+- deactivate the selected vendor with confirmation
+- verify each action returns a visible status message
+
 ### Vendor Display Logic
 Test:
 - missing image fallback

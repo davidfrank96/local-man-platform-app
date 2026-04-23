@@ -60,6 +60,7 @@ Phase 1 is done when:
 - Admin vendor list, create, update, and soft-delete routes call typed service methods.
 - Admin vendor create, update, and soft-delete routes write audit logs.
 - Admin vendor hours, image metadata, and featured dish routes call typed service methods and write audit logs.
+- Minimal admin UI exists for token-based vendor list, create, update, deactivate, hours, image metadata, and featured dish operations.
 
 ## Remaining Phase 1 Gaps
 - IP approximation provider is an interface only; no concrete provider is selected.
@@ -79,8 +80,9 @@ Allowed after runtime validation is complete or fully prepared:
 - admin auth structure
 - vendor CRUD route structure
 - form/request validation boundaries
+- minimal functional admin forms for existing backend routes
 
 Not allowed yet:
 - broad public UI implementation
 - visual polish
-- admin sub-resource business logic before vendor CRUD runtime behavior is verified
+- admin product polish beyond basic operational forms

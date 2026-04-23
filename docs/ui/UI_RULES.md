@@ -51,6 +51,8 @@ The Local Man — UI Rules
 - image upload state must be clear
 - hours editor must be easy to understand
 - destructive actions must be confirmed
+- Phase 2B admin UI may use a pasted Supabase access token until a fuller admin auth flow is implemented.
+- admin screens must stay functional and restrained until runtime data operations are validated.
 
 ## Style Guidance
 - clean modern look
