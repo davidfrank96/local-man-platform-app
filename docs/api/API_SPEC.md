@@ -12,7 +12,7 @@ Initial route foundation:
 - `lib/api/contracts.ts`
 - `lib/api/responses.ts`
 
-The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Phase 1 Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Phase 2B adds authenticated admin vendor create, update, and soft-delete route logic. Phase 2C adds public category and vendor detail read routes.
+The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Phase 2B added authenticated admin vendor create, update, soft-delete, sub-resource, and audit-log route logic. Phase 2C added public category and vendor detail read routes.
 
 ## Types and Validation Foundation
 Initial shared types and validation schemas:

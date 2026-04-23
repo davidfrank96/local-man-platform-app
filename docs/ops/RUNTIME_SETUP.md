@@ -2,7 +2,7 @@
 The Local Man — Runtime Setup and Nearby Smoke Test
 
 ## Goal
-Validate the real Supabase-backed runtime data flow before broader Phase 2 feature implementation begins.
+Validate the real Supabase-backed runtime data flow before deployment or further feature expansion.
 
 This gate verifies:
 - the Phase 1 migration can be applied to a real Supabase project
@@ -10,7 +10,18 @@ This gate verifies:
 - `GET /api/vendors/nearby` can read seeded vendors through Supabase RLS
 - the API returns computed `distance_km` values sorted nearest first
 
-Do not begin broader public UI or admin UI work until this runtime data flow passes.
+Keep this runtime gate green before deployment or further feature expansion.
+
+## Current Gate Status
+The Phase 2 runtime gate has executable checks for environment validation and nearby API smoke testing. The current local verification path is:
+
+```bash
+npm run runtime:check-env
+npm run runtime:check-db-env
+NEXT_PUBLIC_APP_URL=http://localhost:3002 npm run smoke:nearby
+```
+
+The smoke test verifies precise coordinates, `distance_km`, nearest-first sorting, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
 
 ## Required Tools
 - Node.js and npm
@@ -229,24 +240,17 @@ Use this checklist when completing runtime activation manually:
 9. Run `npm run dev`.
 10. In a second terminal, run `npm run smoke:nearby`.
 11. Confirm the smoke command prints `"ok": true`.
-12. Do not proceed to broader Phase 2 UI work until all checks above pass.
+12. Do not proceed to deployment or further feature expansion until all checks above pass.
 
-## Phase 2A Admin Foundation Boundary
-After runtime validation is complete or fully prepared, Phase 2A may establish only:
-- admin auth boundary
-- admin route protection
-- vendor CRUD route/service structure
-- request validation boundaries
+## Phase 2 Runtime/Admin Boundary
+Runtime activation must stay validated before additional admin or public feature expansion.
 
-Current admin foundation files:
+Current admin foundation files include:
 - `lib/admin/auth.ts`
 - `lib/admin/vendor-service.ts`
 - `app/api/admin/**/route.ts`
 
 Do not start:
-- public map UI
-- public vendor card UI
-- public search/filter UI
 - visual polish
 - vendor self-service onboarding
 - payments, delivery, chat, loyalty, coupons, or inventory

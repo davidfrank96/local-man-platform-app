@@ -1,8 +1,8 @@
 ## Title
 The Local Man — Test Plan
 
-## Phase 1 Test Goal
-Ensure the foundation is coherent before feature implementation begins.
+## Test Goal
+Ensure the foundation, runtime data flow, admin operations, and public discovery surface are coherent before launch hardening.
 
 ## Documentation Validation
 Check:

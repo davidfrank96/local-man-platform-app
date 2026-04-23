@@ -2,60 +2,40 @@
 The Local Man — Current Sprint
 
 ## Sprint Goal
-Validate the Phase 1 runtime foundation against real Supabase data before broader Phase 2 feature work begins.
+Complete the Phase 2 release gate across runtime activation, admin data operations, and public discovery without expanding beyond the MVP.
 
 ## In Scope
-- finalize product definition
-- finalize architecture
-- finalize schema
-- finalize API boundaries
-- finalize UI rules
-- create repo skeleton
-- create first migration draft
-- create first seed strategy
-- define distance and nearby vendor logic
-- define user location fallback handling
-- add foundation tests for critical location logic
+- validate runtime environment variables
+- apply and smoke-test the Supabase-backed Abuja seed flow
+- keep admin operations behind Supabase admin auth
+- support vendor CRUD, hours, image metadata, featured dishes, and audit log writes
+- provide minimal functional admin screens
+- provide public map/list discovery, search, filters, vendor detail, call, and directions actions
+- keep tests, docs, and API contracts aligned
 
 ## Out of Scope
-- public feature implementation
-- admin feature implementation
 - production deployment
 - full visual polish
-- full map UI
-- full vendor UI
-- full admin CRUD implementation
 - concrete IP location provider selection
+- real Google Maps JavaScript rendering
+- delivery, payments, chat, loyalty, coupons, inventory, or vendor self-signup
 
 ## Done Criteria
-Phase 1 is done when:
-- all core docs exist
-- docs are internally consistent
-- schema supports MVP
-- initial migration draft exists
-- seed strategy exists
-- API route foundation exists
-- types and validation foundation exists
-- distance calculation and nearby filtering logic exists
-- user location acquisition interface exists
-- critical location and nearby tests pass
-- roadmap is clear
-- agent rules are clear
-- repo structure exists
-- Codex can begin repo setup safely
+Phase 2 is done when:
+- runtime env checks pass
+- nearby smoke test passes against real Supabase env vars and seeded Abuja data
+- admin route tests pass for auth, vendor CRUD, sub-resources, and audit logs
+- public route/client tests pass for categories, vendor detail, nearby queries, call links, and directions links
+- typecheck, lint, and production build pass
+- docs reflect the implemented Phase 2A, Phase 2B, and Phase 2C surfaces
 
-## Current Foundation Status
+## Current Phase 2 Status
 - Product, architecture, schema, API, UI, roadmap, sprint, testing, ops, agent, and README docs exist.
 - Next.js App Router scaffold exists.
-- Supabase initial schema migration exists.
-- Abuja seed strategy exists.
-- API route foundation exists.
-- Type and validation foundation exists.
-- Nearby vendor distance logic exists.
+- Supabase initial schema migration and Abuja pilot seed SQL exist.
+- Runtime setup, env checks, migration, seed, and nearby smoke scripts exist.
+- Nearby vendor distance logic uses dynamic Haversine calculation with bounding-box candidate filtering.
 - Browser geolocation, IP approximation interface, and Abuja fallback handling exist.
-- Unit tests cover distance, nearby filtering, invalid location, fallback location, category filtering, open-now override, and overnight hours.
-- Runtime setup documentation exists for migration, Abuja seed data, and nearby API smoke testing.
-- Abuja pilot seed SQL exists for 20 non-production test vendors.
 - Admin auth boundary exists for admin route protection.
 - Admin vendor list, create, update, and soft-delete routes call typed service methods.
 - Admin vendor create, update, and soft-delete routes write audit logs.
@@ -64,28 +44,28 @@ Phase 1 is done when:
 - Admin UI routes exist at `/admin`, `/admin/vendors`, `/admin/vendors/new`, and `/admin/vendors/[id]`.
 - Public discovery UI exists for map/list search, location fallback handling, vendor cards, filters, call actions, and directions actions.
 - Public vendor detail and category routes now call Supabase REST.
+- Unit tests cover distance, location acquisition, nearby filtering, public API/client behavior, admin auth, admin vendor CRUD, and admin sub-resources.
 
-## Remaining Phase 1 Gaps
+## Remaining Phase 2 Warnings
 - IP approximation provider is an interface only; no concrete provider is selected.
-- Migration and seed execution still require a real Supabase project.
-- Nearby API still needs end-to-end smoke validation with real Supabase environment variables and seeded data.
-- Public discovery UI still needs live validation after migration and seed succeed.
+- Public map rendering uses the MVP coordinate grid, not the final Google Maps JavaScript API integration.
+- Admin UI uses pasted Supabase access tokens until a fuller admin login flow is implemented.
+- Browser-level accessibility and responsive screenshot tests are not automated yet.
 
 ## Runtime Validation Gate
-Before broader Phase 2 implementation:
+Before deployment or further feature expansion:
 - apply `supabase/migrations/20260422180000_initial_schema.sql` to the target Supabase project
 - apply `supabase/seed/20260422_abuja_pilot_seed.sql`
 - run the seed validation SQL in `docs/ops/RUNTIME_SETUP.md`
 - run `npm run smoke:nearby` against the local app with real Supabase env vars
 - document any failures before continuing
 
-## Phase 2A Admin Foundation Scope
-Allowed after runtime validation is complete or fully prepared:
-- admin auth structure
-- vendor CRUD route structure
-- form/request validation boundaries
-- minimal functional admin forms for existing backend routes
+## Phase 2 Boundaries
+Completed surfaces:
+- Phase 2A runtime activation checks and nearby smoke test path
+- Phase 2B admin auth, data operations, audit logging, and minimal admin forms
+- Phase 2C public discovery, search/filter controls, vendor cards, vendor detail, call, and directions actions
 
-Not allowed yet:
+Still not allowed:
 - visual polish
-- admin product polish beyond basic operational forms
+- delivery, payments, chat, loyalty, coupons, inventory, or vendor self-signup
