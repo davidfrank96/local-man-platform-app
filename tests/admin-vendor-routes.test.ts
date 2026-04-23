@@ -10,7 +10,7 @@ import {
 } from "../app/api/admin/vendors/[id]/route.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
-const timestamp = "2026-04-22T00:00:00.000Z";
+const timestamp = "2026-04-22T00:00:00+00:00";
 
 const vendorRecord = {
   id: vendorId,

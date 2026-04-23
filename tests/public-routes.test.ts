@@ -4,7 +4,7 @@ import { GET as categoriesRoute } from "../app/api/categories/route.ts";
 import { GET as vendorDetailRoute } from "../app/api/vendors/[slug]/route.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
-const timestamp = "2026-04-22T00:00:00.000Z";
+const timestamp = "2026-04-22T00:00:00+00:00";
 
 function setPublicEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

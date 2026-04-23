@@ -13,6 +13,7 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
+  overflow-x: hidden;
   background:
     linear-gradient(120deg, rgba(36, 97, 79, 0.08), transparent 35%),
     linear-gradient(240deg, rgba(178, 58, 48, 0.08), transparent 32%),
@@ -23,6 +24,23 @@ body {
     sans-serif;
 }
 
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: -48px;
+  z-index: 1000;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 10px 14px;
+  font-weight: 800;
+  transition: top 0.2s ease;
+}
+
+.skip-link:focus-visible {
+  top: 16px;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -31,6 +49,12 @@ a {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid rgba(36, 97, 79, 0.58);
+  outline-offset: 3px;
 }
 
 .page-shell {
@@ -71,6 +95,8 @@ h2 {
   margin: 0;
   letter-spacing: 0;
   line-height: 1;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 h1 {
@@ -361,6 +387,32 @@ h2 {
 .button-secondary,
 .button-danger {
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.button-primary:hover,
+.button-secondary:hover,
+.button-danger:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary:hover {
+  background: #161a15;
+}
+
+.button-secondary:hover {
+  border-color: rgba(36, 97, 79, 0.5);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.button-danger:hover {
+  border-color: rgba(178, 58, 48, 0.58);
+  background: rgba(178, 58, 48, 0.14);
 }
 
 .button-primary:disabled,
@@ -372,6 +424,9 @@ h2 {
 
 .admin-list {
   display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   gap: 8px;
 }
 
@@ -395,10 +450,47 @@ h2 {
   background: rgba(36, 97, 79, 0.08);
 }
 
+.admin-list-item:hover,
+.vendor-marker:hover {
+  border-color: rgba(36, 97, 79, 0.62);
+}
+
 .admin-list-item span,
 .empty-state,
-.admin-panel p {
+.admin-panel p,
+.location-panel span,
+.field span,
+.checkbox-field span,
+.result-heading span,
+.vendor-detail-copy p,
+.vendor-detail-section p,
+.dish-list span {
   color: var(--color-muted);
+}
+
+.admin-list-item strong,
+.admin-list-item span,
+.empty-state,
+.admin-panel p,
+.location-panel strong,
+.location-panel span,
+.field span,
+.checkbox-field span,
+.result-heading strong,
+.result-heading span,
+.vendor-detail-meta span,
+.category-row span,
+.map-legend span,
+.selected-vendor-panel h2,
+.selected-vendor-panel p,
+.vendor-detail-copy h1,
+.vendor-detail-copy p,
+.vendor-detail-section p,
+.dish-list span,
+.vendor-card h3,
+.vendor-card p,
+.vendor-meta dd {
+  overflow-wrap: anywhere;
 }
 
 .hours-grid {
@@ -418,10 +510,12 @@ h2 {
   min-height: 42px;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .public-shell {
   min-height: 100vh;
+  min-width: 0;
   padding: 18px;
 }
 
@@ -449,6 +543,7 @@ h2 {
 .discovery-heading {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .discovery-heading h1 {
@@ -476,6 +571,7 @@ h2 {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.82);
   padding: 16px;
+  min-width: 0;
 }
 
 .location-panel {
@@ -511,10 +607,12 @@ h2 {
   grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(112px, 0.5fr));
   gap: 12px;
   align-items: end;
+  min-width: 0;
 }
 
 .search-field {
   grid-column: span 2;
+  min-width: 0;
 }
 
 .filter-checkbox {
@@ -546,6 +644,7 @@ h2 {
 
 .result-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -555,6 +654,7 @@ h2 {
 .vendor-card {
   display: grid;
   gap: 12px;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.86);
@@ -570,6 +670,7 @@ h2 {
   display: grid;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -582,11 +683,13 @@ h2 {
   margin: 0;
   font-size: 1.22rem;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .vendor-card p {
   margin: 0;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .status-open,
@@ -627,6 +730,7 @@ h2 {
 
 .vendor-meta dd {
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .vendor-card-footer,
@@ -718,6 +822,7 @@ h2 {
 .selected-vendor-panel {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .selected-vendor-panel h2 {
@@ -749,6 +854,7 @@ h2 {
   display: grid;
   align-content: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .vendor-detail-copy h1 {
@@ -769,6 +875,7 @@ h2 {
   background: rgba(255, 255, 255, 0.72);
   padding: 7px 10px;
   font-weight: 800;
+  max-width: 100%;
 }
 
 .vendor-detail-image {
@@ -880,8 +987,13 @@ h2 {
     min-height: 420px;
   }
 
-  .location-panel,
-  .vendor-card-footer {
+  .location-panel {
     grid-template-columns: 1fr;
+  }
+
+  .vendor-card-footer,
+  .vendor-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

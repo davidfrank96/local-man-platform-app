@@ -33,13 +33,13 @@ export default async function VendorDetailPage({
 
   try {
     vendor = await fetchVendorDetailBySlugFromSupabase(slug, config);
-  } catch (error) {
+  } catch {
     return (
       <main className="page-shell narrow-shell">
         <p className="eyebrow">Runtime setup</p>
         <h1>Vendor detail unavailable</h1>
         <p className="page-intro">
-          {error instanceof Error ? error.message : "Unable to load vendor detail."}
+          Unable to load vendor detail. Check the runtime setup and try again.
         </p>
       </main>
     );

@@ -65,3 +65,27 @@ test("public API client creates call and directions links", () => {
   assert.equal(directionsUrl.searchParams.get("api"), "1");
   assert.equal(directionsUrl.searchParams.get("destination"), "9.0813,7.4694");
 });
+
+test("public API client reports non-json failures clearly", async () => {
+  const fetchImpl = (async () =>
+    new Response("Service unavailable", {
+      status: 503,
+    })) as typeof fetch;
+
+  await assert.rejects(
+    () => fetchNearbyVendors({}, fetchImpl),
+    /HTTP_ERROR: API request failed with status 503/,
+  );
+});
+
+test("public API client reports malformed API responses clearly", async () => {
+  const fetchImpl = (async () =>
+    Response.json({
+      data: null,
+    })) as typeof fetch;
+
+  await assert.rejects(
+    () => fetchNearbyVendors({}, fetchImpl),
+    /INVALID_RESPONSE: API returned an unexpected response shape/,
+  );
+});

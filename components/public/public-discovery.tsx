@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUserLocation } from "../../hooks/use-user-location.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
 import {
@@ -73,12 +73,21 @@ export function PublicDiscovery({
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [isFetchingVendors, setIsFetchingVendors] = useState(false);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const nearbyRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
   const {
     status: locationStatus,
     location,
     errors: locationErrors,
     refresh: refreshLocation,
   } = useUserLocation();
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      nearbyRequestIdRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -104,6 +113,8 @@ export function PublicDiscovery({
 
   const loadNearbyVendors = useCallback(
     async (nextLocation: AcquiredUserLocation, nextFilters: DiscoveryFilters) => {
+      const requestId = nearbyRequestIdRef.current + 1;
+      nearbyRequestIdRef.current = requestId;
       setIsFetchingVendors(true);
       setNearbyError(null);
 
@@ -111,6 +122,11 @@ export function PublicDiscovery({
         const result = await fetchNearbyVendors(
           createNearbyFilters(nextLocation, nextFilters),
         );
+
+        if (!isMountedRef.current || nearbyRequestIdRef.current !== requestId) {
+          return;
+        }
+
         setNearbyData(result);
         setSelectedVendorId((current) => {
           if (current && result.vendors.some((vendor) => vendor.vendor_id === current)) {
@@ -120,13 +136,19 @@ export function PublicDiscovery({
           return result.vendors[0]?.vendor_id ?? null;
         });
       } catch (error) {
+        if (!isMountedRef.current || nearbyRequestIdRef.current !== requestId) {
+          return;
+        }
+
         setNearbyData(null);
         setSelectedVendorId(null);
         setNearbyError(
           error instanceof Error ? error.message : "Unable to load nearby vendors.",
         );
       } finally {
-        setIsFetchingVendors(false);
+        if (isMountedRef.current && nearbyRequestIdRef.current === requestId) {
+          setIsFetchingVendors(false);
+        }
       }
     },
     [],
@@ -209,7 +231,7 @@ export function PublicDiscovery({
           <section className="vendor-results" aria-live="polite">
             <div className="result-heading">
               <strong>{vendors.length} vendors</strong>
-              <span>{isLoading ? "Loading" : "Nearest first"}</span>
+              <span>{isLoading ? "Loading…" : "Nearest first"}</span>
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
             {!nearbyError && vendors.length === 0 && !isLoading ? (

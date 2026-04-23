@@ -20,7 +20,7 @@ export const optionalTextSchema = z
   .nullable()
   .optional();
 
-export const timestampSchema = z.iso.datetime();
+export const timestampSchema = z.iso.datetime({ offset: true });
 
 export const latitudeSchema = z.coerce.number().min(-90).max(90);
 

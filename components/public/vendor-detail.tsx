@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { VendorDetailResponseData } from "../../types/index.ts";
 import { VendorActions } from "./vendor-actions.tsx";
+import { VendorHeroImage } from "./vendor-hero-image.tsx";
 
 type VendorDetailProps = {
   vendor: VendorDetailResponseData;
@@ -47,12 +48,10 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
           />
         </div>
         <div className="vendor-detail-image">
-          {heroImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt={`${vendor.name} food or storefront`} src={heroImage.image_url} />
-          ) : (
-            <span>No image available</span>
-          )}
+          <VendorHeroImage
+            alt={`${vendor.name} food or storefront`}
+            imageUrl={heroImage?.image_url ?? null}
+          />
         </div>
       </section>
 

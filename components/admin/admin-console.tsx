@@ -191,7 +191,7 @@ export function AdminConsole({
     }
 
     setIsLoading(true);
-    setStatus("Working...");
+    setStatus("Working…");
 
     try {
       const result = await action();
@@ -348,7 +348,9 @@ export function AdminConsole({
           <input
             value={accessToken}
             onChange={(event) => setAccessToken(event.target.value)}
+            autoComplete="off"
             placeholder="Paste admin bearer token"
+            spellCheck={false}
             type="password"
           />
         </label>
@@ -409,27 +411,28 @@ export function AdminConsole({
                 Apply filters
               </button>
             </form>
-            <div className="admin-list" role="list">
+            <ul className="admin-list">
               {vendors.map((vendor) => (
-                <button
-                  className={
-                    vendor.id === selectedVendorId
-                      ? "admin-list-item selected"
-                      : "admin-list-item"
-                  }
-                  key={vendor.id}
-                  type="button"
-                  onClick={() => setSelectedVendorId(vendor.id)}
-                >
-                  <strong>{vendor.name}</strong>
-                  <span>{vendor.area ?? "Area missing"}</span>
-                  <span>{vendor.is_active ? "Active" : "Inactive"}</span>
-                </button>
+                <li key={vendor.id}>
+                  <button
+                    className={
+                      vendor.id === selectedVendorId
+                        ? "admin-list-item selected"
+                        : "admin-list-item"
+                    }
+                    type="button"
+                    onClick={() => setSelectedVendorId(vendor.id)}
+                  >
+                    <strong>{vendor.name}</strong>
+                    <span>{vendor.area ?? "Area missing"}</span>
+                    <span>{vendor.is_active ? "Active" : "Inactive"}</span>
+                  </button>
+                </li>
               ))}
               {vendors.length === 0 ? (
-                <p className="empty-state">No vendors loaded yet.</p>
+                <li className="empty-state">No vendors loaded yet.</li>
               ) : null}
-            </div>
+            </ul>
           </section>
         </div>
 
