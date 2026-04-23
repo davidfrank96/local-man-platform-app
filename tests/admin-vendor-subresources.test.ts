@@ -5,7 +5,7 @@ import { POST as replaceHoursRoute } from "../app/api/admin/vendors/[id]/hours/r
 import { POST as createImagesRoute } from "../app/api/admin/vendors/[id]/images/route.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
-const timestamp = "2026-04-22T00:00:00.000Z";
+const timestamp = "2026-04-22T00:00:00+00:00";
 
 function setAdminEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
