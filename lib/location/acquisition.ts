@@ -99,7 +99,7 @@ export function getBrowserGeolocation(): Promise<Coordinates> {
       {
         enableHighAccuracy: true,
         maximumAge: 60_000,
-        timeout: 10_000,
+        timeout: 2_000,
       },
     );
   });
