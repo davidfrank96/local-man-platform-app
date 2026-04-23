@@ -136,7 +136,7 @@ Distance is returned in kilometers and rounded for display.
 
 Distance is never stored in the database.
 
-Current Phase 1 implementation:
+Current implementation:
 - API validates user `lat` and `lng`.
 - Supabase candidate query uses a latitude/longitude bounding box to reduce scanned rows.
 - Application logic calculates exact Haversine distance for each candidate.

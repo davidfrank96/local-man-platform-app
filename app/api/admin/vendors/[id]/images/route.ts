@@ -1,10 +1,15 @@
-import { apiEndpoints } from "@/lib/api/contracts";
-import { apiNotImplemented } from "@/lib/api/responses";
-import { validateInput, validateJsonBody } from "@/lib/api/validation";
+import { apiSuccess } from "../../../../../../lib/api/responses.ts";
+import {
+  validateInput,
+  validateJsonBody,
+} from "../../../../../../lib/api/validation.ts";
+import { requireAdmin } from "../../../../../../lib/admin/auth.ts";
+import { handleAdminServiceError } from "../../../../../../lib/admin/errors.ts";
+import { createVendorImages } from "../../../../../../lib/admin/vendor-service.ts";
 import {
   vendorIdParamsSchema,
   vendorImageMetadataRequestSchema,
-} from "@/lib/validation";
+} from "../../../../../../lib/validation/index.ts";
 
 type VendorImagesRouteContext = {
   params: Promise<{
@@ -13,19 +18,31 @@ type VendorImagesRouteContext = {
 };
 
 export async function POST(_request: Request, { params }: VendorImagesRouteContext) {
+  const admin = await requireAdmin(_request);
+
+  if (!admin.success) {
+    return admin.response;
+  }
+
   const routeParams = validateInput(vendorIdParamsSchema, await params);
 
   if (!routeParams.success) {
     return routeParams.response;
   }
 
-  if (_request.headers.get("content-type")?.includes("application/json")) {
-    const body = await validateJsonBody(_request, vendorImageMetadataRequestSchema);
+  const body = await validateJsonBody(_request, vendorImageMetadataRequestSchema);
 
-    if (!body.success) {
-      return body.response;
-    }
+  if (!body.success) {
+    return body.response;
   }
 
-  return apiNotImplemented(apiEndpoints.uploadVendorImages);
+  try {
+    const images = await createVendorImages(routeParams.data, body.data, {
+      session: admin.session,
+    });
+
+    return apiSuccess({ images }, 201);
+  } catch (error) {
+    return handleAdminServiceError(error, "Unable to create vendor images.");
+  }
 }

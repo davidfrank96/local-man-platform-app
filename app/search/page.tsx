@@ -1,21 +1,13 @@
-import Link from "next/link";
+import { PublicDiscovery } from "../../components/public/public-discovery.tsx";
 
-export default function SearchPage() {
-  return (
-    <main className="page-shell narrow-shell">
-      <p className="eyebrow">Public placeholder</p>
-      <h1>Search local food</h1>
-      <p className="page-intro">
-        This route reserves the future search and filter experience for vendors,
-        categories, distance, price band, and open-now state.
-      </p>
-      <div className="placeholder-panel">
-        <span>Search UI placeholder</span>
-        <span>Feature implementation begins after Phase 1 setup.</span>
-      </div>
-      <Link className="button-secondary inline-link" href="/">
-        Back home
-      </Link>
-    </main>
-  );
+type SearchPageProps = {
+  searchParams: Promise<{
+    q?: string;
+  }>;
+};
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const { q = "" } = await searchParams;
+
+  return <PublicDiscovery initialSearch={q} title="Search local food" />;
 }

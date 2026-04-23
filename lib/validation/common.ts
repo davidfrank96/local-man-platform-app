@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const timePattern = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 
 export const uuidSchema = z.string().uuid();
 

@@ -12,7 +12,7 @@ Initial route foundation:
 - `lib/api/contracts.ts`
 - `lib/api/responses.ts`
 
-The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Phase 1 Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Public detail/category routes and admin routes still return `501 NOT_IMPLEMENTED` until their Phase 2 business logic and admin auth checks are added.
+The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Phase 2B added authenticated admin vendor create, update, soft-delete, sub-resource, and audit-log route logic. Phase 2C added public category and vendor detail read routes.
 
 ## Types and Validation Foundation
 Initial shared types and validation schemas:
@@ -64,6 +64,7 @@ Behavior:
 - Results are filtered by `radius_km` after exact distance calculation.
 - Results are sorted nearest first.
 - Distance is not stored in the database.
+- If the Supabase schema has not been migrated, the API returns `UPSTREAM_ERROR` from the failed Supabase query.
 
 Location response shape:
 ```json
@@ -94,13 +95,55 @@ Returns:
 - images
 - rating summary
 
+Behavior:
+- Returns `NOT_FOUND` when no active vendor matches the slug.
+- Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
+- Returns `UPSTREAM_ERROR` when the Supabase detail query fails.
+
 ### GET /api/categories
 Purpose: fetch filter categories
 
 Route file:
 - `app/api/categories/route.ts`
 
+Returns:
+- category id
+- category name
+- category slug
+
+Behavior:
+- Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
+- Returns `UPSTREAM_ERROR` when the Supabase category query fails.
+
 ## Admin Endpoints
+Admin endpoint rules:
+- Requests must include `Authorization: Bearer <supabase-access-token>`.
+- The bearer token is verified against Supabase Auth.
+- The authenticated user id must exist in `admin_users`.
+- Authentication and admin membership are checked before Phase 2 business logic runs.
+- Request params and request bodies are still validated at the route boundary.
+- Vendor list, create, update, and delete routes call typed admin vendor service methods.
+- Vendor create, update, and delete routes write audit logs.
+- Unexpected Supabase response shapes return `UPSTREAM_ERROR` without leaking raw parser failures.
+
+### GET /api/admin/vendors
+List vendors
+
+Route file:
+- `app/api/admin/vendors/route.ts`
+
+Query params:
+- `limit`
+- `offset`
+- `search`
+- `area`
+- `is_active`
+- `price_band`
+
+Returns:
+- vendor summaries
+- pagination metadata
+
 ### POST /api/admin/vendors
 Create vendor
 
@@ -125,17 +168,39 @@ Upload vendor images
 Route file:
 - `app/api/admin/vendors/[id]/images/route.ts`
 
+Behavior:
+- requires admin auth
+- validates vendor id
+- accepts JSON image metadata
+- inserts `vendor_images` records
+- writes `vendor.images_created` audit log
+
 ### POST /api/admin/vendors/:id/hours
 Create or replace vendor hours
 
 Route file:
 - `app/api/admin/vendors/[id]/hours/route.ts`
 
+Behavior:
+- requires admin auth
+- validates vendor id
+- requires exactly seven day records
+- upserts `vendor_hours` by `vendor_id` and `day_of_week`
+- supports closed days and overnight hours
+- writes `vendor.hours_replaced` audit log
+
 ### POST /api/admin/vendors/:id/dishes
 Create featured dishes
 
 Route file:
 - `app/api/admin/vendors/[id]/dishes/route.ts`
+
+Behavior:
+- requires admin auth
+- validates vendor id
+- accepts one or more featured dish records
+- inserts `vendor_featured_dishes` records
+- writes `vendor.dishes_created` audit log
 
 ### GET /api/admin/audit-logs
 Fetch audit log entries
@@ -174,6 +239,7 @@ Route file:
 
 ## Boundary Rules
 - Public endpoints are read-only.
-- Admin endpoints require Supabase admin authentication before business logic is added.
+- Admin endpoints require Supabase admin authentication before business logic runs.
 - Route handlers should parse input at the edge, pass validated values to service code, and return the standard response shape.
 - Supabase query logic should not be embedded directly in route files once business logic is implemented.
+- Admin service errors should be translated through the shared admin error handler so route behavior stays consistent.

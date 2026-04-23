@@ -1,4 +1,9 @@
-import Link from "next/link";
+import { notFound } from "next/navigation";
+import { VendorDetail } from "../../../components/public/vendor-detail.tsx";
+import {
+  fetchVendorDetailBySlugFromSupabase,
+  getSupabaseRestConfig,
+} from "../../../lib/vendors/supabase.ts";
 
 type VendorDetailPageProps = {
   params: Promise<{
@@ -10,23 +15,39 @@ export default async function VendorDetailPage({
   params,
 }: VendorDetailPageProps) {
   const { slug } = await params;
-  const vendorName = slug.replaceAll("-", " ");
+  const config = getSupabaseRestConfig();
 
-  return (
-    <main className="page-shell narrow-shell">
-      <p className="eyebrow">Vendor placeholder</p>
-      <h1>{vendorName}</h1>
-      <p className="page-intro">
-        This route reserves the future vendor detail page with hero imagery,
-        open state, weekly hours, featured dishes, calls, and directions.
-      </p>
-      <div className="placeholder-panel">
-        <span>Vendor slug</span>
-        <strong>{slug}</strong>
-      </div>
-      <Link className="button-secondary inline-link" href="/">
-        Back home
-      </Link>
-    </main>
-  );
+  if (!config) {
+    return (
+      <main className="page-shell narrow-shell">
+        <p className="eyebrow">Runtime setup</p>
+        <h1>Vendor detail unavailable</h1>
+        <p className="page-intro">
+          Supabase public environment variables are required to load vendor data.
+        </p>
+      </main>
+    );
+  }
+
+  let vendor;
+
+  try {
+    vendor = await fetchVendorDetailBySlugFromSupabase(slug, config);
+  } catch (error) {
+    return (
+      <main className="page-shell narrow-shell">
+        <p className="eyebrow">Runtime setup</p>
+        <h1>Vendor detail unavailable</h1>
+        <p className="page-intro">
+          {error instanceof Error ? error.message : "Unable to load vendor detail."}
+        </p>
+      </main>
+    );
+  }
+
+  if (!vendor) {
+    notFound();
+  }
+
+  return <VendorDetail vendor={vendor} />;
 }

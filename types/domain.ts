@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type {
   adminUserSchema,
+  adminVendorsQuerySchema,
   auditLogSchema,
   createVendorDishesRequestSchema,
   createVendorRequestSchema,
@@ -39,6 +40,7 @@ export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AuditLog = z.infer<typeof auditLogSchema>;
 
 export type NearbyVendorsQuery = z.infer<typeof nearbyVendorsQuerySchema>;
+export type AdminVendorsQuery = z.infer<typeof adminVendorsQuerySchema>;
 export type VendorSlugParams = z.infer<typeof vendorSlugParamsSchema>;
 export type VendorIdParams = z.infer<typeof vendorIdParamsSchema>;
 export type CreateVendorRequest = z.infer<typeof createVendorRequestSchema>;

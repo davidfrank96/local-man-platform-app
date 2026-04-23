@@ -14,15 +14,16 @@ The Local Man — Roadmap
 - user location fallback strategy
 - foundation tests for location and nearby logic
 
-## Phase 2 — Admin Build
+## Phase 2 — Runtime, Admin, and Public MVP Surface
+- runtime environment activation
+- migration and Abuja seed validation
+- nearby API smoke testing
 - admin auth
 - vendor CRUD
 - image upload
 - hours management
 - categories and dishes
 - audit logging
-
-## Phase 3 — Public Discovery Experience
 - integrate geolocation hook into public UI
 - nearby vendor map
 - vendor cards
@@ -30,14 +31,16 @@ The Local Man — Roadmap
 - vendor details
 - directions and call buttons
 
-## Phase 4 — Hardening
+## Phase 3 — Hardening
 - ratings support
 - test coverage
 - performance improvements
 - validation improvements
 - accessibility improvements
+- real Google Maps JavaScript integration
+- fuller admin login flow
 
-## Phase 5 — Launch
+## Phase 4 — Launch
 - Abuja pilot data
 - smoke testing
 - deployment

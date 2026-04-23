@@ -1,7 +1,19 @@
-import { getNearbyBoundingBox, type VendorLocationRecord } from "@/lib/vendors/nearby";
-import type { ResolvedNearbyVendorsQuery } from "@/lib/location/user-location";
+import { getNearbyBoundingBox, type VendorLocationRecord } from "./nearby.ts";
+import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
+import {
+  vendorCategorySchema,
+  vendorDetailResponseDataSchema,
+} from "../validation/index.ts";
+import type {
+  Vendor,
+  VendorCategory,
+  VendorDetailResponseData,
+  VendorFeaturedDish,
+  VendorHours,
+  VendorImage,
+} from "../../types/index.ts";
 
-type SupabaseRestConfig = {
+export type SupabaseRestConfig = {
   url: string;
   anonKey: string;
 };
@@ -22,6 +34,15 @@ const nearbyVendorBaseSelect = [
   "vendor_hours(day_of_week,open_time,close_time,is_closed)",
 ].join(",");
 
+type VendorDetailRestRecord = Vendor & {
+  vendor_hours?: VendorHours[] | null;
+  vendor_category_map?: Array<{
+    vendor_categories: VendorCategory | null;
+  }> | null;
+  vendor_featured_dishes?: VendorFeaturedDish[] | null;
+  vendor_images?: VendorImage[] | null;
+};
+
 export function getSupabaseRestConfig(): SupabaseRestConfig | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -36,6 +57,28 @@ export function getSupabaseRestConfig(): SupabaseRestConfig | null {
 
 function appendFilter(url: URL, key: string, value: string): void {
   url.searchParams.append(key, value);
+}
+
+async function fetchSupabaseJson<T>(
+  url: URL,
+  config: SupabaseRestConfig,
+  errorLabel: string,
+): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      apikey: config.anonKey,
+      authorization: `Bearer ${config.anonKey}`,
+    },
+    next: {
+      revalidate: 30,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`${errorLabel}: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
 }
 
 export async function fetchNearbyVendorCandidates(
@@ -68,19 +111,81 @@ export async function fetchNearbyVendorCandidates(
     );
   }
 
-  const response = await fetch(url, {
-    headers: {
-      apikey: config.anonKey,
-      authorization: `Bearer ${config.anonKey}`,
-    },
-    next: {
-      revalidate: 30,
+  return fetchSupabaseJson<VendorLocationRecord[]>(
+    url,
+    config,
+    "Supabase nearby vendor query failed",
+  );
+}
+
+export async function fetchPublicCategoriesFromSupabase(
+  config: SupabaseRestConfig,
+): Promise<VendorCategory[]> {
+  const url = new URL("/rest/v1/vendor_categories", config.url);
+  url.searchParams.set("select", "id,name,slug,created_at");
+  url.searchParams.set("order", "name.asc");
+
+  const rows = await fetchSupabaseJson<unknown[]>(
+    url,
+    config,
+    "Supabase categories query failed",
+  );
+
+  return rows.map((row) => vendorCategorySchema.parse(row));
+}
+
+export async function fetchVendorDetailBySlugFromSupabase(
+  slug: string,
+  config: SupabaseRestConfig,
+): Promise<VendorDetailResponseData | null> {
+  const url = new URL("/rest/v1/vendors", config.url);
+  url.searchParams.set(
+    "select",
+    [
+      "*",
+      "vendor_hours(*)",
+      "vendor_category_map(vendor_categories(*))",
+      "vendor_featured_dishes(*)",
+      "vendor_images(*)",
+    ].join(","),
+  );
+  url.searchParams.set("slug", `eq.${slug}`);
+  url.searchParams.set("is_active", "eq.true");
+  url.searchParams.set("limit", "1");
+
+  const rows = await fetchSupabaseJson<VendorDetailRestRecord[]>(
+    url,
+    config,
+    "Supabase vendor detail query failed",
+  );
+  const vendor = rows[0];
+
+  if (!vendor) return null;
+
+  const categories =
+    vendor.vendor_category_map
+      ?.flatMap((mapping) =>
+        mapping.vendor_categories ? [mapping.vendor_categories] : [],
+      )
+      .sort((left, right) => left.name.localeCompare(right.name)) ?? [];
+  const hours =
+    vendor.vendor_hours?.toSorted((left, right) => left.day_of_week - right.day_of_week) ??
+    [];
+  const images =
+    vendor.vendor_images?.toSorted((left, right) => left.sort_order - right.sort_order) ??
+    [];
+  const featuredDishes =
+    vendor.vendor_featured_dishes?.filter((dish) => dish.is_featured) ?? [];
+
+  return vendorDetailResponseDataSchema.parse({
+    ...vendor,
+    hours,
+    categories,
+    featured_dishes: featuredDishes,
+    images,
+    rating_summary: {
+      average_rating: vendor.average_rating,
+      review_count: vendor.review_count,
     },
   });
-
-  if (!response.ok) {
-    throw new Error(`Supabase nearby vendor query failed: ${response.status}`);
-  }
-
-  return (await response.json()) as VendorLocationRecord[];
 }

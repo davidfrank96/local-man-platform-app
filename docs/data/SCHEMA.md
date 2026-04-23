@@ -17,8 +17,11 @@ The migration creates the Phase 1 MVP tables, basic constraints, lookup indexes,
 ## Seed Strategy
 Initial seed strategy:
 - `supabase/seed/SEED_STRATEGY.md`
+- `supabase/seed/20260422_abuja_pilot_seed.sql`
 
 The seed strategy defines the Abuja pilot data quality bar, target vendor counts, categories, operating hours patterns, featured dish expectations, image placeholder rules, rating placeholders, and validation checklist.
+
+The Abuja pilot seed SQL creates 20 non-production test vendors across the documented pilot areas for runtime validation of nearby vendor queries.
 
 ## Types and Validation
 Initial shared validation foundation:
@@ -77,6 +80,7 @@ Notes:
 - Each vendor can have one hours row per day.
 - Closed days may omit `open_time` and `close_time`.
 - Overnight ranges are supported because `close_time` is not required to be later than `open_time`.
+- API input may use `HH:MM`; Supabase responses may include seconds as `HH:MM:SS`.
 
 ## Table: vendor_categories
 - id: uuid, primary key
