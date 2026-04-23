@@ -96,6 +96,7 @@ h2 {
   letter-spacing: 0;
   line-height: 1;
   text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 h1 {
@@ -456,8 +457,40 @@ h2 {
 
 .admin-list-item span,
 .empty-state,
-.admin-panel p {
+.admin-panel p,
+.location-panel span,
+.field span,
+.checkbox-field span,
+.result-heading span,
+.vendor-detail-copy p,
+.vendor-detail-section p,
+.dish-list span {
   color: var(--color-muted);
+}
+
+.admin-list-item strong,
+.admin-list-item span,
+.empty-state,
+.admin-panel p,
+.location-panel strong,
+.location-panel span,
+.field span,
+.checkbox-field span,
+.result-heading strong,
+.result-heading span,
+.vendor-detail-meta span,
+.category-row span,
+.map-legend span,
+.selected-vendor-panel h2,
+.selected-vendor-panel p,
+.vendor-detail-copy h1,
+.vendor-detail-copy p,
+.vendor-detail-section p,
+.dish-list span,
+.vendor-card h3,
+.vendor-card p,
+.vendor-meta dd {
+  overflow-wrap: anywhere;
 }
 
 .hours-grid {
@@ -477,10 +510,12 @@ h2 {
   min-height: 42px;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .public-shell {
   min-height: 100vh;
+  min-width: 0;
   padding: 18px;
 }
 
@@ -508,6 +543,7 @@ h2 {
 .discovery-heading {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .discovery-heading h1 {
@@ -535,6 +571,7 @@ h2 {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.82);
   padding: 16px;
+  min-width: 0;
 }
 
 .location-panel {
@@ -570,10 +607,12 @@ h2 {
   grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(112px, 0.5fr));
   gap: 12px;
   align-items: end;
+  min-width: 0;
 }
 
 .search-field {
   grid-column: span 2;
+  min-width: 0;
 }
 
 .filter-checkbox {
@@ -605,6 +644,7 @@ h2 {
 
 .result-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -614,6 +654,7 @@ h2 {
 .vendor-card {
   display: grid;
   gap: 12px;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.86);
@@ -629,6 +670,7 @@ h2 {
   display: grid;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -641,11 +683,13 @@ h2 {
   margin: 0;
   font-size: 1.22rem;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .vendor-card p {
   margin: 0;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .status-open,
@@ -686,6 +730,7 @@ h2 {
 
 .vendor-meta dd {
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .vendor-card-footer,
@@ -777,6 +822,7 @@ h2 {
 .selected-vendor-panel {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .selected-vendor-panel h2 {
@@ -808,6 +854,7 @@ h2 {
   display: grid;
   align-content: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .vendor-detail-copy h1 {
@@ -828,6 +875,7 @@ h2 {
   background: rgba(255, 255, 255, 0.72);
   padding: 7px 10px;
   font-weight: 800;
+  max-width: 100%;
 }
 
 .vendor-detail-image {
@@ -939,8 +987,13 @@ h2 {
     min-height: 420px;
   }
 
-  .location-panel,
-  .vendor-card-footer {
+  .location-panel {
     grid-template-columns: 1fr;
+  }
+
+  .vendor-card-footer,
+  .vendor-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
