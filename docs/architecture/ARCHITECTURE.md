@@ -85,6 +85,7 @@ The public app determines the user location before nearby vendor search.
 Primary method:
 - Browser/device geolocation through the Web Geolocation API.
 - If allowed, use precise `lat` and `lng` with `location_source = precise`.
+- Wait up to 10 seconds for the browser geolocation request before falling back.
 
 Fallback method:
 - IP-based approximation when browser geolocation is denied or unavailable.
@@ -101,6 +102,7 @@ Location handling rules:
 - Precise and approximate coordinates use the same nearby vendor query path.
 - Missing coordinates are handled gracefully by falling back to Abuja.
 - Partial coordinates, such as only `lat` or only `lng`, are invalid.
+- Denied or unavailable precise location should fall back to IP approximation first, then the Abuja default city view if approximation is unavailable.
 
 Implementation interface:
 - `lib/location/acquisition.ts` owns the acquisition sequence and provider interfaces.

@@ -47,6 +47,8 @@ const geolocationErrorCodes: Record<number, LocationAcquisitionErrorCode> = {
   3: "GEOLOCATION_TIMEOUT",
 };
 
+export const BROWSER_GEOLOCATION_TIMEOUT_MS = 10_000;
+
 function toLocationError(error: unknown): LocationAcquisitionError {
   const geolocationError = error as GeolocationErrorLike;
   const code =
@@ -99,7 +101,7 @@ export function getBrowserGeolocation(): Promise<Coordinates> {
       {
         enableHighAccuracy: true,
         maximumAge: 60_000,
-        timeout: 2_000,
+        timeout: BROWSER_GEOLOCATION_TIMEOUT_MS,
       },
     );
   });

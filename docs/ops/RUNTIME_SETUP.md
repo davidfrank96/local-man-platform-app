@@ -179,6 +179,12 @@ The smoke test validates:
 - partial coordinate rejection
 - missing coordinate fallback to the Abuja default city view
 
+Client location acquisition behavior:
+- browser geolocation waits up to 10 seconds before giving up
+- if precise location is denied or unavailable, the app tries IP-based approximate location next
+- if approximate location is also unavailable, the app falls back to the Abuja default city view
+- mobile users should see a short "trying to get precise location" status before fallback is chosen
+
 The smoke test passes only when:
 - the API returns HTTP 200
 - the response uses the standard success shape
