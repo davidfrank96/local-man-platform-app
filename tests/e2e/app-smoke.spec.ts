@@ -90,6 +90,53 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("small phone layout stays readable", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.goto("/");
+
+    await expect(page.locator(".discovery-map")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+    await expect(page.locator(".vendor-card .vendor-card-footer").first()).toBeVisible();
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("tablet layout keeps map and list balanced", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/");
+
+    const layout = page.locator(".discovery-layout");
+    await expect(layout).toBeVisible();
+    await expect(page.locator(".discovery-map")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    const layoutBox = await layout.boundingBox();
+    const mapBox = await page.locator(".discovery-map").boundingBox();
+    const sidebarBox = await page.locator(".discovery-sidebar").boundingBox();
+
+    expect(layoutBox).not.toBeNull();
+    expect(mapBox).not.toBeNull();
+    expect(sidebarBox).not.toBeNull();
+    expect(mapBox?.width).toBeGreaterThan(0);
+    expect(sidebarBox?.width).toBeGreaterThan(0);
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("keyboard focus is visible", async ({ page }) => {
     const errors = trackClientErrors(page);
 
