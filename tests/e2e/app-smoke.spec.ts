@@ -119,9 +119,10 @@ test.describe("Phase 3 browser smoke", () => {
       await page.keyboard.press("Tab");
     }
 
+    expect(activeElementInfo).not.toBeNull();
     expect(activeElementInfo?.tagName).not.toBe("BODY");
-    expect(activeElementInfo.outlineStyle).not.toBe("none");
-    expect(activeElementInfo.outlineWidth).not.toBe("0px");
+    expect(activeElementInfo?.outlineStyle).not.toBe("none");
+    expect(activeElementInfo?.outlineWidth).not.toBe("0px");
 
     await expectNoClientErrors(errors);
   });
