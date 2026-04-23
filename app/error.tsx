@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
+
 type ErrorProps = {
   error: Error & { digest?: string };
   reset: () => void;
 };
 
-export default function Error({ error: _error, reset }: ErrorProps) {
+export default function Error({ reset }: ErrorProps) {
   return (
     <main className="page-shell narrow-shell" aria-live="polite">
       <p className="eyebrow">Error</p>
@@ -17,9 +19,9 @@ export default function Error({ error: _error, reset }: ErrorProps) {
         <button className="button-primary" type="button" onClick={() => reset()}>
           Try again
         </button>
-        <a className="button-secondary" href="/">
+        <Link className="button-secondary" href="/">
           Return home
-        </a>
+        </Link>
       </div>
     </main>
   );
