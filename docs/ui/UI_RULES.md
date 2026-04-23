@@ -18,6 +18,8 @@ The Local Man — UI Rules
 - Call and directions buttons must be obvious.
 - Search and filters must not overwhelm the screen.
 - Do not overload the home screen with too many actions.
+- Runtime errors must be visible when Supabase data is unavailable.
+- Public UI must not render fake vendor data.
 
 ## Location UX Rules
 - Request browser/device location as the primary method for precise nearby results.
@@ -44,6 +46,7 @@ The Local Man — UI Rules
 - weekly hours clearly structured
 - featured dishes visually separated
 - address and location visible
+- If a vendor has no image, show a plain missing-image state instead of stock imagery.
 
 ## Admin UI Rules
 - forms must be explicit and simple

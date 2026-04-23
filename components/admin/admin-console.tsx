@@ -160,11 +160,19 @@ type AdminFormProps = {
   onCreateDishes: (data: CreateVendorDishesRequest) => Promise<void>;
 };
 
-export function AdminConsole() {
+type AdminConsoleProps = {
+  initialSelectedVendorId?: string | null;
+};
+
+export function AdminConsole({
+  initialSelectedVendorId = null,
+}: AdminConsoleProps) {
   const [accessToken, setAccessToken] = useState("");
   const [filters, setFilters] = useState<AdminVendorFilters>({ is_active: true });
   const [vendors, setVendors] = useState<AdminVendorSummary[]>([]);
-  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(
+    initialSelectedVendorId,
+  );
   const [status, setStatus] = useState("Enter an admin access token to load vendors.");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -208,6 +216,13 @@ export function AdminConsole() {
       setSelectedVendorId((current) => {
         if (current && result.vendors.some((vendor) => vendor.id === current)) {
           return current;
+        }
+
+        if (
+          initialSelectedVendorId &&
+          result.vendors.some((vendor) => vendor.id === initialSelectedVendorId)
+        ) {
+          return initialSelectedVendorId;
         }
 
         return result.vendors[0]?.id ?? null;

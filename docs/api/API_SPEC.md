@@ -12,7 +12,7 @@ Initial route foundation:
 - `lib/api/contracts.ts`
 - `lib/api/responses.ts`
 
-The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Phase 1 Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Phase 2B adds authenticated admin vendor create, update, and soft-delete route logic. Public detail/category routes and remaining admin sub-resource routes still return `501 NOT_IMPLEMENTED` until their business logic is added.
+The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Phase 1 Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Phase 2B adds authenticated admin vendor create, update, and soft-delete route logic. Phase 2C adds public category and vendor detail read routes.
 
 ## Types and Validation Foundation
 Initial shared types and validation schemas:
@@ -64,6 +64,7 @@ Behavior:
 - Results are filtered by `radius_km` after exact distance calculation.
 - Results are sorted nearest first.
 - Distance is not stored in the database.
+- If the Supabase schema has not been migrated, the API returns `UPSTREAM_ERROR` from the failed Supabase query.
 
 Location response shape:
 ```json
@@ -94,11 +95,25 @@ Returns:
 - images
 - rating summary
 
+Behavior:
+- Returns `NOT_FOUND` when no active vendor matches the slug.
+- Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
+- Returns `UPSTREAM_ERROR` when the Supabase detail query fails.
+
 ### GET /api/categories
 Purpose: fetch filter categories
 
 Route file:
 - `app/api/categories/route.ts`
+
+Returns:
+- category id
+- category name
+- category slug
+
+Behavior:
+- Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
+- Returns `UPSTREAM_ERROR` when the Supabase category query fails.
 
 ## Admin Endpoints
 Admin endpoint rules:

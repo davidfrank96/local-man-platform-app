@@ -61,11 +61,15 @@ Phase 1 is done when:
 - Admin vendor create, update, and soft-delete routes write audit logs.
 - Admin vendor hours, image metadata, and featured dish routes call typed service methods and write audit logs.
 - Minimal admin UI exists for token-based vendor list, create, update, deactivate, hours, image metadata, and featured dish operations.
+- Admin UI routes exist at `/admin`, `/admin/vendors`, `/admin/vendors/new`, and `/admin/vendors/[id]`.
+- Public discovery UI exists for map/list search, location fallback handling, vendor cards, filters, call actions, and directions actions.
+- Public vendor detail and category routes now call Supabase REST.
 
 ## Remaining Phase 1 Gaps
 - IP approximation provider is an interface only; no concrete provider is selected.
 - Migration and seed execution still require a real Supabase project.
 - Nearby API still needs end-to-end smoke validation with real Supabase environment variables and seeded data.
+- Public discovery UI still needs live validation after migration and seed succeed.
 
 ## Runtime Validation Gate
 Before broader Phase 2 implementation:
@@ -83,6 +87,5 @@ Allowed after runtime validation is complete or fully prepared:
 - minimal functional admin forms for existing backend routes
 
 Not allowed yet:
-- broad public UI implementation
 - visual polish
 - admin product polish beyond basic operational forms

@@ -42,6 +42,19 @@ Runtime smoke coverage:
 - Requires real Supabase env vars and seeded Abuja data.
 - Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, nearest-first ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
 
+### Public Discovery Logic
+Test:
+- public nearby API client sends location, radius, search, category, price, and open-now filters
+- call links normalize phone numbers
+- directions links target Google Maps coordinates
+- categories route returns public category summaries
+- vendor detail route transforms Supabase nested rows into the documented detail shape
+- public UI shows runtime errors when Supabase data is unavailable
+
+Current automated coverage:
+- `tests/public-api-client.test.ts`
+- `tests/public-routes.test.ts`
+
 ### Admin Foundation Logic
 Test:
 - missing admin bearer token returns `UNAUTHORIZED`
@@ -64,6 +77,9 @@ Current automated coverage:
 
 Manual admin UI smoke coverage:
 - open `/admin`
+- open `/admin/vendors`
+- open `/admin/vendors/new`
+- open `/admin/vendors/[id]` with a valid vendor id
 - paste a Supabase access token for an `admin_users` member
 - load vendors
 - create a vendor with Abuja coordinates
