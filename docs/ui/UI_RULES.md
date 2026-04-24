@@ -36,16 +36,23 @@ The Local Man — UI Rules
 - name
 - distance
 - open/closed state
-- short description or dish cue
-- rating
+- one featured dish summary when available
+- short description only when no featured dish summary is available
+- compact price label: `Budget-friendly`, `Everyday price`, or `Higher price`
+- area
+- compact rating: `★ 4.2` when ratings exist, otherwise `New`
 - call button
 - directions button
+- helper text: `Tap to preview on map`
+- visible detail link text: `View details →`
+- tapping the card body should preview the vendor on the map without interfering with call, directions, or details
 
 ## Vendor Detail Rules
 - strong hero image
 - visible primary actions near top
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
 - weekly hours clearly structured
+- public hours should display in 12-hour AM/PM format
 - featured dishes visually separated
 - address and location visible
 - missing vendor data should use explicit fallback copy instead of vague placeholders

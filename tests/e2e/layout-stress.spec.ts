@@ -43,6 +43,10 @@ function createVendor(index: number, overrides: Partial<NearbyVendor> = {}): Nea
     review_count: 24,
     distance_km: Number((0.12 + index * 0.08).toFixed(2)),
     is_open_now: index % 2 === 0,
+    featured_dish: {
+      dish_name: `Dish ${index + 1}`,
+      description: null,
+    },
     ...overrides,
   };
 }
@@ -138,6 +142,10 @@ test.describe("Layout stress", () => {
         name: longText("ULTRALONGVENDORNAMEWITHOUTSPACES_", 140),
         short_description: longText("Y", 240),
         area: longText("EXTREMELY_LONG_AREA_", 120),
+        featured_dish: {
+          dish_name: longText("ULTRALONGDISHWITHOUTSPACES_", 120),
+          description: null,
+        },
       }),
     );
 
@@ -152,6 +160,7 @@ test.describe("Layout stress", () => {
     await expect(page.locator(".vendor-card").first()).toBeVisible();
     await expect(page.locator(".vendor-card .vendor-card-footer").first()).toBeVisible();
     await expect(page.locator(".vendor-card h3").first()).toBeVisible();
+    await expect(page.locator(".vendor-card .vendor-card-rating").first()).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
@@ -178,6 +187,13 @@ test.describe("Layout stress", () => {
         name: `Vendor ${index + 1} ${"N".repeat(index % 5 === 0 ? 80 : 18)}`,
         short_description: index % 3 === 0 ? null : `Description ${index + 1}`,
         area: index % 4 === 0 ? null : `Area ${index + 1}`,
+        featured_dish:
+          index % 3 === 0
+            ? null
+            : {
+                dish_name: `Dish ${index + 1}`,
+                description: null,
+              },
       }),
     );
 
@@ -188,15 +204,23 @@ test.describe("Layout stress", () => {
     await expect(page.locator(".vendor-card")).toHaveCount(30);
 
     for (const index of [0, 4, 9, 14, 19]) {
-      await page.locator(".vendor-card").nth(index).getByRole("button", { name: "Select" }).click();
+      await page
+        .locator(".vendor-card")
+        .nth(index)
+        .getByRole("button", { name: /Preview .* on map/ })
+        .click();
     }
 
     await expect(page.locator(".selected-vendor-panel h2")).toContainText("Vendor 20");
 
     await page.getByRole("textbox", { name: "Search" }).fill("rice");
-    await page.getByRole("button", { name: "Apply" }).click();
+    let applyButton = page.getByRole("button", { name: "Apply" });
+    await applyButton.scrollIntoViewIfNeeded();
+    await applyButton.click();
     await page.getByRole("textbox", { name: "Search" }).fill("spicy");
-    await page.getByRole("button", { name: "Apply" }).click();
+    applyButton = page.getByRole("button", { name: "Apply" });
+    await applyButton.scrollIntoViewIfNeeded();
+    await applyButton.click();
 
     await page.goto("/search?q=rice");
     await expect(page.getByRole("heading", { name: "Search local food" })).toBeVisible();
@@ -245,10 +269,13 @@ test.describe("Layout stress", () => {
     const vendors = [
       createVendor(0, {
         name: longText("PARTIAL_VENDOR_NAME_", 80),
-        short_description: null,
+        short_description: "Local food vendor",
         area: null,
         phone_number: null,
         price_band: null,
+        average_rating: 0,
+        review_count: 0,
+        featured_dish: null,
       }),
     ];
 
@@ -258,8 +285,10 @@ test.describe("Layout stress", () => {
 
     await expect(page.locator(".vendor-card").first()).toBeVisible();
     await expect(page.locator(".vendor-card").first().getByText("Local food vendor")).toBeVisible();
-    await expect(page.locator(".vendor-card").first().getByText("Abuja")).toBeVisible();
-    await expect(page.locator(".vendor-card").first().getByRole("button", { name: "Select" })).toBeVisible();
+    await expect(page.locator(".vendor-card").first().getByText("New")).toBeVisible();
+    await expect(
+      page.locator(".vendor-card").first().getByRole("button", { name: /Preview .* on map/ }),
+    ).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,

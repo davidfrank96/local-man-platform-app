@@ -569,8 +569,7 @@ h2 {
 .vendor-detail-section p,
 .dish-list span,
 .vendor-card h3,
-.vendor-card p,
-.vendor-meta dd {
+.vendor-card p {
   overflow-wrap: anywhere;
 }
 
@@ -637,7 +636,6 @@ h2 {
 .runtime-error,
 .result-heading span,
 .vendor-card p,
-.vendor-meta dt,
 .vendor-detail-copy p,
 .vendor-detail-section p,
 .dish-list span {
@@ -734,7 +732,7 @@ h2 {
 
 .vendor-card {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -747,9 +745,27 @@ h2 {
   background: rgba(36, 97, 79, 0.08);
 }
 
+.vendor-card-preview {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vendor-card-preview:hover .vendor-card-helper,
+.vendor-card-preview:focus-visible .vendor-card-helper {
+  color: var(--color-text);
+}
+
 .vendor-card-main {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -760,17 +776,72 @@ h2 {
   text-align: left;
 }
 
+.vendor-card-helper {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .vendor-card h3 {
   margin: 0;
-  font-size: 1.22rem;
+  font-size: 1.14rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
 .vendor-card p {
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.vendor-card-status-line,
+.vendor-card-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.92rem;
+}
+
+.vendor-card-status-line {
+  font-weight: 700;
+}
+
+.vendor-card p.vendor-card-status-line {
+  color: var(--color-text);
+}
+
+.vendor-card-status-open {
+  color: var(--color-green);
+}
+
+.vendor-card-status-closed {
+  color: var(--color-accent);
+}
+
+.vendor-card p.vendor-card-cue {
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.vendor-card p.vendor-card-meta-line {
+  color: var(--color-muted);
+}
+
+.vendor-card-supporting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vendor-card-rating {
+  flex-shrink: 0;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 800;
 }
 
 .status-open,
@@ -798,34 +869,28 @@ h2 {
   color: var(--color-muted);
 }
 
-.vendor-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.vendor-meta div {
-  display: grid;
-  gap: 2px;
-}
-
-.vendor-meta dt,
-.vendor-meta dd {
-  margin: 0;
-}
-
-.vendor-meta dd {
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
 .vendor-card-footer,
 .vendor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.vendor-card-footer {
+  justify-content: space-between;
+}
+
+.vendor-card-detail-link {
+  color: var(--color-text);
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+
+.vendor-card-detail-link:hover {
+  color: var(--color-green);
 }
 
 .discovery-map {
@@ -1078,7 +1143,6 @@ h2 {
   .hours-row,
   .vendor-image-item,
   .admin-list-item,
-  .vendor-meta,
   .hours-list li,
   .dish-list li {
     grid-template-columns: 1fr;

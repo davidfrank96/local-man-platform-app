@@ -32,6 +32,7 @@ const nearbyVendorBaseSelect = [
   "review_count",
   "is_open_override",
   "vendor_hours(day_of_week,open_time,close_time,is_closed)",
+  "vendor_featured_dishes(dish_name,description,is_featured)",
 ].join(",");
 
 type VendorDetailRestRecord = Vendor & {

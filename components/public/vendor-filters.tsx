@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { PriceBand } from "../../types/index.ts";
 import type { PublicCategory } from "../../lib/vendors/public-api-client.ts";
 
@@ -38,6 +38,8 @@ export function VendorFilters({
   disabled,
   onChange,
 }: VendorFiltersProps) {
+  const [draftFilters, setDraftFilters] = useState<DiscoveryFilters>(filters);
+
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onChange(readFormFilters(event.currentTarget));
@@ -48,14 +50,29 @@ export function VendorFilters({
       <label className="field search-field">
         <span>Search</span>
         <input
-          defaultValue={filters.search}
+          value={draftFilters.search}
           name="search"
           placeholder="Vendor, dish, or area"
+          onChange={(event) =>
+            setDraftFilters((current) => ({
+              ...current,
+              search: event.target.value,
+            }))
+          }
         />
       </label>
       <label className="field">
         <span>Radius</span>
-        <select defaultValue={filters.radiusKm} name="radiusKm">
+        <select
+          value={draftFilters.radiusKm}
+          name="radiusKm"
+          onChange={(event) =>
+            setDraftFilters((current) => ({
+              ...current,
+              radiusKm: Number(event.target.value),
+            }))
+          }
+        >
           {radiusOptions.map((radius) => (
             <option key={radius} value={radius}>
               {radius} km
@@ -65,7 +82,16 @@ export function VendorFilters({
       </label>
       <label className="field">
         <span>Price</span>
-        <select defaultValue={filters.priceBand} name="priceBand">
+        <select
+          value={draftFilters.priceBand}
+          name="priceBand"
+          onChange={(event) =>
+            setDraftFilters((current) => ({
+              ...current,
+              priceBand: event.target.value as DiscoveryFilters["priceBand"],
+            }))
+          }
+        >
           <option value="">Any</option>
           {priceBands.map((band) => (
             <option key={band} value={band}>
@@ -76,7 +102,17 @@ export function VendorFilters({
       </label>
       <label className="field">
         <span>Category</span>
-        <select defaultValue={filters.category} disabled={categories.length === 0} name="category">
+        <select
+          value={draftFilters.category}
+          disabled={categories.length === 0}
+          name="category"
+          onChange={(event) =>
+            setDraftFilters((current) => ({
+              ...current,
+              category: event.target.value,
+            }))
+          }
+        >
           <option value="">Any</option>
           {categories.map((category) => (
             <option key={category.id} value={category.slug}>
@@ -86,7 +122,17 @@ export function VendorFilters({
         </select>
       </label>
       <label className="checkbox-field filter-checkbox">
-        <input defaultChecked={filters.openNow} name="openNow" type="checkbox" />
+        <input
+          checked={draftFilters.openNow}
+          name="openNow"
+          type="checkbox"
+          onChange={(event) =>
+            setDraftFilters((current) => ({
+              ...current,
+              openNow: event.target.checked,
+            }))
+          }
+        />
         <span>Open now</span>
       </label>
       <button className="button-primary compact-button" disabled={disabled} type="submit">

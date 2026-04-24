@@ -19,7 +19,7 @@ export const apiEndpoints = {
     requestShape:
       "Query params: lat, lng, radius_km, open_now, category, price_band, search.",
     responseShape:
-      "Vendor list with vendor_id, name, coordinates, computed distance_km, is_open_now, rating summary, and card fields.",
+      "Vendor list with vendor_id, name, coordinates, computed distance_km, is_open_now, one featured dish summary when available, and card fields.",
     validationBoundary: [
       "coordinates must be valid numbers",
       "radius_km must be a positive number when provided",
