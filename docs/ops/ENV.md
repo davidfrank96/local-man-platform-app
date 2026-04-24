@@ -17,7 +17,9 @@ The Local Man — Environment Variables
 ## Runtime Requirements
 - Local static checks and unit tests do not require environment variables.
 - Public Supabase-backed routes require `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- Admin routes require the public Supabase env vars plus an `Authorization: Bearer <supabase-access-token>` request header for an authenticated `admin_users` member.
+- Admin login uses the public Supabase env vars for browser email/password sign-in.
+- Admin routes still require an `Authorization: Bearer <supabase-access-token>` request header for an authenticated `admin_users` member.
+- Vendor image uploads use the admin bearer session plus the `vendor-images` Supabase Storage bucket created by the migration.
 - Current public map rendering uses the local MVP coordinate grid; Google Maps keys are documented but not required for current tests.
 
 ## Runtime Smoke Test

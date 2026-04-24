@@ -106,6 +106,7 @@ export const vendorImageSchema = z.object({
   id: uuidSchema,
   vendor_id: uuidSchema,
   image_url: nonEmptyTextSchema,
+  storage_object_path: z.string().nullable().optional(),
   sort_order: z.coerce.number().int().min(0),
   created_at: timestampSchema,
 });

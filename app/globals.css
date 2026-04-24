@@ -319,6 +319,17 @@ h2 {
   font-weight: 700;
 }
 
+.session-summary,
+.admin-login-form {
+  display: grid;
+  gap: 6px;
+}
+
+.session-summary span {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
 .admin-form {
   display: grid;
   gap: 14px;
@@ -352,11 +363,70 @@ h2 {
   font-weight: 800;
 }
 
+.field-required {
+  color: #a16207;
+}
+
+.form-note {
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
 .field-hint,
 .field-error {
   color: var(--color-muted);
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.vendor-image-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vendor-image-item {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.03);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.vendor-image-preview {
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.vendor-image-preview img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.vendor-image-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vendor-media-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.vendor-image-meta span {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 
 .field-error {
@@ -704,7 +774,8 @@ h2 {
 }
 
 .status-open,
-.status-closed {
+.status-closed,
+.status-neutral {
   width: fit-content;
   border-radius: 999px;
   padding: 5px 8px;
@@ -720,6 +791,11 @@ h2 {
 .status-closed {
   background: rgba(178, 58, 48, 0.1);
   color: var(--color-accent);
+}
+
+.status-neutral {
+  background: rgba(37, 41, 36, 0.08);
+  color: var(--color-muted);
 }
 
 .vendor-meta {
@@ -889,6 +965,42 @@ h2 {
   max-width: 100%;
 }
 
+.vendor-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.vendor-detail-summary div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 10px 12px;
+}
+
+.vendor-detail-summary dt {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.vendor-detail-summary dd {
+  margin: 0;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.vendor-detail-note {
+  margin: 0;
+  color: var(--color-muted);
+}
+
 .vendor-detail-image {
   display: grid;
   min-height: 360px;
@@ -964,6 +1076,7 @@ h2 {
   .compact-form,
   .form-grid,
   .hours-row,
+  .vendor-image-item,
   .admin-list-item,
   .vendor-meta,
   .hours-list li,
@@ -1006,5 +1119,9 @@ h2 {
   .vendor-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .vendor-detail-summary {
+    grid-template-columns: 1fr;
   }
 }

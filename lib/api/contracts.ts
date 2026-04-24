@@ -91,8 +91,9 @@ export const apiEndpoints = {
     access: "admin",
     method: "POST",
     path: "/api/admin/vendors/[id]/images",
-    requestShape: "Route param: id. Multipart form data or JSON image metadata.",
-    responseShape: "Uploaded image records with URLs and sort order.",
+    requestShape:
+      "GET and POST use route param id. POST accepts multipart form data for uploads, with JSON image metadata as a fallback. DELETE uses route params id and imageId.",
+    responseShape: "Image records, upload results, or deleted image records.",
     validationBoundary: [
       "admin authentication required",
       "id must be a valid UUID",

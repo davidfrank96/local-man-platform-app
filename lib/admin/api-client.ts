@@ -9,7 +9,6 @@ import type {
   VendorFeaturedDish,
   VendorHours,
   VendorImage,
-  VendorImageMetadataRequest,
 } from "../../types/index.ts";
 
 export type AdminVendorSummary = Pick<
@@ -45,14 +44,42 @@ export type AdminVendorFilters = {
   price_band?: PriceBand;
 };
 
+export class AdminApiError extends Error {
+  code: string;
+
+  status: number;
+
+  details: unknown;
+
+  constructor(code: string, message: string, status: number, details?: unknown) {
+    super(`${code}: ${message}`);
+    this.name = "AdminApiError";
+    this.code = code;
+    this.status = status;
+    this.details = details;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 type AdminApiClientOptions = {
   accessToken: string;
   fetchImpl?: typeof fetch;
 };
 
-function createAdminHeaders(accessToken: string): HeadersInit {
-  return {
+function createAdminHeaders(
+  accessToken: string,
+  body?: BodyInit | null,
+): HeadersInit {
+  const headers: HeadersInit = {
     authorization: `Bearer ${accessToken}`,
+  };
+
+  if (body instanceof FormData) {
+    return headers;
+  }
+
+  return {
+    ...headers,
     "content-type": "application/json",
   };
 }
@@ -73,7 +100,7 @@ async function requestAdminApi<T>(
   const response = await fetchImpl(path, {
     ...init,
     headers: {
-      ...createAdminHeaders(accessToken),
+      ...createAdminHeaders(accessToken, init.body ?? null),
       ...init.headers,
     },
   });
@@ -101,7 +128,7 @@ async function requestAdminApi<T>(
     const code = payload.error?.code ?? "UNKNOWN_ERROR";
     const message = payload.error?.message ?? "API request failed.";
 
-    throw new Error(`${code}: ${message}`);
+    throw new AdminApiError(code, message, response.status, payload.error?.details);
   }
 
   return payload.data;
@@ -191,7 +218,7 @@ export async function replaceAdminVendorHours(
 
 export async function createAdminVendorImages(
   vendorId: string,
-  data: VendorImageMetadataRequest,
+  data: FormData,
   options: AdminApiClientOptions,
 ): Promise<VendorImage[]> {
   const result = await requestAdminApi<{ images: VendorImage[] }>(
@@ -199,11 +226,39 @@ export async function createAdminVendorImages(
     options,
     {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data,
     },
   );
 
   return result.images;
+}
+
+export async function listAdminVendorImages(
+  vendorId: string,
+  options: AdminApiClientOptions,
+): Promise<VendorImage[]> {
+  const result = await requestAdminApi<{ images: VendorImage[] }>(
+    `/api/admin/vendors/${vendorId}/images`,
+    options,
+  );
+
+  return result.images;
+}
+
+export async function deleteAdminVendorImage(
+  vendorId: string,
+  imageId: string,
+  options: AdminApiClientOptions,
+): Promise<VendorImage> {
+  const result = await requestAdminApi<{ image: VendorImage }>(
+    `/api/admin/vendors/${vendorId}/images/${imageId}`,
+    options,
+    {
+      method: "DELETE",
+    },
+  );
+
+  return result.image;
 }
 
 export async function createAdminVendorDishes(

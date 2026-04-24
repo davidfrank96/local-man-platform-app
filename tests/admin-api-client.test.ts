@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AdminApiError,
+  deleteAdminVendorImage,
   createAdminVendor,
+  createAdminVendorImages,
   listAdminVendors,
+  listAdminVendorImages,
 } from "../lib/admin/api-client.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
@@ -144,5 +148,164 @@ test("admin API client reports malformed API responses clearly", async () => {
         },
       ),
     /INVALID_RESPONSE: API returned an unexpected response shape/,
+  );
+});
+
+test("admin API client preserves validation details", async () => {
+  const fetchImpl = (async () =>
+    Response.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid request.",
+          details: {
+            issues: [
+              {
+                path: ["slug"],
+                message: "Use lowercase words separated by hyphens.",
+              },
+            ],
+          },
+        },
+      },
+      { status: 400 },
+    )) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      createAdminVendor(
+        {
+          name: "Test Vendor",
+          slug: "invalid slug",
+          short_description: null,
+          phone_number: null,
+          address_text: null,
+          city: "Abuja",
+          area: "Wuse",
+          state: "FCT",
+          country: "Nigeria",
+          latitude: 9.0813,
+          longitude: 7.4694,
+          price_band: "budget",
+          is_active: true,
+          is_open_override: null,
+        },
+        {
+          accessToken: "bad-token",
+          fetchImpl,
+        },
+      ),
+    (error) =>
+      error instanceof AdminApiError &&
+      error.code === "VALIDATION_ERROR" &&
+      error.status === 400 &&
+      typeof error.details === "object" &&
+      error.details !== null,
+  );
+});
+
+test("admin API client uploads image files without forcing json headers", async () => {
+  const requestedHeaders: Headers[] = [];
+  const requestedBodies: unknown[] = [];
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    requestedHeaders.push(new Headers(init?.headers));
+    requestedBodies.push(init?.body);
+
+    return Response.json({
+      success: true,
+      data: {
+        images: [
+          {
+            id: "10000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/vendor/image.jpg",
+            storage_object_path: "vendors/vendor/image.jpg",
+            sort_order: 2,
+          },
+        ],
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const formData = new FormData();
+  formData.set(
+    "image",
+    new File([Uint8Array.from([1, 2, 3])], "image.jpg", { type: "image/jpeg" }),
+  );
+  formData.set("sort_order", "2");
+
+  const images = await createAdminVendorImages(
+    vendorId,
+    formData,
+    {
+      accessToken: "admin-token",
+      fetchImpl,
+    },
+  );
+
+  assert.equal(images[0].storage_object_path, "vendors/vendor/image.jpg");
+  assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
+  assert.equal(requestedHeaders[0].get("content-type"), null);
+  assert.ok(requestedBodies[0] instanceof FormData);
+});
+
+test("admin API client can list vendor images", async () => {
+  const fetchImpl = (async () =>
+    Response.json({
+      success: true,
+      data: {
+        images: [
+          {
+            id: "10000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/vendor/image.jpg",
+            storage_object_path: "vendors/vendor/image.jpg",
+            sort_order: 2,
+          },
+        ],
+      },
+      error: null,
+    })) as typeof fetch;
+
+  const images = await listAdminVendorImages(vendorId, {
+    accessToken: "admin-token",
+    fetchImpl,
+  });
+
+  assert.equal(images[0].storage_object_path, "vendors/vendor/image.jpg");
+});
+
+test("admin API client can delete vendor images", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+
+    return Response.json({
+      success: true,
+      data: {
+        image: {
+          id: "10000000-0000-4000-8000-000000000001",
+          vendor_id: vendorId,
+          image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/vendor/image.jpg",
+          storage_object_path: "vendors/vendor/image.jpg",
+          sort_order: 2,
+        },
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const image = await deleteAdminVendorImage(vendorId, "10000000-0000-4000-8000-000000000001", {
+    accessToken: "admin-token",
+    fetchImpl,
+  });
+
+  assert.equal(image.storage_object_path, "vendors/vendor/image.jpg");
+  assert.equal(
+    new URL(requestedUrls[0], "http://localhost").pathname,
+    "/api/admin/vendors/00000000-0000-4000-8000-000000000001/images/10000000-0000-4000-8000-000000000001",
   );
 });

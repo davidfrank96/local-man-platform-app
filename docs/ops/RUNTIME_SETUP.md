@@ -18,8 +18,10 @@ The Phase 2 runtime gate has executable checks for environment validation and ne
 ```bash
 npm run runtime:check-env
 npm run runtime:check-db-env
-NEXT_PUBLIC_APP_URL=http://localhost:3002 npm run smoke:nearby
+NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run smoke:nearby
 ```
+
+If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that actual origin before running the smoke command.
 
 The smoke test verifies precise coordinates, `distance_km`, nearest-first sorting, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
 
@@ -202,6 +204,8 @@ Manual URL:
 http://localhost:3000/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=30
 ```
 
+If the local app is not using port `3000`, replace the origin with the active local port.
+
 Expected response shape:
 
 ```json
@@ -231,6 +235,8 @@ Phase 2 feature work may proceed only after:
 - seed validation queries pass
 - `npm run smoke:nearby` passes against the local app and real Supabase env vars
 - any runtime failures are documented before implementation continues
+
+For launch-day operator work and ongoing Abuja pilot checks, use [docs/ops/PILOT_CHECKLIST.md](./PILOT_CHECKLIST.md).
 
 ## Operator Checklist
 Use this checklist when completing runtime activation manually:

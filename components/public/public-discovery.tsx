@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUserLocation } from "../../hooks/use-user-location.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
+import type { LocationAcquisitionError } from "../../lib/location/acquisition.ts";
 import {
   fetchNearbyVendors,
   fetchPublicCategories,
@@ -51,10 +52,35 @@ function createNearbyFilters(
   };
 }
 
-function getLocationCopy(location: AcquiredUserLocation | null): string {
+function formatLocationErrorMessage(code: string): string {
+  switch (code) {
+    case "GEOLOCATION_DENIED":
+      return "Precise location was denied.";
+    case "GEOLOCATION_UNAVAILABLE":
+      return "Precise location was unavailable.";
+    case "GEOLOCATION_TIMEOUT":
+      return "Precise location took too long.";
+    case "IP_LOOKUP_UNAVAILABLE":
+      return "Approximate location was unavailable.";
+    default:
+      return "Location could not be resolved.";
+  }
+}
+
+function getLocationCopy(
+  location: AcquiredUserLocation | null,
+  locationErrors: LocationAcquisitionError[],
+): string {
   if (!location) return "Trying to get precise location";
   if (location.source === "precise") return "Using current location";
   if (location.source === "approximate") return "Using approximate location";
+
+  if (
+    locationErrors.some((error) => error.code === "GEOLOCATION_TIMEOUT") &&
+    locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")
+  ) {
+    return "Showing Abuja after location fallback";
+  }
 
   return "Showing Abuja";
 }
@@ -202,11 +228,11 @@ export function PublicDiscovery({
 
           <section className="location-panel" aria-live="polite">
             <div>
-              <strong>{getLocationCopy(location)}</strong>
+              <strong>{getLocationCopy(location, locationErrors)}</strong>
               <span>
                 {resolvedLocation?.label ??
                   (locationStatus === "resolving"
-                    ? "On mobile, precise location can take a few seconds before Abuja fallback."
+                    ? "On mobile, precise location can take up to 10 seconds before Abuja fallback."
                     : "Location access starts automatically.")}
               </span>
             </div>
@@ -219,7 +245,9 @@ export function PublicDiscovery({
               Retry location
             </button>
             {locationErrors.length > 0 ? (
-              <p>{locationErrors.map((error) => error.code).join(", ")}</p>
+              <p>
+                {locationErrors.map((error) => formatLocationErrorMessage(error.code)).join(" ")}
+              </p>
             ) : null}
           </section>
 

@@ -66,9 +66,9 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
 
     await page.goto("/admin");
-    await expect(page.getByRole("heading", { name: "Runtime token" })).toBeVisible();
-    await expect(page.getByLabel("Supabase access token")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Load vendors" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeVisible();
 
     await expectNoClientErrors(errors);
   });

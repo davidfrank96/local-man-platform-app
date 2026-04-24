@@ -44,19 +44,24 @@ The Local Man — UI Rules
 ## Vendor Detail Rules
 - strong hero image
 - visible primary actions near top
+- at-a-glance summary for open state, area, phone, price, rating, and featured dish count
 - weekly hours clearly structured
 - featured dishes visually separated
 - address and location visible
+- missing vendor data should use explicit fallback copy instead of vague placeholders
 - If a vendor has no image, show a plain missing-image state instead of stock imagery.
 
 ## Admin UI Rules
 - forms must be explicit and simple
 - location entry must be easy to validate
 - image upload state must be clear
+- vendor image upload should use a file input with a visible size/type hint, and removal should show the current uploaded images when available
 - hours editor must be easy to understand
 - destructive actions must be confirmed
-- Phase 2B admin UI may use a pasted Supabase access token until a fuller admin auth flow is implemented.
+- Admin access should use a simple Supabase email/password login flow and session validation instead of manual token paste.
 - admin screens must stay functional and restrained until runtime data operations are validated.
+- Vendor creation and editing should auto-generate a valid slug from the vendor name, but still allow manual edits if the slug remains lowercase and hyphen-separated.
+- Admin vendor forms should make required fields obvious, show inline validation messages where possible, and give simple guidance for phone numbers and coordinates.
 
 ## Style Guidance
 - clean modern look

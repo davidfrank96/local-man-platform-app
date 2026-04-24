@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { VendorDetailResponseData } from "../../types/index.ts";
+import { isVendorOpenNow } from "../../lib/vendors/nearby.ts";
 import { VendorActions } from "./vendor-actions.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
 
@@ -23,8 +24,34 @@ function formatTime(time: string | null): string {
   return time.slice(0, 5);
 }
 
+function formatCount(count: number, singularLabel: string): string {
+  return count === 1 ? `1 ${singularLabel}` : `${count} ${singularLabel}s`;
+}
+
 export function VendorDetail({ vendor }: VendorDetailProps) {
   const heroImage = vendor.images[0];
+  const hasHours = vendor.hours.length > 0;
+  const openNow = isVendorOpenNow(vendor.hours, vendor.is_open_override);
+  const statusLabel =
+    vendor.is_open_override === true
+      ? "Open now"
+      : vendor.is_open_override === false
+        ? "Closed now"
+        : hasHours
+          ? openNow
+            ? "Open now"
+            : "Closed now"
+          : "Hours not set";
+  const statusTone =
+    vendor.is_open_override === null && !hasHours
+      ? "status-neutral"
+      : openNow
+        ? "status-open"
+        : "status-closed";
+  const featuredDishLabel =
+    vendor.featured_dishes.length > 0
+      ? formatCount(vendor.featured_dishes.length, "featured dish")
+      : "No featured dishes yet";
 
   return (
     <main className="vendor-detail-shell">
@@ -33,14 +60,49 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
           <Link className="button-secondary compact-button" href="/">
             Back to map
           </Link>
-          <p className="eyebrow">{vendor.area ?? "Abuja"}</p>
+          <p className="eyebrow">{vendor.area ?? "Area not set"}</p>
           <h1>{vendor.name}</h1>
-          <p>{vendor.short_description ?? "Local food vendor"}</p>
-          <div className="vendor-detail-meta">
-            <span>{vendor.price_band ?? "Price not set"}</span>
-            <span>{vendor.rating_summary.review_count} ratings</span>
-            <span>{vendor.rating_summary.average_rating.toFixed(1)} average</span>
-          </div>
+          <p>
+            {vendor.short_description ??
+              "No description added yet. Check the hours and featured dishes below."}
+          </p>
+          <dl className="vendor-detail-summary">
+            <div>
+              <dt>Status</dt>
+              <dd>
+                <span className={statusTone}>{statusLabel}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Area</dt>
+              <dd>{vendor.area ?? "Area not set"}</dd>
+            </div>
+            <div>
+              <dt>Phone</dt>
+              <dd>{vendor.phone_number ?? "No phone yet"}</dd>
+            </div>
+            <div>
+              <dt>Price</dt>
+              <dd>{vendor.price_band ?? "Price not set"}</dd>
+            </div>
+            <div>
+              <dt>Ratings</dt>
+              <dd>
+                {vendor.rating_summary.review_count > 0
+                  ? `${vendor.rating_summary.average_rating.toFixed(1)} from ${formatCount(vendor.rating_summary.review_count, "rating")}`
+                  : "No ratings yet"}
+              </dd>
+            </div>
+            <div>
+              <dt>Featured dishes</dt>
+              <dd>{featuredDishLabel}</dd>
+            </div>
+          </dl>
+          <p className="vendor-detail-note">
+            {hasHours
+              ? "Hours below reflect the posted weekly schedule."
+              : "Hours are not set yet. Call before visiting."}
+          </p>
           <VendorActions
             latitude={vendor.latitude}
             longitude={vendor.longitude}
@@ -70,7 +132,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
                 </span>
               </li>
             ))}
-            {vendor.hours.length === 0 ? (
+            {!hasHours ? (
               <li>
                 <strong>No hours yet</strong>
                 <span>Call before visiting.</span>
@@ -91,7 +153,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
             ))}
             {vendor.featured_dishes.length === 0 ? (
               <li>
-                <strong>No featured dishes yet</strong>
+                <strong>No featured dishes added yet</strong>
                 <span>Check back after admin data completion.</span>
               </li>
             ) : null}
@@ -101,11 +163,12 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
         <div className="vendor-detail-section">
           <p className="eyebrow">Address</p>
           <h2>Location</h2>
-          <p>{vendor.address_text ?? vendor.area ?? "Abuja"}</p>
+          <p>{vendor.address_text ?? "Address not added yet"}</p>
           <p>
             {vendor.city ?? "Abuja"}
             {vendor.state ? `, ${vendor.state}` : ""}
           </p>
+          <p>{vendor.area ?? "Area not set"}</p>
         </div>
 
         <div className="vendor-detail-section">
@@ -115,7 +178,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
             {vendor.categories.map((category) => (
               <span key={category.id}>{category.name}</span>
             ))}
-            {vendor.categories.length === 0 ? <span>No categories</span> : null}
+            {vendor.categories.length === 0 ? <span>No categories added yet</span> : null}
           </div>
         </div>
       </section>

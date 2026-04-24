@@ -12,6 +12,12 @@ import {
   type AdminSession,
 } from "./auth.ts";
 import { AdminServiceError } from "./errors.ts";
+import {
+  buildVendorImagePublicUrl,
+  buildVendorImageStoragePath,
+  deleteVendorImageObject,
+  uploadVendorImageObject,
+} from "./storage.ts";
 import type {
   AdminVendorsQuery,
   CreateVendorDishesRequest,
@@ -159,6 +165,17 @@ function parseReturnedHours(payload: unknown): VendorHoursRecord[] {
 
 function parseReturnedImages(payload: unknown): VendorImageRecord[] {
   return parseSupabasePayload(z.array(vendorImageSchema), payload);
+}
+
+function parseReturnedImage(payload: unknown): VendorImageRecord {
+  const images = parseReturnedImages(payload);
+  const image = images[0];
+
+  if (!image) {
+    throw new AdminServiceError("NOT_FOUND", "Vendor image was not found.", 404);
+  }
+
+  return image;
 }
 
 function parseReturnedDishes(payload: unknown): VendorFeaturedDishRecord[] {
@@ -471,6 +488,162 @@ export async function createVendorImages(
   );
 
   return images;
+}
+
+export async function listVendorImages(
+  params: VendorIdParams,
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorImageRecord[]> {
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_images", {
+      vendor_id: `eq.${params.id}`,
+      order: "sort_order.asc",
+      select: "*",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+
+  return parseReturnedImages(payload);
+}
+
+export async function uploadVendorImage(
+  params: VendorIdParams,
+  data: {
+    file: File;
+    sort_order: number;
+  },
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorImageRecord[]> {
+  const resolvedConfig = requireServiceConfig(config);
+  const imageId = crypto.randomUUID();
+  const storageObjectPath = buildVendorImageStoragePath(
+    params.id,
+    imageId,
+    data.file,
+  );
+  const imageUrl = buildVendorImagePublicUrl(resolvedConfig, storageObjectPath);
+
+  await uploadVendorImageObject({
+    config: resolvedConfig,
+    session,
+    storageObjectPath,
+    file: data.file,
+    fetchImpl,
+  });
+
+  try {
+    const payload = await fetchJson(
+      createRestUrl(resolvedConfig, "vendor_images", { select: "*" }),
+      {
+        method: "POST",
+        headers: createHeaders(session, resolvedConfig),
+        body: JSON.stringify([
+          {
+            vendor_id: params.id,
+            image_url: imageUrl,
+            storage_object_path: storageObjectPath,
+            sort_order: data.sort_order,
+          },
+        ]),
+      },
+      fetchImpl,
+    );
+    const images = parseReturnedImages(payload);
+
+    await writeAuditLog(
+      { session, config: resolvedConfig, fetchImpl },
+      {
+        entityId: params.id,
+        action: "vendor.image_uploaded",
+        metadata: {
+          image_id: images[0]?.id ?? null,
+          storage_object_path: storageObjectPath,
+        },
+      },
+    );
+
+    return images;
+  } catch (error) {
+    await deleteVendorImageObject({
+      config: resolvedConfig,
+      session,
+      storageObjectPath,
+      fetchImpl,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function deleteVendorImage(
+  params: VendorIdParams & { imageId: string },
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorImageRecord> {
+  const resolvedConfig = requireServiceConfig(config);
+  const imagePayload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_images", {
+      id: `eq.${params.imageId}`,
+      vendor_id: `eq.${params.id}`,
+      select: "*",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+  const image = parseReturnedImage(imagePayload);
+
+  if (image.storage_object_path) {
+    await deleteVendorImageObject({
+      config: resolvedConfig,
+      session,
+      storageObjectPath: image.storage_object_path,
+      fetchImpl,
+    });
+  }
+
+  await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_images", {
+      id: `eq.${params.imageId}`,
+      vendor_id: `eq.${params.id}`,
+    }),
+    {
+      method: "DELETE",
+      headers: createHeaders(session, resolvedConfig, "return=minimal"),
+    },
+    fetchImpl,
+  );
+
+  await writeAuditLog(
+    { session, config: resolvedConfig, fetchImpl },
+    {
+      entityId: params.id,
+      action: "vendor.image_deleted",
+      metadata: {
+        image_id: image.id,
+        storage_object_path: image.storage_object_path,
+      },
+    },
+  );
+
+  return image;
 }
 
 export async function createVendorDishes(

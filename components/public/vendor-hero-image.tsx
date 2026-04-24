@@ -15,7 +15,7 @@ export function VendorHeroImage({ imageUrl, alt }: VendorHeroImageProps) {
   const [hasFailed, setHasFailed] = useState(false);
 
   if (!imageUrl || hasFailed || isSeedPlaceholderUrl(imageUrl)) {
-    return <span>No image available</span>;
+    return <span>No photo added yet</span>;
   }
 
   return (

@@ -2,70 +2,73 @@
 The Local Man — Current Sprint
 
 ## Sprint Goal
-Complete the Phase 2 release gate across runtime activation, admin data operations, and public discovery without expanding beyond the MVP.
+Complete Phase 4 usability and pilot-readiness work without expanding beyond the MVP.
 
 ## In Scope
-- validate runtime environment variables
-- apply and smoke-test the Supabase-backed Abuja seed flow
-- keep admin operations behind Supabase admin auth
-- support vendor CRUD, hours, image metadata, featured dishes, and audit log writes
-- provide minimal functional admin screens
-- provide public map/list discovery, search, filters, vendor detail, call, and directions actions
+- improve admin vendor creation and editing usability
+- remove manual slug mistakes with auto-generation and validation feedback
+- replace manual admin token paste with a usable login and session flow
+- support vendor image upload and removal through Supabase Storage
+- improve vendor detail content quality for partial data
+- improve public location fallback messaging
+- document launch-day and pilot operations clearly
 - keep tests, docs, and API contracts aligned
 
 ## Out of Scope
-- production deployment
-- full visual polish
-- concrete IP location provider selection
-- real Google Maps JavaScript rendering
-- delivery, payments, chat, loyalty, coupons, inventory, or vendor self-signup
+- delivery
+- payments
+- chat
+- loyalty
+- vendor self-signup
+- complex role management
+- concrete IP approximation provider selection
+- real Google Maps JavaScript integration
+- broad visual redesign
 
 ## Done Criteria
-Phase 2 is done when:
-- runtime env checks pass
-- nearby smoke test passes against real Supabase env vars and seeded Abuja data
-- admin route tests pass for auth, vendor CRUD, sub-resources, and audit logs
-- public route/client tests pass for categories, vendor detail, nearby queries, call links, and directions links
-- typecheck, lint, and production build pass
-- docs reflect the implemented Phase 2A, Phase 2B, and Phase 2C surfaces
+Phase 4 is done when:
+- admins can create and edit vendors without manual slug errors
+- admin login no longer depends on manually pasted JWTs
+- vendor images can be uploaded, listed, and removed reliably
+- public vendor detail pages degrade cleanly with partial data
+- location fallback messaging is clear on mobile and desktop
+- pilot operations steps are documented in a practical checklist
+- typecheck, lint, unit tests, build, and browser smoke tests pass
 
-## Current Phase 2 Status
-- Product, architecture, schema, API, UI, roadmap, sprint, testing, ops, agent, and README docs exist.
-- Next.js App Router scaffold exists.
-- Supabase initial schema migration and Abuja pilot seed SQL exist.
-- Runtime setup, env checks, migration, seed, and nearby smoke scripts exist.
-- Nearby vendor distance logic uses dynamic Haversine calculation with bounding-box candidate filtering.
-- Browser geolocation, IP approximation interface, and Abuja fallback handling exist.
-- Admin auth boundary exists for admin route protection.
-- Admin vendor list, create, update, and soft-delete routes call typed service methods.
-- Admin vendor create, update, and soft-delete routes write audit logs.
-- Admin vendor hours, image metadata, and featured dish routes call typed service methods and write audit logs.
-- Minimal admin UI exists for token-based vendor list, create, update, deactivate, hours, image metadata, and featured dish operations.
-- Admin UI routes exist at `/admin`, `/admin/vendors`, `/admin/vendors/new`, and `/admin/vendors/[id]`.
-- Public discovery UI exists for map/list search, location fallback handling, vendor cards, filters, call actions, and directions actions.
-- Public vendor detail and category routes now call Supabase REST.
-- Unit tests cover distance, location acquisition, nearby filtering, public API/client behavior, admin auth, admin vendor CRUD, and admin sub-resources.
+## Current Phase 4 Status
+- Admin vendor forms auto-generate valid slugs and reject invalid slug edits.
+- Admin create and edit forms show clearer inline validation feedback.
+- Admin routes use Supabase email/password login and session validation instead of manual token paste.
+- Admin vendor images use the `vendor-images` Supabase Storage bucket for upload and removal.
+- Public vendor detail pages show stronger summary content and explicit fallback copy for missing fields.
+- Public location handling keeps the 10-second precise-location timeout and clearer Abuja fallback messaging.
+- Pilot operator documentation now exists in `docs/ops/PILOT_CHECKLIST.md`.
+- Unit tests, build, and browser smoke tests cover the highest-risk Phase 4 paths.
 
-## Remaining Phase 2 Warnings
-- IP approximation provider is an interface only; no concrete provider is selected.
-- Public map rendering uses the MVP coordinate grid, not the final Google Maps JavaScript API integration.
-- Admin UI uses pasted Supabase access tokens until a fuller admin login flow is implemented.
-- Browser-level accessibility and responsive screenshot tests are not automated yet.
+## Current Phase 4 Warnings
+- IP approximation is still an interface only; there is no concrete provider yet.
+- Public map rendering is still the MVP coordinate grid rather than a real map SDK.
+- Admin auth uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
+- Seed and legacy image rows may still have null `storage_object_path`; newly uploaded images are storage-backed.
+- Pilot quality still depends on operators entering complete vendor data.
 
-## Runtime Validation Gate
-Before deployment or further feature expansion:
-- apply `supabase/migrations/20260422180000_initial_schema.sql` to the target Supabase project
-- apply `supabase/seed/20260422_abuja_pilot_seed.sql`
-- run the seed validation SQL in `docs/ops/RUNTIME_SETUP.md`
-- run `npm run smoke:nearby` against the local app with real Supabase env vars
-- document any failures before continuing
+## Pilot Readiness Gate
+Before pilot launch:
+- confirm `docs/ops/RUNTIME_SETUP.md` passes end to end on the target Supabase project
+- confirm `docs/ops/PILOT_CHECKLIST.md` is followed for vendor data, admin onboarding, and smoke checks
+- confirm admin login works for a real `admin_users` account
+- confirm image upload works against the real Supabase bucket
+- confirm `npm run smoke:nearby` passes against the real environment
+- confirm browser smoke tests still pass against the current build
 
-## Phase 2 Boundaries
+## Phase 4 Boundaries
 Completed surfaces:
-- Phase 2A runtime activation checks and nearby smoke test path
-- Phase 2B admin auth, data operations, audit logging, and minimal admin forms
-- Phase 2C public discovery, search/filter controls, vendor cards, vendor detail, call, and directions actions
+- Phase 4A admin data-entry usability
+- Phase 4B admin authentication usability
+- Phase 4C vendor image management
+- Phase 4D location and discovery refinement
+- Phase 4E pilot operations documentation
 
 Still not allowed:
-- visual polish
 - delivery, payments, chat, loyalty, coupons, inventory, or vendor self-signup
+- broad visual polish unrelated to real usability or pilot operation

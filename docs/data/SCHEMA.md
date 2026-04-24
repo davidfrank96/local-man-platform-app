@@ -65,6 +65,11 @@ Notes:
 - Distance is not stored in the database.
 - Distance is calculated at query time based on user location.
 
+## Vendor Image Notes
+- `storage_object_path` is used for uploaded vendor images and may be null for seed or legacy URLs.
+- Uploaded images should point to the `vendor-images` Supabase Storage bucket.
+- The public app reads `image_url`; the admin app uses `storage_object_path` for removal.
+
 ## Table: vendor_hours
 - id: uuid, primary key
 - vendor_id: uuid, foreign key to vendors
@@ -111,6 +116,7 @@ Notes:
 - id: uuid, primary key
 - vendor_id: uuid, foreign key to vendors
 - image_url: text, required
+- storage_object_path: text nullable
 - sort_order: integer default 0
 - created_at: timestamp
 
