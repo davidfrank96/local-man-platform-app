@@ -20,6 +20,11 @@ import type {
   UpdateVendorRequest,
   VendorImageMetadataRequest,
 } from "../../types/index.ts";
+import {
+  getVendorSlugError,
+  slugifyVendorName,
+} from "../../lib/admin/slug.ts";
+import { slugPattern } from "../../lib/validation/common.ts";
 
 const priceBands: PriceBand[] = ["budget", "standard", "premium"];
 const dayLabels = [
@@ -470,10 +475,13 @@ function AdminForms({
           className="admin-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!event.currentTarget.reportValidity()) {
+              return;
+            }
             void onCreateVendor(createVendorPayload(new FormData(event.currentTarget)));
           }}
         >
-          <VendorIdentityFields />
+          <CreateVendorIdentityFields />
           <button className="button-primary" disabled={disabled} type="submit">
             Create vendor
           </button>
@@ -493,7 +501,7 @@ function AdminForms({
             void onUpdateVendor(updateVendorPayload(new FormData(event.currentTarget)));
           }}
         >
-          <VendorIdentityFields selectedVendor={selectedVendor} isUpdate />
+          <UpdateVendorIdentityFields selectedVendor={selectedVendor} />
           <div className="action-row">
             <button
               className="button-primary"
@@ -621,12 +629,127 @@ function AdminForms({
   );
 }
 
-function VendorIdentityFields({
+function CreateVendorIdentityFields() {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
+  const slugError = slugTouched ? getVendorSlugError(slug) : null;
+  const slugHintId = "create-vendor-slug-help";
+
+  function handleNameChange(nextName: string) {
+    setName(nextName);
+
+    if (!slugTouched) {
+      setSlug(nextName.trim().length > 0 ? slugifyVendorName(nextName) : "");
+    }
+  }
+
+  function handleSlugChange(nextSlug: string) {
+    setSlugTouched(true);
+    setSlug(nextSlug);
+  }
+
+  return (
+    <>
+      <div className="form-grid">
+        <label className="field">
+          <span>Name</span>
+          <input
+            name="name"
+            placeholder="Vendor name"
+            required
+            value={name}
+            onChange={(event) => handleNameChange(event.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Slug</span>
+          <input
+            aria-describedby={slugHintId}
+            aria-invalid={slugError ? "true" : undefined}
+            autoComplete="off"
+            name="slug"
+            pattern={slugPattern.source}
+            placeholder="Generated from name"
+            required
+            spellCheck={false}
+            value={slug}
+            onChange={(event) => handleSlugChange(event.target.value)}
+          />
+          <span id={slugHintId} className={slugError ? "field-error" : "field-hint"}>
+            {slugError ?? "Lowercase letters, numbers, and hyphens only."}
+          </span>
+        </label>
+        <label className="field">
+          <span>Phone</span>
+          <input name="phone_number" placeholder="+234..." />
+        </label>
+        <label className="field">
+          <span>Area</span>
+          <input name="area" placeholder="Wuse" />
+        </label>
+        <label className="field">
+          <span>Latitude</span>
+          <input
+            name="latitude"
+            placeholder="9.0813"
+            required
+            step="any"
+            type="number"
+          />
+        </label>
+        <label className="field">
+          <span>Longitude</span>
+          <input
+            name="longitude"
+            placeholder="7.4694"
+            required
+            step="any"
+            type="number"
+          />
+        </label>
+        <label className="field">
+          <span>Price band</span>
+          <select name="price_band" required>
+            <option value="">Select</option>
+            {priceBands.map((band) => (
+              <option key={band} value={band}>
+                {band}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="field field-wide">
+        <span>Short description</span>
+        <textarea name="short_description" placeholder="Short food or vendor cue" rows={3} />
+      </label>
+      <label className="field field-wide">
+        <span>Address</span>
+        <input name="address_text" placeholder="Street address" />
+      </label>
+      <div className="form-grid">
+        <label className="field">
+          <span>City</span>
+          <input defaultValue="Abuja" name="city" />
+        </label>
+        <label className="field">
+          <span>State</span>
+          <input defaultValue="FCT" name="state" />
+        </label>
+        <label className="field">
+          <span>Country</span>
+          <input defaultValue="Nigeria" name="country" />
+        </label>
+      </div>
+    </>
+  );
+}
+
+function UpdateVendorIdentityFields({
   selectedVendor,
-  isUpdate = false,
 }: {
   selectedVendor?: AdminVendorSummary | null;
-  isUpdate?: boolean;
 }) {
   return (
     <>
@@ -636,16 +759,9 @@ function VendorIdentityFields({
           <input
             defaultValue={selectedVendor?.name ?? ""}
             name="name"
-            placeholder={isUpdate ? "Leave blank to keep current" : "Vendor name"}
-            required={!isUpdate}
+            placeholder="Leave blank to keep current"
           />
         </label>
-        {!isUpdate ? (
-          <label className="field">
-            <span>Slug</span>
-            <input name="slug" placeholder="vendor-slug" required />
-          </label>
-        ) : null}
         <label className="field">
           <span>Phone</span>
           <input
@@ -664,7 +780,6 @@ function VendorIdentityFields({
             defaultValue={selectedVendor?.latitude ?? ""}
             name="latitude"
             placeholder="9.0813"
-            required={!isUpdate}
             step="any"
             type="number"
           />
@@ -675,19 +790,14 @@ function VendorIdentityFields({
             defaultValue={selectedVendor?.longitude ?? ""}
             name="longitude"
             placeholder="7.4694"
-            required={!isUpdate}
             step="any"
             type="number"
           />
         </label>
         <label className="field">
           <span>Price band</span>
-          <select
-            defaultValue={selectedVendor?.price_band ?? ""}
-            name="price_band"
-            required={!isUpdate}
-          >
-            <option value="">{isUpdate ? "No change" : "Select"}</option>
+          <select defaultValue={selectedVendor?.price_band ?? ""} name="price_band">
+            <option value="">No change</option>
             {priceBands.map((band) => (
               <option key={band} value={band}>
                 {band}
@@ -705,28 +815,6 @@ function VendorIdentityFields({
           rows={3}
         />
       </label>
-      {!isUpdate ? (
-        <>
-          <label className="field field-wide">
-            <span>Address</span>
-            <input name="address_text" placeholder="Street address" />
-          </label>
-          <div className="form-grid">
-            <label className="field">
-              <span>City</span>
-              <input defaultValue="Abuja" name="city" />
-            </label>
-            <label className="field">
-              <span>State</span>
-              <input defaultValue="FCT" name="state" />
-            </label>
-            <label className="field">
-              <span>Country</span>
-              <input defaultValue="Nigeria" name="country" />
-            </label>
-          </div>
-        </>
-      ) : null}
     </>
   );
 }

@@ -352,6 +352,17 @@ h2 {
   font-weight: 800;
 }
 
+.field-hint,
+.field-error {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.field-error {
+  color: #9b1c1c;
+}
+
 .field input,
 .field select,
 .field textarea {
