@@ -48,6 +48,14 @@ test.describe("Phase 3 browser smoke", () => {
     const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(".selected-vendor-panel").getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".selected-vendor-panel").getByRole("link", { name: "Call" })).toBeVisible();
+    await expect(
+      page.locator(".selected-vendor-panel").getByRole("link", { name: "Directions" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".selected-vendor-panel").getByRole("link", { name: "View details" }),
+    ).toBeVisible();
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   usePathname,
@@ -15,11 +16,13 @@ import {
   fetchPublicCategories,
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
+import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 import {
   VendorFilters,
   type DiscoveryFilters,
 } from "./vendor-filters.tsx";
+import { VendorActions } from "./vendor-actions.tsx";
 import { VendorCard } from "./vendor-card.tsx";
 import { VendorMap } from "./vendor-map.tsx";
 
@@ -130,6 +133,21 @@ function buildVendorDetailHref(slug: string, returnTo: string): string {
   params.set("returnTo", returnTo);
 
   return `/vendors/${slug}?${params.toString()}`;
+}
+
+function buildDiscoveryReturnTo(
+  pathname: string,
+  filters: DiscoveryFilters,
+  selectedVendorSlug: string | null,
+  locationSource: LocationSource | null,
+): string {
+  const queryString = buildDiscoverySearchParams(
+    filters,
+    selectedVendorSlug,
+    locationSource,
+  ).toString();
+
+  return `${pathname}${queryString ? `?${queryString}` : ""}`;
 }
 
 function readDiscoverySnapshot(key: string): DiscoverySnapshot | null {
@@ -263,6 +281,10 @@ export function PublicDiscovery({
   const discoverySnapshotKey = useMemo(
     () => getDiscoverySnapshotKey(pathname, discoveryQueryString),
     [discoveryQueryString, pathname],
+  );
+  const discoveryReturnTo = useMemo(
+    () => buildDiscoveryReturnTo(pathname, filters, selectedVendorSlug, activeLocationSource),
+    [activeLocationSource, filters, pathname, selectedVendorSlug],
   );
 
   useEffect(() => {
@@ -518,11 +540,12 @@ export function PublicDiscovery({
                 approximateDistance={isApproximateDistance}
                 detailHref={buildVendorDetailHref(
                   vendor.slug,
-                  `${pathname}?${buildDiscoverySearchParams(
+                  buildDiscoveryReturnTo(
+                    pathname,
                     filters,
                     vendor.slug,
                     activeLocationSource,
-                  ).toString()}`.replace(/\?$/, ""),
+                  ),
                 )}
                 key={vendor.vendor_id}
                 selected={vendor.slug === selectedVendorSlug}
@@ -552,10 +575,49 @@ export function PublicDiscovery({
             {selectedVendor ? (
               <>
                 <h2>{selectedVendor.name}</h2>
-                <p>{selectedVendor.short_description ?? "Local food vendor"}</p>
-                <span className={selectedVendor.is_open_now ? "status-open" : "status-closed"}>
-                  {selectedVendor.is_open_now ? "Open now" : "Closed"}
-                </span>
+                <div className="selected-vendor-summary">
+                  <p className="selected-vendor-status-line">
+                    <span>
+                      {formatVendorCardDistance(
+                        selectedVendor.distance_km,
+                        isApproximateDistance,
+                      )}
+                    </span>
+                    <span aria-hidden="true">•</span>
+                    <span
+                      className={
+                        selectedVendor.is_open_now
+                          ? "selected-vendor-status-open"
+                          : "selected-vendor-status-closed"
+                      }
+                    >
+                      {selectedVendor.is_open_now ? "Open" : "Closed"}
+                    </span>
+                  </p>
+                  <p className="selected-vendor-hours-line">
+                    <span className="selected-vendor-label">Today:</span>{" "}
+                    {selectedVendor.today_hours}
+                  </p>
+                  {selectedVendor.area ? (
+                    <p className="selected-vendor-area-line">
+                      <span className="selected-vendor-label">Area:</span>{" "}
+                      {selectedVendor.area}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="selected-vendor-actions">
+                  <VendorActions
+                    latitude={selectedVendor.latitude}
+                    longitude={selectedVendor.longitude}
+                    phoneNumber={selectedVendor.phone_number}
+                  />
+                  <Link
+                    className="button-secondary compact-button"
+                    href={buildVendorDetailHref(selectedVendor.slug, discoveryReturnTo)}
+                  >
+                    View details
+                  </Link>
+                </div>
               </>
             ) : (
               <>

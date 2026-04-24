@@ -987,6 +987,58 @@ h2 {
   min-width: 0;
 }
 
+.selected-vendor-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.selected-vendor-status-line,
+.selected-vendor-hours-line,
+.selected-vendor-area-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  font-size: 0.94rem;
+}
+
+.selected-vendor-status-line {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.selected-vendor-status-open {
+  color: var(--color-green);
+}
+
+.selected-vendor-status-closed {
+  color: var(--color-accent);
+}
+
+.selected-vendor-hours-line,
+.selected-vendor-area-line {
+  color: var(--color-muted);
+}
+
+.selected-vendor-label {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.selected-vendor-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.selected-vendor-actions .vendor-actions {
+  width: 100%;
+}
+
+.selected-vendor-actions .vendor-actions > * {
+  flex: 1 1 0;
+}
+
 .selected-vendor-panel h2 {
   font-size: clamp(1.8rem, 4vw, 3.2rem);
 }

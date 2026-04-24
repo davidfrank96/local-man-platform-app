@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 import {
+  formatVendorCardDistance,
   formatVendorCardPriceBand,
   formatVendorCardRating,
 } from "../../lib/vendors/card-display.ts";
@@ -15,16 +16,6 @@ type VendorCardProps = {
   detailHref: string;
   onSelect: (vendorId: string) => void;
 };
-
-function formatDistance(distanceKm: number, approximateDistance: boolean): string {
-  const prefix = approximateDistance ? "About " : "";
-
-  if (distanceKm < 1) {
-    return `${prefix}${Math.round(distanceKm * 1000)} m`;
-  }
-
-  return `${prefix}${distanceKm.toFixed(1)} km`;
-}
 
 function getVendorCue(vendor: NearbyVendor): string | null {
   return vendor.featured_dish?.dish_name ?? vendor.short_description;
@@ -61,7 +52,7 @@ export function VendorCard({
         <div className="vendor-card-main">
           <h3>{vendor.name}</h3>
           <p className="vendor-card-status-line">
-            <span>{formatDistance(vendor.distance_km, approximateDistance)}</span>
+            <span>{formatVendorCardDistance(vendor.distance_km, approximateDistance)}</span>
             <span aria-hidden="true">•</span>
             <span
               className={vendor.is_open_now ? "vendor-card-status-open" : "vendor-card-status-closed"}
