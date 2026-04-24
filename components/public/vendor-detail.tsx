@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { VendorDetailResponseData } from "../../types/index.ts";
 import { isVendorOpenNow } from "../../lib/vendors/nearby.ts";
+import { formatVendorHoursRange } from "../../lib/vendors/time-display.ts";
 import { VendorActions } from "./vendor-actions.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
 
 type VendorDetailProps = {
   vendor: VendorDetailResponseData;
+  returnTo?: string;
 };
 
 const dayLabels = [
@@ -18,17 +20,11 @@ const dayLabels = [
   "Saturday",
 ];
 
-function formatTime(time: string | null): string {
-  if (!time) return "";
-
-  return time.slice(0, 5);
-}
-
 function formatCount(count: number, singularLabel: string): string {
   return count === 1 ? `1 ${singularLabel}` : `${count} ${singularLabel}s`;
 }
 
-export function VendorDetail({ vendor }: VendorDetailProps) {
+export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
   const heroImage = vendor.images[0];
   const hasHours = vendor.hours.length > 0;
   const openNow = isVendorOpenNow(vendor.hours, vendor.is_open_override);
@@ -57,7 +53,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
     <main className="vendor-detail-shell">
       <section className="vendor-detail-hero">
         <div className="vendor-detail-copy">
-          <Link className="button-secondary compact-button" href="/">
+          <Link className="button-secondary compact-button" href={returnTo}>
             Back to map
           </Link>
           <p className="eyebrow">{vendor.area ?? "Area not set"}</p>
@@ -128,7 +124,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
                 <span>
                   {hours.is_closed
                     ? "Closed"
-                    : `${formatTime(hours.open_time)} - ${formatTime(hours.close_time)}`}
+                    : formatVendorHoursRange(hours.open_time, hours.close_time)}
                 </span>
               </li>
             ))}

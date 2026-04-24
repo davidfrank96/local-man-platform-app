@@ -17,6 +17,11 @@ export type VendorHourWindow = {
   is_closed: boolean;
 };
 
+export type NearbyVendorFeaturedDishSummary = {
+  dish_name: string;
+  description: string | null;
+};
+
 export type VendorLocationRecord = {
   id: string;
   name: string;
@@ -31,6 +36,11 @@ export type VendorLocationRecord = {
   review_count: number;
   is_open_override: boolean | null;
   vendor_hours?: VendorHourWindow[] | null;
+  vendor_featured_dishes?: Array<{
+    dish_name: string;
+    description: string | null;
+    is_featured: boolean;
+  }> | null;
   vendor_category_map?: Array<{
     vendor_categories: {
       slug: string;
@@ -52,6 +62,7 @@ export type NearbyVendorResult = {
   review_count: number;
   distance_km: number;
   is_open_now: boolean;
+  featured_dish: NearbyVendorFeaturedDishSummary | null;
 };
 
 type NearbyVendorSortable = NearbyVendorResult & {
@@ -164,6 +175,21 @@ function matchesCategory(vendor: VendorLocationRecord, category: string): boolea
   );
 }
 
+function getFeaturedDishSummary(
+  vendor: VendorLocationRecord,
+): NearbyVendorFeaturedDishSummary | null {
+  const featuredDish =
+    vendor.vendor_featured_dishes?.find((dish) => dish.is_featured) ??
+    vendor.vendor_featured_dishes?.[0];
+
+  if (!featuredDish) return null;
+
+  return {
+    dish_name: featuredDish.dish_name,
+    description: featuredDish.description,
+  };
+}
+
 export function findNearbyVendors(
   vendors: VendorLocationRecord[],
   query: ResolvedNearbyVendorsQuery,
@@ -212,6 +238,7 @@ export function findNearbyVendors(
           review_count: vendor.review_count,
           distance_km: roundDistanceKm(rawDistanceKm),
           is_open_now: isOpenNow,
+          featured_dish: getFeaturedDishSummary(vendor),
           rawDistanceKm,
         },
       ];

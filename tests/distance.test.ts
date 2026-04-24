@@ -26,6 +26,7 @@ const baseVendor = {
   review_count: 0,
   is_open_override: null,
   vendor_hours: [],
+  vendor_featured_dishes: null,
 } satisfies Omit<
   VendorLocationRecord,
   "id" | "name" | "latitude" | "longitude"
@@ -88,6 +89,43 @@ test("filters nearby vendors by radius and sorts nearest first", () => {
     ["near", "middle"],
   );
   assert.ok(results[0].distance_km < results[1].distance_km);
+});
+
+test("includes one featured dish summary when present", () => {
+  const results = findNearbyVendors(
+    [
+      {
+        ...baseVendor,
+        id: "featured",
+        name: "Featured Vendor",
+        latitude: 0,
+        longitude: 0.01,
+        vendor_featured_dishes: [
+          {
+            dish_name: "Rice and stew",
+            description: "Lunch plate",
+            is_featured: true,
+          },
+          {
+            dish_name: "Beans and plantain",
+            description: "Backup dish",
+            is_featured: false,
+          },
+        ],
+      },
+    ],
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+  );
+
+  assert.deepEqual(results[0]?.featured_dish, {
+    dish_name: "Rice and stew",
+    description: "Lunch plate",
+  });
 });
 
 test("returns an empty list when no vendors are nearby", () => {

@@ -102,6 +102,11 @@ export const vendorFeaturedDishSchema = z.object({
   updated_at: timestampSchema,
 });
 
+export const nearbyVendorFeaturedDishSummarySchema = z.object({
+  dish_name: nonEmptyTextSchema,
+  description: z.string().nullable(),
+});
+
 export const vendorImageSchema = z.object({
   id: uuidSchema,
   vendor_id: uuidSchema,
@@ -289,6 +294,7 @@ export const nearbyVendorsResponseDataSchema = z.object({
       review_count: z.coerce.number().int().min(0),
       distance_km: z.number().min(0),
       is_open_now: z.boolean(),
+      featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),
     }),
   ),
 });

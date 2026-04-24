@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { VendorDetail } from "../../../components/public/vendor-detail.tsx";
+import { sanitizePublicReturnPath } from "../../../lib/public/navigation.ts";
 import {
   fetchVendorDetailBySlugFromSupabase,
   getSupabaseRestConfig,
@@ -9,12 +10,17 @@ type VendorDetailPageProps = {
   params: Promise<{
     slug: string;
   }>;
+  searchParams: Promise<{
+    returnTo?: string;
+  }>;
 };
 
 export default async function VendorDetailPage({
   params,
+  searchParams,
 }: VendorDetailPageProps) {
   const { slug } = await params;
+  const { returnTo } = await searchParams;
   const config = getSupabaseRestConfig();
 
   if (!config) {
@@ -49,5 +55,5 @@ export default async function VendorDetailPage({
     notFound();
   }
 
-  return <VendorDetail vendor={vendor} />;
+  return <VendorDetail returnTo={sanitizePublicReturnPath(returnTo ?? null)} vendor={vendor} />;
 }

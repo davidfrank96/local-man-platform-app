@@ -49,6 +49,7 @@ Returns:
 - longitude
 - distance_km, computed from user coordinates to vendor coordinates
 - is_open_now
+- one featured dish summary when available: `featured_dish.dish_name` and optional `featured_dish.description`
 - summary fields for cards
 
 Behavior:
