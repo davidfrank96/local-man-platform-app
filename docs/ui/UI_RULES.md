@@ -37,6 +37,7 @@ The Local Man — UI Rules
 - distance
 - open/closed state
 - one featured dish summary when available
+- today’s hours only, shown as a compact `Today:` line
 - short description only when no featured dish summary is available
 - compact price label: `Budget-friendly`, `Everyday price`, or `Higher price`
 - area

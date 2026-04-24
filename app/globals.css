@@ -796,7 +796,8 @@ h2 {
 }
 
 .vendor-card-status-line,
-.vendor-card-meta-line {
+.vendor-card-meta-line,
+.vendor-card-hours-line {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -810,6 +811,15 @@ h2 {
 
 .vendor-card p.vendor-card-status-line {
   color: var(--color-text);
+}
+
+.vendor-card p.vendor-card-hours-line {
+  color: var(--color-muted);
+}
+
+.vendor-card-hours-label {
+  color: var(--color-text);
+  font-weight: 800;
 }
 
 .vendor-card-status-open {

@@ -39,6 +39,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(firstCard).toBeVisible();
     await expect(firstCard.locator(".vendor-card-cue")).toBeVisible();
     await expect(firstCard.locator(".vendor-card-rating")).toBeVisible();
+    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
     await expect(firstCard.getByText("Tap to preview on map")).toBeVisible();
     await expect(firstCard.getByRole("link", { name: "Call" })).toBeVisible();
     await expect(firstCard.getByRole("link", { name: "Directions" })).toBeVisible();

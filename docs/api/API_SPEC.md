@@ -50,6 +50,7 @@ Returns:
 - distance_km, computed from user coordinates to vendor coordinates
 - is_open_now
 - one featured dish summary when available: `featured_dish.dish_name` and optional `featured_dish.description`
+- `today_hours`, a compact current-day summary such as `9:00 AM - 6:00 PM`, `Closed`, or `Hours not listed`
 - summary fields for cards
 
 Behavior:

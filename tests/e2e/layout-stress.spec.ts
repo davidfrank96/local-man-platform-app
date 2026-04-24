@@ -47,6 +47,7 @@ function createVendor(index: number, overrides: Partial<NearbyVendor> = {}): Nea
       dish_name: `Dish ${index + 1}`,
       description: null,
     },
+    today_hours: "9:00 AM - 6:00 PM",
     ...overrides,
   };
 }

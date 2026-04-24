@@ -69,6 +69,9 @@ export function VendorCard({
               {vendor.is_open_now ? "Open" : "Closed"}
             </span>
           </p>
+          <p className="vendor-card-hours-line">
+            <span className="vendor-card-hours-label">Today:</span> {vendor.today_hours}
+          </p>
           {cue ? <p className="vendor-card-cue">{cue}</p> : null}
           <div className="vendor-card-supporting">
             {metaLine ? <p className="vendor-card-meta-line">{metaLine}</p> : null}

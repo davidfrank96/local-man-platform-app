@@ -295,6 +295,7 @@ export const nearbyVendorsResponseDataSchema = z.object({
       distance_km: z.number().min(0),
       is_open_now: z.boolean(),
       featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),
+      today_hours: z.string(),
     }),
   ),
 });
