@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { POST as createDishesRoute } from "../app/api/admin/vendors/[id]/dishes/route.ts";
 import { POST as replaceHoursRoute } from "../app/api/admin/vendors/[id]/hours/route.ts";
-import { POST as createImagesRoute } from "../app/api/admin/vendors/[id]/images/route.ts";
+import {
+  GET as listImagesRoute,
+  POST as createImagesRoute,
+} from "../app/api/admin/vendors/[id]/images/route.ts";
+import { DELETE as deleteImageRoute } from "../app/api/admin/vendors/[id]/images/[imageId]/route.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 const timestamp = "2026-04-22T00:00:00+00:00";
@@ -75,13 +79,57 @@ function createAdminFetchMock(calls: string[]): typeof fetch {
       );
     }
 
+    if (url.pathname.startsWith("/storage/v1/object/vendor-images/vendors/")) {
+      return new Response(null, { status: 200 });
+    }
+
     if (url.pathname === "/rest/v1/vendor_images") {
+      if (method === "GET") {
+        return Response.json([
+          {
+            id: "10000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            image_url:
+              `https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/${vendorId}/image-1.jpg`,
+            storage_object_path: `vendors/${vendorId}/image-1.jpg`,
+            sort_order: 2,
+            created_at: timestamp,
+          },
+        ]);
+      }
+
+      if (method === "POST") {
+        const rows = JSON.parse(String(init?.body ?? "[]")) as Array<{
+          vendor_id: string;
+          image_url: string;
+          storage_object_path?: string | null;
+          sort_order: number;
+        }>;
+
+        return Response.json(
+          rows.map((row, index) => ({
+            id: `10000000-0000-4000-8000-00000000000${index + 1}`,
+            vendor_id: row.vendor_id,
+            image_url: row.image_url,
+            storage_object_path: row.storage_object_path ?? null,
+            sort_order: row.sort_order,
+            created_at: timestamp,
+          })),
+        );
+      }
+
+      if (method === "DELETE") {
+        return new Response(null, { status: 200 });
+      }
+
       return Response.json([
         {
           id: "10000000-0000-4000-8000-000000000001",
           vendor_id: vendorId,
-          image_url: "/seed-images/vendors/test/cover.jpg",
-          sort_order: 0,
+          image_url:
+            `https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/${vendorId}/image-1.jpg`,
+          storage_object_path: `vendors/${vendorId}/image-1.jpg`,
+          sort_order: 2,
           created_at: timestamp,
         },
       ]);
@@ -121,10 +169,67 @@ function createAdminRequest(body: unknown): Request {
   });
 }
 
+function createAdminGetRequest(): Request {
+  return new Request("http://localhost/api/admin/vendors", {
+    method: "GET",
+    headers: {
+      authorization: "Bearer admin-token",
+    },
+  });
+}
+
+function createAdminDeleteRequest(): Request {
+  return new Request("http://localhost/api/admin/vendors", {
+    method: "DELETE",
+    headers: {
+      authorization: "Bearer admin-token",
+    },
+  });
+}
+
 function createRouteContext() {
   return {
     params: Promise.resolve({ id: vendorId }),
   };
+}
+
+function createImageRouteContext(imageId = "10000000-0000-4000-8000-000000000001") {
+  return {
+    params: Promise.resolve({ id: vendorId, imageId }),
+  };
+}
+
+function createMultipartAdminRequest(): Request {
+  const body = new FormData();
+  body.set(
+    "image",
+    new File([Uint8Array.from([1, 2, 3, 4])], "cover.jpg", {
+      type: "image/jpeg",
+    }),
+  );
+  body.set("sort_order", "2");
+
+  return new Request("http://localhost/api/admin/vendors", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-token",
+    },
+    body,
+  });
+}
+
+function createMultipartAdminRequestWithFile(file: File): Request {
+  const body = new FormData();
+  body.set("image", file);
+  body.set("sort_order", "2");
+
+  return new Request("http://localhost/api/admin/vendors", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-token",
+    },
+    body,
+  });
 }
 
 test("admin replace vendor hours route upserts hours and writes audit log", async () => {
@@ -170,27 +275,34 @@ test("admin create vendor images route inserts images and writes audit log", asy
 
   try {
     const response = await createImagesRoute(
-      createAdminRequest({
-        images: [
-          {
-            image_url: "/seed-images/vendors/test/cover.jpg",
-            sort_order: 0,
-          },
-        ],
-      }),
+      createMultipartAdminRequest(),
       createRouteContext(),
     );
     const body = await response.json();
 
     assert.equal(response.status, 201);
     assert.equal(body.success, true);
-    assert.equal(body.data.images[0].image_url, "/seed-images/vendors/test/cover.jpg");
-    assert.deepEqual(calls, [
-      "GET /auth/v1/user",
-      "GET /rest/v1/admin_users",
-      "POST /rest/v1/vendor_images",
-      "POST /rest/v1/audit_logs",
-    ]);
+    assert.equal(body.data.images[0].storage_object_path?.startsWith(`vendors/${vendorId}/`), true);
+    assert.equal(
+      body.data.images[0].image_url.startsWith(
+        `https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/${vendorId}/`,
+      ),
+      true,
+    );
+    const storageCall = calls.find((call) =>
+      call.startsWith("POST /storage/v1/object/vendor-images/vendors/"),
+    );
+
+    assert.ok(storageCall);
+    assert.deepEqual(
+      calls.filter((call) => !call.startsWith("POST /storage/v1/object/vendor-images/vendors/")),
+      [
+        "GET /auth/v1/user",
+        "GET /rest/v1/admin_users",
+        "POST /rest/v1/vendor_images",
+        "POST /rest/v1/audit_logs",
+      ],
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -254,6 +366,122 @@ test("admin vendor image route rejects empty image arrays", async () => {
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin vendor image route rejects unsupported file types", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await createImagesRoute(
+      createMultipartAdminRequestWithFile(
+        new File([Uint8Array.from([1, 2, 3])], "notes.txt", {
+          type: "text/plain",
+        }),
+      ),
+      createRouteContext(),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin vendor image route rejects oversized uploads", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await createImagesRoute(
+      createMultipartAdminRequestWithFile(
+        new File(
+          [new Uint8Array(5 * 1024 * 1024 + 1)],
+          "large.jpg",
+          {
+            type: "image/jpeg",
+          },
+        ),
+      ),
+      createRouteContext(),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin list vendor images route returns vendor images", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await listImagesRoute(createAdminGetRequest(), createRouteContext());
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.images[0].storage_object_path, `vendors/${vendorId}/image-1.jpg`);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendor_images",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin delete vendor image route removes image and storage object", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await deleteImageRoute(
+      createAdminDeleteRequest(),
+      createImageRouteContext(),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.image.storage_object_path, `vendors/${vendorId}/image-1.jpg`);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendor_images",
+      "DELETE /storage/v1/object/vendor-images/vendors/00000000-0000-4000-8000-000000000001/image-1.jpg",
+      "DELETE /rest/v1/vendor_images",
+      "POST /rest/v1/audit_logs",
     ]);
   } finally {
     globalThis.fetch = originalFetch;

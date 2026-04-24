@@ -121,10 +121,23 @@ Admin endpoint rules:
 - The bearer token is verified against Supabase Auth.
 - The authenticated user id must exist in `admin_users`.
 - Authentication and admin membership are checked before Phase 2 business logic runs.
+- The Phase 4 admin login UI obtains the bearer token from a Supabase email/password session instead of manual token paste.
 - Request params and request bodies are still validated at the route boundary.
 - Vendor list, create, update, and delete routes call typed admin vendor service methods.
 - Vendor create, update, and delete routes write audit logs.
 - Unexpected Supabase response shapes return `UPSTREAM_ERROR` without leaking raw parser failures.
+
+### GET /api/admin/session
+Validate the current admin session
+
+Route file:
+- `app/api/admin/session/route.ts`
+
+Behavior:
+- requires `Authorization: Bearer <supabase-access-token>`
+- verifies the Supabase user
+- verifies that the authenticated user exists in `admin_users`
+- returns the authenticated user and matching admin user record
 
 ### GET /api/admin/vendors
 List vendors
@@ -171,9 +184,45 @@ Route file:
 Behavior:
 - requires admin auth
 - validates vendor id
-- accepts JSON image metadata
-- inserts `vendor_images` records
-- writes `vendor.images_created` audit log
+- accepts multipart form uploads with `image` and `sort_order`
+- accepts JSON image metadata as a compatibility fallback
+- validates file type, file size, and sort order
+- uploads the file to the `vendor-images` Supabase Storage bucket
+- inserts `vendor_images` records with `image_url` and `storage_object_path`
+- writes `vendor.image_uploaded` audit log
+
+Returns:
+- `images`
+
+### GET /api/admin/vendors/:id/images
+List vendor images
+
+Route file:
+- `app/api/admin/vendors/[id]/images/route.ts`
+
+Behavior:
+- requires admin auth
+- validates vendor id
+- returns vendor image records ordered by `sort_order`
+
+Returns:
+- `images`
+
+### DELETE /api/admin/vendors/:id/images/:imageId
+Remove vendor image
+
+Route file:
+- `app/api/admin/vendors/[id]/images/[imageId]/route.ts`
+
+Behavior:
+- requires admin auth
+- validates vendor id and image id
+- deletes the Supabase Storage object when `storage_object_path` exists
+- deletes the `vendor_images` row
+- writes `vendor.image_deleted` audit log
+
+Returns:
+- `image`
 
 ### POST /api/admin/vendors/:id/hours
 Create or replace vendor hours

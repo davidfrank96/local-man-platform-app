@@ -117,6 +117,17 @@ Implementation interface:
 5. Admin saves changes
 6. System logs action in audit log
 
+## Vendor Image Storage
+
+Uploaded vendor images are stored in the Supabase `vendor-images` bucket.
+
+Implementation rules:
+- the admin route uploads the file after validating type and size
+- the database stores both the public `image_url` and the `storage_object_path`
+- the public app renders `image_url`
+- the admin app removes images by deleting the storage object first and then the database row
+- seed or legacy URLs may leave `storage_object_path` null, but uploaded images should not
+
 ## Core Product Logic
 ### Open Now
 Supports:

@@ -26,3 +26,10 @@ test("returns a clear slug validation error", () => {
   );
   assert.equal(getVendorSlugError("jabi-office-lunch-bowl"), null);
 });
+
+test("slugify output stays suitable for vendor edit workflows", () => {
+  const slug = slugifyVendorName("Jabi Office Lunch Bowl Updated");
+
+  assert.equal(isValidVendorSlug(slug), true);
+  assert.equal(slug, "jabi-office-lunch-bowl-updated");
+});

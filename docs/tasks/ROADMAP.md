@@ -45,5 +45,5 @@ The Local Man — Roadmap
 - smoke testing
 - deployment
 - monitoring
-- launch checklist
+- pilot operations checklist
 - feedback collection
