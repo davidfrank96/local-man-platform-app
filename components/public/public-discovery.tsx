@@ -17,6 +17,11 @@ import {
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
 import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
+import {
+  getMillisecondsUntilNextPublicTimeTheme,
+  getPublicTimeTheme,
+  type PublicTimeTheme,
+} from "../../lib/public/time-theme.ts";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 import {
   VendorFilters,
@@ -254,6 +259,7 @@ export function PublicDiscovery({
   const [nearbyData, setNearbyData] = useState<NearbyVendorsResponseData | null>(null);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [isFetchingVendors, setIsFetchingVendors] = useState(false);
+  const [timeTheme, setTimeTheme] = useState<PublicTimeTheme | null>(null);
   const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(
     parsedUrlState.selectedVendorSlug,
   );
@@ -291,6 +297,25 @@ export function PublicDiscovery({
     return () => {
       isMountedRef.current = false;
       nearbyRequestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    let timeoutId: number | null = null;
+
+    function applyTimeTheme(now: Date) {
+      setTimeTheme(getPublicTimeTheme(now));
+      timeoutId = window.setTimeout(() => {
+        applyTimeTheme(new Date());
+      }, getMillisecondsUntilNextPublicTimeTheme(now));
+    }
+
+    applyTimeTheme(new Date());
+
+    return () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, []);
 
@@ -483,13 +508,16 @@ export function PublicDiscovery({
   }
 
   return (
-    <main className="public-shell">
+    <main
+      className="public-shell"
+      data-time-theme={timeTheme ?? undefined}
+    >
       <section className="discovery-layout" aria-labelledby="discovery-title">
         <div className="discovery-sidebar">
           <div className="discovery-heading">
             <p className="eyebrow">Abuja pilot</p>
             <h1 id="discovery-title">{title}</h1>
-            <p>Find nearby local food vendors and act quickly.</p>
+            <p>Nearby local vendors. Act quickly.</p>
           </div>
 
           <section className="location-panel" aria-live="polite">

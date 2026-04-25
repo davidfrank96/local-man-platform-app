@@ -594,9 +594,146 @@ h2 {
 }
 
 .public-shell {
+  --discovery-shell-background:
+    linear-gradient(180deg, rgba(255, 252, 245, 0.72), rgba(255, 255, 255, 0.18)),
+    linear-gradient(135deg, rgba(245, 248, 242, 0.42), rgba(255, 255, 255, 0));
+  --discovery-panel-background: rgba(255, 255, 255, 0.82);
+  --discovery-map-surface: rgba(255, 255, 255, 0.82);
+  --discovery-map-overlay: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.82),
+    rgba(244, 193, 87, 0.26)
+  );
+  --discovery-accent-glow: rgba(36, 97, 79, 0.08);
+  --discovery-accent-glow-secondary: rgba(244, 193, 87, 0.06);
+  --discovery-map-legend-background: rgba(255, 255, 255, 0.88);
+  --discovery-heading-title: var(--color-text);
+  --discovery-heading-subtitle: rgba(37, 41, 36, 0.72);
+  --discovery-heading-accent: var(--color-accent);
+  --vendor-card-surface: rgba(255, 255, 255, 0.92);
+  --vendor-card-selected-surface: rgba(247, 251, 248, 0.82);
+  --vendor-card-selected-border: rgba(36, 97, 79, 0.72);
+  --vendor-card-selected-shadow:
+    0 18px 40px rgba(37, 41, 36, 0.14),
+    0 0 0 1px rgba(36, 97, 79, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --vendor-card-selected-overlay: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(36, 97, 79, 0.14)
+  );
+  --vendor-card-selected-text: var(--color-text);
+  --vendor-card-selected-muted: rgba(37, 41, 36, 0.82);
+  --vendor-card-selected-helper: rgba(37, 41, 36, 0.76);
   min-height: 100vh;
   min-width: 0;
   padding: 18px;
+  background:
+    radial-gradient(circle at top left, var(--discovery-accent-glow), transparent 42%),
+    radial-gradient(circle at bottom right, var(--discovery-accent-glow-secondary), transparent 38%),
+    var(--discovery-shell-background);
+}
+
+.public-shell[data-time-theme="morning"] {
+  --discovery-shell-background:
+    linear-gradient(180deg, rgba(245, 243, 231, 0.96), rgba(240, 249, 242, 0.48)),
+    linear-gradient(135deg, rgba(225, 242, 230, 0.34), rgba(255, 255, 255, 0.12));
+  --discovery-panel-background: rgba(255, 253, 247, 0.88);
+  --discovery-map-surface: rgba(244, 249, 243, 0.84);
+  --discovery-map-overlay: linear-gradient(
+    135deg,
+    rgba(249, 247, 237, 0.92),
+    rgba(205, 231, 210, 0.42)
+  );
+  --discovery-accent-glow: rgba(112, 158, 98, 0.18);
+  --discovery-accent-glow-secondary: rgba(194, 229, 204, 0.16);
+  --discovery-map-legend-background: rgba(255, 252, 243, 0.92);
+  --discovery-heading-title: #1f4d2f;
+  --discovery-heading-subtitle: rgba(31, 77, 47, 0.82);
+  --discovery-heading-accent: #1f4d2f;
+  --vendor-card-surface: rgba(255, 255, 255, 0.94);
+  --vendor-card-selected-surface: rgba(245, 252, 247, 0.84);
+  --vendor-card-selected-border: rgba(31, 77, 47, 0.74);
+  --vendor-card-selected-shadow:
+    0 18px 40px rgba(31, 77, 47, 0.16),
+    0 0 0 1px rgba(31, 77, 47, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --vendor-card-selected-overlay: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2),
+    rgba(96, 159, 112, 0.16)
+  );
+  --vendor-card-selected-text: #1f3125;
+  --vendor-card-selected-muted: rgba(31, 49, 37, 0.84);
+  --vendor-card-selected-helper: rgba(31, 49, 37, 0.78);
+}
+
+.public-shell[data-time-theme="afternoon"] {
+  --discovery-shell-background:
+    linear-gradient(180deg, rgba(250, 242, 226, 0.96), rgba(255, 247, 234, 0.4)),
+    linear-gradient(135deg, rgba(249, 212, 138, 0.22), rgba(255, 255, 255, 0.12));
+  --discovery-panel-background: rgba(255, 250, 242, 0.88);
+  --discovery-map-surface: rgba(252, 244, 228, 0.82);
+  --discovery-map-overlay: linear-gradient(
+    135deg,
+    rgba(255, 248, 233, 0.9),
+    rgba(247, 191, 102, 0.36)
+  );
+  --discovery-accent-glow: rgba(221, 153, 59, 0.18);
+  --discovery-accent-glow-secondary: rgba(240, 167, 91, 0.14);
+  --discovery-map-legend-background: rgba(255, 249, 238, 0.92);
+  --discovery-heading-title: #7a3f12;
+  --discovery-heading-subtitle: rgba(122, 63, 18, 0.82);
+  --discovery-heading-accent: #7a3f12;
+  --vendor-card-surface: rgba(255, 255, 255, 0.94);
+  --vendor-card-selected-surface: rgba(255, 248, 240, 0.84);
+  --vendor-card-selected-border: rgba(122, 63, 18, 0.74);
+  --vendor-card-selected-shadow:
+    0 18px 40px rgba(122, 63, 18, 0.16),
+    0 0 0 1px rgba(122, 63, 18, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  --vendor-card-selected-overlay: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(219, 148, 65, 0.18)
+  );
+  --vendor-card-selected-text: #49250a;
+  --vendor-card-selected-muted: rgba(73, 37, 10, 0.84);
+  --vendor-card-selected-helper: rgba(73, 37, 10, 0.78);
+}
+
+.public-shell[data-time-theme="night"] {
+  --discovery-shell-background:
+    linear-gradient(180deg, rgba(33, 46, 68, 0.34), rgba(61, 78, 108, 0.16)),
+    linear-gradient(135deg, rgba(26, 39, 61, 0.28), rgba(76, 95, 126, 0.08));
+  --discovery-panel-background: rgba(246, 248, 252, 0.82);
+  --discovery-map-surface: rgba(53, 66, 92, 0.9);
+  --discovery-map-overlay: linear-gradient(
+    135deg,
+    rgba(90, 107, 138, 0.74),
+    rgba(39, 52, 76, 0.94)
+  );
+  --discovery-accent-glow: rgba(82, 121, 184, 0.18);
+  --discovery-accent-glow-secondary: rgba(104, 126, 166, 0.12);
+  --discovery-map-legend-background: rgba(245, 247, 251, 0.92);
+  --discovery-heading-title: #20345f;
+  --discovery-heading-subtitle: rgba(32, 52, 95, 0.84);
+  --discovery-heading-accent: #20345f;
+  --vendor-card-surface: rgba(251, 252, 255, 0.95);
+  --vendor-card-selected-surface: rgba(245, 248, 255, 0.86);
+  --vendor-card-selected-border: rgba(32, 52, 95, 0.72);
+  --vendor-card-selected-shadow:
+    0 20px 44px rgba(32, 52, 95, 0.2),
+    0 0 0 1px rgba(32, 52, 95, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  --vendor-card-selected-overlay: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.18),
+    rgba(82, 105, 148, 0.24)
+  );
+  --vendor-card-selected-text: #20345f;
+  --vendor-card-selected-muted: rgba(32, 52, 95, 0.84);
+  --vendor-card-selected-helper: rgba(32, 52, 95, 0.78);
 }
 
 .discovery-layout {
@@ -624,10 +761,39 @@ h2 {
   display: grid;
   gap: 10px;
   min-width: 0;
+  padding: 4px 2px 6px;
+  position: relative;
+}
+
+.discovery-heading::after {
+  content: "";
+  width: min(148px, 42vw);
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--discovery-heading-accent),
+    rgba(255, 255, 255, 0.18)
+  );
+}
+
+.public-shell[data-time-theme="morning"] .discovery-heading .eyebrow {
+  color: var(--discovery-heading-accent);
+}
+
+.public-shell[data-time-theme="afternoon"] .discovery-heading .eyebrow {
+  color: var(--discovery-heading-accent);
+}
+
+.public-shell[data-time-theme="night"] .discovery-heading .eyebrow {
+  color: var(--discovery-heading-accent);
 }
 
 .discovery-heading h1 {
   font-size: clamp(2.8rem, 8vw, 5.8rem);
+  font-weight: 900;
+  color: var(--discovery-heading-title);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .discovery-heading p,
@@ -642,13 +808,22 @@ h2 {
   color: var(--color-muted);
 }
 
+.discovery-heading > p:last-child {
+  max-width: 24rem;
+  color: var(--discovery-heading-subtitle);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .location-panel,
 .discovery-filters,
 .selected-vendor-panel,
 .vendor-detail-section {
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--discovery-panel-background);
+  box-shadow: 0 14px 34px rgba(37, 41, 36, 0.06);
   padding: 16px;
   min-width: 0;
 }
@@ -658,6 +833,8 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .location-panel div {
@@ -687,6 +864,20 @@ h2 {
   gap: 12px;
   align-items: end;
   min-width: 0;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.discovery-filters .field span,
+.discovery-filters .checkbox-field span {
+  color: var(--color-text);
+  font-size: 0.8rem;
+}
+
+.discovery-filters .field input,
+.discovery-filters .field select {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .search-field {
@@ -728,6 +919,7 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   min-height: 38px;
+  padding: 2px 2px 0;
 }
 
 .vendor-card {
@@ -736,13 +928,78 @@ h2 {
   min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--vendor-card-surface);
+  box-shadow: 0 10px 24px rgba(37, 41, 36, 0.05);
   padding: 14px;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
 .vendor-card.selected {
-  border-color: rgba(36, 97, 79, 0.65);
-  background: rgba(36, 97, 79, 0.08);
+  border-color: var(--vendor-card-selected-border);
+  background: var(--vendor-card-selected-surface);
+  box-shadow: var(--vendor-card-selected-shadow);
+  position: relative;
+  isolation: isolate;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transform: translateY(-1px);
+}
+
+.vendor-card.selected::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  border-radius: 8px 0 0 8px;
+  background: linear-gradient(
+    180deg,
+    var(--vendor-card-selected-border),
+    rgba(255, 255, 255, 0.2)
+  );
+}
+
+.vendor-card.selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--vendor-card-selected-overlay);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.vendor-card.selected h3,
+.vendor-card.selected .vendor-card-cue,
+.vendor-card.selected .vendor-card-rating,
+.vendor-card.selected .vendor-card-status-line,
+.vendor-card.selected .vendor-card-hours-label {
+  color: var(--vendor-card-selected-text);
+}
+
+.vendor-card.selected .vendor-card-hours-line,
+.vendor-card.selected .vendor-card-meta-line {
+  color: var(--vendor-card-selected-muted);
+}
+
+.vendor-card.selected .vendor-card-helper {
+  color: var(--vendor-card-selected-helper);
+}
+
+.vendor-card.selected .vendor-card-status-line,
+.vendor-card.selected .vendor-card-cue,
+.vendor-card.selected .vendor-card-rating {
+  font-weight: 800;
+}
+
+.vendor-card.selected .vendor-card-detail-link {
+  color: var(--vendor-card-selected-text);
+}
+
+.vendor-card.selected .vendor-card-detail-link:hover {
+  color: var(--vendor-card-selected-text);
 }
 
 .vendor-card-preview {
@@ -765,7 +1022,7 @@ h2 {
 
 .vendor-card-main {
   display: grid;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -852,6 +1109,8 @@ h2 {
   color: var(--color-text);
   font-size: 0.9rem;
   font-weight: 800;
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid rgba(37, 41, 36, 0.08);
 }
 
 .status-open,
@@ -889,6 +1148,8 @@ h2 {
 
 .vendor-card-footer {
   justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid rgba(37, 41, 36, 0.08);
 }
 
 .vendor-card-detail-link {
@@ -910,7 +1171,8 @@ h2 {
   min-height: min(64vh, 680px);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: var(--color-surface);
+  background: var(--discovery-map-surface);
+  box-shadow: 0 18px 40px rgba(37, 41, 36, 0.08);
 }
 
 .discovery-map-grid {
@@ -919,7 +1181,7 @@ h2 {
   background:
     linear-gradient(90deg, rgba(37, 41, 36, 0.08) 1px, transparent 1px),
     linear-gradient(rgba(37, 41, 36, 0.08) 1px, transparent 1px),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(244, 193, 87, 0.26));
+    var(--discovery-map-overlay);
   background-size: 56px 56px, 56px 56px, 100% 100%;
 }
 
@@ -958,6 +1220,7 @@ h2 {
   width: 42px;
   height: 42px;
   background: var(--color-text);
+  box-shadow: 0 14px 30px rgba(37, 41, 36, 0.34);
 }
 
 .map-legend {
@@ -970,7 +1233,9 @@ h2 {
   gap: 12px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--discovery-map-legend-background);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   padding: 10px 12px;
   font-size: 0.9rem;
   font-weight: 800;
@@ -985,11 +1250,14 @@ h2 {
   display: grid;
   gap: 10px;
   min-width: 0;
+  border-color: rgba(37, 41, 36, 0.1);
+  box-shadow: 0 16px 36px rgba(37, 41, 36, 0.08);
 }
 
 .selected-vendor-summary {
   display: grid;
   gap: 6px;
+  padding: 2px 0 2px;
 }
 
 .selected-vendor-status-line,
@@ -1029,6 +1297,8 @@ h2 {
 .selected-vendor-actions {
   display: grid;
   gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(37, 41, 36, 0.08);
 }
 
 .selected-vendor-actions .vendor-actions {
@@ -1041,6 +1311,7 @@ h2 {
 
 .selected-vendor-panel h2 {
   font-size: clamp(1.8rem, 4vw, 3.2rem);
+  line-height: 1.06;
 }
 
 .selected-vendor-panel p {
