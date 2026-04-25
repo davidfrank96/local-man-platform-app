@@ -192,6 +192,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".discovery-map")).toBeVisible();
     await expect(page.locator(".location-panel strong")).toHaveText("Using your current location");
     await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
+    await expect(page.locator(".location-trust-line")).toHaveText("High accuracy");
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     const firstCard = page.locator(".vendor-card").first();
     await expect(firstCard).toBeVisible();
@@ -335,6 +336,7 @@ test.describe("Phase 3 browser smoke", () => {
       "Using your current location",
     );
     await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
+    await expect(page.locator(".location-trust-line")).toHaveText("High accuracy");
     await expect(page.locator(".location-panel p")).toHaveCount(0);
     await expect(page.locator(".vendor-card").first()).toBeVisible();
 

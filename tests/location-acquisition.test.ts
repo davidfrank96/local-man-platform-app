@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BROWSER_GEOLOCATION_MAXIMUM_AGE_MS,
   BROWSER_GEOLOCATION_TIMEOUT_MS,
   acquireUserLocation,
   deriveLocationAcquisitionStatus,
@@ -8,6 +9,7 @@ import {
 
 test("uses a mobile-friendly browser geolocation timeout", () => {
   assert.equal(BROWSER_GEOLOCATION_TIMEOUT_MS, 10_000);
+  assert.equal(BROWSER_GEOLOCATION_MAXIMUM_AGE_MS, 15_000);
 });
 
 test("uses browser geolocation first when available", async () => {
