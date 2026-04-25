@@ -2,7 +2,7 @@
 The Local Man — Test Plan
 
 ## Test Goal
-Ensure the foundation, runtime data flow, admin operations, and public discovery surface are coherent before launch hardening.
+Ensure the runtime, admin operations, public discovery surface, and Phase 5 UX polish remain coherent before commit, deployment, or pilot use.
 
 ## Documentation Validation
 Check:
@@ -24,6 +24,10 @@ Test:
 Test:
 - location allowed
 - location denied
+- location retry after denied or unavailable
+- resolved precise location trust messaging
+- human-readable reverse location display when available
+- coordinate fallback when reverse lookup fails
 - no nearby vendors
 - incorrect coordinates
 - distance calculation accuracy
@@ -32,10 +36,13 @@ Test:
 - browser geolocation success
 - IP approximation fallback
 - Abuja default city fallback
+- approximate location messaging stays approximate and never implies exact nearby accuracy
 
 Current automated coverage:
 - `tests/distance.test.ts`
 - `tests/location-acquisition.test.ts`
+- `tests/location-display.test.ts`
+- `tests/reverse-geocode.test.ts`
 
 Runtime smoke coverage:
 - `npm run smoke:nearby`
@@ -50,10 +57,21 @@ Test:
 - categories route returns public category summaries
 - vendor detail route transforms Supabase nested rows into the documented detail shape
 - public UI shows runtime errors when Supabase data is unavailable
+- vendor cards always render required fields
+- `Today:` hours stay visible before and after card selection
+- distance and open/closed state stay visible before and after card selection
+- selected vendor highlight remains readable
+- selected vendor preview exposes `View details`, `Call`, and `Directions`
+- browser back restores discovery state
+- `Back to map` restores discovery state
+- small-phone and tablet layouts remain stable
+- time-based morning, afternoon, and night themes do not compromise card readability
 
 Current automated coverage:
 - `tests/public-api-client.test.ts`
 - `tests/public-routes.test.ts`
+- `tests/e2e/app-smoke.spec.ts`
+- `tests/e2e/layout-stress.spec.ts`
 
 ### Admin Foundation Logic
 Test:
@@ -103,6 +121,9 @@ Test:
 - no rating fallback
 - no hours fallback
 - explicit missing-data copy for area, phone, address, and featured dishes
+- compact price-band labels
+- `New` fallback for unrated vendors
+- selected-card readability in all time themes
 
 ### Admin Data Quality
 Test:

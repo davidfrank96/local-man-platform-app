@@ -5,15 +5,16 @@ The Local Man — Runtime Setup and Nearby Smoke Test
 Validate the real Supabase-backed runtime data flow before deployment or further feature expansion.
 
 This gate verifies:
-- the Phase 1 migration can be applied to a real Supabase project
+- the current migration set can be applied to a real Supabase project
 - Abuja pilot seed data exists
 - `GET /api/vendors/nearby` can read seeded vendors through Supabase RLS
 - the API returns computed `distance_km` values sorted nearest first
+- the nearby response still exposes compact vendor-card fields such as `today_hours`
 
 Keep this runtime gate green before deployment or further feature expansion.
 
 ## Current Gate Status
-The Phase 2 runtime gate has executable checks for environment validation and nearby API smoke testing. The current local verification path is:
+The current runtime gate has executable checks for environment validation and nearby API smoke testing. The standard local verification path is:
 
 ```bash
 npm run runtime:check-env
@@ -23,7 +24,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run smoke:nearby
 
 If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that actual origin before running the smoke command.
 
-The smoke test verifies precise coordinates, `distance_km`, nearest-first sorting, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
+The smoke test verifies precise coordinates, `distance_km`, nearest-first sorting, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
 
 ## Required Tools
 - Node.js and npm
@@ -183,15 +184,18 @@ The smoke test validates:
 
 Client location acquisition behavior:
 - browser geolocation waits up to 10 seconds before giving up
+- browser geolocation requests high accuracy and keeps the accepted cached position window low to avoid stale results
 - if precise location is denied or unavailable, the app tries IP-based approximate location next
 - if approximate location is also unavailable, the app falls back to the Abuja default city view
 - mobile users should see a short "trying to get precise location" status before fallback is chosen
+- precise mode should show a human-readable area label when reverse lookup succeeds, or rounded coordinates otherwise
+- approximate mode must stay labeled approximate and must not imply exact nearby accuracy
 
 The smoke test passes only when:
 - the API returns HTTP 200
 - the response uses the standard success shape
 - one or more vendors are returned
-- every vendor includes `vendor_id`, `name`, `latitude`, `longitude`, `distance_km`, and `is_open_now`
+- every vendor includes `vendor_id`, `name`, `latitude`, `longitude`, `distance_km`, `is_open_now`, and `today_hours`
 - `distance_km` is numeric and non-negative
 - vendors are sorted nearest first
 - invalid and partial coordinate requests return `VALIDATION_ERROR`
@@ -230,11 +234,17 @@ Expected response shape:
 With the Abuja seed data loaded, `vendors` should contain nearby vendor records sorted by `distance_km`.
 
 ## Release Gate
-Phase 2 feature work may proceed only after:
+Deployment, pilot validation, or further UX iteration should proceed only after:
 - migration succeeds against the target Supabase project
 - seed validation queries pass
 - `npm run smoke:nearby` passes against the local app and real Supabase env vars
 - any runtime failures are documented before implementation continues
+
+## Deployment Notes
+- DigitalOcean App Platform is the current deployment target.
+- Local development and smoke testing assume `http://localhost:3000` unless `NEXT_PUBLIC_APP_URL` is overridden.
+- Production should use the real deployed app URL for `NEXT_PUBLIC_APP_URL`.
+- The same Supabase public env vars used locally must be present in the DigitalOcean app configuration.
 
 For launch-day operator work and ongoing Abuja pilot checks, use [docs/ops/PILOT_CHECKLIST.md](./PILOT_CHECKLIST.md).
 
@@ -254,8 +264,8 @@ Use this checklist when completing runtime activation manually:
 11. Confirm the smoke command prints `"ok": true`.
 12. Do not proceed to deployment or further feature expansion until all checks above pass.
 
-## Phase 2 Runtime/Admin Boundary
-Runtime activation must stay validated before additional admin or public feature expansion.
+## Runtime/Admin Boundary
+Runtime activation must stay validated before additional admin or public UX changes are shipped.
 
 Current admin foundation files include:
 - `lib/admin/auth.ts`
@@ -263,6 +273,5 @@ Current admin foundation files include:
 - `app/api/admin/**/route.ts`
 
 Do not start:
-- visual polish
 - vendor self-service onboarding
 - payments, delivery, chat, loyalty, coupons, or inventory

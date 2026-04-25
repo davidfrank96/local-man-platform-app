@@ -25,6 +25,8 @@ The Local Man — UI Rules
 - Request browser/device location as the primary method for precise nearby results.
 - If the user allows location access, use precise coordinates and show nearby vendors normally.
 - When precise browser location is active, show a compact trust label such as `High accuracy`.
+- When reverse location lookup succeeds, show a human-readable area or city label first.
+- If reverse lookup does not resolve a useful label, fall back to rounded coordinates instead of inventing a place name.
 - If the user denies location access, use IP-based approximate coordinates when available and communicate that results are approximate.
 - Approximate location copy must never imply exact nearby accuracy; tell the user to turn on location for exact nearby results.
 - If precise and approximate location are unavailable, show the Abuja default city view.
@@ -50,6 +52,8 @@ The Local Man — UI Rules
 - helper text: `Tap to preview on map`
 - visible detail link text: `View details →`
 - tapping the card body should preview the vendor on the map without interfering with call, directions, or details
+- `Today:`, distance, and open/closed state must remain visible before and after the card is selected.
+- selected cards must stay readable in every time theme and use a clear but compact highlight treatment
 
 ## Vendor Detail Rules
 - strong hero image
@@ -87,6 +91,7 @@ The Local Man — UI Rules
 - Time-based themes must never compromise vendor card readability, including selected cards.
 - Vendor cards should stay light and high-contrast in morning, afternoon, and night themes, even when the page background gets darker.
 - Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Today:`, distance, open/closed state, featured dish, price, area, rating, and actions easy to read.
+- Selected vendor preview panels should stay compact and action-oriented, with `View details`, `Call`, and `Directions` visible on mobile.
 - Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
 - Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.
 - Night background tones should feel like evening discovery with deeper blue/slate washes and readable light cards, not harsh black surfaces.

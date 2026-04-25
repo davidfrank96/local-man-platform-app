@@ -17,12 +17,13 @@ Provide a stable, maintainable, and AI-friendly architecture for a map-based loc
 - Supabase Storage for vendor images
 
 ### Maps
-- Google Maps JavaScript API
 - Google Maps deep link for directions
-- Google Geocoding API if needed for admin workflows
+- lightweight internal reverse geocoding route for human-readable public location labels
+- real Google Maps JavaScript integration remains optional future work, not a current dependency
 
 ### Deployment
-- DigitalOcean App Platform or Vercel for frontend
+- DigitalOcean App Platform for the deployed app
+- local development and smoke testing use `http://localhost:3000`
 - Supabase managed backend
 
 ## Why This Stack
@@ -36,11 +37,14 @@ Provide a stable, maintainable, and AI-friendly architecture for a map-based loc
 ### Public App
 Handles:
 - geolocation
-- map rendering
+- reverse location label display
+- lightweight map rendering
 - nearby vendors query
 - search and filter UI
+- selected vendor preview and selected-card highlight
 - vendor detail pages
 - call and directions actions
+- browser-back and `Back to map` state restoration
 
 ### Admin App
 Handles:
@@ -85,17 +89,22 @@ The public app determines the user location before nearby vendor search.
 Primary method:
 - Browser/device geolocation through the Web Geolocation API.
 - If allowed, use precise `lat` and `lng` with `location_source = precise`.
+- Request high accuracy from the browser with a 10 second timeout and a low maximum age to avoid stale positions.
 - Wait up to 10 seconds for the browser geolocation request before falling back.
+- Show `Using your current location` with a compact `High accuracy` trust label.
+- Display a human-readable area label when reverse lookup succeeds; otherwise fall back to rounded coordinates.
 
 Fallback method:
 - IP-based approximation when browser geolocation is denied or unavailable.
 - If available, use approximate `lat` and `lng` with `location_source = approximate`.
 - Treat this as low accuracy and avoid implying exact proximity.
+- Show `Using approximate location` and tell the user to turn on location for exact nearby results.
 
 Default city fallback:
 - If precise and approximate coordinates are unavailable, use the Abuja default city view.
 - Default coordinates are the Abuja city center approximation.
 - Use `location_source = default_city`.
+- Show `Showing Abuja` and explain that enabling location improves nearby results.
 
 Location handling rules:
 - Distance is calculated from the resolved search location, not persisted.
@@ -106,7 +115,8 @@ Location handling rules:
 
 Implementation interface:
 - `lib/location/acquisition.ts` owns the acquisition sequence and provider interfaces.
-- `hooks/use-user-location.ts` exposes the client hook for future public UI.
+- `hooks/use-user-location.ts` is the active public UI hook for location acquisition and retry.
+- `app/api/location/reverse/route.ts` and `lib/location/reverse-geocode.ts` format human-readable area labels without blocking vendor loading.
 - IP approximation is represented as an injectable provider; a concrete vendor endpoint is not selected yet.
 
 ## Admin Flow
@@ -178,3 +188,4 @@ Use clickable phone links.
 - graceful fallback if location permission denied
 - image optimization
 - clean error handling
+- time-based visual theming that does not compromise vendor card readability
