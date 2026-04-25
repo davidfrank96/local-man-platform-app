@@ -24,7 +24,9 @@ The Local Man — UI Rules
 ## Location UX Rules
 - Request browser/device location as the primary method for precise nearby results.
 - If the user allows location access, use precise coordinates and show nearby vendors normally.
+- When precise browser location is active, show a compact trust label such as `High accuracy`.
 - If the user denies location access, use IP-based approximate coordinates when available and communicate that results are approximate.
+- Approximate location copy must never imply exact nearby accuracy; tell the user to turn on location for exact nearby results.
 - If precise and approximate location are unavailable, show the Abuja default city view.
 - Do not block the public app when location permission is denied.
 - Do not imply exact distance when the location source is approximate or default city.

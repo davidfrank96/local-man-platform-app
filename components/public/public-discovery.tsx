@@ -11,7 +11,10 @@ import { useUserLocation } from "../../hooks/use-user-location.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
 import type { LocationAcquisitionError } from "../../lib/location/acquisition.ts";
 import type { LocationAcquisitionStatus } from "../../lib/location/acquisition.ts";
-import { formatLocationCoordinates } from "../../lib/location/display.ts";
+import {
+  formatLocationAccuracyLabel,
+  formatLocationCoordinates,
+} from "../../lib/location/display.ts";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   fetchNearbyVendors,
@@ -275,16 +278,6 @@ function getLocationDetailCopy(
     default:
       return "Location access starts automatically.";
   }
-}
-
-function getLocationTrustLine(
-  locationStatus: LocationAcquisitionStatus,
-): string | null {
-  if (locationStatus === "approximate") {
-    return "Turn on location for better accuracy";
-  }
-
-  return null;
 }
 
 function getLocationDisplayLine(
@@ -649,10 +642,13 @@ export function PublicDiscovery({
   const isLoading = locationStatus === "resolving" || isFetchingVendors;
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
   const locationErrorCopy = getLocationErrorCopy(locationStatus, locationErrors);
-  const locationTrustLine = getLocationTrustLine(locationStatus);
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
       ? resolvedLocationLabel.label
+      : null;
+  const locationTrustLine =
+    locationStatus === "precise" || locationStatus === "approximate"
+      ? formatLocationAccuracyLabel(location?.source ?? null)
       : null;
 
   function applyFilters(nextFilters: DiscoveryFilters) {

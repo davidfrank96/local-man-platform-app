@@ -52,6 +52,7 @@ const geolocationErrorCodes: Record<number, LocationAcquisitionErrorCode> = {
 };
 
 export const BROWSER_GEOLOCATION_TIMEOUT_MS = 10_000;
+export const BROWSER_GEOLOCATION_MAXIMUM_AGE_MS = 15_000;
 
 export function deriveLocationAcquisitionStatus(
   location: AcquiredUserLocation,
@@ -131,7 +132,7 @@ export function getBrowserGeolocation(): Promise<Coordinates> {
       reject,
       {
         enableHighAccuracy: true,
-        maximumAge: 60_000,
+        maximumAge: BROWSER_GEOLOCATION_MAXIMUM_AGE_MS,
         timeout: BROWSER_GEOLOCATION_TIMEOUT_MS,
       },
     );
