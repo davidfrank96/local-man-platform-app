@@ -842,6 +842,13 @@ h2 {
   gap: 4px;
 }
 
+.location-trust-line {
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .location-panel p,
 .runtime-note,
 .runtime-error {

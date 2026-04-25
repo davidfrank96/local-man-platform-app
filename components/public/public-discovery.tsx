@@ -10,6 +10,8 @@ import {
 import { useUserLocation } from "../../hooks/use-user-location.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
 import type { LocationAcquisitionError } from "../../lib/location/acquisition.ts";
+import type { LocationAcquisitionStatus } from "../../lib/location/acquisition.ts";
+import { formatLocationCoordinates } from "../../lib/location/display.ts";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   fetchNearbyVendors,
@@ -225,21 +227,115 @@ function formatLocationErrorMessage(code: string): string {
 }
 
 function getLocationCopy(
+  locationStatus: LocationAcquisitionStatus,
   location: AcquiredUserLocation | null,
   locationErrors: LocationAcquisitionError[],
 ): string {
-  if (!location) return "Trying to get precise location";
-  if (location.source === "precise") return "Using current location";
-  if (location.source === "approximate") return "Using approximate location";
+  if (locationStatus === "resolving" || locationStatus === "idle") {
+    return "Trying to get precise location";
+  }
+
+  if (locationStatus === "precise" || location?.source === "precise") {
+    return "Using your current location";
+  }
+
+  if (locationStatus === "approximate" || location?.source === "approximate") {
+    return "Using approximate location";
+  }
 
   if (
     locationErrors.some((error) => error.code === "GEOLOCATION_TIMEOUT") &&
     locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")
   ) {
-    return "Showing Abuja after location fallback";
+    return "Showing Abuja";
   }
 
   return "Showing Abuja";
+}
+
+function getLocationDetailCopy(
+  locationStatus: LocationAcquisitionStatus,
+  location: AcquiredUserLocation | null,
+): string {
+  switch (locationStatus) {
+    case "resolving":
+      return "On mobile, precise location can take up to 10 seconds before Abuja fallback.";
+    case "precise":
+      return location?.label ?? "Current location";
+    case "approximate":
+      return location?.label ?? "Approximate location";
+    case "denied":
+      return "Location access is off. Turn it on for vendors closer to you.";
+    case "unavailable":
+      return "Location access is off or unavailable. Turn it on for vendors closer to you.";
+    case "default_city":
+      return "Location access is off or unavailable. Turn it on for vendors closer to you.";
+    case "error":
+      return "Location could not be resolved.";
+    default:
+      return "Location access starts automatically.";
+  }
+}
+
+function getLocationTrustLine(
+  locationStatus: LocationAcquisitionStatus,
+): string | null {
+  if (locationStatus === "approximate") {
+    return "Turn on location for better accuracy";
+  }
+
+  return null;
+}
+
+function getLocationDisplayLine(
+  locationStatus: LocationAcquisitionStatus,
+  location: AcquiredUserLocation | null,
+  locationDisplayLabel: string | null,
+): string {
+  if (
+    (locationStatus === "precise" || locationStatus === "approximate") &&
+    location
+  ) {
+    return locationDisplayLabel ?? formatLocationCoordinates(location.coordinates);
+  }
+
+  return getLocationDetailCopy(locationStatus, location);
+}
+
+function getLocationErrorCopy(
+  locationStatus: LocationAcquisitionStatus,
+  locationErrors: LocationAcquisitionError[],
+): string | null {
+  if (
+    locationStatus === "precise" ||
+    locationStatus === "approximate" ||
+    locationStatus === "idle" ||
+    locationStatus === "resolving"
+  ) {
+    return null;
+  }
+
+  if (locationStatus === "denied") {
+    if (locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")) {
+      return "Location access was denied and approximate location is unavailable.";
+    }
+
+    return "Location access was denied.";
+  }
+
+  if (locationStatus === "unavailable") {
+    if (locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")) {
+      return "Precise location is unavailable and approximate location is unavailable.";
+    }
+
+    return "Precise location is unavailable.";
+  }
+
+  if (locationStatus === "default_city" && locationErrors.length > 0) {
+    return locationErrors.map((error) => formatLocationErrorMessage(error.code)).join(" ");
+  }
+
+  return null;
 }
 
 export function PublicDiscovery({
@@ -260,11 +356,16 @@ export function PublicDiscovery({
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [isFetchingVendors, setIsFetchingVendors] = useState(false);
   const [timeTheme, setTimeTheme] = useState<PublicTimeTheme | null>(null);
+  const [resolvedLocationLabel, setResolvedLocationLabel] = useState<{
+    key: string;
+    label: string;
+  } | null>(null);
   const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(
     parsedUrlState.selectedVendorSlug,
   );
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const nearbyRequestIdRef = useRef(0);
+  const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const hasRestoredScrollRef = useRef(false);
   const {
@@ -284,6 +385,13 @@ export function PublicDiscovery({
     () => JSON.stringify(filters),
     [filters],
   );
+  const resolvedLocationKey = useMemo(() => {
+    if (!location || location.source === "default_city") {
+      return null;
+    }
+
+    return `${location.source}:${location.coordinates.lat}:${location.coordinates.lng}`;
+  }, [location]);
   const discoverySnapshotKey = useMemo(
     () => getDiscoverySnapshotKey(pathname, discoveryQueryString),
     [discoveryQueryString, pathname],
@@ -318,6 +426,54 @@ export function PublicDiscovery({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!location || location.source === "default_city" || !resolvedLocationKey) {
+      reverseGeocodeRequestIdRef.current += 1;
+      return;
+    }
+
+    const requestId = reverseGeocodeRequestIdRef.current + 1;
+    reverseGeocodeRequestIdRef.current = requestId;
+
+    const timeout = window.setTimeout(() => {
+      void fetch(
+        `/api/location/reverse?lat=${location.coordinates.lat}&lng=${location.coordinates.lng}`,
+      )
+        .then(async (response) => {
+          if (!response.ok) {
+            return null;
+          }
+
+          const payload = (await response.json()) as {
+            data?: { label?: string | null };
+          };
+
+          return payload.data?.label ?? null;
+        })
+        .then((label) => {
+          if (
+            !label ||
+            !isMountedRef.current ||
+            reverseGeocodeRequestIdRef.current !== requestId
+          ) {
+            return;
+          }
+
+          setResolvedLocationLabel({
+            key: resolvedLocationKey,
+            label,
+          });
+        })
+        .catch(() => {
+          // Keep coordinate fallback.
+        });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [location, resolvedLocationKey]);
 
   useEffect(() => {
     const nextQueryString = discoveryQueryString;
@@ -465,7 +621,14 @@ export function PublicDiscovery({
   );
 
   useEffect(() => {
-    if (locationStatus !== "resolved" || !location) return;
+    if (
+      locationStatus === "idle" ||
+      locationStatus === "resolving" ||
+      locationStatus === "error" ||
+      !location
+    ) {
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       void loadNearbyVendors(location, filters);
@@ -485,6 +648,12 @@ export function PublicDiscovery({
   const selectedVendorId = selectedVendor?.vendor_id ?? null;
   const isLoading = locationStatus === "resolving" || isFetchingVendors;
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
+  const locationErrorCopy = getLocationErrorCopy(locationStatus, locationErrors);
+  const locationTrustLine = getLocationTrustLine(locationStatus);
+  const locationDisplayLabel =
+    resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
+      ? resolvedLocationLabel.label
+      : null;
 
   function applyFilters(nextFilters: DiscoveryFilters) {
     setFilters(nextFilters);
@@ -497,9 +666,10 @@ export function PublicDiscovery({
   }
 
   async function retryLocation() {
+    setNearbyError(null);
+
     try {
-      const nextLocation = await refreshLocation();
-      await loadNearbyVendors(nextLocation, filters);
+      await refreshLocation();
     } catch (error) {
       setNearbyError(
         error instanceof Error ? error.message : "Unable to refresh location.",
@@ -522,13 +692,11 @@ export function PublicDiscovery({
 
           <section className="location-panel" aria-live="polite">
             <div>
-              <strong>{getLocationCopy(location, locationErrors)}</strong>
-              <span>
-                {resolvedLocation?.label ??
-                  (locationStatus === "resolving"
-                    ? "On mobile, precise location can take up to 10 seconds before Abuja fallback."
-                    : "Location access starts automatically.")}
-              </span>
+              <strong>{getLocationCopy(locationStatus, location, locationErrors)}</strong>
+              <span>{getLocationDisplayLine(locationStatus, location, locationDisplayLabel)}</span>
+              {locationTrustLine ? (
+                <span className="location-trust-line">{locationTrustLine}</span>
+              ) : null}
             </div>
             <button
               className="button-secondary compact-button"
@@ -538,10 +706,8 @@ export function PublicDiscovery({
             >
               Retry location
             </button>
-            {locationErrors.length > 0 ? (
-              <p>
-                {locationErrors.map((error) => formatLocationErrorMessage(error.code)).join(" ")}
-              </p>
+            {locationErrorCopy ? (
+              <p>{locationErrorCopy}</p>
             ) : null}
           </section>
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   acquireUserLocation,
+  deriveLocationAcquisitionStatus,
   getBrowserGeolocation,
   getIpApproximation,
   type AcquiredUserLocation,
@@ -36,6 +37,7 @@ export function useUserLocation({
 
   const refresh = useCallback(async () => {
     setStatus("resolving");
+    setErrors([]);
 
     try {
       const nextLocation = await acquireUserLocation({
@@ -45,7 +47,7 @@ export function useUserLocation({
 
       setLocation(nextLocation);
       setErrors(nextLocation.errors);
-      setStatus("resolved");
+      setStatus(deriveLocationAcquisitionStatus(nextLocation));
 
       return nextLocation;
     } catch (error) {
