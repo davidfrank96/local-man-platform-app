@@ -27,3 +27,16 @@ export function formatVendorCardRating(
 
   return `★ ${averageRating.toFixed(1)}`;
 }
+
+export function formatVendorCardDistance(
+  distanceKm: number,
+  approximateDistance: boolean,
+): string {
+  const prefix = approximateDistance ? "About " : "";
+
+  if (distanceKm < 1) {
+    return `${prefix}${Math.round(distanceKm * 1000)} m`;
+  }
+
+  return `${prefix}${distanceKm.toFixed(1)} km`;
+}

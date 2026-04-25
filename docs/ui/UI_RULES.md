@@ -37,6 +37,7 @@ The Local Man — UI Rules
 - distance
 - open/closed state
 - one featured dish summary when available
+- today’s hours only, shown as a compact `Today:` line
 - short description only when no featured dish summary is available
 - compact price label: `Budget-friendly`, `Everyday price`, or `Higher price`
 - area
@@ -77,3 +78,12 @@ The Local Man — UI Rules
 - practical spacing
 - clear typography
 - strong contrast
+- Public discovery should use a subtle client-local time theme: morning, afternoon, or night.
+- Time-based theme changes should mainly affect the page background, accent tone, map panel, and small highlights.
+- Time-based theming must not reduce readability or make vendor cards visually heavy.
+- Time-based themes must never compromise vendor card readability, including selected cards.
+- Vendor cards should stay light and high-contrast in morning, afternoon, and night themes, even when the page background gets darker.
+- Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Today:`, distance, open/closed state, featured dish, price, area, rating, and actions easy to read.
+- Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
+- Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.
+- Night background tones should feel like evening discovery with deeper blue/slate washes and readable light cards, not harsh black surfaces.

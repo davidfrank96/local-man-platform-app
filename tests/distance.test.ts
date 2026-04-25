@@ -7,6 +7,7 @@ import {
 } from "../lib/location/distance.ts";
 import {
   findNearbyVendors,
+  getTodayHoursSummary,
   isVendorOpenNow,
   type VendorLocationRecord,
 } from "../lib/vendors/nearby.ts";
@@ -128,6 +129,37 @@ test("includes one featured dish summary when present", () => {
   });
 });
 
+test("returns compact today hours from nearby vendors", () => {
+  const results = findNearbyVendors(
+    [
+      {
+        ...baseVendor,
+        id: "hours",
+        name: "Hours Vendor",
+        latitude: 0,
+        longitude: 0.01,
+        vendor_hours: [
+          {
+            day_of_week: 2,
+            open_time: "19:00",
+            close_time: "02:00",
+            is_closed: false,
+          },
+        ],
+      },
+    ],
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-04-28T12:00:00Z"),
+  );
+
+  assert.equal(results[0]?.today_hours, "7:00 PM - 2:00 AM");
+});
+
 test("returns an empty list when no vendors are nearby", () => {
   const results = findNearbyVendors(
     [
@@ -185,6 +217,25 @@ test("nearby response schema accepts the actual nearby result shape", () => {
   if (!parsed.success) {
     assert.fail(JSON.stringify(parsed.error.issues));
   }
+});
+
+test("today hours summary handles closed and missing schedules", () => {
+  assert.equal(
+    getTodayHoursSummary(
+      [
+        {
+          day_of_week: 2,
+          open_time: null,
+          close_time: null,
+          is_closed: true,
+        },
+      ],
+      new Date("2026-04-28T12:00:00Z"),
+    ),
+    "Closed",
+  );
+
+  assert.equal(getTodayHoursSummary([], new Date("2026-04-28T12:00:00Z")), "Hours not listed");
 });
 
 test("rejects invalid or partial user location", () => {

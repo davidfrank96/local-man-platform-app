@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  formatTodayHoursLabel,
   formatVendorDisplayTime,
   formatVendorHoursRange,
 } from "../lib/vendors/time-display.ts";
@@ -26,4 +27,11 @@ test("formats overnight vendor hour ranges clearly", () => {
 test("returns the original time when it cannot be parsed", () => {
   assert.equal(formatVendorDisplayTime("invalid"), "invalid");
   assert.equal(formatVendorDisplayTime(null), "");
+});
+
+test("formats compact today hours labels", () => {
+  assert.equal(formatTodayHoursLabel("09:00", "18:00", false), "9:00 AM - 6:00 PM");
+  assert.equal(formatTodayHoursLabel("19:00", "02:00", false), "7:00 PM - 2:00 AM");
+  assert.equal(formatTodayHoursLabel(null, null, true), "Closed");
+  assert.equal(formatTodayHoursLabel(null, null, false), "Hours not listed");
 });

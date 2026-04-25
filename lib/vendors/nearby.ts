@@ -7,6 +7,7 @@ import {
 } from "../location/distance.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import type { PriceBand } from "../../types";
+import { formatTodayHoursLabel } from "./time-display.ts";
 
 export const DEFAULT_NEARBY_RADIUS_KM = 10;
 
@@ -63,6 +64,7 @@ export type NearbyVendorResult = {
   distance_km: number;
   is_open_now: boolean;
   featured_dish: NearbyVendorFeaturedDishSummary | null;
+  today_hours: string;
 };
 
 type NearbyVendorSortable = NearbyVendorResult & {
@@ -106,6 +108,10 @@ function getDayAndMinuteInAbuja(date: Date): {
     dayOfWeek,
     minuteOfDay: hour * 60 + minute,
   };
+}
+
+function getDayOfWeekInAbuja(date: Date): number {
+  return getDayAndMinuteInAbuja(date).dayOfWeek;
 }
 
 function isWindowOpenAtMinute(
@@ -190,6 +196,28 @@ function getFeaturedDishSummary(
   };
 }
 
+export function getTodayHoursSummary(
+  hours: VendorHourWindow[] | null | undefined,
+  now = new Date(),
+): string {
+  if (!hours?.length) {
+    return "Hours not listed";
+  }
+
+  const dayOfWeek = getDayOfWeekInAbuja(now);
+  const todayHours = hours.find((entry) => entry.day_of_week === dayOfWeek);
+
+  if (!todayHours) {
+    return "Hours not listed";
+  }
+
+  return formatTodayHoursLabel(
+    todayHours.open_time,
+    todayHours.close_time,
+    todayHours.is_closed,
+  );
+}
+
 export function findNearbyVendors(
   vendors: VendorLocationRecord[],
   query: ResolvedNearbyVendorsQuery,
@@ -239,6 +267,7 @@ export function findNearbyVendors(
           distance_km: roundDistanceKm(rawDistanceKm),
           is_open_now: isOpenNow,
           featured_dish: getFeaturedDishSummary(vendor),
+          today_hours: getTodayHoursSummary(vendor.vendor_hours, now),
           rawDistanceKm,
         },
       ];

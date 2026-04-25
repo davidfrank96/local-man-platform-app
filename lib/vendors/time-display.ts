@@ -22,3 +22,19 @@ export function formatVendorHoursRange(
 ): string {
   return `${formatVendorDisplayTime(openTime)} - ${formatVendorDisplayTime(closeTime)}`;
 }
+
+export function formatTodayHoursLabel(
+  openTime: string | null,
+  closeTime: string | null,
+  isClosed: boolean,
+): string {
+  if (isClosed) {
+    return "Closed";
+  }
+
+  if (!openTime || !closeTime) {
+    return "Hours not listed";
+  }
+
+  return formatVendorHoursRange(openTime, closeTime);
+}

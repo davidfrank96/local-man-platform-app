@@ -20,9 +20,90 @@ async function expectNoClientErrors(errors: string[]) {
   expect(errors, errors.join("\n")).toEqual([]);
 }
 
+function parseRgbChannels(value: string) {
+  const match = value.match(/\d+(\.\d+)?/g) ?? [];
+
+  return match.slice(0, 3).map((channel) => Number(channel));
+}
+
 async function primePublicLocation(page: Page) {
   await page.context().grantPermissions(["geolocation"]);
   await page.context().setGeolocation({ latitude: 9.08, longitude: 7.4 });
+}
+
+async function setMockClientTime(page: Page, isoString: string) {
+  const timestamp = new Date(isoString).valueOf();
+
+  await page.addInitScript(({ now }) => {
+    const RealDate = Date;
+
+    class MockDate extends RealDate {
+      constructor(...args: unknown[]) {
+        switch (args.length) {
+          case 0:
+            super(now);
+            return;
+          case 1:
+            super(args[0] as string | number | Date);
+            return;
+          case 2:
+            super(args[0] as number, args[1] as number);
+            return;
+          case 3:
+            super(args[0] as number, args[1] as number, args[2] as number);
+            return;
+          case 4:
+            super(args[0] as number, args[1] as number, args[2] as number, args[3] as number);
+            return;
+          case 5:
+            super(
+              args[0] as number,
+              args[1] as number,
+              args[2] as number,
+              args[3] as number,
+              args[4] as number,
+            );
+            return;
+          case 6:
+            super(
+              args[0] as number,
+              args[1] as number,
+              args[2] as number,
+              args[3] as number,
+              args[4] as number,
+              args[5] as number,
+            );
+            return;
+          default:
+            super(
+              args[0] as number,
+              args[1] as number,
+              args[2] as number,
+              args[3] as number,
+              args[4] as number,
+              args[5] as number,
+              args[6] as number,
+            );
+        }
+      }
+
+      static now() {
+        return now;
+      }
+
+      static parse(value: string) {
+        return RealDate.parse(value);
+      }
+
+      static UTC(...args: Parameters<typeof Date.UTC>) {
+        return RealDate.UTC(...args);
+      }
+    }
+
+    Object.setPrototypeOf(MockDate, RealDate);
+    // @ts-expect-error overriding Date for deterministic browser tests
+    globalThis.Date = MockDate;
+  }, { now: timestamp });
 }
 
 test.describe("Phase 3 browser smoke", () => {
@@ -39,6 +120,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(firstCard).toBeVisible();
     await expect(firstCard.locator(".vendor-card-cue")).toBeVisible();
     await expect(firstCard.locator(".vendor-card-rating")).toBeVisible();
+    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
     await expect(firstCard.getByText("Tap to preview on map")).toBeVisible();
     await expect(firstCard.getByRole("link", { name: "Call" })).toBeVisible();
     await expect(firstCard.getByRole("link", { name: "Directions" })).toBeVisible();
@@ -46,7 +128,42 @@ test.describe("Phase 3 browser smoke", () => {
 
     const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(firstCard).toHaveClass(/selected/);
+    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-status-line")).toContainText("km");
+    await expect(firstCard.locator(".vendor-card-status-line")).toContainText(/Open|Closed/);
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(".selected-vendor-panel").getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".selected-vendor-panel").getByRole("link", { name: "Call" })).toBeVisible();
+    await expect(
+      page.locator(".selected-vendor-panel").getByRole("link", { name: "Directions" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".selected-vendor-panel").getByRole("link", { name: "View details" }),
+    ).toBeVisible();
+
+    const selectedCardStyles = await firstCard.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      const title = element.querySelector("h3");
+      const titleStyles = title ? getComputedStyle(title) : null;
+
+      return {
+        backgroundColor: styles.backgroundColor,
+        borderColor: styles.borderColor,
+        boxShadow: styles.boxShadow,
+        titleColor: titleStyles?.color ?? null,
+      };
+    });
+
+    const [bgRed, bgGreen, bgBlue] = parseRgbChannels(selectedCardStyles.backgroundColor);
+    const [titleRed, titleGreen, titleBlue] = parseRgbChannels(selectedCardStyles.titleColor ?? "");
+    const backgroundAverage = (bgRed + bgGreen + bgBlue) / 3;
+    const titleAverage = (titleRed + titleGreen + titleBlue) / 3;
+
+    expect(backgroundAverage).toBeGreaterThan(225);
+    expect(titleAverage).toBeLessThan(120);
+    expect(selectedCardStyles.borderColor).not.toBe("rgba(0, 0, 0, 0)");
+    expect(selectedCardStyles.boxShadow).not.toBe("none");
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
 
@@ -195,11 +312,57 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".discovery-map")).toBeVisible();
     await expect(page.locator(".vendor-card").first()).toBeVisible();
     await expect(page.locator(".vendor-card .vendor-card-footer").first()).toBeVisible();
+    await page.locator(".vendor-card").first().getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(page.locator(".vendor-card").first()).toHaveClass(/selected/);
+    await expect(page.locator(".vendor-card").first().getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".vendor-card").first().locator(".vendor-card-status-line")).toContainText("km");
 
     const hasHorizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
     expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("night theme keeps cards readable and selected state clear", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await setMockClientTime(page, "2026-04-25T21:00:00");
+    await primePublicLocation(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const shell = page.locator(".public-shell");
+    await expect(shell).toHaveAttribute("data-time-theme", "night");
+
+    const firstCard = page.locator(".vendor-card").first();
+    await expect(firstCard).toBeVisible();
+    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(firstCard).toHaveClass(/selected/);
+    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-status-line")).toContainText("km");
+    await expect(firstCard.locator(".vendor-card-status-line")).toContainText(/Open|Closed/);
+
+    const selectedStyles = await firstCard.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      const title = element.querySelector("h3");
+      const titleStyles = title ? getComputedStyle(title) : null;
+
+      return {
+        backgroundColor: styles.backgroundColor,
+        color: titleStyles?.color ?? null,
+        boxShadow: styles.boxShadow,
+      };
+    });
+
+    const [bgRed, bgGreen, bgBlue] = parseRgbChannels(selectedStyles.backgroundColor);
+    const [titleRed, titleGreen, titleBlue] = parseRgbChannels(selectedStyles.color ?? "");
+
+    expect((bgRed + bgGreen + bgBlue) / 3).toBeGreaterThan(210);
+    expect((titleRed + titleGreen + titleBlue) / 3).toBeLessThan(120);
+    expect(selectedStyles.boxShadow).not.toBe("none");
 
     await expectNoClientErrors(errors);
   });
