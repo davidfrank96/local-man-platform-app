@@ -26,9 +26,67 @@ function parseRgbChannels(value: string) {
   return match.slice(0, 3).map((channel) => Number(channel));
 }
 
+type MockGeolocationMode =
+  | { kind: "success"; lat: number; lng: number }
+  | { kind: "error"; code: number; message: string };
+
 async function primePublicLocation(page: Page) {
   await page.context().grantPermissions(["geolocation"]);
   await page.context().setGeolocation({ latitude: 9.08, longitude: 7.4 });
+}
+
+async function installMockGeolocation(page: Page, initialMode: MockGeolocationMode) {
+  await page.addInitScript(({ mode }) => {
+    const state = { current: mode };
+
+    Object.defineProperty(globalThis, "__codexGeoState", {
+      configurable: true,
+      value: state,
+    });
+
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        clearWatch() {},
+        getCurrentPosition(
+          success: (position: { coords: { latitude: number; longitude: number } }) => void,
+          error: (reason: { code: number; message: string }) => void,
+        ) {
+          const currentState = state.current;
+
+          if (currentState.kind === "success") {
+            success({
+              coords: {
+                latitude: currentState.lat,
+                longitude: currentState.lng,
+              },
+            });
+            return;
+          }
+
+          error({
+            code: currentState.code,
+            message: currentState.message,
+          });
+        },
+        watchPosition() {
+          return 0;
+        },
+      },
+    });
+  }, { mode: initialMode });
+}
+
+async function setMockGeolocationMode(page: Page, nextMode: MockGeolocationMode) {
+  await page.evaluate(({ mode }) => {
+    const state = globalThis as typeof globalThis & {
+      __codexGeoState?: { current: MockGeolocationMode };
+    };
+
+    if (state.__codexGeoState) {
+      state.__codexGeoState.current = mode;
+    }
+  }, { mode: nextMode });
 }
 
 async function setMockClientTime(page: Page, isoString: string) {
@@ -106,15 +164,34 @@ async function setMockClientTime(page: Page, isoString: string) {
   }, { now: timestamp });
 }
 
+async function mockReverseGeocode(page: Page, label: string | null, status = 200) {
+  await page.route("**/api/location/reverse**", async (route) => {
+    await route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          label,
+        },
+        error: null,
+      }),
+    });
+  });
+}
+
 test.describe("Phase 3 browser smoke", () => {
   test("homepage loads, vendor cards render, and details are clickable", async ({ page }) => {
     const errors = trackClientErrors(page);
 
     await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "The Local Man" })).toBeVisible();
     await expect(page.locator(".discovery-layout")).toBeVisible();
     await expect(page.locator(".discovery-map")).toBeVisible();
+    await expect(page.locator(".location-panel strong")).toHaveText("Using your current location");
+    await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     const firstCard = page.locator(".vendor-card").first();
     await expect(firstCard).toBeVisible();
@@ -190,10 +267,79 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
 
     await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
     await page.goto("/search?q=rice");
     await expect(page.getByRole("heading", { name: "Search local food" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search" })).toHaveValue("rice");
     await expect(page.locator(".discovery-layout")).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("denied geolocation falls back to Abuja without stale approximate claims", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await installMockGeolocation(page, {
+      kind: "error",
+      code: 1,
+      message: "User denied geolocation.",
+    });
+    await page.goto("/");
+
+    await expect(page.locator(".location-panel strong")).toHaveText("Showing Abuja");
+    await expect(page.locator(".location-panel div > span").first()).toHaveText(
+      "Location access is off. Turn it on for vendors closer to you.",
+    );
+    await expect(page.locator(".location-panel p")).toHaveText(
+      "Location access was denied and approximate location is unavailable.",
+    );
+    await expect(page.locator(".location-trust-line")).toHaveCount(0);
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("retry clears denied state and reloads nearby vendors after precise location succeeds", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const nearbyUrls: string[] = [];
+
+    await installMockGeolocation(page, {
+      kind: "error",
+      code: 1,
+      message: "User denied geolocation.",
+    });
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+
+    await page.route("**/api/vendors/nearby**", async (route) => {
+      nearbyUrls.push(route.request().url());
+      await route.continue();
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    await expect(page.locator(".location-panel strong")).toHaveText("Showing Abuja");
+    await expect(page.locator(".location-panel p")).toHaveText(
+      "Location access was denied and approximate location is unavailable.",
+    );
+
+    await setMockGeolocationMode(page, {
+      kind: "success",
+      lat: 9.08,
+      lng: 7.4,
+    });
+
+    await page.getByRole("button", { name: "Retry location" }).click();
+
+    await expect(page.locator(".location-panel strong")).toHaveText(
+      "Using your current location",
+    );
+    await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
+    await expect(page.locator(".location-panel p")).toHaveCount(0);
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    expect(nearbyUrls.some((url) => !url.includes("lat=") && !url.includes("lng="))).toBe(true);
+    expect(nearbyUrls.some((url) => url.includes("lat=") && url.includes("lng="))).toBe(true);
 
     await expectNoClientErrors(errors);
   });
@@ -289,9 +435,11 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
     await page.goto("/");
 
     await expect(page.locator(".discovery-map")).toBeVisible();
+    await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
     await expect(page.locator(".vendor-card").first()).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(
@@ -330,6 +478,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await setMockClientTime(page, "2026-04-25T21:00:00");
     await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
@@ -363,6 +512,21 @@ test.describe("Phase 3 browser smoke", () => {
     expect((bgRed + bgGreen + bgBlue) / 3).toBeGreaterThan(210);
     expect((titleRed + titleGreen + titleBlue) / 3).toBeLessThan(120);
     expect(selectedStyles.boxShadow).not.toBe("none");
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("precise location falls back to coordinates when reverse geocoding fails", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, null);
+    await page.goto("/");
+
+    await expect(page.locator(".location-panel strong")).toHaveText("Using your current location");
+    await expect(page.locator(".location-panel div > span").first()).toHaveText(
+      "9.08000, 7.40000",
+    );
 
     await expectNoClientErrors(errors);
   });

@@ -30,6 +30,7 @@ The Local Man — UI Rules
 - Do not imply exact distance when the location source is approximate or default city.
 - Provide a clear path to retry location permission or change location later.
 - Tell mobile users that precise location can take a few seconds before fallback.
+- Retry location must clear stale denied/unavailable copy and update the UI to the current resolved source after success.
 - Use `hooks/use-user-location.ts` as the frontend location acquisition interface.
 
 ## Vendor Card Required Fields

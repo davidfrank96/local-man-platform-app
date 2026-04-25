@@ -8,7 +8,11 @@ import type { Coordinates } from "./distance.ts";
 export type LocationAcquisitionStatus =
   | "idle"
   | "resolving"
-  | "resolved"
+  | "precise"
+  | "approximate"
+  | "default_city"
+  | "denied"
+  | "unavailable"
   | "error";
 
 export type LocationAcquisitionErrorCode =
@@ -48,6 +52,33 @@ const geolocationErrorCodes: Record<number, LocationAcquisitionErrorCode> = {
 };
 
 export const BROWSER_GEOLOCATION_TIMEOUT_MS = 10_000;
+
+export function deriveLocationAcquisitionStatus(
+  location: AcquiredUserLocation,
+): LocationAcquisitionStatus {
+  if (location.source === "precise") {
+    return "precise";
+  }
+
+  if (location.source === "approximate") {
+    return "approximate";
+  }
+
+  if (location.errors.some((error) => error.code === "GEOLOCATION_DENIED")) {
+    return "denied";
+  }
+
+  if (
+    location.errors.some(
+      (error) =>
+        error.code === "GEOLOCATION_UNAVAILABLE" || error.code === "GEOLOCATION_TIMEOUT",
+    )
+  ) {
+    return "unavailable";
+  }
+
+  return "default_city";
+}
 
 function toLocationError(error: unknown): LocationAcquisitionError {
   const geolocationError = error as GeolocationErrorLike;
