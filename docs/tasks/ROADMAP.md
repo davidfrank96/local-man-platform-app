@@ -18,32 +18,49 @@ The Local Man — Roadmap
 - runtime environment activation
 - migration and Abuja seed validation
 - nearby API smoke testing
-- admin auth
+- admin auth foundation
 - vendor CRUD
-- image upload
 - hours management
 - categories and dishes
 - audit logging
-- integrate geolocation hook into public UI
-- nearby vendor map
+- public discovery
+- nearby vendor map surface
 - vendor cards
 - search and filters
 - vendor details
 - directions and call buttons
 
 ## Phase 3 — Hardening
-- ratings support
-- test coverage
-- performance improvements
-- validation improvements
-- accessibility improvements
-- real Google Maps JavaScript integration
-- fuller admin login flow
+- race-condition fixes
+- API error handling improvements
+- accessibility fixes
+- mobile layout hardening
+- loading, empty, and error states
+- browser smoke tests
+- layout stress tests
 
-## Phase 4 — Launch
-- Abuja pilot data
-- smoke testing
-- deployment
-- monitoring
+## Phase 4 — Launch Readiness
+- admin form validation UX
+- slug generation and validation
+- admin login/session flow
+- vendor image upload and removal
+- content quality improvements
 - pilot operations checklist
-- feedback collection
+- master verification before pilot iteration
+
+## Phase 5 — UX Polish & Real-User Feedback Iteration
+- compact discovery-oriented vendor cards
+- `Today:` hours on cards
+- selected vendor highlight and selected preview actions
+- browser-back and `Back to map` restoration
+- time-based morning, afternoon, and night discovery theming
+- precise, approximate, and default-city location messaging
+- reverse location display with human-readable area labels
+- final regression, runtime, and documentation alignment
+
+## After Phase 5
+Potential future work only after pilot evidence justifies it:
+- real Google Maps JavaScript integration
+- live IP approximation provider selection
+- stronger deployment monitoring and analytics
+- broader city rollout

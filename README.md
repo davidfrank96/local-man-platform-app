@@ -12,7 +12,7 @@ Let users discover nearby food vendors, see what they sell, know whether they ar
 - TypeScript
 - Tailwind CSS
 - Supabase
-- Google Maps
+- Google Maps deep links for directions
 
 ## Project Structure
 - `app/` - Next.js App Router pages, layouts, and route entry points.
@@ -40,10 +40,18 @@ Before shipping or continuing broad feature work, validate the Supabase-backed n
 
 Exact steps are in `docs/ops/RUNTIME_SETUP.md`.
 
-## Current Phase 2 Surface
-- Runtime activation scripts and nearby smoke testing are available.
-- Admin vendor CRUD, hours, image metadata, featured dish routes, and minimal token-based admin UI are implemented.
-- Public discovery, vendor cards, search/filter controls, vendor detail pages, call actions, and directions actions are implemented.
+## Current Phase 5 Surface
+Phase 5 is `UX Polish & Real-User Feedback Iteration`.
+
+The current implementation includes:
+- public discovery with vendor cards, map preview, selected vendor preview, search, filters, and back-navigation state restoration
+- vendor cards with distance, open/closed state, `Today:` hours, featured dish, price label, area, rating or `New`, call, directions, and visible details link
+- vendor detail pages with weekly hours, featured dishes, image fallback, and a safe `Back to map` flow
+- browser/device geolocation with retry, human-readable reverse location labels when available, approximate/default-city fallback, and explicit accuracy messaging
+- client-local morning, afternoon, and night discovery theming
+- admin login with Supabase email/password session validation
+- admin vendor create, edit, deactivate, hours, featured dishes, and image upload/removal flows
+- runtime validation and nearby smoke testing against seeded Abuja pilot data
 
 ## How to Work in This Repo
 1. Read the docs.

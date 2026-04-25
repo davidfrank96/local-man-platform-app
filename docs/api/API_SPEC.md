@@ -12,7 +12,7 @@ Initial route foundation:
 - `lib/api/contracts.ts`
 - `lib/api/responses.ts`
 
-The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, and nearest-first sorting. Phase 2B added authenticated admin vendor create, update, soft-delete, sub-resource, and audit-log route logic. Phase 2C added public category and vendor detail read routes.
+The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, nearest-first sorting, featured dish summary selection, and compact `today_hours` output. Authenticated admin routes cover vendor create, update, deactivate, sub-resources, and audit-log behavior.
 
 ## Types and Validation Foundation
 Initial shared types and validation schemas:
@@ -52,6 +52,7 @@ Returns:
 - one featured dish summary when available: `featured_dish.dish_name` and optional `featured_dish.description`
 - `today_hours`, a compact current-day summary such as `9:00 AM - 6:00 PM`, `Closed`, or `Hours not listed`
 - summary fields for cards
+- `price_band`, `area`, `average_rating`, and `review_count` for compact vendor card display
 
 Behavior:
 - If `lat` and `lng` are provided, both must be valid coordinates.
@@ -61,6 +62,7 @@ Behavior:
 - `location_source = approximate` means IP-based or other low-accuracy approximation.
 - `location_source = default_city` means no user coordinates were available and Abuja was used.
 - The frontend location hook should call `/api/vendors/nearby` with precise coordinates first, approximate coordinates second, or no coordinates when default city fallback is needed.
+- Reverse geocoding is a separate best-effort UI concern and does not block or alter the nearby vendor response.
 - Candidate vendors are fetched with a latitude/longitude bounding box before precise distance calculation.
 - `distance_km` is calculated dynamically with the Haversine formula.
 - Results are filtered by `radius_km` after exact distance calculation.
@@ -80,6 +82,30 @@ Location response shape:
     },
     "isApproximate": false
   }
+}
+```
+
+Vendor card fields in the nearby response:
+```json
+{
+  "vendor_id": "20000000-0000-4000-8000-000000000008",
+  "name": "Jabi Office Lunch Bowl",
+  "slug": "jabi-office-lunch-bowl",
+  "short_description": "Test lunch bowl vendor with white rice, stew, and native rice.",
+  "phone_number": "+2340000000000",
+  "area": "Jabi",
+  "latitude": 9.0606,
+  "longitude": 7.4219,
+  "price_band": "standard",
+  "average_rating": 0,
+  "review_count": 0,
+  "distance_km": 3.11,
+  "is_open_now": true,
+  "featured_dish": {
+    "dish_name": "White rice and stew",
+    "description": "Lunch bowl with stew."
+  },
+  "today_hours": "11:00 AM - 3:00 PM"
 }
 ```
 
@@ -122,8 +148,8 @@ Admin endpoint rules:
 - Requests must include `Authorization: Bearer <supabase-access-token>`.
 - The bearer token is verified against Supabase Auth.
 - The authenticated user id must exist in `admin_users`.
-- Authentication and admin membership are checked before Phase 2 business logic runs.
-- The Phase 4 admin login UI obtains the bearer token from a Supabase email/password session instead of manual token paste.
+- Authentication and admin membership are checked before route business logic runs.
+- The admin login UI obtains the bearer token from a Supabase email/password session instead of manual token paste.
 - Request params and request bodies are still validated at the route boundary.
 - Vendor list, create, update, and delete routes call typed admin vendor service methods.
 - Vendor create, update, and delete routes write audit logs.

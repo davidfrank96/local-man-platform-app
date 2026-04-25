@@ -2,17 +2,16 @@
 The Local Man — Current Sprint
 
 ## Sprint Goal
-Complete Phase 4 usability and pilot-readiness work without expanding beyond the MVP.
+Complete Phase 5 `UX Polish & Real-User Feedback Iteration` without expanding the product scope.
 
 ## In Scope
-- improve admin vendor creation and editing usability
-- remove manual slug mistakes with auto-generation and validation feedback
-- replace manual admin token paste with a usable login and session flow
-- support vendor image upload and removal through Supabase Storage
-- improve vendor detail content quality for partial data
-- improve public location fallback messaging
-- document launch-day and pilot operations clearly
-- keep tests, docs, and API contracts aligned
+- keep public discovery, vendor cards, selected state, and vendor detail flows aligned with current behavior
+- preserve back-navigation and `Back to map` state restoration
+- keep location handling honest and retryable across precise, approximate, and default-city modes
+- maintain human-readable location display with coordinate fallback when reverse lookup fails
+- refine time-based theming without compromising card readability
+- keep admin vendor create, edit, deactivate, hours, dishes, and image flows stable
+- keep tests, docs, and runtime checks aligned with the shipped surface
 
 ## Out of Scope
 - delivery
@@ -21,54 +20,46 @@ Complete Phase 4 usability and pilot-readiness work without expanding beyond the
 - loyalty
 - vendor self-signup
 - complex role management
-- concrete IP approximation provider selection
 - real Google Maps JavaScript integration
-- broad visual redesign
+- concrete live IP approximation provider selection
+- broad product expansion beyond discovery, vendor detail, and admin maintenance
 
 ## Done Criteria
-Phase 4 is done when:
-- admins can create and edit vendors without manual slug errors
-- admin login no longer depends on manually pasted JWTs
-- vendor images can be uploaded, listed, and removed reliably
-- public vendor detail pages degrade cleanly with partial data
-- location fallback messaging is clear on mobile and desktop
-- pilot operations steps are documented in a practical checklist
-- typecheck, lint, unit tests, build, and browser smoke tests pass
+Phase 5 is done when:
+- docs describe the current UX and location behavior accurately
+- vendor cards consistently show all required fields, including `Today:` hours
+- selected vendor states remain readable and obvious across morning, afternoon, and night themes
+- browser back and `Back to map` restore discovery state without manual reload
+- precise location, fallback behavior, retry behavior, and reverse location display remain stable
+- admin vendor maintenance flows remain functional
+- lint, typecheck, unit tests, browser smoke tests, build, and nearby smoke all pass
 
-## Current Phase 4 Status
-- Admin vendor forms auto-generate valid slugs and reject invalid slug edits.
-- Admin create and edit forms show clearer inline validation feedback.
-- Admin routes use Supabase email/password login and session validation instead of manual token paste.
-- Admin vendor images use the `vendor-images` Supabase Storage bucket for upload and removal.
-- Public vendor detail pages show stronger summary content and explicit fallback copy for missing fields.
-- Public location handling keeps the 10-second precise-location timeout and clearer Abuja fallback messaging.
-- Pilot operator documentation now exists in `docs/ops/PILOT_CHECKLIST.md`.
-- Unit tests, build, and browser smoke tests cover the highest-risk Phase 4 paths.
+## Current Phase 5 Status
+- Vendor cards use a compact food-discovery layout with required actions and status fields.
+- Vendor cards show compact `Today:` hours and preserve those fields after selection.
+- Selected vendor cards and selected vendor preview panels use a stronger, readable highlight treatment.
+- `Back to map` and browser-back restore discovery vendors, filters, selection, and scroll state.
+- Public discovery uses client-local morning, afternoon, and night theming while keeping vendor cards light and readable.
+- Public location handling distinguishes precise, approximate, and default-city modes with explicit trust messaging.
+- Reverse location lookup shows human-readable area labels when available and falls back to rounded coordinates when it is not.
+- Admin vendor creation, editing, deactivation, hours, dishes, and image management remain part of the active maintained surface.
 
-## Current Phase 4 Warnings
-- IP approximation is still an interface only; there is no concrete provider yet.
-- Public map rendering is still the MVP coordinate grid rather than a real map SDK.
-- Admin auth uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
-- Seed and legacy image rows may still have null `storage_object_path`; newly uploaded images are storage-backed.
-- Pilot quality still depends on operators entering complete vendor data.
+## Current Phase 5 Warnings
+- IP approximation is still an interface only; there is no live provider yet.
+- Reverse geocoding is best-effort and depends on external availability.
+- The public map is still the lightweight MVP map surface rather than a full SDK integration.
+- Admin auth still uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
+- Pilot quality still depends on complete and accurate vendor data entry.
 
-## Pilot Readiness Gate
-Before pilot launch:
-- confirm `docs/ops/RUNTIME_SETUP.md` passes end to end on the target Supabase project
-- confirm `docs/ops/PILOT_CHECKLIST.md` is followed for vendor data, admin onboarding, and smoke checks
-- confirm admin login works for a real `admin_users` account
-- confirm image upload works against the real Supabase bucket
-- confirm `npm run smoke:nearby` passes against the real environment
-- confirm browser smoke tests still pass against the current build
-
-## Phase 4 Boundaries
-Completed surfaces:
-- Phase 4A admin data-entry usability
-- Phase 4B admin authentication usability
-- Phase 4C vendor image management
-- Phase 4D location and discovery refinement
-- Phase 4E pilot operations documentation
+## Phase 5 Boundaries
+Allowed:
+- UX polish that does not bloat the interface
+- readability, spacing, hierarchy, and selected-state refinements
+- location trust messaging and retry behavior improvements
+- documentation alignment
+- regression coverage improvements
 
 Still not allowed:
 - delivery, payments, chat, loyalty, coupons, inventory, or vendor self-signup
-- broad visual polish unrelated to real usability or pilot operation
+- speculative feature work that is not grounded in current pilot use
+- heavy visual redesign, media-heavy UI, or new third-party UI frameworks
