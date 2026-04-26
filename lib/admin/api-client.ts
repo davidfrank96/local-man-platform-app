@@ -1,5 +1,7 @@
 import type { ApiResponse } from "../api/responses.ts";
 import type {
+  AdminAnalyticsRange,
+  AdminAnalyticsResponseData,
   CreateVendorDishesRequest,
   CreateVendorRequest,
   PriceBand,
@@ -48,6 +50,10 @@ export type AdminVendorFilters = {
   price_band?: PriceBand;
   limit?: number;
   offset?: number;
+};
+
+export type AdminAnalyticsFilters = {
+  range?: AdminAnalyticsRange;
 };
 
 export class AdminApiError extends Error {
@@ -155,6 +161,19 @@ export async function listAdminVendors(
 
   return requestAdminApi<AdminVendorListResult>(
     `/api/admin/vendors?${params.toString()}`,
+    options,
+  );
+}
+
+export async function fetchAdminAnalytics(
+  filters: AdminAnalyticsFilters,
+  options: AdminApiClientOptions,
+): Promise<AdminAnalyticsResponseData> {
+  const params = new URLSearchParams();
+  appendDefinedParam(params, "range", filters.range ?? "7d");
+
+  return requestAdminApi<AdminAnalyticsResponseData>(
+    `/api/admin/analytics?${params.toString()}`,
     options,
   );
 }

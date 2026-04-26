@@ -12,6 +12,10 @@ import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
 import {
   getPublicLocationDisplayModel,
 } from "../../lib/location/display.ts";
+import {
+  ensurePublicTrackingSession,
+  trackPublicUserAction,
+} from "../../lib/public/user-action-tracking.ts";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   fetchNearbyVendors,
@@ -287,6 +291,16 @@ export function PublicDiscovery({
   }, []);
 
   useEffect(() => {
+    void ensurePublicTrackingSession({
+      page_path:
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : pathname,
+      location_source: activeLocationSource ?? null,
+    });
+  }, [activeLocationSource, pathname]);
+
+  useEffect(() => {
     let timeoutId: number | null = null;
 
     function applyTimeTheme(now: Date) {
@@ -549,8 +563,23 @@ export function PublicDiscovery({
     setFilters(nextFilters);
   }
 
-  function selectVendorById(vendorId: string) {
+  function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
     const vendor = vendors.find((entry) => entry.vendor_id === vendorId);
+
+    if (vendor) {
+      trackPublicUserAction({
+        event_type: "vendor_selected",
+        vendor_id: vendor.vendor_id,
+        location_source: activeLocationSource ?? null,
+        vendor_slug: vendor.slug,
+        page_path:
+          typeof window !== "undefined"
+            ? `${window.location.pathname}${window.location.search}`
+            : pathname,
+        metadata: { source },
+        filters: {},
+      });
+    }
 
     setSelectedVendorSlug(vendor?.slug ?? null);
   }
@@ -604,6 +633,7 @@ export function PublicDiscovery({
             categories={categories}
             filters={filters}
             key={filterFormKey}
+            locationSource={activeLocationSource ?? null}
             onChange={applyFilters}
           />
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
@@ -630,6 +660,7 @@ export function PublicDiscovery({
                   ),
                 )}
                 key={vendor.vendor_id}
+                locationSource={activeLocationSource ?? null}
                 selected={vendor.slug === selectedVendorSlug}
                 vendor={vendor}
                 onSelect={selectVendorById}
@@ -694,6 +725,10 @@ export function PublicDiscovery({
                     latitude={selectedVendor.latitude}
                     longitude={selectedVendor.longitude}
                     phoneNumber={selectedVendor.phone_number}
+                    source="selected_preview"
+                    vendorId={selectedVendor.vendor_id}
+                    vendorSlug={selectedVendor.slug}
+                    locationSource={activeLocationSource ?? null}
                   />
                   <Link
                     className="button-secondary compact-button"

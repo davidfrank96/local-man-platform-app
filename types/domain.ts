@@ -1,10 +1,18 @@
 import type { z } from "zod";
 import type {
   adminUserSchema,
+  adminAnalyticsQuerySchema,
+  adminAnalyticsRangeSchema,
+  adminAnalyticsResponseDataSchema,
+  adminAnalyticsRecentEventSchema,
+  adminAnalyticsSummarySchema,
+  adminAnalyticsVendorMetricSchema,
+  adminAnalyticsDropoffSchema,
   adminVendorsQuerySchema,
   auditLogSchema,
   createVendorDishesRequestSchema,
   createVendorRequestSchema,
+  deviceTypeSchema,
   locationSourceSchema,
   nearbyVendorsQuerySchema,
   nearbyVendorsResponseDataSchema,
@@ -12,6 +20,8 @@ import type {
   ratingSummarySchema,
   replaceVendorHoursRequestSchema,
   updateVendorRequestSchema,
+  userActionEventNameSchema,
+  userActionEventSchema,
   vendorCategorySchema,
   vendorCategoryMapSchema,
   vendorDetailResponseDataSchema,
@@ -27,6 +37,7 @@ import type { priceBandSchema } from "@/lib/validation/common";
 
 export type PriceBand = z.infer<typeof priceBandSchema>;
 export type LocationSource = z.infer<typeof locationSourceSchema>;
+export type DeviceType = z.infer<typeof deviceTypeSchema>;
 
 export type Vendor = z.infer<typeof vendorSchema>;
 export type VendorHours = z.infer<typeof vendorHoursSchema>;
@@ -38,6 +49,15 @@ export type Rating = z.infer<typeof ratingSchema>;
 export type RatingSummary = z.infer<typeof ratingSummarySchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AuditLog = z.infer<typeof auditLogSchema>;
+export type UserActionEventName = z.infer<typeof userActionEventNameSchema>;
+export type UserActionEvent = z.infer<typeof userActionEventSchema>;
+export type AdminAnalyticsRange = z.infer<typeof adminAnalyticsRangeSchema>;
+export type AdminAnalyticsQuery = z.infer<typeof adminAnalyticsQuerySchema>;
+export type AdminAnalyticsSummary = z.infer<typeof adminAnalyticsSummarySchema>;
+export type AdminAnalyticsVendorMetric = z.infer<typeof adminAnalyticsVendorMetricSchema>;
+export type AdminAnalyticsDropoff = z.infer<typeof adminAnalyticsDropoffSchema>;
+export type AdminAnalyticsRecentEvent = z.infer<typeof adminAnalyticsRecentEventSchema>;
+export type AdminAnalyticsResponseData = z.infer<typeof adminAnalyticsResponseDataSchema>;
 
 export type NearbyVendorsQuery = z.infer<typeof nearbyVendorsQuerySchema>;
 export type AdminVendorsQuery = z.infer<typeof adminVendorsQuerySchema>;

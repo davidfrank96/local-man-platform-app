@@ -4,12 +4,28 @@ import { selectPrimaryVendorImage } from "../../lib/vendors/images.ts";
 import { isVendorOpenNow } from "../../lib/vendors/nearby.ts";
 import { formatVendorHoursRange } from "../../lib/vendors/time-display.ts";
 import { VendorActions } from "./vendor-actions.tsx";
+import { VendorDetailTracker } from "./vendor-detail-tracker.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
 
 type VendorDetailProps = {
   vendor: VendorDetailResponseData;
   returnTo?: string;
 };
+
+function readLocationSourceFromReturnTo(returnTo: string): "precise" | "approximate" | "default_city" | null {
+  try {
+    const url = new URL(returnTo, "http://localhost");
+    const locationSource = url.searchParams.get("location_source");
+
+    return locationSource === "precise" ||
+      locationSource === "approximate" ||
+      locationSource === "default_city"
+      ? locationSource
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 const dayLabels = [
   "Sunday",
@@ -27,6 +43,7 @@ function formatCount(count: number, singularLabel: string): string {
 
 export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
   const heroImage = selectPrimaryVendorImage(vendor.images);
+  const locationSource = readLocationSourceFromReturnTo(returnTo);
   const hasHours = vendor.hours.length > 0;
   const openNow = isVendorOpenNow(vendor.hours, vendor.is_open_override);
   const statusLabel =
@@ -52,6 +69,11 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
 
   return (
     <main className="vendor-detail-shell">
+      <VendorDetailTracker
+        locationSource={locationSource}
+        vendorId={vendor.id}
+        vendorSlug={vendor.slug}
+      />
       <section className="vendor-detail-hero">
         <div className="vendor-detail-copy">
           <Link className="button-secondary compact-button" href={returnTo}>
@@ -104,6 +126,10 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
             latitude={vendor.latitude}
             longitude={vendor.longitude}
             phoneNumber={vendor.phone_number}
+            source="detail"
+            vendorId={vendor.id}
+            vendorSlug={vendor.slug}
+            locationSource={locationSource}
           />
         </div>
         <div className="vendor-detail-image">

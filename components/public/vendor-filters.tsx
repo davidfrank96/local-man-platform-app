@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
-import type { PriceBand } from "../../types/index.ts";
+import type { LocationSource, PriceBand } from "../../types/index.ts";
 import type { PublicCategory } from "../../lib/vendors/public-api-client.ts";
+import { trackPublicUserAction } from "../../lib/public/user-action-tracking.ts";
 
 export type DiscoveryFilters = {
   search: string;
@@ -13,6 +14,7 @@ export type DiscoveryFilters = {
 type VendorFiltersProps = {
   filters: DiscoveryFilters;
   categories: PublicCategory[];
+  locationSource?: LocationSource | null;
   onChange: (filters: DiscoveryFilters) => void;
 };
 
@@ -34,13 +36,41 @@ function readFormFilters(form: HTMLFormElement): DiscoveryFilters {
 export function VendorFilters({
   filters,
   categories,
+  locationSource,
   onChange,
 }: VendorFiltersProps) {
   const [draftFilters, setDraftFilters] = useState<DiscoveryFilters>(filters);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onChange(readFormFilters(event.currentTarget));
+    const nextFilters = readFormFilters(event.currentTarget);
+
+    trackPublicUserAction({
+      event_type: "filter_applied",
+      page_path:
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/",
+      location_source: locationSource ?? null,
+      filters: nextFilters,
+      metadata: {},
+    });
+
+    if (nextFilters.search.length > 0) {
+      trackPublicUserAction({
+        event_type: "search_used",
+        page_path:
+          typeof window !== "undefined"
+            ? `${window.location.pathname}${window.location.search}`
+            : "/",
+        location_source: locationSource ?? null,
+        search_query: nextFilters.search,
+        filters: nextFilters,
+        metadata: {},
+      });
+    }
+
+    onChange(nextFilters);
   }
 
   return (

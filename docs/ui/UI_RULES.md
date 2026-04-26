@@ -72,11 +72,18 @@ The Local Man — UI Rules
 ## Admin UI Rules
 - admin workspace should be split cleanly across:
   - `/admin` for overview
+  - `/admin/analytics` for usage signals
   - `/admin/vendors` for registry management
   - `/admin/vendors/new` for creation
   - `/admin/vendors/[id]` for focused editing
 - admin screens should use clear hierarchy, restrained cards, and obvious section boundaries instead of one long mixed form
 - the dashboard view should surface overview counts and quick actions for incomplete vendors
+- the analytics view should stay read-only and show:
+  - summary cards
+  - vendor performance tables
+  - drop-off panels
+  - recent activity
+  - clear empty states when usage data is not available yet
 - the vendor registry should support search and filtering, then move into a dedicated edit workspace
 - the create vendor page should be a full onboarding page with clearly separated sections for:
   - basic details
@@ -108,6 +115,8 @@ The Local Man — UI Rules
 - successful admin write actions should show concise confirmation such as vendor updated, hours updated, or image uploaded.
 - failed admin write actions should show a readable message with the API error code when available and must not fail silently.
 - when create flow succeeds only partially, the status copy must identify the failed step, such as hours, dishes, or image upload.
+- analytics must never expose raw tracking failures in the public app
+- analytics filters should stay lightweight: last 24 hours, 7 days, 30 days, and all time
 
 ## Style Guidance
 - clean modern look
