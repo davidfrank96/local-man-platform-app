@@ -69,6 +69,7 @@ Test:
 - distance and open/closed state stay visible before and after card selection
 - selected vendor highlight remains readable
 - selected vendor preview exposes `View details`, `Call`, and `Directions`
+- vendor card metadata row keeps distance and open/closed state visible together
 - browser back restores discovery state
 - `Back to map` restores discovery state
 - restored discovery state keeps search and filter controls usable without manual reload
@@ -76,6 +77,7 @@ Test:
 - time-based morning, afternoon, and night themes do not compromise card readability
 - public shell applies the correct browser-local theme attribute for morning, afternoon, and night
 - uploaded vendor images appear on vendor detail pages
+- vendor detail layout stays compact on desktop and mobile without hiding sections
 
 Current automated coverage:
 - `tests/public-api-client.test.ts`
@@ -188,8 +190,35 @@ Test:
 - explicit missing-data copy for area, phone, address, and featured dishes
 - compact price-band labels
 - `New` fallback for unrated vendors
+- vendor cards remain image-free on discovery surfaces
 - selected-card readability in all time themes
 - selected state does not change open/closed data
+
+## Release Gate Checklist
+Run before signoff:
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- `npm run smoke:nearby`
+- `npm run test:e2e`
+
+Manual viewport checks:
+- `320px`
+- `375px`
+- `414px`
+- `768px`
+- `1024px`
+- `1440px`
+
+Manual UI checks:
+- homepage/map view loads without overlap
+- vendor cards remain compact, readable, and image-free
+- selected vendor preview keeps `Call`, `Directions`, and `View details` accessible
+- vendor detail hero remains compact and readable
+- map controls stay visible
+- no horizontal overflow on mobile
+- morning, afternoon, and night themes stay readable
 
 ### Admin Data Quality
 Test:

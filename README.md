@@ -21,9 +21,10 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - area
   - rating or `New`
   - call, directions, and detail actions
+  - no vendor card photos or thumbnails
 - popular-vendor highlighting when ranking signals exist
 - selected vendor preview
-- vendor detail pages with weekly hours, featured dishes, vendor images, and `Back to map`
+- vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
 - lightweight vendor rating input with 1-5 stars and no comments
 - local retention helpers:
   - recently viewed vendors
@@ -172,3 +173,4 @@ Phase 5 delivered:
 - update docs when behavior changes
 - keep runtime and smoke checks aligned with Supabase-backed behavior
 - keep vendor slugs stable after creation unless explicitly edited
+- keep vendor cards text-first and image-free on discovery/list surfaces

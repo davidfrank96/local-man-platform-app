@@ -43,6 +43,7 @@ The Local Man — UI Rules
 - Use `hooks/use-user-location.ts` as the frontend location acquisition interface.
 
 ## Vendor Card Required Fields
+- vendor cards on homepage/search/list surfaces must remain text-first and image-free
 - name
 - distance
 - open/closed state
@@ -59,13 +60,15 @@ The Local Man — UI Rules
 - visible detail link text: `View details →`
 - tapping the card body should preview the vendor on the map without interfering with call, directions, or details
 - `Today:`, distance, and open/closed state must remain visible before and after the card is selected.
+- compact card density matters: metadata rows should scan quickly without making the card tall
 - selected cards must stay readable in every time theme and use a clear but compact highlight treatment
 - browser back and `Back to map` must restore discovery state without leaving the search and filter controls blocked or requiring a manual reload
 
 ## Vendor Detail Rules
-- strong hero image
+- a compact hero image is allowed only on the detail page
 - visible primary actions near top
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
+- compact summary cards or chips are preferred when they reduce scrolling without hiding information
 - lightweight star rating input may appear here, but it must stay compact and comment-free
 - weekly hours clearly structured
 - public hours should display in 12-hour AM/PM format
@@ -144,6 +147,7 @@ The Local Man — UI Rules
 - Vendor cards should stay light and high-contrast in morning, afternoon, and night themes, even when the page background gets darker.
 - Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Today:`, distance, open/closed state, featured dish, price, area, rating, and actions easy to read.
 - Selected vendor preview panels should stay compact and action-oriented, with `View details`, `Call`, and `Directions` visible on mobile.
+- Selected vendor preview panels on desktop should keep `Call`, `Directions`, and `View details` on one row when space allows.
 - Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
 - Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.
 - Night background tones should feel like evening discovery with deeper blue/slate washes and readable light cards, not harsh black surfaces.

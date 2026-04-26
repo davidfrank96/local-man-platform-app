@@ -53,7 +53,7 @@ Small food businesses with:
 1. As a user, I want to see nearby food vendors on a map so I can quickly decide where to go.
 2. As a user, I want to know whether a vendor is open so I do not waste time.
 3. As a user, I want to see distance in kilometers so I know how close the vendor is.
-4. As a user, I want to see food photos and featured dishes so I can choose where to eat.
+4. As a user, I want to see featured dishes and clear vendor cues so I can choose where to eat quickly.
 5. As a user, I want to call the vendor so I can confirm availability or reserve food.
 6. As a user, I want directions so I can navigate there easily.
 7. As an admin, I want to manually manage vendor data so listings stay accurate.
@@ -64,11 +64,12 @@ Small food businesses with:
 - nearby vendor map
 - vendor list below map
 - vendor detail page
-- search by vendor or food category
-- filtering by open now, meal type, budget-friendly, and distance
+- search by vendor, dish, or area
+- filtering by radius, category, price, and open now
 - call vendor button
 - directions button
 - ratings display
+- no-image vendor cards on discovery surfaces for faster loading and scanning
 
 ### Admin Features
 - admin-only login
