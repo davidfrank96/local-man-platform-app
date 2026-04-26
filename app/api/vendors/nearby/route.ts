@@ -6,7 +6,9 @@ import { nearbyVendorsQuerySchema } from "@/lib/validation";
 import { findNearbyVendors } from "@/lib/vendors/nearby";
 import {
   fetchNearbyVendorCandidates,
+  fetchVendorUsageScores,
   getSupabaseRestConfig,
+  getSupabaseServiceRoleConfig,
 } from "@/lib/vendors/supabase";
 
 export async function GET(request: NextRequest) {
@@ -35,7 +37,16 @@ export async function GET(request: NextRequest) {
       resolvedSearch.query,
       config,
     );
-    const vendors = findNearbyVendors(candidates, resolvedSearch.query);
+    const usageScores = await fetchVendorUsageScores(
+      candidates.map((vendor) => vendor.id),
+      getSupabaseServiceRoleConfig(),
+    );
+    const vendors = findNearbyVendors(
+      candidates,
+      resolvedSearch.query,
+      new Date(),
+      usageScores,
+    );
 
     return apiSuccess({
       location: resolvedSearch.location,

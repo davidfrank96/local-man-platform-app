@@ -11,6 +11,7 @@ import type {
   adminVendorsQuerySchema,
   auditLogSchema,
   createVendorDishesRequestSchema,
+  createVendorRatingRequestSchema,
   createVendorRequestSchema,
   deviceTypeSchema,
   locationSourceSchema,
@@ -30,6 +31,7 @@ import type {
   vendorIdParamsSchema,
   vendorImageMetadataRequestSchema,
   vendorImageSchema,
+  vendorRatingResponseDataSchema,
   vendorSchema,
   vendorSlugParamsSchema,
 } from "@/lib/validation/schemas";
@@ -64,6 +66,7 @@ export type AdminVendorsQuery = z.infer<typeof adminVendorsQuerySchema>;
 export type VendorSlugParams = z.infer<typeof vendorSlugParamsSchema>;
 export type VendorIdParams = z.infer<typeof vendorIdParamsSchema>;
 export type CreateVendorRequest = z.infer<typeof createVendorRequestSchema>;
+export type CreateVendorRatingRequest = z.infer<typeof createVendorRatingRequestSchema>;
 export type UpdateVendorRequest = z.infer<typeof updateVendorRequestSchema>;
 export type ReplaceVendorHoursRequest = z.infer<
   typeof replaceVendorHoursRequestSchema
@@ -79,4 +82,7 @@ export type VendorDetailResponseData = z.infer<
 >;
 export type NearbyVendorsResponseData = z.infer<
   typeof nearbyVendorsResponseDataSchema
+>;
+export type VendorRatingResponseData = z.infer<
+  typeof vendorRatingResponseDataSchema
 >;

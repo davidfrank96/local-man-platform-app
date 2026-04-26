@@ -17,6 +17,9 @@ The Local Man — UI Rules
 - Show distance clearly.
 - Call and directions buttons must be obvious.
 - Search and filters must not overwhelm the screen.
+- Discovery ordering should be understandable without exposing raw ranking math.
+- Open vendors should be easier to find than closed vendors.
+- The UI may highlight a small set of popular nearby vendors when real usage signals support it.
 - Do not overload the home screen with too many actions.
 - Runtime errors must be visible when Supabase data is unavailable.
 - Public UI must not render fake vendor data.
@@ -49,6 +52,7 @@ The Local Man — UI Rules
 - compact price label: `Budget-friendly`, `Everyday price`, or `Higher price`
 - area
 - compact rating: `★ 4.2` when ratings exist, otherwise `New`
+- optional lightweight popularity badge when a vendor is among the top ranked nearby results
 - call button
 - directions button
 - helper text: `Tap to preview on map`
@@ -62,12 +66,20 @@ The Local Man — UI Rules
 - strong hero image
 - visible primary actions near top
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
+- lightweight star rating input may appear here, but it must stay compact and comment-free
 - weekly hours clearly structured
 - public hours should display in 12-hour AM/PM format
 - featured dishes visually separated
 - address and location visible
 - missing vendor data should use explicit fallback copy instead of vague placeholders
 - If a vendor has no image, show a plain missing-image state instead of stock imagery.
+
+## Discovery Clarity Rules
+- Search relevance should feel predictable: stronger name matches should rise above weaker descriptive matches.
+- When filters are active, the current filter state should be obvious and easy to clear.
+- Discovery ordering helper copy may explain the current emphasis, such as open now, search relevance, popularity, or distance.
+- Retention helpers such as recently viewed vendors or last selected vendor memory should remain compact and supportive rather than taking over the page.
+- Client-only retention must use local browser storage and must never block public browsing.
 
 ## Admin UI Rules
 - admin workspace should be split cleanly across:

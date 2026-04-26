@@ -61,6 +61,7 @@ export type NearbyVendorResult = {
   price_band: PriceBand | null;
   average_rating: number;
   review_count: number;
+  ranking_score: number;
   distance_km: number;
   is_open_now: boolean;
   featured_dish: NearbyVendorFeaturedDishSummary | null;
@@ -70,6 +71,8 @@ export type NearbyVendorResult = {
 type NearbyVendorSortable = NearbyVendorResult & {
   rawDistanceKm: number;
 };
+
+export type VendorUsageScoreMap = Map<string, number>;
 
 const ABUJA_TIME_ZONE = "Africa/Lagos";
 
@@ -222,6 +225,7 @@ export function findNearbyVendors(
   vendors: VendorLocationRecord[],
   query: ResolvedNearbyVendorsQuery,
   now = new Date(),
+  usageScores: VendorUsageScoreMap = new Map(),
 ): NearbyVendorResult[] {
   const userLocation: Coordinates = {
     lat: query.lat,
@@ -264,6 +268,7 @@ export function findNearbyVendors(
           price_band: vendor.price_band,
           average_rating: vendor.average_rating,
           review_count: vendor.review_count,
+          ranking_score: usageScores.get(vendor.id) ?? 0,
           distance_km: roundDistanceKm(rawDistanceKm),
           is_open_now: isOpenNow,
           featured_dish: getFeaturedDishSummary(vendor),
@@ -272,7 +277,11 @@ export function findNearbyVendors(
         },
       ];
     })
-    .sort((left, right) => left.rawDistanceKm - right.rawDistanceKm)
+    .sort(
+      (left, right) =>
+        right.ranking_score - left.ranking_score ||
+        left.rawDistanceKm - right.rawDistanceKm,
+    )
     .map(({ rawDistanceKm, ...vendor }) => {
       void rawDistanceKm;
       return vendor;

@@ -2,11 +2,14 @@
 The Local Man — Current Sprint
 
 ## Sprint Goal
-Start Phase 6 `Usage Signals` with lightweight, trustworthy internal analytics while keeping the Phase 5 surface stable.
+Close Phase 6 `Usage Signals` with a stable analytics surface, discovery refinement informed by real usage, and lightweight retention/rating loops that do not add backend weight.
 
 ## In Scope
 - keep Phase 5 public discovery and admin workflows stable
 - add internal analytics visibility for real usage signals
+- use those signals to improve discovery ordering without adding opaque ranking logic
+- add lightweight retention helpers for recent and last-selected vendors
+- add simple public vendor ratings without expanding into a full review system
 - keep public event tracking lightweight and non-blocking
 - expose admin-only analytics at `/admin/analytics`
 - summarize sessions, events, vendor performance, and drop-off signals safely
@@ -35,6 +38,9 @@ Phase 6 signal visibility is ready when:
 - public tracking remains fire-and-forget and non-blocking
 - `/admin/analytics` is protected by admin auth
 - analytics summaries, vendor performance, drop-off panels, and recent activity load without breaking when data is sparse
+- discovery ordering remains open-now-first, relevance-aware, and usage-ranked without regressing location or selection behavior
+- local retention helpers stay non-blocking and device-local only
+- simple ratings update vendor aggregate score display without introducing comments or account requirements
 - Phase 5 public and admin workflows remain green under the full regression gate
 - lint, typecheck, unit tests, browser smoke tests, build, and nearby smoke all pass
 
@@ -56,6 +62,10 @@ Phase 6 signal visibility is ready when:
 - Create vendor now supports a fuller onboarding flow with basic details, hours, featured dishes, image selection, acknowledgements, and review before create.
 - Public event tracking records session, selection, detail, call, directions, search, and filter signals in `user_events`.
 - Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent activity.
+- Nearby discovery now uses a simple weighted `ranking_score` from usage signals and keeps distance as a tie-breaker rather than the only sort rule.
+- Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and applies a clearer search ordering.
+- Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.
+- Public vendor detail now supports a lightweight 1-5 star rating flow that updates aggregate vendor rating state.
 
 ## Current Warnings
 - IP approximation is still an interface only; there is no live provider yet.
@@ -64,9 +74,10 @@ Phase 6 signal visibility is ready when:
 - Admin auth still uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
 - Pilot quality still depends on complete and accurate vendor data entry.
 - Historical `user_events` rows may not include `session_id`, so exact session drop-off reporting can be incomplete until newer traffic accumulates.
+- Discovery retention is browser-local only and does not sync across devices.
 
 ## Readiness
-Phase 6 can continue as long as the regression gate, runtime gate, and documentation gate remain green together.
+Phase 6 is ready to close as long as the regression gate, runtime gate, and documentation gate remain green together.
 
 ## Phase 5 Boundaries
 Allowed:

@@ -13,6 +13,7 @@ type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 type VendorCardProps = {
   vendor: NearbyVendor;
   selected: boolean;
+  isPopular: boolean;
   approximateDistance: boolean;
   detailHref: string;
   locationSource?: LocationSource | null;
@@ -26,6 +27,7 @@ function getVendorCue(vendor: NearbyVendor): string | null {
 export function VendorCard({
   vendor,
   selected,
+  isPopular,
   approximateDistance,
   detailHref,
   locationSource,
@@ -54,6 +56,7 @@ export function VendorCard({
         onClick={() => onSelect(vendor.vendor_id, "card")}
       >
         <div className="vendor-card-main">
+          {isPopular ? <span className="vendor-card-popular-badge">Popular nearby</span> : null}
           <h3>{vendor.name}</h3>
           <p className="vendor-card-status-line">
             <span>{formatVendorCardDistance(vendor.distance_km, approximateDistance)}</span>

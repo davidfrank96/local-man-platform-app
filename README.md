@@ -6,6 +6,11 @@ The Local Man is a location-based food discovery product for finding nearby loca
 
 ### Public
 - discovery homepage with nearby vendors, search, filters, and map preview
+- discovery ordering that prioritizes:
+  - open vendors first
+  - stronger search matches
+  - usage-signal ranking
+  - distance as the final tie-breaker
 - vendor cards with:
   - name
   - distance
@@ -16,8 +21,14 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - area
   - rating or `New`
   - call, directions, and detail actions
+- popular-vendor highlighting when ranking signals exist
 - selected vendor preview
 - vendor detail pages with weekly hours, featured dishes, vendor images, and `Back to map`
+- lightweight vendor rating input with 1-5 stars and no comments
+- local retention helpers:
+  - recently viewed vendors
+  - last selected vendor memory
+  - popular vendors near you
 - trust-first location behavior:
   - precise browser geolocation
   - approximate location only when usable and clearly labeled
@@ -117,6 +128,17 @@ Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/franken
 ## Phase 6 Summary
 Phase 6 currently covers:
 - lightweight first-party public event tracking
+- usage-signal vendor ranking from tracked public behavior
+- discovery refinement from real usage signals:
+  - open-now priority
+  - improved relevance ordering
+  - clearer filter state
+  - lower-friction vendor return paths
+- lightweight client-side retention:
+  - recently viewed vendors
+  - last selected vendor memory
+  - popular vendors near you
+- simple public vendor ratings with aggregate score display
 - tracked events:
   - `session_started`
   - `first_interaction`

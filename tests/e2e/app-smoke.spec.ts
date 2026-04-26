@@ -3,6 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
+type MockNearbyVendor = Omit<NearbyVendor, "ranking_score"> & {
+  ranking_score?: number;
+};
 
 function trackClientErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -30,7 +33,7 @@ function parseRgbChannels(value: string) {
   return match.slice(0, 3).map((channel) => Number(channel));
 }
 
-async function mockNearbyDiscovery(page: Page, vendors: NearbyVendor[]) {
+async function mockNearbyDiscovery(page: Page, vendors: MockNearbyVendor[]) {
   await page.route("**/api/vendors/nearby**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -47,7 +50,10 @@ async function mockNearbyDiscovery(page: Page, vendors: NearbyVendor[]) {
             },
             isApproximate: false,
           },
-          vendors,
+          vendors: vendors.map((vendor) => ({
+            ranking_score: 0,
+            ...vendor,
+          })),
         },
         error: null,
       }),

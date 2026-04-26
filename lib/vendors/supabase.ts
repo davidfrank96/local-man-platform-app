@@ -13,11 +13,29 @@ import type {
   VendorHours,
   VendorImage,
 } from "../../types/index.ts";
+import type { VendorUsageScoreMap } from "./nearby.ts";
 
 export type SupabaseRestConfig = {
   url: string;
   anonKey: string;
 };
+
+type SupabaseServiceRoleConfig = {
+  url: string;
+  serviceRoleKey: string;
+};
+
+type UserEventRow = {
+  vendor_id: string | null;
+  event_type: string;
+};
+
+const vendorUsageEventWeights = {
+  vendor_selected: 1,
+  vendor_detail_opened: 3,
+  directions_clicked: 5,
+  call_clicked: 8,
+} as const;
 
 const nearbyVendorBaseSelect = [
   "id",
@@ -57,6 +75,18 @@ export function getSupabaseRestConfig(): SupabaseRestConfig | null {
   };
 }
 
+export function getSupabaseServiceRoleConfig(): SupabaseServiceRoleConfig | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
+
+  if (!url || !serviceRoleKey) return null;
+
+  return {
+    url,
+    serviceRoleKey,
+  };
+}
+
 function appendFilter(url: URL, key: string, value: string): void {
   url.searchParams.append(key, value);
 }
@@ -83,6 +113,26 @@ async function fetchSupabaseJson<T>(
           },
         }
       : {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`${errorLabel}: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function fetchSupabaseServiceRoleJson<T>(
+  url: URL,
+  config: SupabaseServiceRoleConfig,
+  errorLabel: string,
+): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      apikey: config.serviceRoleKey,
+      authorization: `Bearer ${config.serviceRoleKey}`,
+    },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -127,6 +177,50 @@ export async function fetchNearbyVendorCandidates(
     config,
     "Supabase nearby vendor query failed",
   );
+}
+
+export async function fetchVendorUsageScores(
+  vendorIds: string[],
+  config: SupabaseServiceRoleConfig | null,
+): Promise<VendorUsageScoreMap> {
+  if (!config || vendorIds.length === 0) {
+    return new Map();
+  }
+
+  const url = new URL("/rest/v1/user_events", config.url);
+  url.searchParams.set("select", "vendor_id,event_type");
+  url.searchParams.set("vendor_id", `in.(${vendorIds.join(",")})`);
+  url.searchParams.set(
+    "event_type",
+    `in.(${Object.keys(vendorUsageEventWeights).join(",")})`,
+  );
+
+  const rows = await fetchSupabaseServiceRoleJson<UserEventRow[]>(
+    url,
+    config,
+    "Supabase vendor usage query failed",
+  );
+
+  const scores: VendorUsageScoreMap = new Map();
+
+  for (const row of rows) {
+    if (!row.vendor_id) {
+      continue;
+    }
+
+    const weight =
+      vendorUsageEventWeights[
+        row.event_type as keyof typeof vendorUsageEventWeights
+      ];
+
+    if (!weight) {
+      continue;
+    }
+
+    scores.set(row.vendor_id, (scores.get(row.vendor_id) ?? 0) + weight);
+  }
+
+  return scores;
 }
 
 export async function fetchPublicCategoriesFromSupabase(
