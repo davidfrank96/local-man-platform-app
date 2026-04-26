@@ -54,6 +54,8 @@ type PublicDiscoveryProps = {
   initialSearch?: string;
 };
 
+type MobileVendorSection = "nearby" | "recent" | "popular";
+
 const defaultFilters: DiscoveryFilters = {
   search: "",
   radiusKm: 10,
@@ -252,6 +254,8 @@ export function PublicDiscovery({
   const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(
     parsedUrlState.selectedVendorSlug,
   );
+  const [activeMobileVendorSection, setActiveMobileVendorSection] =
+    useState<MobileVendorSection>("nearby");
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
@@ -621,6 +625,7 @@ export function PublicDiscovery({
 
   function applyFilters(nextFilters: DiscoveryFilters) {
     setFilters(nextFilters);
+    setActiveMobileVendorSection("nearby");
   }
 
   function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
@@ -704,7 +709,161 @@ export function PublicDiscovery({
           />
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
-          <section className="retention-panel">
+          <section className="vendor-section-nav" aria-label="Vendor sections">
+            <button
+              aria-pressed={activeMobileVendorSection === "nearby"}
+              className={
+                activeMobileVendorSection === "nearby"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveMobileVendorSection("nearby")}
+            >
+              Nearby
+            </button>
+            <button
+              aria-pressed={activeMobileVendorSection === "recent"}
+              className={
+                activeMobileVendorSection === "recent"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveMobileVendorSection("recent")}
+            >
+              Recent
+            </button>
+            <button
+              aria-pressed={activeMobileVendorSection === "popular"}
+              className={
+                activeMobileVendorSection === "popular"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveMobileVendorSection("popular")}
+            >
+              Popular
+            </button>
+          </section>
+
+          <section
+            aria-live="polite"
+            className="vendor-results vendor-section-pane"
+            data-mobile-active={activeMobileVendorSection === "nearby"}
+          >
+            <div className="result-heading">
+              <strong>Nearby vendors</strong>
+              <span>
+                {isLoading
+                  ? "Loading…"
+                  : filters.search
+                    ? "Best search matches first"
+                    : filters.openNow
+                      ? "Open now only"
+                      : "Open now, then popular, then distance"}
+              </span>
+            </div>
+            {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
+            {!nearbyError && vendors.length === 0 && !isLoading ? (
+              <p className="empty-state">No vendors matched this search.</p>
+            ) : null}
+            {vendors.map((vendor) => (
+              <VendorCard
+                approximateDistance={isApproximateDistance}
+                detailHref={buildVendorDetailHref(
+                  vendor.slug,
+                  buildDiscoveryReturnTo(
+                    pathname,
+                    filters,
+                    vendor.slug,
+                    activeLocationSource,
+                  ),
+                )}
+                key={vendor.vendor_id}
+                isPopular={popularVendorIds.has(vendor.vendor_id)}
+                locationSource={activeLocationSource ?? null}
+                selected={vendor.slug === selectedVendorSlug}
+                vendor={vendor}
+                onSelect={selectVendorById}
+              />
+            ))}
+          </section>
+
+          <section
+            className="retention-panel retention-panel-muted vendor-section-pane"
+            data-mobile-active={activeMobileVendorSection === "recent"}
+          >
+            <div className="result-heading">
+              <strong>Recently viewed vendors</strong>
+              <span>
+                {recentlyViewedVendors.length > 0
+                  ? `${recentlyViewedVendors.length} saved`
+                  : "No recent views yet"}
+              </span>
+            </div>
+            {recentlyViewedVendors.length > 0 ? (
+              <div className="retention-list">
+                {recentlyViewedVendors.map((vendor) => (
+                  <div key={vendor.vendor_id} className="retention-item">
+                    <div className="retention-item-copy">
+                      <strong>{vendor.name}</strong>
+                      <span>
+                        {vendor.area ?? "Area not set"} • Today: {vendor.today_hours}
+                      </span>
+                    </div>
+                    <Link
+                      className="button-secondary compact-button"
+                      href={buildVendorDetailHref(vendor.slug, discoveryReturnTo)}
+                    >
+                      Open
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="runtime-note">Viewed vendor details will appear here.</p>
+            )}
+          </section>
+
+          <section
+            className="retention-panel retention-panel-muted vendor-section-pane"
+            data-mobile-active={activeMobileVendorSection === "popular"}
+          >
+            <div className="result-heading">
+              <strong>Popular vendors near you</strong>
+              <span>
+                {popularVendors.length > 0 ? "Based on recent usage" : "No popularity signal yet"}
+              </span>
+            </div>
+            {popularVendors.length > 0 ? (
+              <div className="retention-list">
+                {popularVendors.map((vendor) => (
+                  <div key={vendor.vendor_id} className="retention-item">
+                    <div className="retention-item-copy">
+                      <strong>{vendor.name}</strong>
+                      <span>
+                        {formatVendorCardDistance(vendor.distance_km, isApproximateDistance)} •{" "}
+                        Today: {vendor.today_hours}
+                      </span>
+                    </div>
+                    <button
+                      className="button-secondary compact-button"
+                      type="button"
+                      onClick={() => selectVendorById(vendor.vendor_id, "card")}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="runtime-note">Popular nearby vendors will appear as usage builds.</p>
+            )}
+          </section>
+
+          <section className="retention-panel retention-panel-muted retention-panel-secondary">
             <div className="result-heading">
               <strong>Last selected vendor</strong>
               <span>{lastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}</span>
@@ -741,111 +900,6 @@ export function PublicDiscovery({
               <p className="runtime-note">Your last selected vendor will stay here.</p>
             )}
           </section>
-
-          <section className="retention-panel">
-            <div className="result-heading">
-              <strong>Recently viewed vendors</strong>
-              <span>
-                {recentlyViewedVendors.length > 0
-                  ? `${recentlyViewedVendors.length} saved`
-                  : "No recent views yet"}
-              </span>
-            </div>
-            {recentlyViewedVendors.length > 0 ? (
-              <div className="retention-list">
-                {recentlyViewedVendors.map((vendor) => (
-                  <div key={vendor.vendor_id} className="retention-item">
-                    <div className="retention-item-copy">
-                      <strong>{vendor.name}</strong>
-                      <span>
-                        {vendor.area ?? "Area not set"} • Today: {vendor.today_hours}
-                      </span>
-                    </div>
-                    <Link
-                      className="button-secondary compact-button"
-                      href={buildVendorDetailHref(vendor.slug, discoveryReturnTo)}
-                    >
-                      Open
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="runtime-note">Viewed vendor details will appear here.</p>
-            )}
-          </section>
-
-          <section className="retention-panel">
-            <div className="result-heading">
-              <strong>Popular vendors near you</strong>
-              <span>
-                {popularVendors.length > 0 ? "Based on recent usage" : "No popularity signal yet"}
-              </span>
-            </div>
-            {popularVendors.length > 0 ? (
-              <div className="retention-list">
-                {popularVendors.map((vendor) => (
-                  <div key={vendor.vendor_id} className="retention-item">
-                    <div className="retention-item-copy">
-                      <strong>{vendor.name}</strong>
-                      <span>
-                        {formatVendorCardDistance(vendor.distance_km, isApproximateDistance)} •{" "}
-                        Today: {vendor.today_hours}
-                      </span>
-                    </div>
-                    <button
-                      className="button-secondary compact-button"
-                      type="button"
-                      onClick={() => selectVendorById(vendor.vendor_id, "card")}
-                    >
-                      Preview
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="runtime-note">Popular nearby vendors will appear as usage builds.</p>
-            )}
-          </section>
-
-          <section className="vendor-results" aria-live="polite">
-            <div className="result-heading">
-              <strong>{vendors.length} vendors</strong>
-              <span>
-                {isLoading
-                  ? "Loading…"
-                  : filters.search
-                    ? "Best search matches first"
-                    : filters.openNow
-                      ? "Open now only"
-                      : "Open now, then popular, then distance"}
-              </span>
-            </div>
-            {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
-            {!nearbyError && vendors.length === 0 && !isLoading ? (
-              <p className="empty-state">No vendors matched this search.</p>
-            ) : null}
-            {vendors.map((vendor) => (
-              <VendorCard
-                approximateDistance={isApproximateDistance}
-                detailHref={buildVendorDetailHref(
-                  vendor.slug,
-                  buildDiscoveryReturnTo(
-                    pathname,
-                    filters,
-                    vendor.slug,
-                    activeLocationSource,
-                  ),
-                )}
-                key={vendor.vendor_id}
-                isPopular={popularVendorIds.has(vendor.vendor_id)}
-                locationSource={activeLocationSource ?? null}
-                selected={vendor.slug === selectedVendorSlug}
-                vendor={vendor}
-                onSelect={selectVendorById}
-              />
-            ))}
-          </section>
         </div>
 
         <div className="discovery-main">
@@ -869,33 +923,55 @@ export function PublicDiscovery({
                 <h2>{selectedVendor.name}</h2>
                 <div className="selected-vendor-summary">
                   <p className="selected-vendor-status-line">
-                    <span>
+                    <span className="selected-vendor-chip">
+                      <span className="selected-vendor-chip-icon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <path d="M8 14s4-3.9 4-7A4 4 0 1 0 4 7c0 3.1 4 7 4 7Z" strokeLinejoin="round" />
+                          <circle cx="8" cy="7" r="1.5" />
+                        </svg>
+                      </span>
                       {formatVendorCardDistance(
                         selectedVendor.distance_km,
                         isApproximateDistance,
                       )}
                     </span>
-                    <span aria-hidden="true">•</span>
                     <span
                       className={
                         selectedVendorOpenState.toneClassName === "vendor-card-status-open"
-                          ? "selected-vendor-status-open"
+                          ? "selected-vendor-chip selected-vendor-status-open"
                           : selectedVendorOpenState.toneClassName === "vendor-card-status-closed"
-                            ? "selected-vendor-status-closed"
-                            : "selected-vendor-status-unavailable"
+                            ? "selected-vendor-chip selected-vendor-status-closed"
+                            : "selected-vendor-chip selected-vendor-status-unavailable"
                       }
                     >
+                      <span className="selected-vendor-chip-icon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <circle cx="8" cy="8" r="5.5" />
+                          <path d="M8 4.8v3.6l2.4 1.4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
                       {selectedVendorOpenState.label}
                     </span>
                   </p>
                   <p className="selected-vendor-hours-line">
-                    <span className="selected-vendor-label">Today:</span>{" "}
-                    {selectedVendor.today_hours}
+                    <span className="selected-vendor-summary-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <circle cx="8" cy="8" r="5.5" />
+                        <path d="M8 4.8v3.6l2.4 1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span className="selected-vendor-label">Today:</span> {selectedVendor.today_hours}
                   </p>
                   {selectedVendor.area ? (
                     <p className="selected-vendor-area-line">
-                      <span className="selected-vendor-label">Area:</span>{" "}
-                      {selectedVendor.area}
+                      <span className="selected-vendor-summary-icon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <path d="M3 4h10" strokeLinecap="round" />
+                          <path d="M3 8h10" strokeLinecap="round" />
+                          <path d="M3 12h10" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      <span className="selected-vendor-label">Area:</span> {selectedVendor.area}
                     </p>
                   ) : null}
                 </div>
@@ -910,7 +986,7 @@ export function PublicDiscovery({
                     locationSource={activeLocationSource ?? null}
                   />
                   <Link
-                    className="button-secondary compact-button"
+                    className="button-secondary compact-button selected-vendor-detail-link"
                     href={buildVendorDetailHref(selectedVendor.slug, discoveryReturnTo)}
                   >
                     View details

@@ -83,12 +83,14 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
       />
       <section className="vendor-detail-hero">
         <div className="vendor-detail-copy">
-          <Link className="button-secondary compact-button" href={returnTo}>
-            Back to map
-          </Link>
-          <p className="eyebrow">{vendor.area ?? "Area not set"}</p>
+          <div className="vendor-detail-topline">
+            <Link className="button-secondary compact-button" href={returnTo}>
+              Back to map
+            </Link>
+            <p className="eyebrow">{vendor.area ?? "Area not set"}</p>
+          </div>
           <h1>{vendor.name}</h1>
-          <p>
+          <p className="vendor-detail-intro">
             {vendor.short_description ??
               "No description added yet. Check the hours and featured dishes below."}
           </p>
@@ -125,20 +127,22 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
               <dd>{featuredDishLabel}</dd>
             </div>
           </dl>
+          <div className="vendor-detail-actions">
+            <VendorActions
+              latitude={vendor.latitude}
+              longitude={vendor.longitude}
+              phoneNumber={vendor.phone_number}
+              source="detail"
+              vendorId={vendor.id}
+              vendorSlug={vendor.slug}
+              locationSource={locationSource}
+            />
+          </div>
           <p className="vendor-detail-note">
             {hasHours
               ? "Hours below reflect the posted weekly schedule."
               : "No hours listed yet. Call before visiting."}
           </p>
-          <VendorActions
-            latitude={vendor.latitude}
-            longitude={vendor.longitude}
-            phoneNumber={vendor.phone_number}
-            source="detail"
-            vendorId={vendor.id}
-            vendorSlug={vendor.slug}
-            locationSource={locationSource}
-          />
         </div>
         <div className="vendor-detail-image">
           <VendorHeroImage

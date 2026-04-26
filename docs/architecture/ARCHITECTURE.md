@@ -103,6 +103,12 @@ Stores:
 6. Vendors render in the list, map, selected preview, and lightweight retention panels
 7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
 
+Public rendering rules:
+- discovery/list surfaces use compact no-image vendor cards
+- vendor images remain detail-page only
+- selected vendor preview stays compact so the map retains usable space
+- vendor detail uses a shorter hero and compact summary blocks to reduce scrolling
+
 ## User Location Handling
 
 The public app determines the user location before nearby vendor search.
