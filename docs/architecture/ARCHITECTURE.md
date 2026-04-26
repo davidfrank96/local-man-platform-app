@@ -2,29 +2,31 @@
 The Local Man — Architecture Overview
 
 ## Architecture Goal
-Provide a stable, maintainable, and AI-friendly architecture for a map-based local vendor discovery platform.
+Provide a stable, maintainable architecture for a location-based vendor discovery product with a separate admin operations surface.
 
-## Chosen Stack
+## Core Stack
+
 ### Frontend
-- Next.js
+- Next.js App Router
+- React
 - TypeScript
-- Tailwind CSS
-- App Router
+- global CSS
 
 ### Backend Services
-- Supabase PostgreSQL
-- Supabase Auth for admin users only
-- Supabase Storage for vendor images
+- Supabase Postgres
+- Supabase Auth for admin-only access
+- Supabase Storage for vendor profile images
 
-### Maps
-- Google Maps deep link for directions
-- lightweight internal reverse geocoding route for human-readable public location labels
-- real Google Maps JavaScript integration remains optional future work, not a current dependency
+### Maps and Location
+- browser geolocation for precise location
+- optional approximate location provider interface
+- internal reverse geocoding route for human-readable labels
+- Google Maps deep links for directions
 
 ### Deployment
-- DigitalOcean App Platform for the deployed app
-- local development and smoke testing use `http://localhost:3000`
+- DigitalOcean App Platform
 - Supabase managed backend
+- local runtime and smoke checks assume `http://localhost:3000`
 
 ## Why This Stack
 - fast MVP delivery
@@ -33,38 +35,48 @@ Provide a stable, maintainable, and AI-friendly architecture for a map-based loc
 - avoids excessive backend boilerplate
 - strong ecosystem support
 
-## System Components
+## Separation of Concerns
+
 ### Public App
 Handles:
-- geolocation
-- reverse location label display
-- lightweight map rendering
-- nearby vendors query
-- search and filter UI
-- selected vendor preview and selected-card highlight
-- vendor detail pages
-- call and directions actions
-- browser-back and `Back to map` state restoration
+- discovery homepage
+- nearby vendor loading
+- search and filters
+- selected vendor state
+- navigation restoration
+- vendor detail rendering
+- trust-first location display
+- time-based theming
 
 ### Admin App
 Handles:
-- admin authentication
-- vendor creation and editing
-- image uploads
-- hours updates
-- category and dish management
-- visibility control
+- admin login and session validation
+- dashboard overview
+- vendor registry management
+- vendor creation
+- vendor editing
+- hours management
+- featured dish management
+- vendor image upload and removal
+
+### API Routes
+Handle:
+- public nearby vendor reads
+- public vendor detail reads
+- reverse geocoding
+- authenticated admin writes
+- admin subresource loading
 
 ### Database
 Stores:
 - vendors
-- vendor hours
-- categories
-- dishes
-- images
+- vendor_hours
+- vendor_category_map
+- vendor_featured_dishes
+- vendor_images
 - ratings
-- admin users
-- audit logs
+- admin_users
+- audit_logs
 
 ## Architecture Principles
 1. Keep the public app read-heavy and simple.
@@ -75,36 +87,35 @@ Stores:
 6. Build for Abuja pilot before scale.
 
 ## Public App Flow
-1. User opens app
-2. App requests or detects location
-3. App fetches nearby vendors
-4. Vendors render on map and list
-5. User opens vendor detail
-6. User calls vendor or opens directions
+1. User opens the discovery page
+2. Browser geolocation is attempted
+3. The app resolves precise, approximate, or default-city browse mode
+4. `/api/vendors/nearby` returns nearby vendors
+5. Vendors render in the list, map, and selected preview
+6. User opens vendor detail or actions
 
 ## User Location Handling
 
 The public app determines the user location before nearby vendor search.
 
 Primary method:
-- Browser/device geolocation through the Web Geolocation API.
-- If allowed, use precise `lat` and `lng` with `location_source = precise`.
-- Request high accuracy from the browser with a 10 second timeout and a low maximum age to avoid stale positions.
-- Wait up to 10 seconds for the browser geolocation request before falling back.
-- Show `Using your current location` with a compact `High accuracy` trust label.
-- Display a human-readable area label when reverse lookup succeeds; otherwise fall back to rounded coordinates.
+- browser/device geolocation through the Web Geolocation API
+- `location_source = precise`
+- high-accuracy request, 10 second timeout, low cached-age allowance
+- UI copy such as `Using your current location`
+- human-readable area label when reverse lookup succeeds, otherwise rounded coordinates
 
-Fallback method:
-- IP-based approximation when browser geolocation is denied or unavailable.
-- If available, use approximate `lat` and `lng` with `location_source = approximate`.
-- Treat this as low accuracy and avoid implying exact proximity.
-- Show `Using approximate location` and tell the user to turn on location for exact nearby results.
+Approximate method:
+- optional approximation provider interface
+- `location_source = approximate`
+- only shown in the UI when both coordinates and a usable place label are available
+- always labeled approximate, never exact
 
 Default city fallback:
-- If precise and approximate coordinates are unavailable, use the Abuja default city view.
-- Default coordinates are the Abuja city center approximation.
-- Use `location_source = default_city`.
-- Show `Showing Abuja` and explain that enabling location improves nearby results.
+- Abuja browse mode when precise and approximate coordinates are unavailable
+- `location_source = default_city`
+- used internally to keep discovery working
+- not presented as the user’s exact location
 
 Location handling rules:
 - Distance is calculated from the resolved search location, not persisted.
@@ -112,41 +123,83 @@ Location handling rules:
 - Missing coordinates are handled gracefully by falling back to Abuja.
 - Partial coordinates, such as only `lat` or only `lng`, are invalid.
 - Denied or unavailable precise location should fall back to IP approximation first, then the Abuja default city view if approximation is unavailable.
+- The frontend should show a location label only when the source is trustworthy enough to present clearly.
 
-Implementation interface:
-- `lib/location/acquisition.ts` owns the acquisition sequence and provider interfaces.
-- `hooks/use-user-location.ts` is the active public UI hook for location acquisition and retry.
-- `app/api/location/reverse/route.ts` and `lib/location/reverse-geocode.ts` format human-readable area labels without blocking vendor loading.
-- IP approximation is represented as an injectable provider; a concrete vendor endpoint is not selected yet.
+Implementation ownership:
+- `lib/location/acquisition.ts` owns acquisition order and provider interfaces
+- `hooks/use-user-location.ts` owns public retry and state updates
+- `app/api/location/reverse/route.ts` formats human-readable labels without blocking vendor loading
+- approximate location remains provider-driven rather than hard-coded to a live vendor
 
 ## Admin Flow
+Admin workspace routes:
+- `/admin` for overview and quick actions
+- `/admin/vendors` for vendor registry and completeness review
+- `/admin/vendors/new` for vendor onboarding
+- `/admin/vendors/[id]` for focused edit workflows
+
 1. Admin logs in
-2. Admin adds or edits vendor
-3. Admin uploads images and dishes
-4. Admin sets vendor hours and categories
-5. Admin saves changes
-6. System logs action in audit log
+2. Admin reviews dashboard counts and incomplete vendor follow-up work
+3. Admin creates the base vendor record, optionally with hours, dishes, and image input
+4. Missing hours, dishes, or images require explicit acknowledgement during creation
+5. Admin edits the selected vendor without changing the slug unless a manual URL change is intended
+6. Admin updates hours, dishes, and images against the selected vendor id
+7. System logs write actions in the audit log
 
-## Vendor Image Storage
+Admin workflow rules:
+- the vendor slug is created from the vendor name on first creation
+- the slug stays stable on later name edits unless the admin explicitly edits the slug field
+- selected-vendor editing must load current hours, images, and featured dishes from the linked vendor id before new writes happen
+- admin hour entry accepts simple 12-hour text such as `9 AM` or `8:30 PM` and converts it to 24-hour database time before save
+- featured dish image URLs are dish-scoped metadata and must not be treated as vendor profile images
 
-Uploaded vendor images are stored in the Supabase `vendor-images` bucket.
+## Vendor Image Pipeline
 
-Implementation rules:
-- the admin route uploads the file after validating type and size
-- the database stores both the public `image_url` and the `storage_object_path`
-- the public app renders `image_url`
-- the admin app removes images by deleting the storage object first and then the database row
-- seed or legacy URLs may leave `storage_object_path` null, but uploaded images should not
+Vendor profile images use this path:
+
+1. admin upload route receives the file
+2. file is validated
+3. file is uploaded to Supabase Storage bucket `vendor-images`
+4. `vendor_images.storage_object_path` stores the canonical Storage path
+5. `vendor_images.image_url` stores the public URL when created
+6. admin and public APIs normalize storage-backed rows into browser-loadable URLs
+7. public vendor detail renders the returned image URL
+
+Rules:
+- vendor profile images belong to `vendor_images`
+- featured dish image URLs are dish-scoped and separate
+- upload and delete are server-side only
+- `storage_object_path` is the Storage source of truth
+- frontend rendering uses the returned public URL
+
+## State Model
+
+### Vendor Selection
+- the public list stores selected vendor by slug
+- selection is visual only and must not mutate vendor data
+
+### Navigation Restoration
+- discovery state is restored through a combination of:
+  - URL query state
+  - `sessionStorage` snapshot state
+  - selected vendor slug
+  - preserved scroll position
+
+### Admin Session State
+- admin login uses Supabase email/password auth
+- browser-stored session is validated against `admin_users`
+- protected routes resolve through the admin route guard
 
 ## Core Product Logic
+
 ### Open Now
 Supports:
-- same-day hours
-- overnight hours
+- same-day schedules
+- overnight schedules
 - manual override
 
 ### Distance
-Based on user location and vendor coordinates.
+Calculated from the resolved search location and vendor coordinates.
 
 ## Distance Calculation
 
@@ -184,8 +237,7 @@ Use clickable phone links.
 ## Non-Functional Requirements
 - mobile-first responsiveness
 - fast page loads
-- graceful fallback if maps fail
-- graceful fallback if location permission denied
-- image optimization
-- clean error handling
-- time-based visual theming that does not compromise vendor card readability
+- graceful location fallback
+- clear error handling
+- no vendor data mutation from UI selection
+- time-based theming without readability loss

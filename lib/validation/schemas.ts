@@ -58,6 +58,12 @@ export const vendorSummarySchema = vendorSchema.pick({
   is_open_override: true,
 });
 
+export const adminVendorSummarySchema = vendorSummarySchema.extend({
+  hours_count: z.coerce.number().int().min(0),
+  images_count: z.coerce.number().int().min(0),
+  featured_dishes_count: z.coerce.number().int().min(0),
+});
+
 export const vendorHoursSchema = z
   .object({
     id: uuidSchema,

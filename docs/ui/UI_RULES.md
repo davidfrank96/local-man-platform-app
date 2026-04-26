@@ -27,14 +27,16 @@ The Local Man — UI Rules
 - When precise browser location is active, show a compact trust label such as `High accuracy`.
 - When reverse location lookup succeeds, show a human-readable area or city label first.
 - If reverse lookup does not resolve a useful label, fall back to rounded coordinates instead of inventing a place name.
-- If the user denies location access, use IP-based approximate coordinates when available and communicate that results are approximate.
+- If the user denies location access, use IP-based approximate coordinates internally when available, but only show approximate location in the UI when a usable human-readable label exists.
 - Approximate location copy must never imply exact nearby accuracy; tell the user to turn on location for exact nearby results.
-- If precise and approximate location are unavailable, show the Abuja default city view.
+- If precise and approximate location are unavailable, keep vendor discovery usable internally with the Abuja default city view, but do not present that default city as the user’s exact location.
 - Do not block the public app when location permission is denied.
 - Do not imply exact distance when the location source is approximate or default city.
 - Provide a clear path to retry location permission or change location later.
 - Tell mobile users that precise location can take a few seconds before fallback.
 - Retry location must clear stale denied/unavailable copy and update the UI to the current resolved source after success.
+- Denied, unavailable, and default-city fallback states should use calm trust-first copy such as `Showing nearby vendors` and `Turn on location for more accurate nearby vendors.`
+- Do not show raw fallback chains like `Approximate location unavailable` or `Showing Abuja` as if that were the user’s location.
 - Use `hooks/use-user-location.ts` as the frontend location acquisition interface.
 
 ## Vendor Card Required Fields
@@ -54,6 +56,7 @@ The Local Man — UI Rules
 - tapping the card body should preview the vendor on the map without interfering with call, directions, or details
 - `Today:`, distance, and open/closed state must remain visible before and after the card is selected.
 - selected cards must stay readable in every time theme and use a clear but compact highlight treatment
+- browser back and `Back to map` must restore discovery state without leaving the search and filter controls blocked or requiring a manual reload
 
 ## Vendor Detail Rules
 - strong hero image
@@ -67,16 +70,44 @@ The Local Man — UI Rules
 - If a vendor has no image, show a plain missing-image state instead of stock imagery.
 
 ## Admin UI Rules
+- admin workspace should be split cleanly across:
+  - `/admin` for overview
+  - `/admin/vendors` for registry management
+  - `/admin/vendors/new` for creation
+  - `/admin/vendors/[id]` for focused editing
+- admin screens should use clear hierarchy, restrained cards, and obvious section boundaries instead of one long mixed form
+- the dashboard view should surface overview counts and quick actions for incomplete vendors
+- the vendor registry should support search and filtering, then move into a dedicated edit workspace
+- the create vendor page should be a full onboarding page with clearly separated sections for:
+  - basic details
+  - opening hours
+  - featured dishes
+  - vendor images
+  - review and create
 - forms must be explicit and simple
 - location entry must be easy to validate
 - image upload state must be clear
-- vendor image upload should use a file input with a visible size/type hint, and removal should show the current uploaded images when available
+- vendor profile images and featured dishes must be presented as separate admin sections with separate helper text
+- vendor image upload should use a file input with a visible size/type hint, immediate local preview before upload, and removal should show the current uploaded images when available
+- `No images yet` should appear only when the selected vendor has no current vendor profile images
 - hours editor must be easy to understand
+- admin vendor edit workflows must load current hours, current uploaded images, and current featured dishes before editing so updates do not start from a blank state
+- current featured dishes should have a clear remove action in the same selected-vendor edit surface
 - destructive actions must be confirmed
 - Admin access should use a simple Supabase email/password login flow and session validation instead of manual token paste.
 - admin screens must stay functional and restrained until runtime data operations are validated.
-- Vendor creation and editing should auto-generate a valid slug from the vendor name, but still allow manual edits if the slug remains lowercase and hyphen-separated.
+- Vendor creation should auto-generate a valid slug from the vendor name.
+- Vendor editing should keep the existing slug stable by default, because the slug controls the public URL.
+- Admins may still edit the slug manually if it remains lowercase and hyphen-separated.
+- Base vendor creation may proceed without hours, featured dishes, or images only after the admin explicitly acknowledges each missing data group.
+- the create vendor page should allow hours, featured dishes, and an image to be added during onboarding instead of forcing all of them into later edit-only work
+- The edit workspace should keep basic details, hours, featured dishes, and vendor images as clearly separated sections within the same selected-vendor view.
+- Hours entry should use simple 12-hour text input such as `9 AM` or `8:30 PM`, converted to 24-hour storage before submission.
+- Optional featured dish image URLs should be labeled clearly as dish-specific and not currently displayed on the public vendor profile.
 - Admin vendor forms should make required fields obvious, show inline validation messages where possible, and give simple guidance for phone numbers and coordinates.
+- successful admin write actions should show concise confirmation such as vendor updated, hours updated, or image uploaded.
+- failed admin write actions should show a readable message with the API error code when available and must not fail silently.
+- when create flow succeeds only partially, the status copy must identify the failed step, such as hours, dishes, or image upload.
 
 ## Style Guidance
 - clean modern look

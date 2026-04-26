@@ -1,61 +1,134 @@
-## Title
-The Local Man
+## The Local Man
 
-## Summary
-The Local Man is a location-based local food discovery platform designed to help users find nearby underrepresented food vendors, starting with Abuja, Nigeria.
+The Local Man is a location-based food discovery product for finding nearby local vendors, starting with Abuja, Nigeria. The public app helps people see nearby vendors, whether they are open, what they sell, and how to call or reach them. The admin app supports vendor onboarding, maintenance, media upload, and content completeness review.
 
-## MVP Goal
-Let users discover nearby food vendors, see what they sell, know whether they are open, and either call them or get directions.
+## Product Surface
 
-## Core Stack
-- Next.js
+### Public
+- discovery homepage with nearby vendors, search, filters, and map preview
+- vendor cards with:
+  - name
+  - distance
+  - open/closed state
+  - `Today:` hours
+  - featured dish
+  - price band
+  - area
+  - rating or `New`
+  - call, directions, and detail actions
+- selected vendor preview
+- vendor detail pages with weekly hours, featured dishes, vendor images, and `Back to map`
+- trust-first location behavior:
+  - precise browser geolocation
+  - approximate location only when usable and clearly labeled
+  - Abuja default city fallback without claiming it is the user’s exact location
+- morning, afternoon, and night discovery themes based on browser-local time
+
+### Admin
+- Supabase email/password admin login
+- admin dashboard overview cards and quick actions
+- vendor registry with completeness badges
+- vendor create workflow with:
+  - basic details
+  - opening hours
+  - featured dishes
+  - vendor image selection
+  - missing-data acknowledgements
+  - review summary before create
+- focused vendor edit workspace for:
+  - basic details
+  - hours
+  - featured dishes
+  - vendor images
+
+## Tech Stack
+- Next.js App Router
 - TypeScript
-- Tailwind CSS
-- Supabase
+- React
+- global CSS styling
+- Supabase Postgres
+- Supabase Auth
+- Supabase Storage
 - Google Maps deep links for directions
 
 ## Project Structure
-- `app/` - Next.js App Router pages, layouts, and route entry points.
-- `components/` - Admin and public UI components.
-- `hooks/` - Shared React hooks.
-- `lib/` - Shared constants, helpers, clients, and services.
-- `types/` - Shared TypeScript types.
-- `docs/` - Source-of-truth product, architecture, API, UI, task, testing, and ops docs.
-- `supabase/` - Database migrations and seed files.
-- `tests/` - Automated tests.
+- `app/` - App Router pages and route handlers
+- `components/` - admin and public UI
+- `hooks/` - shared React hooks
+- `lib/` - shared helpers, services, validation, and clients
+- `types/` - shared TypeScript domain and API types
+- `tests/` - unit and browser tests
+- `docs/` - architecture, API, UI, ops, testing, and task docs
+- `supabase/` - migrations, seeds, and ops SQL
 
 ## Local Setup
-1. Install dependencies with `npm install`.
-2. Copy `.env.example` to `.env.local` and fill in local values when services are available.
-3. Start the dev server with `npm run dev`.
-4. Run `npm test`, `npm run lint`, and `npm run typecheck` before shipping changes.
+1. Install dependencies:
+   - `npm install`
+2. Create `.env.local`
+3. Set required environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Start the app:
+   - `npm run dev`
+5. Run the standard verification set:
+   - `npm run lint`
+   - `npm run typecheck`
+   - `npm test`
+   - `npm run test:e2e`
+   - `npm run build`
+
+## Required Environment Variables
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+```
+
+Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
+
+## Deployment Notes
+- production deployment target: DigitalOcean App Platform
+- backend services: Supabase Postgres, Auth, and Storage
+- vendor image bucket: `vendor-images`
+- local development and smoke testing use `http://localhost:3000`
 
 ## Runtime Validation
-Before shipping or continuing broad feature work, validate the Supabase-backed nearby vendor flow:
+Before deployment or major continuation work, keep the runtime gate green:
 
-1. Apply `supabase/migrations/20260422180000_initial_schema.sql`.
-2. Apply `supabase/seed/20260422_abuja_pilot_seed.sql`.
-3. Start the app with real Supabase env vars.
-4. Run `npm run smoke:nearby`.
+1. apply migrations
+2. seed the Abuja pilot dataset
+3. start the app with real Supabase env vars
+4. run:
+   - `npm run smoke:nearby`
 
-Exact steps are in `docs/ops/RUNTIME_SETUP.md`.
+Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 
-## Current Phase 5 Surface
-Phase 5 is `UX Polish & Real-User Feedback Iteration`.
+## Phase Summary
+- Phase 1 — Foundation
+- Phase 2 — Core product
+- Phase 3 — Stability & testing
+- Phase 4 — Usability & admin baseline
+- Phase 5 — UX polish & real-user iteration
+- Phase 6 — Usage signals
 
-The current implementation includes:
-- public discovery with vendor cards, map preview, selected vendor preview, search, filters, and back-navigation state restoration
-- vendor cards with distance, open/closed state, `Today:` hours, featured dish, price label, area, rating or `New`, call, directions, and visible details link
-- vendor detail pages with weekly hours, featured dishes, image fallback, and a safe `Back to map` flow
-- browser/device geolocation with retry, human-readable reverse location labels when available, approximate/default-city fallback, and explicit accuracy messaging
-- client-local morning, afternoon, and night discovery theming
-- admin login with Supabase email/password session validation
-- admin vendor create, edit, deactivate, hours, featured dishes, and image upload/removal flows
-- runtime validation and nearby smoke testing against seeded Abuja pilot data
+## Phase 5 Summary
+Phase 5 delivered:
+- vendor card redesign
+- `Today:` hours on cards
+- selected vendor highlight behavior
+- browser-back and `Back to map` restoration
+- Apply button restoration after navigation
+- morning, afternoon, and night discovery theming
+- trust-first location display and retry behavior
+- admin dashboard restructuring
+- fuller vendor onboarding flow
+- vendor image upload pipeline fixes
+- featured dish add/remove management
+- simplified 12-hour admin hours input
 
-## How to Work in This Repo
-1. Read the docs.
-2. Check current sprint.
-3. Make small changes.
-4. Keep implementation aligned with PRD.
-5. Update docs when needed.
+## Working Rules
+- update docs when behavior changes
+- keep runtime and smoke checks aligned with Supabase-backed behavior
+- keep vendor slugs stable after creation unless explicitly edited

@@ -3,6 +3,7 @@ import { apiError } from "../api/responses.ts";
 export type AdminAuthConfig = {
   supabaseUrl: string;
   supabaseAnonKey: string;
+  supabaseServiceRoleKey?: string | null;
 };
 
 export type SupabaseAuthUser = {
@@ -40,15 +41,26 @@ type RequireAdminOptions = {
 
 export type AdminAuthResult = AdminAuthSuccess | AdminAuthFailure;
 
+function logAdminAuthEvent(
+  level: "info" | "warn" | "error",
+  message: string,
+  details: Record<string, unknown>,
+) {
+  const logger = console[level] ?? console.info;
+  logger(`[admin][auth] ${message}`, details);
+}
+
 export function getAdminAuthConfig(): AdminAuthConfig | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? null;
 
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
   return {
     supabaseUrl,
     supabaseAnonKey,
+    supabaseServiceRoleKey: supabaseServiceRoleKey || null,
   };
 }
 
@@ -96,10 +108,13 @@ async function fetchAdminUser(
   url.searchParams.set("select", "id,email,full_name,role");
   url.searchParams.set("limit", "1");
 
+  const adminLookupToken = config.supabaseServiceRoleKey?.trim() || accessToken;
+  const adminLookupKey = config.supabaseServiceRoleKey?.trim() || config.supabaseAnonKey;
+
   const response = await fetchImpl(url, {
     headers: {
-      apikey: config.supabaseAnonKey,
-      authorization: `Bearer ${accessToken}`,
+      apikey: adminLookupKey,
+      authorization: `Bearer ${adminLookupToken}`,
     },
   });
 
@@ -147,20 +162,43 @@ export async function requireAdmin(
     const user = await fetchAuthUser(accessToken, config, fetchImpl);
 
     if (!user) {
+      logAdminAuthEvent("warn", "session rejected because auth user lookup returned no user", {
+        hasAccessToken: true,
+      });
       return {
         success: false,
         response: apiError("UNAUTHORIZED", "Invalid admin session.", 401),
       };
     }
 
+    logAdminAuthEvent("info", "auth user verified", {
+      userId: user.id,
+      email: user.email ?? null,
+    });
+
     const adminUser = await fetchAdminUser(user.id, accessToken, config, fetchImpl);
 
     if (!adminUser) {
+      logAdminAuthEvent("warn", "authenticated user is not present in admin_users", {
+        userId: user.id,
+        email: user.email ?? null,
+      });
       return {
         success: false,
-        response: apiError("FORBIDDEN", "Authenticated user is not an admin.", 403),
+        response: apiError("FORBIDDEN", "Authenticated user is not an admin.", 403, {
+          userId: user.id,
+          email: user.email ?? null,
+          table: "admin_users",
+        }),
       };
     }
+
+    logAdminAuthEvent("info", "admin membership verified", {
+      userId: user.id,
+      email: user.email ?? null,
+      role: adminUser.role,
+      lookupMode: config.supabaseServiceRoleKey ? "service_role" : "user_token",
+    });
 
     return {
       success: true,
@@ -171,6 +209,9 @@ export async function requireAdmin(
       },
     };
   } catch (error) {
+    logAdminAuthEvent("error", "admin session verification failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     return {
       success: false,
       response: apiError(

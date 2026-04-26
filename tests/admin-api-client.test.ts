@@ -3,8 +3,11 @@ import test from "node:test";
 import {
   AdminApiError,
   deleteAdminVendorImage,
+  deleteAdminVendorDish,
   createAdminVendor,
   createAdminVendorImages,
+  listAdminVendorDishes,
+  listAdminVendorHours,
   listAdminVendors,
   listAdminVendorImages,
 } from "../lib/admin/api-client.ts";
@@ -220,8 +223,8 @@ test("admin API client uploads image files without forcing json headers", async 
           {
             id: "10000000-0000-4000-8000-000000000001",
             vendor_id: vendorId,
-            image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/vendor/image.jpg",
-            storage_object_path: "vendors/vendor/image.jpg",
+            image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendor/image.jpg",
+            storage_object_path: "vendor/image.jpg",
             sort_order: 2,
           },
         ],
@@ -246,10 +249,43 @@ test("admin API client uploads image files without forcing json headers", async 
     },
   );
 
-  assert.equal(images[0].storage_object_path, "vendors/vendor/image.jpg");
+  assert.equal(images[0].storage_object_path, "vendor/image.jpg");
   assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
   assert.equal(requestedHeaders[0].get("content-type"), null);
   assert.ok(requestedBodies[0] instanceof FormData);
+});
+
+test("admin API client surfaces readable image upload failures", async () => {
+  const fetchImpl = (async () =>
+    Response.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Only JPEG, PNG, and WebP images are allowed.",
+        },
+      },
+      { status: 400 },
+    )) as typeof fetch;
+
+  const formData = new FormData();
+  formData.set(
+    "image",
+    new File([Uint8Array.from([1, 2, 3])], "image.gif", { type: "image/gif" }),
+  );
+
+  await assert.rejects(
+    () =>
+      createAdminVendorImages(vendorId, formData, {
+        accessToken: "admin-token",
+        fetchImpl,
+      }),
+    (error) =>
+      error instanceof AdminApiError &&
+      error.code === "VALIDATION_ERROR" &&
+      error.message === "VALIDATION_ERROR: Only JPEG, PNG, and WebP images are allowed.",
+  );
 });
 
 test("admin API client can list vendor images", async () => {
@@ -261,8 +297,8 @@ test("admin API client can list vendor images", async () => {
           {
             id: "10000000-0000-4000-8000-000000000001",
             vendor_id: vendorId,
-            image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/vendor/image.jpg",
-            storage_object_path: "vendors/vendor/image.jpg",
+            image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendor/image.jpg",
+            storage_object_path: "vendor/image.jpg",
             sort_order: 2,
           },
         ],
@@ -275,7 +311,67 @@ test("admin API client can list vendor images", async () => {
     fetchImpl,
   });
 
-  assert.equal(images[0].storage_object_path, "vendors/vendor/image.jpg");
+  assert.equal(images[0].storage_object_path, "vendor/image.jpg");
+});
+
+test("admin API client can list vendor dishes", async () => {
+  const fetchImpl = (async () =>
+    Response.json({
+      success: true,
+      data: {
+        dishes: [
+          {
+            id: "20000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            dish_name: "Jollof rice",
+            description: "Test dish",
+            image_url: null,
+            is_featured: true,
+            created_at: "2026-04-22T00:00:00+00:00",
+            updated_at: "2026-04-22T00:00:00+00:00",
+          },
+        ],
+      },
+      error: null,
+    })) as typeof fetch;
+
+  const dishes = await listAdminVendorDishes(vendorId, {
+    accessToken: "admin-token",
+    fetchImpl,
+  });
+
+  assert.equal(dishes[0].vendor_id, vendorId);
+  assert.equal(dishes[0].dish_name, "Jollof rice");
+});
+
+test("admin API client can list vendor hours", async () => {
+  const fetchImpl = (async () =>
+    Response.json({
+      success: true,
+      data: {
+        hours: [
+          {
+            id: "20000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            day_of_week: 1,
+            open_time: "08:00",
+            close_time: "18:00",
+            is_closed: false,
+            created_at: "2026-04-22T00:00:00+00:00",
+            updated_at: "2026-04-22T00:00:00+00:00",
+          },
+        ],
+      },
+      error: null,
+    })) as typeof fetch;
+
+  const hours = await listAdminVendorHours(vendorId, {
+    accessToken: "admin-token",
+    fetchImpl,
+  });
+
+  assert.equal(hours[0].day_of_week, 1);
+  assert.equal(hours[0].open_time, "08:00");
 });
 
 test("admin API client can delete vendor images", async () => {
@@ -289,8 +385,8 @@ test("admin API client can delete vendor images", async () => {
         image: {
           id: "10000000-0000-4000-8000-000000000001",
           vendor_id: vendorId,
-          image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendors/vendor/image.jpg",
-          storage_object_path: "vendors/vendor/image.jpg",
+          image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendor/image.jpg",
+          storage_object_path: "vendor/image.jpg",
           sort_order: 2,
         },
       },
@@ -303,9 +399,44 @@ test("admin API client can delete vendor images", async () => {
     fetchImpl,
   });
 
-  assert.equal(image.storage_object_path, "vendors/vendor/image.jpg");
+  assert.equal(image.storage_object_path, "vendor/image.jpg");
   assert.equal(
     new URL(requestedUrls[0], "http://localhost").pathname,
     "/api/admin/vendors/00000000-0000-4000-8000-000000000001/images/10000000-0000-4000-8000-000000000001",
+  );
+});
+
+test("admin API client can delete vendor dishes", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+
+    return Response.json({
+      success: true,
+      data: {
+        dish: {
+          id: "20000000-0000-4000-8000-000000000001",
+          vendor_id: vendorId,
+          dish_name: "Jollof rice",
+          description: "Test dish",
+          image_url: null,
+          is_featured: true,
+          created_at: "2026-04-22T00:00:00+00:00",
+          updated_at: "2026-04-22T00:00:00+00:00",
+        },
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const dish = await deleteAdminVendorDish(vendorId, "20000000-0000-4000-8000-000000000001", {
+    accessToken: "admin-token",
+    fetchImpl,
+  });
+
+  assert.equal(dish.dish_name, "Jollof rice");
+  assert.equal(
+    new URL(requestedUrls[0], "http://localhost").pathname,
+    "/api/admin/vendors/00000000-0000-4000-8000-000000000001/dishes/20000000-0000-4000-8000-000000000001",
   );
 });

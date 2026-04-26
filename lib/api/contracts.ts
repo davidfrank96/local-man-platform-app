@@ -114,6 +114,17 @@ export const apiEndpoints = {
       "hours must support closed days and overnight ranges",
     ],
   },
+  getVendorHours: {
+    access: "admin",
+    method: "GET",
+    path: "/api/admin/vendors/[id]/hours",
+    requestShape: "Route param: id.",
+    responseShape: "Current weekly vendor hours ordered by day_of_week.",
+    validationBoundary: [
+      "admin authentication required",
+      "id must be a valid UUID",
+    ],
+  },
   createVendorDishes: {
     access: "admin",
     method: "POST",
@@ -124,6 +135,18 @@ export const apiEndpoints = {
       "admin authentication required",
       "id must be a valid UUID",
       "dish_name is required",
+      "dish records must belong to the target vendor",
+    ],
+  },
+  getVendorDishes: {
+    access: "admin",
+    method: "GET",
+    path: "/api/admin/vendors/[id]/dishes",
+    requestShape: "Route param: id.",
+    responseShape: "Current featured dish records for the selected vendor.",
+    validationBoundary: [
+      "admin authentication required",
+      "id must be a valid UUID",
       "dish records must belong to the target vendor",
     ],
   },

@@ -14,7 +14,7 @@ The Local Man — Roadmap
 - user location fallback strategy
 - foundation tests for location and nearby logic
 
-## Phase 2 — Runtime, Admin, and Public MVP Surface
+## Phase 2 — Core Product
 - runtime environment activation
 - migration and Abuja seed validation
 - nearby API smoke testing
@@ -30,7 +30,7 @@ The Local Man — Roadmap
 - vendor details
 - directions and call buttons
 
-## Phase 3 — Hardening
+## Phase 3 — Stability & Testing
 - race-condition fixes
 - API error handling improvements
 - accessibility fixes
@@ -39,7 +39,7 @@ The Local Man — Roadmap
 - browser smoke tests
 - layout stress tests
 
-## Phase 4 — Launch Readiness
+## Phase 4 — Usability & Admin Baseline
 - admin form validation UX
 - slug generation and validation
 - admin login/session flow
@@ -48,18 +48,34 @@ The Local Man — Roadmap
 - pilot operations checklist
 - master verification before pilot iteration
 
-## Phase 5 — UX Polish & Real-User Feedback Iteration
+## Phase 5 — UX Polish & Real-User Iteration
 - compact discovery-oriented vendor cards
 - `Today:` hours on cards
 - selected vendor highlight and selected preview actions
 - browser-back and `Back to map` restoration
+- Apply button restoration after navigation
 - time-based morning, afternoon, and night discovery theming
-- precise, approximate, and default-city location messaging
+- trust-first precise, approximate, and default-city location messaging
 - reverse location display with human-readable area labels
+- structured admin workspace routes for dashboard, registry, create, and edit flows
+- full vendor onboarding flow during create vendor
+- stable vendor-slug editing behavior for admin updates
+- admin create acknowledgements for intentionally incomplete vendor records
+- simplified 12-hour admin hours entry
+- vendor profile image normalization and clearer admin media workflows
+- featured dish add/remove workflow completion
 - final regression, runtime, and documentation alignment
 
-## After Phase 5
-Potential future work only after pilot evidence justifies it:
+Status: completed
+
+## Phase 6 — Usage Signals
+- usage signals and real behavior tracking
+- stronger pilot observation
+- operator-facing signal review workflows
+- evidence-based prioritization for the next product changes
+
+## After Phase 6
+Potential future work only after real usage signals justify it:
 - real Google Maps JavaScript integration
 - live IP approximation provider selection
 - stronger deployment monitoring and analytics

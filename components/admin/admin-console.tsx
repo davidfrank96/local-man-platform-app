@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import {
+  useCallback,
   type FormEvent,
   useEffect,
   useMemo,
@@ -9,12 +11,15 @@ import {
 } from "react";
 import {
   AdminApiError,
+  deleteAdminVendorDish,
   deleteAdminVendorImage,
   createAdminVendor,
   createAdminVendorDishes,
   createAdminVendorImages,
   deactivateAdminVendor,
+  listAdminVendorDishes,
   listAdminVendorImages,
+  listAdminVendorHours,
   listAdminVendors,
   replaceAdminVendorHours,
   updateAdminVendor,
@@ -29,12 +34,23 @@ import type {
   PriceBand,
   ReplaceVendorHoursRequest,
   UpdateVendorRequest,
+  VendorFeaturedDish,
+  VendorHours,
   VendorImage,
 } from "../../types/index.ts";
 import {
   getVendorSlugError,
   slugifyVendorName,
 } from "../../lib/admin/slug.ts";
+import {
+  parseAdminTimeInputTo24Hour,
+  parseStoredTimeForAdmin,
+} from "../../lib/admin/hours-input.ts";
+import {
+  extractCreateVendorImageUpload,
+  getVendorCompletenessLabels,
+  validateVendorCreateIntent,
+} from "../../lib/admin/vendor-create-intent.ts";
 import { slugPattern } from "../../lib/validation/common.ts";
 
 const priceBands: PriceBand[] = ["budget", "standard", "premium"];
@@ -47,7 +63,6 @@ const dayLabels = [
   "Friday",
   "Saturday",
 ];
-
 function readText(formData: FormData, key: string): string | undefined {
   const value = String(formData.get(key) ?? "").trim();
 
@@ -68,19 +83,52 @@ function readPriceBand(formData: FormData, key: string): PriceBand | undefined {
   return priceBands.includes(value as PriceBand) ? (value as PriceBand) : undefined;
 }
 
-function createHoursPayload(formData: FormData): ReplaceVendorHoursRequest {
+function createHoursPayload(
+  formData: FormData,
+  prefix = "",
+): ReplaceVendorHoursRequest {
   return {
     hours: dayLabels.map((_, dayOfWeek) => {
-      const isClosed = formData.get(`closed-${dayOfWeek}`) === "on";
+      const isClosed = formData.get(`${prefix}closed-${dayOfWeek}`) === "on";
+      const openTime = isClosed
+        ? null
+        : parseAdminTimeInputTo24Hour(String(formData.get(`${prefix}open-${dayOfWeek}`) ?? ""));
+      const closeTime = isClosed
+        ? null
+        : parseAdminTimeInputTo24Hour(String(formData.get(`${prefix}close-${dayOfWeek}`) ?? ""));
 
       return {
         day_of_week: dayOfWeek,
-        open_time: isClosed ? null : readNullableText(formData, `open-${dayOfWeek}`),
-        close_time: isClosed ? null : readNullableText(formData, `close-${dayOfWeek}`),
+        open_time: openTime,
+        close_time: closeTime,
         is_closed: isClosed,
       };
     }),
   };
+}
+
+function createOnboardingDishesPayload(
+  formData: FormData,
+  rowIds: number[],
+): CreateVendorDishesRequest | null {
+  const dishes = rowIds
+    .map((rowId) => {
+      const dishName = String(formData.get(`create-dish-name-${rowId}`) ?? "").trim();
+
+      if (!dishName) {
+        return null;
+      }
+
+      return {
+        dish_name: dishName,
+        description: readNullableText(formData, `create-dish-description-${rowId}`),
+        image_url: readNullableText(formData, `create-dish-image-url-${rowId}`),
+        is_featured: true,
+      };
+    })
+    .filter((dish) => dish !== null);
+
+  return dishes.length > 0 ? { dishes } : null;
 }
 
 function createVendorPayload(formData: FormData): CreateVendorRequest {
@@ -173,39 +221,142 @@ type AdminVendorFieldErrors = Partial<Record<
 
 type AdminFormProps = {
   selectedVendor: AdminVendorSummary | null;
+  vendorHours: VendorHours[];
   vendorImages: VendorImage[];
+  vendorDishes: VendorFeaturedDish[];
   disabled: boolean;
-  onCreateVendor: (data: CreateVendorRequest) => Promise<void>;
+  onCreateVendor: (
+    data: CreateVendorRequest,
+    options?: {
+      hoursData: ReplaceVendorHoursRequest | null;
+      dishesData: CreateVendorDishesRequest | null;
+      imageUpload: FormData | null;
+    },
+  ) => Promise<void>;
   onUpdateVendor: (data: UpdateVendorRequest) => Promise<void>;
   onDeactivateVendor: () => Promise<void>;
   onReplaceHours: (data: ReplaceVendorHoursRequest) => Promise<void>;
-  onCreateImages: (data: FormData) => Promise<void>;
+  onCreateImages: (data: FormData) => Promise<VendorImage[] | null>;
   onDeleteImage: (imageId: string) => Promise<void>;
   onCreateDishes: (data: CreateVendorDishesRequest) => Promise<void>;
+  onDeleteDish: (dishId: string) => Promise<void>;
 };
+
+function formatAdminErrorStatus(error: unknown, fallbackMessage: string): string {
+  if (error instanceof AdminApiError) {
+    return `${error.code}: ${error.message.replace(/^[A-Z_]+:\s*/, "")}`;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
+function getAdminStatusTone(status: string, isLoading: boolean): "neutral" | "success" | "error" {
+  if (isLoading) {
+    return "neutral";
+  }
+
+  const normalized = status.toLowerCase();
+
+  if (
+    normalized.includes("failed") ||
+    normalized.includes("unable") ||
+    normalized.includes("error") ||
+    normalized.includes("missing") ||
+    normalized.includes("forbidden") ||
+    normalized.includes("unauthorized")
+  ) {
+    return "error";
+  }
+
+  if (
+    normalized.includes("successfully") ||
+    normalized.includes("ready") ||
+    normalized.includes("refreshed")
+  ) {
+    return "success";
+  }
+
+  return "neutral";
+}
+
+function getVendorSummaryStatusLabels(vendor: AdminVendorSummary): string[] {
+  const labels: string[] = [];
+
+  labels.push(vendor.is_active ? "Active" : "Inactive");
+
+  if (vendor.hours_count < 7) {
+    labels.push("Missing hours");
+  }
+
+  if (vendor.images_count < 1) {
+    labels.push("Missing images");
+  }
+
+  if (vendor.featured_dishes_count < 1) {
+    labels.push("Missing featured dishes");
+  }
+
+  return labels;
+}
 
 type AdminConsoleProps = {
   initialSelectedVendorId?: string | null;
+  mode?: "dashboard" | "vendors" | "create" | "edit";
 };
 
 export function AdminConsole({
   initialSelectedVendorId = null,
+  mode = "dashboard",
 }: AdminConsoleProps) {
-  const [filters, setFilters] = useState<AdminVendorFilters>({ is_active: true });
+  const [filters, setFilters] = useState<AdminVendorFilters>({
+    limit: 100,
+    offset: 0,
+  });
   const [vendors, setVendors] = useState<AdminVendorSummary[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(
     initialSelectedVendorId,
   );
   const [status, setStatus] = useState("Admin session ready. Load vendors when needed.");
   const [isLoading, setIsLoading] = useState(false);
+  const [vendorHours, setVendorHours] = useState<VendorHours[]>([]);
   const [vendorImages, setVendorImages] = useState<VendorImage[]>([]);
+  const [vendorDishes, setVendorDishes] = useState<VendorFeaturedDish[]>([]);
   const vendorImagesRequestId = useRef(0);
+  const vendorHoursRequestId = useRef(0);
+  const vendorDishesRequestId = useRef(0);
   const { session, signOut } = useAdminSession();
 
   const selectedVendor = useMemo(
     () => vendors.find((vendor) => vendor.id === selectedVendorId) ?? null,
     [selectedVendorId, vendors],
   );
+  const vendorsMissingHours = useMemo(
+    () => vendors.filter((vendor) => vendor.hours_count < 7),
+    [vendors],
+  );
+  const vendorsMissingImages = useMemo(
+    () => vendors.filter((vendor) => vendor.images_count < 1),
+    [vendors],
+  );
+  const vendorsMissingDishes = useMemo(
+    () => vendors.filter((vendor) => vendor.featured_dishes_count < 1),
+    [vendors],
+  );
+  const incompleteVendors = useMemo(
+    () =>
+      vendors.filter(
+        (vendor) =>
+          vendor.hours_count < 7 ||
+          vendor.images_count < 1 ||
+          vendor.featured_dishes_count < 1,
+      ),
+    [vendors],
+  );
+  const statusTone = getAdminStatusTone(status, isLoading);
 
   async function loadVendorImages(
     vendorId: string | null,
@@ -226,6 +377,44 @@ export function AdminConsole({
     }
   }
 
+  async function loadVendorHours(
+    vendorId: string | null,
+    accessToken: string | undefined,
+  ) {
+    if (!vendorId || !accessToken) {
+      setVendorHours([]);
+      return;
+    }
+
+    const requestId = ++vendorHoursRequestId.current;
+    const hours = await listAdminVendorHours(vendorId, {
+      accessToken,
+    });
+
+    if (requestId === vendorHoursRequestId.current) {
+      setVendorHours(hours);
+    }
+  }
+
+  async function loadVendorDishes(
+    vendorId: string | null,
+    accessToken: string | undefined,
+  ) {
+    if (!vendorId || !accessToken) {
+      setVendorDishes([]);
+      return;
+    }
+
+    const requestId = ++vendorDishesRequestId.current;
+    const dishes = await listAdminVendorDishes(vendorId, {
+      accessToken,
+    });
+
+    if (requestId === vendorDishesRequestId.current) {
+      setVendorDishes(dishes);
+    }
+  }
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void loadVendorImages(selectedVendor?.id ?? null, session?.accessToken).catch((error) => {
@@ -239,7 +428,33 @@ export function AdminConsole({
     };
   }, [selectedVendor?.id, session?.accessToken]);
 
-  async function runAdminAction<T>(
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadVendorHours(selectedVendor?.id ?? null, session?.accessToken).catch((error) => {
+        setVendorHours([]);
+        setStatus(formatAdminErrorStatus(error, "Unable to load vendor hours."));
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [selectedVendor?.id, session?.accessToken]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadVendorDishes(selectedVendor?.id ?? null, session?.accessToken).catch((error) => {
+        setVendorDishes([]);
+        setStatus(formatAdminErrorStatus(error, "Unable to load vendor dishes."));
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [selectedVendor?.id, session?.accessToken]);
+
+  const runAdminAction = useCallback(async function runAdminAction<T>(
     action: () => Promise<T>,
     successMessage: string,
     options?: {
@@ -259,16 +474,14 @@ export function AdminConsole({
       setStatus(successMessage);
       return result;
     } catch (error) {
-      if (error instanceof AdminApiError && error.code === "VALIDATION_ERROR") {
-        setStatus("Check the highlighted fields and try again.");
-      } else if (
+      if (
         error instanceof AdminApiError &&
         (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")
       ) {
-        setStatus("Admin session expired. Sign in again.");
+        setStatus(formatAdminErrorStatus(error, "Admin session expired. Sign in again."));
         void signOut();
       } else {
-        setStatus(error instanceof Error ? error.message : "Admin request failed.");
+        setStatus(formatAdminErrorStatus(error, "Admin request failed."));
       }
 
       if (options?.rethrowErrors) {
@@ -279,37 +492,57 @@ export function AdminConsole({
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [session?.accessToken, signOut]);
 
-  async function refreshVendors(nextFilters = filters) {
+  const applyVendorListResult = useCallback((result: Awaited<ReturnType<typeof listAdminVendors>>) => {
+    setVendors(result.vendors);
+    setSelectedVendorId((current) => {
+      if (current && result.vendors.some((vendor) => vendor.id === current)) {
+        return current;
+      }
+
+      if (
+        initialSelectedVendorId &&
+        result.vendors.some((vendor) => vendor.id === initialSelectedVendorId)
+      ) {
+        return initialSelectedVendorId;
+      }
+
+      return result.vendors[0]?.id ?? null;
+    });
+  }, [initialSelectedVendorId]);
+
+  const refreshVendors = useCallback(async function refreshVendors(nextFilters = filters) {
     const result = await runAdminAction(
       () => listAdminVendors(nextFilters, { accessToken: session?.accessToken ?? "" }),
       "Vendor list refreshed.",
     );
 
     if (result) {
-      setVendors(result.vendors);
-      setSelectedVendorId((current) => {
-        if (current && result.vendors.some((vendor) => vendor.id === current)) {
-          return current;
-        }
-
-        if (
-          initialSelectedVendorId &&
-          result.vendors.some((vendor) => vendor.id === initialSelectedVendorId)
-        ) {
-          return initialSelectedVendorId;
-        }
-
-        return result.vendors[0]?.id ?? null;
-      });
+      applyVendorListResult(result);
     }
-  }
+  }, [applyVendorListResult, filters, runAdminAction, session?.accessToken]);
+
+  useEffect(() => {
+    if (!session?.accessToken || isLoading || vendors.length > 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void refreshVendors();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isLoading, refreshVendors, session?.accessToken, vendors.length]);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const nextFilters: AdminVendorFilters = {
+      limit: filters.limit ?? 100,
+      offset: 0,
       search: readText(formData, "search"),
       area: readText(formData, "area"),
       price_band: readPriceBand(formData, "price_band"),
@@ -323,16 +556,100 @@ export function AdminConsole({
     void refreshVendors(nextFilters);
   }
 
-  async function handleCreateVendor(data: CreateVendorRequest) {
-    const createdVendor = await runAdminAction(
-      () => createAdminVendor(data, { accessToken: session?.accessToken ?? "" }),
-      "Vendor created.",
-      { rethrowErrors: true },
-    );
+  async function handleCreateVendor(
+    data: CreateVendorRequest,
+    options?: {
+      hoursData: ReplaceVendorHoursRequest | null;
+      dishesData: CreateVendorDishesRequest | null;
+      imageUpload: FormData | null;
+    },
+  ) {
+    if (!session?.accessToken) {
+      setStatus("Admin session is missing. Sign in again.");
+      return;
+    }
 
-    if (createdVendor) {
-      await refreshVendors();
+    setIsLoading(true);
+    setStatus("Working…");
+
+    try {
+      const createdVendor = await createAdminVendor(data, {
+        accessToken: session.accessToken,
+      });
+      const completionMessages = ["Vendor created successfully."];
+      const failures: string[] = [];
+
+      let createdHours: VendorHours[] | null = null;
+      let createdDishes: VendorFeaturedDish[] | null = null;
+      let createdImages: VendorImage[] | null = null;
+
+      if (options?.hoursData) {
+        try {
+          createdHours = await replaceAdminVendorHours(createdVendor.id, options.hoursData, {
+            accessToken: session.accessToken,
+          });
+          completionMessages.push("Hours updated successfully.");
+        } catch (error) {
+          failures.push(`Hours update failed: ${formatAdminErrorStatus(error, "Hours update failed.")}`);
+        }
+      }
+
+      if (options?.dishesData) {
+        try {
+          createdDishes = await createAdminVendorDishes(createdVendor.id, options.dishesData, {
+            accessToken: session.accessToken,
+          });
+          completionMessages.push("Featured dishes updated successfully.");
+        } catch (error) {
+          failures.push(`Featured dishes update failed: ${formatAdminErrorStatus(error, "Featured dishes update failed.")}`);
+        }
+      }
+
+      if (options?.imageUpload) {
+        try {
+          createdImages = await createAdminVendorImages(createdVendor.id, options.imageUpload, {
+            accessToken: session.accessToken,
+          });
+          completionMessages.push("Image uploaded successfully.");
+        } catch (error) {
+          failures.push(`Image upload failed: ${formatAdminErrorStatus(error, "Image upload failed.")}`);
+        }
+      }
+
       setSelectedVendorId(createdVendor.id);
+      setVendorHours(createdHours ?? []);
+      setVendorDishes(createdDishes ?? []);
+      setVendorImages(createdImages ?? []);
+
+      try {
+        const refreshed = await listAdminVendors(filters, {
+          accessToken: session.accessToken,
+        });
+        applyVendorListResult(refreshed);
+        setSelectedVendorId(createdVendor.id);
+      } catch {
+        // keep the create flow result visible even if the follow-up list refresh fails
+      }
+
+      setStatus(
+        failures.length > 0
+          ? `${completionMessages.join(" ")} ${failures.join(" ")}`
+          : completionMessages.join(" "),
+      );
+    } catch (error) {
+      if (
+        error instanceof AdminApiError &&
+        (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")
+      ) {
+        setStatus(formatAdminErrorStatus(error, "Admin session expired. Sign in again."));
+        void signOut();
+      } else {
+        setStatus(formatAdminErrorStatus(error, "Vendor creation failed."));
+      }
+
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -344,7 +661,7 @@ export function AdminConsole({
 
     const updatedVendor = await runAdminAction(
       () => updateAdminVendor(selectedVendor.id, data, { accessToken: session?.accessToken ?? "" }),
-      "Vendor updated.",
+      "Vendor updated successfully.",
       { rethrowErrors: true },
     );
 
@@ -361,7 +678,7 @@ export function AdminConsole({
 
     const deactivatedVendor = await runAdminAction(
       () => deactivateAdminVendor(selectedVendor.id, { accessToken: session?.accessToken ?? "" }),
-      "Vendor deactivated.",
+      "Vendor deactivated successfully.",
     );
 
     if (deactivatedVendor) {
@@ -375,19 +692,23 @@ export function AdminConsole({
       return;
     }
 
-    await runAdminAction(
+    const hours = await runAdminAction(
       () =>
         replaceAdminVendorHours(selectedVendor.id, data, {
           accessToken: session?.accessToken ?? "",
         }),
-      "Vendor hours replaced.",
+      "Hours updated successfully.",
     );
+
+    if (hours) {
+      setVendorHours(hours);
+    }
   }
 
-  async function handleCreateImages(data: FormData) {
+  async function handleCreateImages(data: FormData): Promise<VendorImage[] | null> {
     if (!selectedVendor) {
       setStatus("Select a vendor before adding images.");
-      return;
+      return null;
     }
 
     const uploadedImages = await runAdminAction(
@@ -395,12 +716,18 @@ export function AdminConsole({
         createAdminVendorImages(selectedVendor.id, data, {
           accessToken: session?.accessToken ?? "",
         }),
-      "Vendor image uploaded.",
+      "Image uploaded successfully.",
     );
 
     if (uploadedImages) {
-      await loadVendorImages(selectedVendor.id, session?.accessToken);
+      setVendorImages((current) =>
+        [...current, ...uploadedImages].toSorted(
+          (left, right) => left.sort_order - right.sort_order,
+        ),
+      );
     }
+
+    return uploadedImages;
   }
 
   async function handleDeleteImage(imageId: string) {
@@ -414,11 +741,11 @@ export function AdminConsole({
         deleteAdminVendorImage(selectedVendor.id, imageId, {
           accessToken: session?.accessToken ?? "",
         }),
-      "Vendor image removed.",
+      "Image removed successfully.",
     );
 
     if (deletedImage) {
-      await loadVendorImages(selectedVendor.id, session?.accessToken);
+      setVendorImages((current) => current.filter((image) => image.id !== deletedImage.id));
     }
   }
 
@@ -428,34 +755,54 @@ export function AdminConsole({
       return;
     }
 
-    await runAdminAction(
+    const dishes = await runAdminAction(
       () =>
         createAdminVendorDishes(selectedVendor.id, data, {
           accessToken: session?.accessToken ?? "",
         }),
-      "Vendor dish added.",
+      "Featured dishes updated successfully.",
     );
+
+    if (dishes) {
+      setVendorDishes((current) => [...current, ...dishes]);
+    }
+  }
+
+  async function handleDeleteDish(dishId: string) {
+    if (!selectedVendor) {
+      setStatus("Select a vendor before removing dishes.");
+      return;
+    }
+
+    const deletedDish = await runAdminAction(
+      () =>
+        deleteAdminVendorDish(selectedVendor.id, dishId, {
+          accessToken: session?.accessToken ?? "",
+        }),
+      "Featured dish removed successfully.",
+    );
+
+    if (deletedDish) {
+      setVendorDishes((current) => current.filter((dish) => dish.id !== deletedDish.id));
+    }
   }
 
   return (
-    <div className="admin-console">
-      <section className="admin-panel admin-token-panel" aria-labelledby="admin-token">
-        <div>
-          <p className="eyebrow">Admin session</p>
-          <h2 id="admin-token">Signed in</h2>
+    <div className={`admin-console admin-console-${mode}`}>
+      <section className={`admin-panel admin-status-panel admin-status-panel-${statusTone}`} aria-live="polite">
+        <div className="admin-status-heading">
+          <p className="eyebrow">Status</p>
+          <h2>{isLoading ? "Working" : "Ready"}</h2>
         </div>
-        <div className="session-summary">
-          <strong>{session?.adminUser.full_name ?? session?.adminUser.email ?? "Admin user"}</strong>
-          <span>{session?.user.email ?? "Session active"}</span>
-        </div>
+        <p className="admin-status-copy">{status}</p>
         <div className="action-row">
           <button
-            className="button-primary"
+            className="button-secondary"
             disabled={isLoading}
             type="button"
             onClick={() => void refreshVendors()}
           >
-            Load vendors
+            Refresh vendors
           </button>
           <button className="button-secondary" type="button" onClick={() => void signOut()}>
             Log out
@@ -463,307 +810,1116 @@ export function AdminConsole({
         </div>
       </section>
 
-      <section className="admin-panel" aria-live="polite">
-        <strong>Status</strong>
-        <p>{status}</p>
-      </section>
+      {mode === "dashboard" ? (
+        <>
+          <section className="admin-overview-grid" aria-label="Admin overview">
+            <article className="admin-metric-panel">
+              <span>Loaded vendors</span>
+              <strong>{vendors.length}</strong>
+              <small>Current registry set</small>
+            </article>
+            <article className="admin-metric-panel">
+              <span>Loaded active vendors</span>
+              <strong>{vendors.filter((vendor) => vendor.is_active).length}</strong>
+              <small>Available to users</small>
+            </article>
+            <article className="admin-metric-panel">
+              <span>Missing hours</span>
+              <strong>{vendorsMissingHours.length}</strong>
+              <small>Need schedule completion</small>
+            </article>
+            <article className="admin-metric-panel">
+              <span>Missing images</span>
+              <strong>{vendorsMissingImages.length}</strong>
+              <small>Need profile media</small>
+            </article>
+            <article className="admin-metric-panel">
+              <span>Missing dishes</span>
+              <strong>{vendorsMissingDishes.length}</strong>
+              <small>Need menu highlights</small>
+            </article>
+          </section>
 
-      <section className="admin-grid">
-        <div className="admin-stack">
-          <section className="admin-panel" aria-labelledby="admin-vendors">
-            <div className="admin-section-header">
-              <div>
-                <p className="eyebrow">Vendor data</p>
-                <h2 id="admin-vendors">Vendors</h2>
+          <section className="admin-grid admin-grid-dashboard">
+            <section className="admin-panel" aria-labelledby="admin-dashboard-actions">
+              <div className="admin-section-header">
+                <div>
+                  <p className="eyebrow">Quick actions</p>
+                  <h2 id="admin-dashboard-actions">Next actions</h2>
+                </div>
               </div>
-              <span>{vendors.length} loaded</span>
-            </div>
-            <form className="admin-form compact-form" onSubmit={submitFilters}>
-              <label className="field">
-                <span>Search</span>
-                <input name="search" placeholder="Name or description" />
-              </label>
-              <label className="field">
-                <span>Area</span>
-                <input name="area" placeholder="Wuse" />
-              </label>
-              <label className="field">
-                <span>Status</span>
-                <select name="is_active" defaultValue="true">
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                  <option value="all">All</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Price</span>
-                <select name="price_band" defaultValue="">
-                  <option value="">Any</option>
-                  {priceBands.map((band) => (
-                    <option key={band} value={band}>
-                      {band}
-                    </option>
+              <div className="admin-action-cards">
+                <Link className="admin-action-card" href="/admin/vendors/new">
+                  <strong>Create vendor</strong>
+                  <span>Add a new vendor record and acknowledge any missing data intentionally.</span>
+                </Link>
+                <Link className="admin-action-card" href="/admin/vendors">
+                  <strong>Manage vendors</strong>
+                  <span>Search the registry, inspect completeness, and open edit workspaces.</span>
+                </Link>
+                <Link className="admin-action-card" href="/admin/vendors">
+                  <strong>Review incomplete vendors</strong>
+                  <span>Focus on vendors still missing hours, images, or featured dishes.</span>
+                </Link>
+              </div>
+            </section>
+
+            <section className="admin-panel" aria-labelledby="admin-dashboard-incomplete">
+              <div className="admin-section-header">
+                <div>
+                  <p className="eyebrow">Incomplete vendors</p>
+                  <h2 id="admin-dashboard-incomplete">Needs follow-up</h2>
+                </div>
+                <span>{incompleteVendors.length} vendors</span>
+              </div>
+              <VendorRegistryList
+                vendors={incompleteVendors}
+                selectedVendorId={selectedVendorId}
+                onSelectVendor={setSelectedVendorId}
+                emptyMessage="All loaded vendors have hours, images, and featured dishes."
+                compact
+              />
+            </section>
+          </section>
+        </>
+      ) : null}
+
+      {mode === "vendors" ? (
+        <section className="admin-grid admin-grid-vendors">
+          <VendorRegistryPanel
+            disabled={isLoading}
+            filters={filters}
+            selectedVendorId={selectedVendorId}
+            vendors={vendors}
+            onSelectVendor={setSelectedVendorId}
+            onSubmitFilters={submitFilters}
+          />
+          <section className="admin-panel" aria-labelledby="vendor-list-preview">
+            <p className="eyebrow">Selection</p>
+            <h2 id="vendor-list-preview">
+              {selectedVendor ? selectedVendor.name : "Select a vendor"}
+            </h2>
+            <p className="form-note">
+              Review completeness and open a dedicated edit workspace for this vendor.
+            </p>
+            {selectedVendor ? (
+              <>
+                <ul className="admin-completeness-list">
+                  {getVendorSummaryStatusLabels(selectedVendor).map((label) => (
+                    <li key={label}>{label}</li>
                   ))}
-                </select>
-              </label>
-              <button className="button-secondary" disabled={isLoading} type="submit">
-                Apply filters
-              </button>
-            </form>
-            <ul className="admin-list">
-              {vendors.map((vendor) => (
-                <li key={vendor.id}>
-                  <button
-                    className={
-                      vendor.id === selectedVendorId
-                        ? "admin-list-item selected"
-                        : "admin-list-item"
-                    }
-                    type="button"
-                    onClick={() => setSelectedVendorId(vendor.id)}
-                  >
-                    <strong>{vendor.name}</strong>
-                    <span>{vendor.area ?? "Area missing"}</span>
-                    <span>{vendor.is_active ? "Active" : "Inactive"}</span>
-                  </button>
-                </li>
-              ))}
-              {vendors.length === 0 ? (
-                <li className="empty-state">No vendors loaded yet.</li>
-              ) : null}
+                </ul>
+                <dl className="admin-summary-grid">
+                  <div>
+                    <dt>Area</dt>
+                    <dd>{selectedVendor.area ?? "Area missing"}</dd>
+                  </div>
+                  <div>
+                    <dt>Hours rows</dt>
+                    <dd>{selectedVendor.hours_count}</dd>
+                  </div>
+                  <div>
+                    <dt>Images</dt>
+                    <dd>{selectedVendor.images_count}</dd>
+                  </div>
+                  <div>
+                    <dt>Featured dishes</dt>
+                    <dd>{selectedVendor.featured_dishes_count}</dd>
+                  </div>
+                </dl>
+                <div className="admin-selection-actions">
+                  <Link className="button-primary" href={`/admin/vendors/${selectedVendor.id}`}>
+                    Open edit workspace
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <p className="empty-state">Select a vendor to review details and edit it.</p>
+            )}
+          </section>
+        </section>
+      ) : null}
+
+      {mode === "create" ? (
+        <section className="admin-grid admin-grid-create">
+          <AdminCreateVendorSection
+            disabled={isLoading}
+            onCreateVendor={handleCreateVendor}
+          />
+          <section className="admin-panel" aria-labelledby="create-vendor-guidance">
+            <p className="eyebrow">Workflow</p>
+            <h2 id="create-vendor-guidance">Create flow</h2>
+            <ul className="admin-guidance-list">
+              <li>Basic vendor identity is created first.</li>
+              <li>Hours, images, and featured dishes can be added immediately after creation.</li>
+              <li>Missing-data acknowledgements prevent accidental incomplete records.</li>
+              <li>Uploaded vendor images appear on the public vendor profile, not on dish cards.</li>
             </ul>
           </section>
-        </div>
+        </section>
+      ) : null}
 
-        <AdminForms
-          disabled={isLoading}
-          selectedVendor={selectedVendor}
-          vendorImages={vendorImages}
-          onCreateVendor={handleCreateVendor}
-          onUpdateVendor={handleUpdateVendor}
-          onDeactivateVendor={handleDeactivateVendor}
-          onReplaceHours={handleReplaceHours}
-          onCreateImages={handleCreateImages}
-          onDeleteImage={handleDeleteImage}
-          onCreateDishes={handleCreateDishes}
-        />
-      </section>
+      {mode === "edit" ? (
+        <section className="admin-grid admin-grid-edit">
+          <VendorRegistryPanel
+            disabled={isLoading}
+            filters={filters}
+            selectedVendorId={selectedVendorId}
+            vendors={vendors}
+            onSelectVendor={setSelectedVendorId}
+            onSubmitFilters={submitFilters}
+          />
+          <EditVendorWorkspace
+            disabled={isLoading}
+            selectedVendor={selectedVendor}
+            vendorDishes={vendorDishes}
+            vendorHours={vendorHours}
+            vendorImages={vendorImages}
+            onUpdateVendor={handleUpdateVendor}
+            onDeactivateVendor={handleDeactivateVendor}
+            onReplaceHours={handleReplaceHours}
+            onCreateImages={handleCreateImages}
+            onDeleteImage={handleDeleteImage}
+            onCreateDishes={handleCreateDishes}
+            onDeleteDish={handleDeleteDish}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }
 
-function AdminForms({
-  selectedVendor,
-  vendorImages,
+function VendorRegistryPanel({
+  disabled,
+  filters,
+  selectedVendorId,
+  vendors,
+  onSelectVendor,
+  onSubmitFilters,
+}: {
+  disabled: boolean;
+  filters: AdminVendorFilters;
+  selectedVendorId: string | null;
+  vendors: AdminVendorSummary[];
+  onSelectVendor: (vendorId: string) => void;
+  onSubmitFilters: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className="admin-panel admin-registry-panel" aria-labelledby="vendor-registry">
+      <div className="admin-section-header">
+        <div>
+          <p className="eyebrow">Vendor registry</p>
+          <h2 id="vendor-registry">Manage vendors</h2>
+        </div>
+        <span>{vendors.length} loaded</span>
+      </div>
+
+      <form className="admin-form" onSubmit={onSubmitFilters}>
+        <div className="admin-filter-grid">
+          <label className="field field-wide">
+            <span>Search</span>
+            <input defaultValue={filters.search ?? ""} name="search" placeholder="Vendor name, area, or cue" />
+          </label>
+          <label className="field">
+            <span>Area</span>
+            <input defaultValue={filters.area ?? ""} name="area" placeholder="Wuse" />
+          </label>
+          <label className="field">
+            <span>Price band</span>
+            <select defaultValue={filters.price_band ?? ""} name="price_band">
+              <option value="">All</option>
+              {priceBands.map((band) => (
+                <option key={band} value={band}>
+                  {band}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select defaultValue={filters.is_active === undefined ? "all" : String(filters.is_active)} name="is_active">
+              <option value="all">All vendors</option>
+              <option value="true">Active only</option>
+              <option value="false">Inactive only</option>
+            </select>
+          </label>
+        </div>
+        <div className="action-row">
+          <button className="button-primary" disabled={disabled} type="submit">
+            Apply
+          </button>
+        </div>
+      </form>
+
+      <VendorRegistryList
+        vendors={vendors}
+        selectedVendorId={selectedVendorId}
+        onSelectVendor={onSelectVendor}
+        emptyMessage="No vendors matched the current filters."
+      />
+    </section>
+  );
+}
+
+function VendorRegistryList({
+  vendors,
+  selectedVendorId,
+  onSelectVendor,
+  emptyMessage,
+  compact = false,
+}: {
+  vendors: AdminVendorSummary[];
+  selectedVendorId: string | null;
+  onSelectVendor: (vendorId: string) => void;
+  emptyMessage: string;
+  compact?: boolean;
+}) {
+  if (vendors.length === 0) {
+    return <p className="empty-state">{emptyMessage}</p>;
+  }
+
+  return (
+    <ul className={compact ? "admin-list admin-list-compact" : "admin-list"}>
+      {vendors.map((vendor) => {
+        const labels = getVendorSummaryStatusLabels(vendor);
+
+        return (
+          <li key={vendor.id}>
+            <button
+              className={selectedVendorId === vendor.id ? "admin-list-item selected" : "admin-list-item"}
+              type="button"
+              onClick={() => onSelectVendor(vendor.id)}
+            >
+              <div className="admin-list-item-copy">
+                <div className="admin-list-item-topline">
+                  <strong>{vendor.name}</strong>
+                  <span className="admin-list-item-edit">Review</span>
+                </div>
+                <span>{vendor.area ?? "Area missing"}</span>
+              </div>
+              <div className="admin-list-badges" aria-label={`${vendor.name} status`}>
+                {labels.map((label) => (
+                  <span className="admin-badge" key={label}>
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function AdminCreateVendorSection({
   disabled,
   onCreateVendor,
+}: {
+  disabled: boolean;
+  onCreateVendor: (
+    data: CreateVendorRequest,
+    options?: {
+      hoursData: ReplaceVendorHoursRequest | null;
+      dishesData: CreateVendorDishesRequest | null;
+      imageUpload: FormData | null;
+    },
+  ) => Promise<void>;
+}) {
+  const [createFieldErrors, setCreateFieldErrors] = useState<AdminVendorFieldErrors>({});
+  const [createIntentErrors, setCreateIntentErrors] = useState<Partial<Record<
+    "hours" | "featured_dishes" | "images",
+  string
+  >>>({});
+  const [pendingCreateVendorImagePreviewUrl, setPendingCreateVendorImagePreviewUrl] = useState<string | null>(null);
+  const [pendingCreateVendorImageName, setPendingCreateVendorImageName] = useState<string | null>(null);
+  const [hoursDraft, setHoursDraft] = useState(
+    dayLabels.map(() => ({
+      open: "",
+      close: "",
+      closed: false,
+    })),
+  );
+  const [dishRows, setDishRows] = useState([
+    { id: 0, dish_name: "", description: "", image_url: "" },
+  ]);
+  const [createSummary, setCreateSummary] = useState({
+    name: "",
+    area: "",
+    missingHoursAcknowledged: false,
+    missingFeaturedDishesAcknowledged: false,
+    missingImagesAcknowledged: false,
+  });
+
+  useEffect(() => {
+    return () => {
+      if (pendingCreateVendorImagePreviewUrl) {
+        URL.revokeObjectURL(pendingCreateVendorImagePreviewUrl);
+      }
+    };
+  }, [pendingCreateVendorImagePreviewUrl]);
+
+  async function submitCreateVendor(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCreateFieldErrors({});
+    setCreateIntentErrors({});
+    const form = event.currentTarget;
+
+    if (!form.reportValidity()) {
+      return;
+    }
+
+    const formData = new FormData(form);
+    const intentErrors = validateVendorCreateIntent(formData);
+
+    if (Object.keys(intentErrors).length > 0) {
+      setCreateIntentErrors(intentErrors);
+      return;
+    }
+
+    try {
+      const hoursData = hoursDraft.some(
+        (hours) => hours.closed || hours.open.trim().length > 0 || hours.close.trim().length > 0,
+      )
+        ? createHoursPayload(formData, "create-")
+        : null;
+      const dishesData = createOnboardingDishesPayload(
+        formData,
+        dishRows.map((dish) => dish.id),
+      );
+
+      await onCreateVendor(createVendorPayload(formData), {
+        hoursData,
+        dishesData,
+        imageUpload: extractCreateVendorImageUpload(formData),
+      });
+      setHoursDraft(
+        dayLabels.map(() => ({
+          open: "",
+          close: "",
+          closed: false,
+        })),
+      );
+      setDishRows([{ id: 0, dish_name: "", description: "", image_url: "" }]);
+      setCreateSummary({
+        name: "",
+        area: "",
+        missingHoursAcknowledged: false,
+        missingFeaturedDishesAcknowledged: false,
+        missingImagesAcknowledged: false,
+      });
+      setPendingCreateVendorImageName(null);
+      setPendingCreateVendorImagePreviewUrl((current) => {
+        if (current) {
+          URL.revokeObjectURL(current);
+        }
+
+        return null;
+      });
+      form?.reset();
+    } catch (error) {
+      if (error instanceof AdminApiError && error.code === "VALIDATION_ERROR") {
+        const feedback = extractValidationFeedback(error.details);
+        setCreateFieldErrors(feedback.fieldErrors as AdminVendorFieldErrors);
+        return;
+      }
+
+      if (error instanceof Error) {
+        setCreateIntentErrors((current) => ({
+          ...current,
+          hours: error.message.includes("Use format like") ? error.message : current.hours,
+        }));
+      }
+    }
+  }
+
+  return (
+    <section className="admin-panel" aria-labelledby="create-vendor">
+      <p className="eyebrow">Create vendor</p>
+      <h2 id="create-vendor">New vendor</h2>
+      <p className="form-note">Add the vendor&apos;s basic details, hours, featured dishes, and images.</p>
+      <form className="admin-form" onSubmit={submitCreateVendor}>
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-basic-details">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Section 1</p>
+              <h3 id="create-basic-details">Basic details</h3>
+            </div>
+          </div>
+          <CreateVendorIdentityFields
+            fieldErrors={createFieldErrors}
+            onAreaChange={(value) =>
+              setCreateSummary((current) => ({
+                ...current,
+                area: value,
+              }))
+            }
+            onNameChange={(value) =>
+              setCreateSummary((current) => ({
+                ...current,
+                name: value,
+              }))
+            }
+          />
+        </section>
+
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-hours">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Section 2</p>
+              <h3 id="create-hours">Opening hours</h3>
+            </div>
+          </div>
+          <div className="hours-grid">
+            {dayLabels.map((day, index) => (
+              <div className="hours-row" key={day}>
+                <strong>{day}</strong>
+                <label className="field">
+                  <span>Opens</span>
+                  <input
+                    name={`create-open-${index}`}
+                    placeholder="9 AM"
+                    value={hoursDraft[index]?.open ?? ""}
+                    onChange={(event) => {
+                      const next = [...hoursDraft];
+                      next[index] = { ...next[index], open: event.target.value };
+                      setHoursDraft(next);
+                    }}
+                  />
+                </label>
+                <label className="field">
+                  <span>Closes</span>
+                  <input
+                    name={`create-close-${index}`}
+                    placeholder="8:30 PM"
+                    value={hoursDraft[index]?.close ?? ""}
+                    onChange={(event) => {
+                      const next = [...hoursDraft];
+                      next[index] = { ...next[index], close: event.target.value };
+                      setHoursDraft(next);
+                    }}
+                  />
+                </label>
+                <label className="checkbox-field">
+                  <input
+                    checked={hoursDraft[index]?.closed ?? false}
+                    name={`create-closed-${index}`}
+                    type="checkbox"
+                    onChange={(event) => {
+                      const next = [...hoursDraft];
+                      next[index] = { ...next[index], closed: event.target.checked };
+                      setHoursDraft(next);
+                    }}
+                  />
+                  <span>Closed</span>
+                </label>
+              </div>
+            ))}
+          </div>
+          <span className="field-hint">Use format like 9 AM or 8:30 PM.</span>
+          <label className="checkbox-field">
+            <input
+              checked={createSummary.missingHoursAcknowledged}
+              name="missing-hours-acknowledged"
+              type="checkbox"
+              onChange={(event) =>
+                setCreateSummary((current) => ({
+                  ...current,
+                  missingHoursAcknowledged: event.target.checked,
+                }))
+              }
+            />
+            <span>I do not have this vendor&apos;s opening hours yet.</span>
+          </label>
+          {createIntentErrors.hours ? <span className="field-error">{createIntentErrors.hours}</span> : null}
+        </section>
+
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-dishes">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Section 3</p>
+              <h3 id="create-dishes">Featured dishes</h3>
+            </div>
+            <span>{dishRows.filter((dish) => dish.dish_name.trim().length > 0).length} ready</span>
+          </div>
+          <div className="admin-create-dishes-stack">
+            {dishRows.map((dish, index) => (
+              <div className="admin-inline-list-item admin-create-dish-card" key={dish.id}>
+                <div className="admin-create-dish-card-header">
+                  <strong>Dish {index + 1}</strong>
+                  {dishRows.length > 1 ? (
+                    <button
+                      className="button-secondary compact-button"
+                      type="button"
+                      onClick={() => setDishRows((current) => current.filter((item) => item.id !== dish.id))}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                <div className="admin-form">
+                  <label className="field field-wide">
+                    <span>Dish name</span>
+                    <input
+                      name={`create-dish-name-${dish.id}`}
+                      placeholder="Jollof rice"
+                      value={dish.dish_name}
+                      onChange={(event) =>
+                        setDishRows((current) =>
+                          current.map((item) =>
+                            item.id === dish.id ? { ...item, dish_name: event.target.value } : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="field field-wide">
+                    <span>Description</span>
+                    <input
+                      name={`create-dish-description-${dish.id}`}
+                      placeholder="Short description"
+                      value={dish.description}
+                      onChange={(event) =>
+                        setDishRows((current) =>
+                          current.map((item) =>
+                            item.id === dish.id ? { ...item, description: event.target.value } : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="field field-wide">
+                    <span>Optional dish image URL</span>
+                    <input
+                      name={`create-dish-image-url-${dish.id}`}
+                      placeholder="https://..."
+                      value={dish.image_url}
+                      onChange={(event) =>
+                        setDishRows((current) =>
+                          current.map((item) =>
+                            item.id === dish.id ? { ...item, image_url: event.target.value } : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="action-row">
+            <button
+              className="button-secondary"
+              disabled={dishRows.length >= 3}
+              type="button"
+              onClick={() =>
+                setDishRows((current) => [
+                  ...current,
+                  {
+                    id: current.reduce((maxId, item) => Math.max(maxId, item.id), -1) + 1,
+                    dish_name: "",
+                    description: "",
+                    image_url: "",
+                  },
+                ])
+              }
+            >
+              Add another dish
+            </button>
+          </div>
+          <label className="checkbox-field">
+            <input
+              checked={createSummary.missingFeaturedDishesAcknowledged}
+              name="missing-featured-dishes-acknowledged"
+              type="checkbox"
+              onChange={(event) =>
+                setCreateSummary((current) => ({
+                  ...current,
+                  missingFeaturedDishesAcknowledged: event.target.checked,
+                }))
+              }
+            />
+            <span>I do not have featured dishes yet.</span>
+          </label>
+          {createIntentErrors.featured_dishes ? (
+            <span className="field-error">{createIntentErrors.featured_dishes}</span>
+          ) : null}
+        </section>
+
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-images">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Section 4</p>
+              <h3 id="create-images">Vendor images</h3>
+            </div>
+          </div>
+          <p className="form-note">Vendor images appear on the public vendor profile.</p>
+          <label className="field field-wide">
+            <span>Vendor profile image</span>
+            <input
+              accept="image/jpeg,image/png,image/webp"
+              name="create-image"
+              type="file"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+
+                setPendingCreateVendorImagePreviewUrl((current) => {
+                  if (current) {
+                    URL.revokeObjectURL(current);
+                  }
+
+                  return file ? URL.createObjectURL(file) : null;
+                });
+                setPendingCreateVendorImageName(file?.name ?? null);
+              }}
+            />
+          </label>
+          <label className="field">
+            <span>Image sort order</span>
+            <input defaultValue="0" min="0" name="create-image-sort-order" type="number" />
+          </label>
+          {pendingCreateVendorImagePreviewUrl ? (
+            <div className="vendor-image-local-preview">
+              <div className="vendor-image-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt="" loading="lazy" src={pendingCreateVendorImagePreviewUrl} />
+              </div>
+              <span>{pendingCreateVendorImageName ?? "Selected image preview"}</span>
+            </div>
+          ) : null}
+          <label className="checkbox-field">
+            <input
+              checked={createSummary.missingImagesAcknowledged}
+              name="missing-images-acknowledged"
+              type="checkbox"
+              onChange={(event) =>
+                setCreateSummary((current) => ({
+                  ...current,
+                  missingImagesAcknowledged: event.target.checked,
+                }))
+              }
+            />
+            <span>I do not have vendor images yet.</span>
+          </label>
+          {createIntentErrors.images ? <span className="field-error">{createIntentErrors.images}</span> : null}
+        </section>
+
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-review">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Section 5</p>
+              <h3 id="create-review">Review and create</h3>
+            </div>
+          </div>
+          <dl className="admin-summary-grid">
+            <div>
+              <dt>Vendor name</dt>
+              <dd>{createSummary.name || "Not filled yet"}</dd>
+            </div>
+            <div>
+              <dt>Area</dt>
+              <dd>{createSummary.area || "Not filled yet"}</dd>
+            </div>
+            <div>
+              <dt>Hours</dt>
+              <dd>
+                {hoursDraft.some((hours) => hours.closed || hours.open.trim().length > 0 || hours.close.trim().length > 0)
+                  ? `${hoursDraft.filter((hours) => hours.closed || hours.open.trim().length > 0 || hours.close.trim().length > 0).length} days ready`
+                  : createSummary.missingHoursAcknowledged
+                    ? "Will add later"
+                    : "Missing"}
+              </dd>
+            </div>
+            <div>
+              <dt>Featured dishes</dt>
+              <dd>
+                {dishRows.filter((dish) => dish.dish_name.trim().length > 0).length > 0
+                  ? `${dishRows.filter((dish) => dish.dish_name.trim().length > 0).length} added`
+                  : createSummary.missingFeaturedDishesAcknowledged
+                    ? "Will add later"
+                    : "Missing"}
+              </dd>
+            </div>
+            <div>
+              <dt>Image</dt>
+              <dd>
+                {pendingCreateVendorImageName
+                  ? pendingCreateVendorImageName
+                  : createSummary.missingImagesAcknowledged
+                    ? "Will add later"
+                    : "Missing"}
+              </dd>
+            </div>
+            <div>
+              <dt>Acknowledgements</dt>
+              <dd>
+                {[
+                  createSummary.missingHoursAcknowledged ? "Hours later" : null,
+                  createSummary.missingFeaturedDishesAcknowledged ? "Dishes later" : null,
+                  createSummary.missingImagesAcknowledged ? "Images later" : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "None"}
+              </dd>
+            </div>
+          </dl>
+        </section>
+        <button className="button-primary" disabled={disabled} type="submit">
+          Create vendor
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function EditVendorWorkspace({
+  disabled,
+  selectedVendor,
+  vendorHours,
+  vendorImages,
+  vendorDishes,
   onUpdateVendor,
   onDeactivateVendor,
   onReplaceHours,
   onCreateImages,
   onDeleteImage,
   onCreateDishes,
-}: AdminFormProps) {
-  const [createFieldErrors, setCreateFieldErrors] = useState<AdminVendorFieldErrors>({});
+  onDeleteDish,
+}: Omit<AdminFormProps, "onCreateVendor">) {
+  const completenessLabels = useMemo(
+    () =>
+      getVendorCompletenessLabels({
+        hours: vendorHours,
+        images: vendorImages,
+        dishes: vendorDishes,
+      }),
+    [vendorDishes, vendorHours, vendorImages],
+  );
 
-  async function submitCreateVendor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreateFieldErrors({});
-
-    if (!event.currentTarget.reportValidity()) {
-      return;
-    }
-
-    try {
-      await onCreateVendor(createVendorPayload(new FormData(event.currentTarget)));
-    } catch (error) {
-      if (error instanceof AdminApiError && error.code === "VALIDATION_ERROR") {
-        const feedback = extractValidationFeedback(error.details);
-        setCreateFieldErrors(feedback.fieldErrors as AdminVendorFieldErrors);
-      }
-    }
+  if (!selectedVendor) {
+    return (
+      <section className="admin-panel" aria-labelledby="edit-vendor-empty">
+        <p className="eyebrow">Edit workspace</p>
+        <h2 id="edit-vendor-empty">Select a vendor</h2>
+        <p className="empty-state">
+          Choose a vendor from the registry to open details, hours, featured dishes, and images.
+        </p>
+      </section>
+    );
   }
 
   return (
-    <div className="admin-stack">
-      <section className="admin-panel" aria-labelledby="create-vendor">
-        <p className="eyebrow">Create</p>
-        <h2 id="create-vendor">New vendor</h2>
-        <p className="form-note">Fields marked * are required.</p>
-        <form className="admin-form" onSubmit={submitCreateVendor}>
-          <CreateVendorIdentityFields fieldErrors={createFieldErrors} />
-          <button className="button-primary" disabled={disabled} type="submit">
-            Create vendor
-          </button>
-        </form>
-      </section>
-
-      <UpdateVendorSection
-        key={selectedVendor?.id ?? "no-selected-vendor"}
-        disabled={disabled}
-        onDeactivateVendor={onDeactivateVendor}
-        onUpdateVendor={onUpdateVendor}
-        selectedVendor={selectedVendor}
-      />
-
-      <section className="admin-panel" aria-labelledby="vendor-hours">
-        <p className="eyebrow">Completeness</p>
-        <h2 id="vendor-hours">Hours</h2>
-        <form
-          className="admin-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onReplaceHours(createHoursPayload(new FormData(event.currentTarget)));
-          }}
-        >
-          <div className="hours-grid">
-            {dayLabels.map((day, index) => (
-              <div className="hours-row" key={day}>
-                <strong>{day}</strong>
-                <label className="field">
-                  <span>Open</span>
-                  <input name={`open-${index}`} placeholder="09:00" />
-                </label>
-                <label className="field">
-                  <span>Close</span>
-                  <input name={`close-${index}`} placeholder="21:00" />
-                </label>
-                <label className="checkbox-field">
-                  <input name={`closed-${index}`} type="checkbox" />
-                  <span>Closed</span>
-                </label>
-              </div>
-            ))}
-          </div>
-          <button
-            className="button-secondary"
-            disabled={disabled || !selectedVendor}
-            type="submit"
-          >
-            Replace hours
-          </button>
-        </form>
-      </section>
-
-      <section className="admin-panel split-panel" aria-labelledby="vendor-media">
-        <div className="vendor-media-stack">
+    <section className="admin-stack">
+      <section className="admin-panel admin-identity-panel" aria-labelledby="edit-vendor-identity">
+        <div className="admin-section-header">
           <div>
-            <p className="eyebrow">Media</p>
-            <h2 id="vendor-media">Image upload</h2>
-            <p className="form-note">JPEG, PNG, or WebP. Max 5 MB.</p>
-            <form
-              className="admin-form"
-              onSubmit={(event) => {
-                event.preventDefault();
+            <p className="eyebrow">Edit workspace</p>
+            <h2 id="edit-vendor-identity">{selectedVendor.name}</h2>
+          </div>
+          <span>{selectedVendor.slug}</span>
+        </div>
+        <dl className="admin-summary-grid">
+          <div>
+            <dt>Area</dt>
+            <dd>{selectedVendor.area ?? "Area missing"}</dd>
+          </div>
+          <div>
+            <dt>Phone</dt>
+            <dd>{selectedVendor.phone_number ?? "Phone missing"}</dd>
+          </div>
+          <div>
+            <dt>Status</dt>
+            <dd>{selectedVendor.is_active ? "Active" : "Inactive"}</dd>
+          </div>
+          <div>
+            <dt>Public page</dt>
+            <dd>/vendors/{selectedVendor.slug}</dd>
+          </div>
+        </dl>
+        {completenessLabels.length > 0 ? (
+          <ul className="admin-completeness-list">
+            {completenessLabels.map((label) => (
+              <li key={label}>{label}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="form-note">This vendor currently has hours, images, and featured dishes.</p>
+        )}
+        <nav className="admin-section-tabs" aria-label="Vendor edit sections">
+          <a href="#edit-basic-details">Basic details</a>
+          <a href="#edit-hours">Hours</a>
+          <a href="#edit-dishes">Featured dishes</a>
+          <a href="#edit-images">Images</a>
+        </nav>
+      </section>
 
-                if (!event.currentTarget.reportValidity()) {
-                  return;
+      <div className="admin-edit-sections">
+        <div id="edit-basic-details">
+          <UpdateVendorSection
+            disabled={disabled}
+            onDeactivateVendor={onDeactivateVendor}
+            onUpdateVendor={onUpdateVendor}
+            selectedVendor={selectedVendor}
+            completenessLabels={completenessLabels}
+          />
+        </div>
+        <div id="edit-hours">
+          <VendorHoursSection
+            key={`${selectedVendor.id}:${vendorHours
+              .map(
+                (hours) =>
+                  `${hours.day_of_week}:${hours.open_time ?? "closed"}:${hours.close_time ?? "closed"}:${hours.is_closed}`,
+              )
+              .join("|")}`}
+            disabled={disabled}
+            selectedVendor={selectedVendor}
+            vendorHours={vendorHours}
+            onReplaceHours={onReplaceHours}
+          />
+        </div>
+        <div className="admin-edit-split">
+          <div id="edit-dishes">
+            <FeaturedDishesSection
+              disabled={disabled}
+              selectedVendor={selectedVendor}
+              vendorDishes={vendorDishes}
+              onCreateDishes={onCreateDishes}
+              onDeleteDish={onDeleteDish}
+            />
+          </div>
+          <div id="edit-images">
+            <VendorImagesSection
+              disabled={disabled}
+              selectedVendor={selectedVendor}
+              vendorImages={vendorImages}
+              onCreateImages={onCreateImages}
+              onDeleteImage={onDeleteImage}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VendorImagesSection({
+  disabled,
+  selectedVendor,
+  vendorImages,
+  onCreateImages,
+  onDeleteImage,
+}: {
+  disabled: boolean;
+  selectedVendor: AdminVendorSummary | null;
+  vendorImages: VendorImage[];
+  onCreateImages: (data: FormData) => Promise<VendorImage[] | null>;
+  onDeleteImage: (imageId: string) => Promise<void>;
+}) {
+  const [pendingVendorImagePreviewUrl, setPendingVendorImagePreviewUrl] = useState<string | null>(null);
+  const [pendingVendorImageName, setPendingVendorImageName] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pendingVendorImagePreviewUrl) {
+        URL.revokeObjectURL(pendingVendorImagePreviewUrl);
+      }
+    };
+  }, [pendingVendorImagePreviewUrl]);
+
+  return (
+    <section className="admin-panel" aria-labelledby="vendor-images">
+      <p className="eyebrow">Vendor profile images</p>
+      <h2 id="vendor-images">Vendor images</h2>
+      <p className="form-note">
+        These images appear on the vendor public profile. They are different from optional featured dish image URLs.
+      </p>
+      <form
+        className="admin-form"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = event.currentTarget;
+
+          if (!form.reportValidity()) {
+            return;
+          }
+
+          const uploadedImages = await onCreateImages(new FormData(form));
+
+          if (uploadedImages) {
+            setPendingVendorImageName(null);
+            setPendingVendorImagePreviewUrl((current) => {
+              if (current) {
+                URL.revokeObjectURL(current);
+              }
+
+              return null;
+            });
+            form?.reset();
+          }
+        }}
+      >
+        <label className="field field-wide">
+          <span>
+            Image file <span className="field-required" aria-hidden="true">*</span>
+          </span>
+          <input
+            accept="image/jpeg,image/png,image/webp"
+            name="image"
+            required
+            type="file"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0] ?? null;
+
+              setPendingVendorImagePreviewUrl((current) => {
+                if (current) {
+                  URL.revokeObjectURL(current);
                 }
 
-                void onCreateImages(new FormData(event.currentTarget));
-              }}
-            >
-              <label className="field field-wide">
-                <span>
-                  Image file <span className="field-required" aria-hidden="true">*</span>
-                </span>
-                <input
-                  accept="image/jpeg,image/png,image/webp"
-                  name="image"
-                  required
-                  type="file"
-                />
-              </label>
-              <label className="field">
-                <span>Sort order</span>
-                <input defaultValue="0" name="sort_order" min="0" type="number" />
-              </label>
-              <button
-                className="button-secondary"
-                disabled={disabled || !selectedVendor}
-                type="submit"
-              >
-                Upload image
-              </button>
-            </form>
+                return file ? URL.createObjectURL(file) : null;
+              });
+              setPendingVendorImageName(file?.name ?? null);
+            }}
+          />
+        </label>
+        <label className="field">
+          <span>Sort order</span>
+          <input defaultValue="0" name="sort_order" min="0" type="number" />
+        </label>
+        {pendingVendorImagePreviewUrl ? (
+          <div className="vendor-image-local-preview">
+            <div className="vendor-image-preview">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="" loading="lazy" src={pendingVendorImagePreviewUrl} />
+            </div>
+            <span>{pendingVendorImageName ?? "Selected image preview"}</span>
           </div>
+        ) : null}
+        <button className="button-secondary" disabled={disabled || !selectedVendor} type="submit">
+          Upload vendor image
+        </button>
+      </form>
+
+      <div className="admin-subsection">
+        <div className="admin-section-header">
           <div>
             <p className="eyebrow">Current</p>
-            <h2>Vendor images</h2>
-            <ul className="vendor-image-list">
-              {vendorImages.map((image) => (
-                <li className="vendor-image-item" key={image.id}>
-                  <div className="vendor-image-preview">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img alt="" loading="lazy" src={image.image_url} />
-                  </div>
-                  <div className="vendor-image-meta">
-                    <strong>Image {image.sort_order + 1}</strong>
-                    <span>{image.storage_object_path ?? "Seed or external image"}</span>
-                  </div>
-                  <button
-                    className="button-secondary compact-button"
-                    disabled={disabled || !selectedVendor}
-                    type="button"
-                    onClick={() => {
-                      if (confirm("Remove this image?")) {
-                        void onDeleteImage(image.id);
-                      }
-                    }}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-              {vendorImages.length === 0 ? (
-                <li className="empty-state">No uploaded vendor images yet.</li>
-              ) : null}
-            </ul>
+            <h2>Current vendor images</h2>
           </div>
+          <span>{vendorImages.length} images</span>
         </div>
-        <div>
-          <p className="eyebrow">Menu cue</p>
-          <h2>Featured dish</h2>
-          <form
-            className="admin-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onCreateDishes(dishesPayload(new FormData(event.currentTarget)));
-            }}
-          >
-            <label className="field field-wide">
-              <span>Dish name</span>
-              <input name="dish_name" placeholder="Jollof rice" />
-            </label>
-            <label className="field field-wide">
-              <span>Description</span>
-              <input name="description" placeholder="Short description" />
-            </label>
-            <label className="field field-wide">
-              <span>Image URL</span>
-              <input name="image_url" placeholder="https://..." />
-            </label>
+        <ul className="vendor-image-list">
+          {vendorImages.map((image) => (
+            <li className="vendor-image-item" key={image.id}>
+              <div className="vendor-image-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt="" loading="lazy" src={image.image_url} />
+              </div>
+              <div className="vendor-image-meta">
+                <strong>Image {image.sort_order + 1}</strong>
+                <span>{image.storage_object_path ?? "External image URL"}</span>
+              </div>
+              <button
+                className="button-secondary compact-button"
+                disabled={disabled || !selectedVendor}
+                type="button"
+                onClick={() => {
+                  if (confirm("Remove this image?")) {
+                    void onDeleteImage(image.id);
+                  }
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+          {vendorImages.length === 0 ? <li className="empty-state">No vendor images yet.</li> : null}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function FeaturedDishesSection({
+  disabled,
+  selectedVendor,
+  vendorDishes,
+  onCreateDishes,
+  onDeleteDish,
+}: {
+  disabled: boolean;
+  selectedVendor: AdminVendorSummary | null;
+  vendorDishes: VendorFeaturedDish[];
+  onCreateDishes: (data: CreateVendorDishesRequest) => Promise<void>;
+  onDeleteDish: (dishId: string) => Promise<void>;
+}) {
+  return (
+    <section className="admin-panel" aria-labelledby="featured-dishes">
+      <p className="eyebrow">Featured dishes</p>
+      <h2 id="featured-dishes">Featured dishes</h2>
+      <p className="form-note">
+        Featured dishes appear on vendor cards and vendor details. Dish image URL is optional and applies only to that dish.
+      </p>
+      <ul className="admin-inline-list">
+        {vendorDishes.map((dish) => (
+          <li key={dish.id}>
+            <div className="admin-inline-list-item-copy">
+              <strong>{dish.dish_name}</strong>
+              <span>{dish.description ?? "No description yet"}</span>
+            </div>
             <button
-              className="button-secondary"
+              className="button-secondary compact-button"
               disabled={disabled || !selectedVendor}
-              type="submit"
+              type="button"
+              onClick={() => {
+                if (confirm(`Remove featured dish "${dish.dish_name}"?`)) {
+                  void onDeleteDish(dish.id);
+                }
+              }}
             >
-              Add dish
+              Remove
             </button>
-          </form>
-        </div>
-      </section>
-    </div>
+          </li>
+        ))}
+        {vendorDishes.length === 0 ? <li className="empty-state">No featured dishes added yet.</li> : null}
+      </ul>
+      <form
+        className="admin-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onCreateDishes(dishesPayload(new FormData(event.currentTarget)));
+        }}
+      >
+        <label className="field field-wide">
+          <span>
+            Dish name <span className="field-required" aria-hidden="true">*</span>
+          </span>
+          <input name="dish_name" placeholder="Jollof rice" required />
+        </label>
+        <label className="field field-wide">
+          <span>Description</span>
+          <input name="description" placeholder="Short description" />
+        </label>
+        <label className="field field-wide">
+          <span>Optional dish image URL</span>
+          <input name="image_url" placeholder="https://..." />
+        </label>
+        <button className="button-secondary" disabled={disabled || !selectedVendor} type="submit">
+          Add dish
+        </button>
+      </form>
+    </section>
   );
 }
 
 function UpdateVendorSection({
   selectedVendor,
+  completenessLabels,
   disabled,
   onUpdateVendor,
   onDeactivateVendor,
 }: {
   selectedVendor: AdminVendorSummary | null;
+  completenessLabels: string[];
   disabled: boolean;
   onUpdateVendor: (data: UpdateVendorRequest) => Promise<void>;
   onDeactivateVendor: () => Promise<void>;
@@ -794,7 +1950,14 @@ function UpdateVendorSection({
       <h2 id="update-vendor">
         {selectedVendor ? selectedVendor.name : "Select a vendor"}
       </h2>
-      <p className="form-note">Only changed fields need to be filled in.</p>
+      <p className="form-note">Review details carefully. Slug stays stable unless you edit the slug field directly.</p>
+      {selectedVendor && completenessLabels.length > 0 ? (
+        <ul className="admin-completeness-list" aria-label="Missing vendor data">
+          {completenessLabels.map((label) => (
+            <li key={label}>{label}</li>
+          ))}
+        </ul>
+      ) : null}
       <form className="admin-form" onSubmit={submitUpdateVendor}>
         <UpdateVendorIdentityFields fieldErrors={fieldErrors} selectedVendor={selectedVendor} />
         <div className="action-row">
@@ -819,10 +1982,103 @@ function UpdateVendorSection({
   );
 }
 
+function VendorHoursSection({
+  selectedVendor,
+  vendorHours,
+  disabled,
+  onReplaceHours,
+}: {
+  selectedVendor: AdminVendorSummary | null;
+  vendorHours: VendorHours[];
+  disabled: boolean;
+  onReplaceHours: (data: ReplaceVendorHoursRequest) => Promise<void>;
+}) {
+  const hoursByDay = new Map(vendorHours.map((hours) => [hours.day_of_week, hours]));
+  const [hoursFormError, setHoursFormError] = useState<string | null>(null);
+
+  return (
+    <section className="admin-panel" aria-labelledby="vendor-hours">
+      <p className="eyebrow">Completeness</p>
+      <h2 id="vendor-hours">Hours</h2>
+      <p className="form-note">Enter hours in 12-hour time. Overnight ranges are allowed.</p>
+      <form
+        className="admin-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setHoursFormError(null);
+
+          if (!event.currentTarget.reportValidity()) {
+            return;
+          }
+
+          try {
+            void onReplaceHours(createHoursPayload(new FormData(event.currentTarget)));
+          } catch (error) {
+            setHoursFormError(
+              error instanceof Error ? error.message : "Unable to prepare hours update.",
+            );
+          }
+        }}
+      >
+        <div className="hours-grid">
+          {dayLabels.map((day, index) => {
+            const existingHours = hoursByDay.get(index);
+            const openTime = parseStoredTimeForAdmin(existingHours?.open_time ?? null);
+            const closeTime = parseStoredTimeForAdmin(existingHours?.close_time ?? null);
+
+            return (
+              <div className="hours-row" key={day}>
+                <strong>{day}</strong>
+                <label className="field">
+                  <span>Opens</span>
+                  <input
+                    defaultValue={openTime}
+                    name={`open-${index}`}
+                    placeholder="9 AM"
+                  />
+                </label>
+                <label className="field">
+                  <span>Closes</span>
+                  <input
+                    defaultValue={closeTime}
+                    name={`close-${index}`}
+                    placeholder="8:30 PM"
+                  />
+                </label>
+                <label className="checkbox-field">
+                  <input
+                    defaultChecked={existingHours?.is_closed ?? false}
+                    name={`closed-${index}`}
+                    type="checkbox"
+                  />
+                  <span>Closed</span>
+                </label>
+              </div>
+            );
+          })}
+        </div>
+        <span className="field-hint">Use format like 9 AM or 8:30 PM.</span>
+        {hoursFormError ? <span className="field-error">{hoursFormError}</span> : null}
+        <button
+          className="button-secondary"
+          disabled={disabled || !selectedVendor}
+          type="submit"
+        >
+          Save hours
+        </button>
+      </form>
+    </section>
+  );
+}
+
 function CreateVendorIdentityFields({
   fieldErrors,
+  onNameChange,
+  onAreaChange,
 }: {
   fieldErrors: AdminVendorFieldErrors;
+  onNameChange?: (value: string) => void;
+  onAreaChange?: (value: string) => void;
 }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -832,6 +2088,7 @@ function CreateVendorIdentityFields({
 
   function handleNameChange(nextName: string) {
     setName(nextName);
+    onNameChange?.(nextName);
 
     if (!slugTouched) {
       setSlug(nextName.trim().length > 0 ? slugifyVendorName(nextName) : "");
@@ -877,7 +2134,7 @@ function CreateVendorIdentityFields({
             onChange={(event) => handleSlugChange(event.target.value)}
           />
           <span id={slugHintId} className={slugError ? "field-error" : "field-hint"}>
-            {slugError ?? "Lowercase letters, numbers, and hyphens only."}
+            {slugError ?? "Slug controls the public page URL. Change it only when needed."}
           </span>
           {fieldErrors.slug ? <span className="field-error">{fieldErrors.slug}</span> : null}
         </label>
@@ -891,7 +2148,11 @@ function CreateVendorIdentityFields({
         </label>
         <label className="field">
           <span>Area</span>
-          <input name="area" placeholder="Wuse" />
+          <input
+            name="area"
+            placeholder="Wuse"
+            onChange={(event) => onAreaChange?.(event.target.value)}
+          />
           {fieldErrors.area ? <span className="field-error">{fieldErrors.area}</span> : null}
         </label>
         <label className="field">
@@ -1001,10 +2262,6 @@ function UpdateVendorIdentityFields({
 
   function handleNameChange(nextName: string) {
     setName(nextName);
-
-    if (!slugTouched) {
-      setSlug(nextName.trim().length > 0 ? slugifyVendorName(nextName) : "");
-    }
   }
 
   function handleSlugChange(nextSlug: string) {

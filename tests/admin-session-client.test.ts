@@ -142,6 +142,28 @@ test("fetchAdminSessionIdentity surfaces forbidden responses", async () => {
   );
 });
 
+test("signInAdminSession surfaces invalid credentials", async () => {
+  await assert.rejects(
+    () =>
+      signInAdminSession(
+        "admin@example.com",
+        "wrong-password",
+        (async () =>
+          Response.json(
+            {
+              error_description: "Invalid login credentials",
+            },
+            { status: 400 },
+          )) as typeof fetch,
+      ),
+    (error) =>
+      error instanceof AdminSessionError &&
+      error.code === "AUTH_ERROR" &&
+      error.status === 400 &&
+      error.message === "Invalid login credentials",
+  );
+});
+
 test("shouldRefreshAdminSession becomes true near expiry", () => {
   assert.equal(
     shouldRefreshAdminSession({

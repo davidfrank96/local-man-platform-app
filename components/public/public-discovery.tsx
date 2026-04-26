@@ -9,11 +9,8 @@ import {
 } from "next/navigation";
 import { useUserLocation } from "../../hooks/use-user-location.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
-import type { LocationAcquisitionError } from "../../lib/location/acquisition.ts";
-import type { LocationAcquisitionStatus } from "../../lib/location/acquisition.ts";
 import {
-  formatLocationAccuracyLabel,
-  formatLocationCoordinates,
+  getPublicLocationDisplayModel,
 } from "../../lib/location/display.ts";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
@@ -22,6 +19,7 @@ import {
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
 import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
+import { getVendorOpenStateDisplay } from "../../lib/vendors/card-display.ts";
 import {
   getMillisecondsUntilNextPublicTimeTheme,
   getPublicTimeTheme,
@@ -214,123 +212,6 @@ function createNearbyFilters(
   };
 }
 
-function formatLocationErrorMessage(code: string): string {
-  switch (code) {
-    case "GEOLOCATION_DENIED":
-      return "Precise location was denied.";
-    case "GEOLOCATION_UNAVAILABLE":
-      return "Precise location was unavailable.";
-    case "GEOLOCATION_TIMEOUT":
-      return "Precise location took too long.";
-    case "IP_LOOKUP_UNAVAILABLE":
-      return "Approximate location was unavailable.";
-    default:
-      return "Location could not be resolved.";
-  }
-}
-
-function getLocationCopy(
-  locationStatus: LocationAcquisitionStatus,
-  location: AcquiredUserLocation | null,
-  locationErrors: LocationAcquisitionError[],
-): string {
-  if (locationStatus === "resolving" || locationStatus === "idle") {
-    return "Trying to get precise location";
-  }
-
-  if (locationStatus === "precise" || location?.source === "precise") {
-    return "Using your current location";
-  }
-
-  if (locationStatus === "approximate" || location?.source === "approximate") {
-    return "Using approximate location";
-  }
-
-  if (
-    locationErrors.some((error) => error.code === "GEOLOCATION_TIMEOUT") &&
-    locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")
-  ) {
-    return "Showing Abuja";
-  }
-
-  return "Showing Abuja";
-}
-
-function getLocationDetailCopy(
-  locationStatus: LocationAcquisitionStatus,
-  location: AcquiredUserLocation | null,
-): string {
-  switch (locationStatus) {
-    case "resolving":
-      return "On mobile, precise location can take up to 10 seconds before Abuja fallback.";
-    case "precise":
-      return location?.label ?? "Current location";
-    case "approximate":
-      return location?.label ?? "Approximate location";
-    case "denied":
-      return "Location access is off. Turn it on for vendors closer to you.";
-    case "unavailable":
-      return "Location access is off or unavailable. Turn it on for vendors closer to you.";
-    case "default_city":
-      return "Location access is off or unavailable. Turn it on for vendors closer to you.";
-    case "error":
-      return "Location could not be resolved.";
-    default:
-      return "Location access starts automatically.";
-  }
-}
-
-function getLocationDisplayLine(
-  locationStatus: LocationAcquisitionStatus,
-  location: AcquiredUserLocation | null,
-  locationDisplayLabel: string | null,
-): string {
-  if (
-    (locationStatus === "precise" || locationStatus === "approximate") &&
-    location
-  ) {
-    return locationDisplayLabel ?? formatLocationCoordinates(location.coordinates);
-  }
-
-  return getLocationDetailCopy(locationStatus, location);
-}
-
-function getLocationErrorCopy(
-  locationStatus: LocationAcquisitionStatus,
-  locationErrors: LocationAcquisitionError[],
-): string | null {
-  if (
-    locationStatus === "precise" ||
-    locationStatus === "approximate" ||
-    locationStatus === "idle" ||
-    locationStatus === "resolving"
-  ) {
-    return null;
-  }
-
-  if (locationStatus === "denied") {
-    if (locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")) {
-      return "Location access was denied and approximate location is unavailable.";
-    }
-
-    return "Location access was denied.";
-  }
-
-  if (locationStatus === "unavailable") {
-    if (locationErrors.some((error) => error.code === "IP_LOOKUP_UNAVAILABLE")) {
-      return "Precise location is unavailable and approximate location is unavailable.";
-    }
-
-    return "Precise location is unavailable.";
-  }
-
-  if (locationStatus === "default_city" && locationErrors.length > 0) {
-    return locationErrors.map((error) => formatLocationErrorMessage(error.code)).join(" ");
-  }
-
-  return null;
-}
-
 export function PublicDiscovery({
   title = "The Local Man",
   initialSearch = "",
@@ -364,7 +245,6 @@ export function PublicDiscovery({
   const {
     status: locationStatus,
     location,
-    errors: locationErrors,
     refresh: refreshLocation,
   } = useUserLocation();
   const urlLocationSource = parsedUrlState.locationSource;
@@ -373,6 +253,11 @@ export function PublicDiscovery({
     () =>
       buildDiscoverySearchParams(filters, selectedVendorSlug, activeLocationSource).toString(),
     [activeLocationSource, filters, selectedVendorSlug],
+  );
+  const discoverySnapshotQueryString = useMemo(
+    () =>
+      buildDiscoverySearchParams(filters, null, activeLocationSource).toString(),
+    [activeLocationSource, filters],
   );
   const filterFormKey = useMemo(
     () => JSON.stringify(filters),
@@ -386,8 +271,8 @@ export function PublicDiscovery({
     return `${location.source}:${location.coordinates.lat}:${location.coordinates.lng}`;
   }, [location]);
   const discoverySnapshotKey = useMemo(
-    () => getDiscoverySnapshotKey(pathname, discoveryQueryString),
-    [discoveryQueryString, pathname],
+    () => getDiscoverySnapshotKey(pathname, discoverySnapshotQueryString),
+    [discoverySnapshotQueryString, pathname],
   );
   const discoveryReturnTo = useMemo(
     () => buildDiscoveryReturnTo(pathname, filters, selectedVendorSlug, activeLocationSource),
@@ -638,18 +523,27 @@ export function PublicDiscovery({
     () => vendors.find((vendor) => vendor.slug === selectedVendorSlug) ?? null,
     [selectedVendorSlug, vendors],
   );
+  const selectedVendorOpenState = useMemo(
+    () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
+    [selectedVendor?.is_open_now],
+  );
   const selectedVendorId = selectedVendor?.vendor_id ?? null;
-  const isLoading = locationStatus === "resolving" || isFetchingVendors;
+  const isResolvingLocation = locationStatus === "resolving";
+  const isLoading = isResolvingLocation || isFetchingVendors;
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
-  const locationErrorCopy = getLocationErrorCopy(locationStatus, locationErrors);
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
       ? resolvedLocationLabel.label
       : null;
-  const locationTrustLine =
-    locationStatus === "precise" || locationStatus === "approximate"
-      ? formatLocationAccuracyLabel(location?.source ?? null)
-      : null;
+  const locationDisplay = useMemo(
+    () =>
+      getPublicLocationDisplayModel({
+        status: locationStatus,
+        location,
+        resolvedLocationLabel: locationDisplayLabel,
+      }),
+    [location, locationDisplayLabel, locationStatus],
+  );
 
   function applyFilters(nextFilters: DiscoveryFilters) {
     setFilters(nextFilters);
@@ -688,10 +582,12 @@ export function PublicDiscovery({
 
           <section className="location-panel" aria-live="polite">
             <div>
-              <strong>{getLocationCopy(locationStatus, location, locationErrors)}</strong>
-              <span>{getLocationDisplayLine(locationStatus, location, locationDisplayLabel)}</span>
-              {locationTrustLine ? (
-                <span className="location-trust-line">{locationTrustLine}</span>
+              <strong>{locationDisplay.headline}</strong>
+              {locationDisplay.detail ? (
+                <span>{locationDisplay.detail}</span>
+              ) : null}
+              {locationDisplay.trustLine ? (
+                <span className="location-trust-line">{locationDisplay.trustLine}</span>
               ) : null}
             </div>
             <button
@@ -702,14 +598,10 @@ export function PublicDiscovery({
             >
               Retry location
             </button>
-            {locationErrorCopy ? (
-              <p>{locationErrorCopy}</p>
-            ) : null}
           </section>
 
           <VendorFilters
             categories={categories}
-            disabled={isLoading}
             filters={filters}
             key={filterFormKey}
             onChange={applyFilters}
@@ -776,12 +668,14 @@ export function PublicDiscovery({
                     <span aria-hidden="true">•</span>
                     <span
                       className={
-                        selectedVendor.is_open_now
+                        selectedVendorOpenState.toneClassName === "vendor-card-status-open"
                           ? "selected-vendor-status-open"
-                          : "selected-vendor-status-closed"
+                          : selectedVendorOpenState.toneClassName === "vendor-card-status-closed"
+                            ? "selected-vendor-status-closed"
+                            : "selected-vendor-status-unavailable"
                       }
                     >
-                      {selectedVendor.is_open_now ? "Open" : "Closed"}
+                      {selectedVendorOpenState.label}
                     </span>
                   </p>
                   <p className="selected-vendor-hours-line">

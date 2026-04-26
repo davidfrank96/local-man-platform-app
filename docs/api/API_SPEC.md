@@ -14,6 +14,12 @@ Initial route foundation:
 
 The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, nearest-first sorting, featured dish summary selection, and compact `today_hours` output. Authenticated admin routes cover vendor create, update, deactivate, sub-resources, and audit-log behavior.
 
+Media model:
+- vendor profile images live in `vendor_images`
+- `vendor_images.image_url` is the browser-ready public URL used by the public frontend
+- `vendor_images.storage_object_path` is the Storage path used for admin upload/delete bookkeeping
+- featured dish `image_url` belongs to the individual dish record and is not used as the vendor profile image
+
 ## Types and Validation Foundation
 Initial shared types and validation schemas:
 - `lib/validation/common.ts`
@@ -45,6 +51,7 @@ Returns:
 - location metadata used for the search
 - vendor_id
 - name
+- slug
 - latitude
 - longitude
 - distance_km, computed from user coordinates to vendor coordinates
@@ -53,6 +60,8 @@ Returns:
 - `today_hours`, a compact current-day summary such as `9:00 AM - 6:00 PM`, `Closed`, or `Hours not listed`
 - summary fields for cards
 - `price_band`, `area`, `average_rating`, and `review_count` for compact vendor card display
+
+Current nearby response does **not** include vendor profile images. Vendor cards do not depend on image payloads from `/api/vendors/nearby`. Vendor images are loaded on the vendor detail route.
 
 Behavior:
 - If `lat` and `lng` are provided, both must be valid coordinates.
@@ -127,6 +136,13 @@ Behavior:
 - Returns `NOT_FOUND` when no active vendor matches the slug.
 - Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
 - Returns `UPSTREAM_ERROR` when the Supabase detail query fails.
+- When a `vendor_images` row has `storage_object_path` but no usable `image_url`, the server normalizes it into a public bucket URL before returning the vendor detail payload.
+- Missing hours, featured dishes, or images must not cause the detail route to fail.
+
+Detail image shape:
+- `images` contains vendor profile image records for that vendor
+- public rendering should use the returned browser-ready `image_url`
+- storage-backed rows are normalized from `storage_object_path` when needed
 
 ### GET /api/categories
 Purpose: fetch filter categories
@@ -185,17 +201,36 @@ Returns:
 - vendor summaries
 - pagination metadata
 
+Vendor summary fields used by the admin workspace include:
+- base vendor identity fields
+- `hours_count`
+- `images_count`
+- `featured_dishes_count`
+
+Those counts drive dashboard overview cards, incomplete-vendor status, and registry badges in the admin UI.
+
 ### POST /api/admin/vendors
 Create vendor
 
 Route file:
 - `app/api/admin/vendors/route.ts`
 
+Behavior:
+- creates the base vendor record
+- the admin UI may then attach hours, featured dishes, and image upload as follow-up create-flow steps
+- the backend route itself still creates the base vendor record only
+- the admin UI must require explicit acknowledgement when linked records are intentionally missing at creation time
+
 ### PUT /api/admin/vendors/:id
 Update vendor
 
 Route file:
 - `app/api/admin/vendors/[id]/route.ts`
+
+Behavior:
+- updates editable vendor profile fields
+- keeps the existing slug stable unless the admin explicitly sends a new slug
+- slug still controls the public vendor detail URL and must remain unique
 
 ### DELETE /api/admin/vendors/:id
 Delete vendor or soft-disable vendor
@@ -217,6 +252,7 @@ Behavior:
 - validates file type, file size, and sort order
 - uploads the file to the `vendor-images` Supabase Storage bucket
 - inserts `vendor_images` records with `image_url` and `storage_object_path`
+- returns vendor image rows for the selected vendor id
 - writes `vendor.image_uploaded` audit log
 
 Returns:
@@ -232,6 +268,7 @@ Behavior:
 - requires admin auth
 - validates vendor id
 - returns vendor image records ordered by `sort_order`
+- normalizes any storage-path-only rows into browser-loadable public URLs before responding
 
 Returns:
 - `images`
@@ -249,8 +286,20 @@ Behavior:
 - deletes the `vendor_images` row
 - writes `vendor.image_deleted` audit log
 
+### DELETE /api/admin/vendors/:id/dishes/:dishId
+Remove featured dish
+
+Route file:
+- `app/api/admin/vendors/[id]/dishes/[dishId]/route.ts`
+
+Behavior:
+- requires admin auth
+- validates vendor id and dish id
+- deletes only the selected dish row for the selected vendor id
+- writes `vendor.dish_deleted` audit log
+
 Returns:
-- `image`
+- `dish`
 
 ### POST /api/admin/vendors/:id/hours
 Create or replace vendor hours
@@ -266,6 +315,37 @@ Behavior:
 - supports closed days and overnight hours
 - writes `vendor.hours_replaced` audit log
 
+Returns:
+- `hours`
+
+### GET /api/admin/vendors/:id/hours
+Load vendor hours
+
+Route file:
+- `app/api/admin/vendors/[id]/hours/route.ts`
+
+Behavior:
+- requires admin auth
+- validates vendor id
+- returns current `vendor_hours` rows ordered by `day_of_week`
+
+Returns:
+- `hours`
+
+### GET /api/admin/vendors/:id/dishes
+Load featured dishes
+
+Route file:
+- `app/api/admin/vendors/[id]/dishes/route.ts`
+
+Behavior:
+- requires admin auth
+- validates vendor id
+- returns current `vendor_featured_dishes` rows for the selected vendor
+
+Returns:
+- `dishes`
+
 ### POST /api/admin/vendors/:id/dishes
 Create featured dishes
 
@@ -278,6 +358,15 @@ Behavior:
 - accepts one or more featured dish records
 - inserts `vendor_featured_dishes` records
 - writes `vendor.dishes_created` audit log
+
+### Current Admin Create Workflow
+The current admin onboarding flow uses the existing routes in sequence:
+1. create base vendor
+2. attach hours when provided
+3. attach featured dishes when provided
+4. upload vendor image when provided
+
+If a later step fails, the UI must report which step failed instead of hiding the partial success.
 
 ### GET /api/admin/audit-logs
 Fetch audit log entries

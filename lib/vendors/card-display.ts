@@ -40,3 +40,31 @@ export function formatVendorCardDistance(
 
   return `${prefix}${distanceKm.toFixed(1)} km`;
 }
+
+export type VendorOpenStateDisplay = {
+  label: string;
+  toneClassName: string;
+};
+
+export function getVendorOpenStateDisplay(
+  isOpenNow: boolean | null | undefined,
+): VendorOpenStateDisplay {
+  if (isOpenNow === true) {
+    return {
+      label: "Open",
+      toneClassName: "vendor-card-status-open",
+    };
+  }
+
+  if (isOpenNow === false) {
+    return {
+      label: "Closed",
+      toneClassName: "vendor-card-status-closed",
+    };
+  }
+
+  return {
+    label: "Status unavailable",
+    toneClassName: "vendor-card-status-unavailable",
+  };
+}

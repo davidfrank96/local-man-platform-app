@@ -24,6 +24,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run smoke:nearby
 
 If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that actual origin before running the smoke command.
 
+The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
+
 The smoke test verifies precise coordinates, `distance_km`, nearest-first sorting, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
 
 ## Required Tools
@@ -42,10 +44,18 @@ Create `.env.local` from `.env.example` and fill:
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 DATABASE_URL=<postgres-connection-string>
 ```
 
 `DATABASE_URL` is only required for the `npm run db:migrate` and `npm run db:seed:abuja` scripts. Those scripts load `.env.local` before invoking `psql`. If using the Supabase Dashboard SQL Editor, `DATABASE_URL` is not required locally.
+
+`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations.
+
+Supabase requirements:
+- Auth must be enabled for admin login
+- Storage bucket `vendor-images` must exist
+- `vendor-images` must be public for the current vendor image URL strategy
 
 Validate app runtime env:
 
@@ -60,8 +70,9 @@ npm run runtime:check-db-env
 ```
 
 ## Migration
-Migration file:
+Migration files:
 - `supabase/migrations/20260422180000_initial_schema.sql`
+- `supabase/migrations/20260423120000_vendor_image_storage.sql`
 
 Preferred command when `psql` is available:
 
@@ -70,12 +81,17 @@ npm run runtime:check-db-env
 npm run db:migrate
 ```
 
+Migration runner behavior:
+- `npm run db:migrate` applies all SQL files in `supabase/migrations` in filename order
+- applied migrations are tracked in `public.app_schema_migrations`
+- fresh or partially provisioned environments should use the migration runner instead of applying only the initial schema file
+
 Dashboard fallback:
 1. Open the Supabase project.
 2. Go to SQL Editor.
-3. Paste the full contents of `supabase/migrations/20260422180000_initial_schema.sql`.
-4. Run the SQL once.
-5. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, and `audit_logs`.
+3. Run both migration files in filename order.
+4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, and `audit_logs`.
+5. Confirm `public.vendor_images` includes `storage_object_path`.
 
 ## Abuja Seed Data
 Seed file:
@@ -190,6 +206,9 @@ Client location acquisition behavior:
 - mobile users should see a short "trying to get precise location" status before fallback is chosen
 - precise mode should show a human-readable area label when reverse lookup succeeds, or rounded coordinates otherwise
 - approximate mode must stay labeled approximate and must not imply exact nearby accuracy
+- approximate location should only be shown in the frontend when the app has both usable approximate coordinates and a usable human-readable label
+- if no trustworthy precise or approximate label is available, the frontend should stay neutral with copy such as `Showing nearby vendors`
+- the internal Abuja fallback may keep vendor discovery usable, but it must not be presented as the user’s exact location
 
 The smoke test passes only when:
 - the API returns HTTP 200

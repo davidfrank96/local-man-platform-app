@@ -8,7 +8,7 @@ The Local Man — Environment Variables
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and admin-user authenticated writes.
 
 ## Server / Secure
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only key reserved for controlled setup tasks if needed later.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload and delete operations against the `vendor-images` Storage bucket.
 - `DATABASE_URL`: direct database connection string for migrations or server-only maintenance tasks.
 - `GOOGLE_MAPS_SERVER_API_KEY`: server-only Google API key for future geocoding or admin address workflows.
 - `ADMIN_SEED_EMAIL`: initial admin account email for seed/setup workflows.
@@ -19,7 +19,8 @@ The Local Man — Environment Variables
 - Public Supabase-backed routes require `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - Admin login uses the public Supabase env vars for browser email/password sign-in.
 - Admin routes still require an `Authorization: Bearer <supabase-access-token>` request header for an authenticated `admin_users` member.
-- Vendor image uploads use the admin bearer session plus the `vendor-images` Supabase Storage bucket created by the migration.
+- Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.
+- Admin API auth still uses the admin bearer session for route authorization and audit scoping, but Storage writes themselves should not depend on the public anon key.
 - Current public map rendering uses the local MVP coordinate grid; Google Maps keys are documented but not required for current tests.
 
 ## Runtime Smoke Test
@@ -33,7 +34,8 @@ Exact migration, seed, and nearby smoke test steps are documented in `docs/ops/R
 ## Runtime Environment Checks
 - `npm run runtime:check-env` verifies `.env.local`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - `npm run runtime:check-db-env` also verifies `DATABASE_URL` for local `psql` migration and seed commands.
-- `npm run db:migrate` and `npm run db:seed:abuja` load `.env.local` before invoking `psql`.
+- `npm run db:migrate` applies every SQL file in `supabase/migrations` in filename order.
+- `npm run db:seed:abuja` loads `.env.local` before invoking `psql`.
 
 ## Rules
 - Never expose server secrets to client code.

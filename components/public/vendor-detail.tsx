@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { VendorDetailResponseData } from "../../types/index.ts";
+import { selectPrimaryVendorImage } from "../../lib/vendors/images.ts";
 import { isVendorOpenNow } from "../../lib/vendors/nearby.ts";
 import { formatVendorHoursRange } from "../../lib/vendors/time-display.ts";
 import { VendorActions } from "./vendor-actions.tsx";
@@ -25,7 +26,7 @@ function formatCount(count: number, singularLabel: string): string {
 }
 
 export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
-  const heroImage = vendor.images[0];
+  const heroImage = selectPrimaryVendorImage(vendor.images);
   const hasHours = vendor.hours.length > 0;
   const openNow = isVendorOpenNow(vendor.hours, vendor.is_open_override);
   const statusLabel =
@@ -97,7 +98,7 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
           <p className="vendor-detail-note">
             {hasHours
               ? "Hours below reflect the posted weekly schedule."
-              : "Hours are not set yet. Call before visiting."}
+              : "No hours listed yet. Call before visiting."}
           </p>
           <VendorActions
             latitude={vendor.latitude}
@@ -130,7 +131,7 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
             ))}
             {!hasHours ? (
               <li>
-                <strong>No hours yet</strong>
+                <strong>No hours listed yet</strong>
                 <span>Call before visiting.</span>
               </li>
             ) : null}
@@ -149,8 +150,8 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
             ))}
             {vendor.featured_dishes.length === 0 ? (
               <li>
-                <strong>No featured dishes added yet</strong>
-                <span>Check back after admin data completion.</span>
+                <strong>No featured dishes listed yet</strong>
+                <span>Check back later.</span>
               </li>
             ) : null}
           </ul>

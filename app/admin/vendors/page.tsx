@@ -1,24 +1,16 @@
-import Link from "next/link";
+import { AdminShell } from "../../../components/admin/admin-shell.tsx";
 import { AdminConsole } from "../../../components/admin/admin-console.tsx";
 import { AdminRouteGuard } from "../../../components/admin/admin-route-guard.tsx";
 
 export default function AdminVendorsPage() {
   return (
     <AdminRouteGuard>
-      <main className="page-shell">
-        <p className="eyebrow">Admin vendors</p>
-        <h1>Vendor list</h1>
-        <p className="page-intro">Review and manage Abuja vendor records.</p>
-        <div className="action-row admin-route-links">
-          <Link className="button-secondary" href="/admin">
-            Admin home
-          </Link>
-          <Link className="button-secondary" href="/admin/vendors/new">
-            Create vendor
-          </Link>
-        </div>
-        <AdminConsole />
-      </main>
+      <AdminShell
+        title="Manage vendors"
+        intro="Search the vendor registry, review completeness, and move directly into editing."
+      >
+        <AdminConsole mode="vendors" />
+      </AdminShell>
     </AdminRouteGuard>
   );
 }
