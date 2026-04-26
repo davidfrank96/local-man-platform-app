@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { VendorDetailResponseData } from "../../types/index.ts";
 import { selectPrimaryVendorImage } from "../../lib/vendors/images.ts";
-import { isVendorOpenNow } from "../../lib/vendors/nearby.ts";
+import { getTodayHoursSummary, isVendorOpenNow } from "../../lib/vendors/nearby.ts";
 import { formatVendorHoursRange } from "../../lib/vendors/time-display.ts";
 import { VendorActions } from "./vendor-actions.tsx";
 import { VendorDetailTracker } from "./vendor-detail-tracker.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
+import { VendorRating } from "./vendor-rating.tsx";
+import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
 
 type VendorDetailProps = {
   vendor: VendorDetailResponseData;
@@ -66,12 +68,17 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
     vendor.featured_dishes.length > 0
       ? formatCount(vendor.featured_dishes.length, "featured dish")
       : "No featured dishes yet";
+  const todayHours = getTodayHoursSummary(vendor.hours);
 
   return (
     <main className="vendor-detail-shell">
       <VendorDetailTracker
+        isOpenNow={openNow}
         locationSource={locationSource}
+        todayHours={todayHours}
+        vendorArea={vendor.area}
         vendorId={vendor.id}
+        vendorName={vendor.name}
         vendorSlug={vendor.slug}
       />
       <section className="vendor-detail-hero">
@@ -107,9 +114,10 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
             <div>
               <dt>Ratings</dt>
               <dd>
-                {vendor.rating_summary.review_count > 0
-                  ? `${vendor.rating_summary.average_rating.toFixed(1)} from ${formatCount(vendor.rating_summary.review_count, "rating")}`
-                  : "No ratings yet"}
+                {formatVendorCardRating(
+                  vendor.rating_summary.average_rating,
+                  vendor.rating_summary.review_count,
+                )}
               </dd>
             </div>
             <div>
@@ -203,6 +211,17 @@ export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
             ))}
             {vendor.categories.length === 0 ? <span>No categories added yet</span> : null}
           </div>
+        </div>
+
+        <div className="vendor-detail-section">
+          <p className="eyebrow">Ratings</p>
+          <h2>Rate this vendor</h2>
+          <VendorRating
+            vendorId={vendor.id}
+            vendorSlug={vendor.slug}
+            initialAverageRating={vendor.rating_summary.average_rating}
+            initialReviewCount={vendor.rating_summary.review_count}
+          />
         </div>
       </section>
     </main>

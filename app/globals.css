@@ -1435,6 +1435,7 @@ h2 {
 
 .location-panel,
 .discovery-filters,
+.retention-panel,
 .selected-vendor-panel,
 .vendor-detail-section {
   border: 1px solid var(--color-border);
@@ -1492,6 +1493,29 @@ h2 {
   -webkit-backdrop-filter: blur(4px);
 }
 
+.discovery-filters-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 32px;
+}
+
+.discovery-filters-summary strong {
+  font-size: 0.92rem;
+}
+
+.discovery-filters-summary span {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.discovery-clear-button {
+  margin-inline-start: auto;
+}
+
 .discovery-filters .field span,
 .discovery-filters .checkbox-field span {
   color: var(--color-text);
@@ -1534,6 +1558,44 @@ h2 {
 .vendor-results {
   display: grid;
   gap: 10px;
+}
+
+.retention-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.retention-list {
+  display: grid;
+  gap: 8px;
+}
+
+.retention-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 10px 12px;
+}
+
+.retention-item-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.retention-item-copy strong {
+  font-size: 0.92rem;
+}
+
+.retention-item-copy span {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .result-heading {
@@ -1655,6 +1717,16 @@ h2 {
   font: inherit;
   padding: 0;
   text-align: left;
+}
+
+.vendor-card-popular-badge {
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(36, 97, 79, 0.11);
+  color: var(--color-green);
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
 .vendor-card-helper {
@@ -2063,6 +2135,53 @@ h2 {
   font-size: clamp(1.8rem, 4vw, 3rem);
 }
 
+.vendor-rating-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 247, 243, 0.86));
+  padding: 14px;
+}
+
+.vendor-rating-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.vendor-rating-summary strong {
+  font-size: 1.2rem;
+}
+
+.vendor-rating-summary span,
+.vendor-rating-status {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.vendor-rating-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vendor-rating-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(37, 41, 36, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.vendor-rating-button:disabled {
+  opacity: 0.7;
+}
+
 .hours-list,
 .dish-list {
   display: grid;
@@ -2184,8 +2303,13 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .discovery-clear-button {
+    margin-inline-start: 0;
+  }
+
   .vendor-card-footer,
-  .vendor-actions {
+  .vendor-actions,
+  .retention-item {
     flex-direction: column;
     align-items: stretch;
   }

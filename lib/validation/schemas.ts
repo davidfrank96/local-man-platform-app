@@ -376,6 +376,15 @@ export const vendorImageMetadataRequestSchema = z.object({
   ).min(1),
 });
 
+export const createVendorRatingRequestSchema = z.object({
+  score: z.coerce.number().int().min(1).max(5),
+});
+
+export const vendorRatingResponseDataSchema = z.object({
+  vendor_id: uuidSchema,
+  rating_summary: ratingSummarySchema,
+});
+
 export const auditLogsQuerySchema = paginationQuerySchema.extend({
   entity_type: z.string().trim().max(80).optional(),
   entity_id: uuidSchema.optional(),
@@ -412,6 +421,7 @@ export const nearbyVendorsResponseDataSchema = z.object({
       price_band: priceBandSchema.nullable(),
       average_rating: z.coerce.number().min(0).max(5),
       review_count: z.coerce.number().int().min(0),
+      ranking_score: z.coerce.number().int().min(0),
       distance_km: z.number().min(0),
       is_open_now: z.boolean(),
       featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import type { PublicCategory } from "../../lib/vendors/public-api-client.ts";
 import { trackPublicUserAction } from "../../lib/public/user-action-tracking.ts";
+import { countActiveDiscoveryFilters } from "../../lib/vendors/discovery-ranking.ts";
 
 export type DiscoveryFilters = {
   search: string;
@@ -20,6 +21,13 @@ type VendorFiltersProps = {
 
 const radiusOptions = [1, 5, 10, 30];
 const priceBands: PriceBand[] = ["budget", "standard", "premium"];
+const defaultFilters: DiscoveryFilters = {
+  search: "",
+  radiusKm: 10,
+  openNow: false,
+  priceBand: "",
+  category: "",
+};
 
 function readFormFilters(form: HTMLFormElement): DiscoveryFilters {
   const formData = new FormData(form);
@@ -40,6 +48,12 @@ export function VendorFilters({
   onChange,
 }: VendorFiltersProps) {
   const [draftFilters, setDraftFilters] = useState<DiscoveryFilters>(filters);
+  const activeFilterCount = countActiveDiscoveryFilters(draftFilters);
+
+  function clearFilters() {
+    setDraftFilters(defaultFilters);
+    onChange(defaultFilters);
+  }
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +89,23 @@ export function VendorFilters({
 
   return (
     <form className="discovery-filters" onSubmit={submitFilters}>
+      <div className="discovery-filters-summary">
+        <strong>Filters</strong>
+        <span>
+          {activeFilterCount > 0
+            ? `${activeFilterCount} active`
+            : "Search by vendor, dish, or area"}
+        </span>
+        {activeFilterCount > 0 ? (
+          <button
+            className="button-secondary compact-button discovery-clear-button"
+            type="button"
+            onClick={clearFilters}
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
       <label className="field search-field">
         <span>Search</span>
         <input

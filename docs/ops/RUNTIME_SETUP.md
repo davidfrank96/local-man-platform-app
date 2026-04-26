@@ -8,7 +8,7 @@ This gate verifies:
 - the current migration set can be applied to a real Supabase project
 - Abuja pilot seed data exists
 - `GET /api/vendors/nearby` can read seeded vendors through Supabase RLS
-- the API returns computed `distance_km` values sorted nearest first
+- the API returns computed `distance_km` values with stable discovery ordering
 - the nearby response still exposes compact vendor-card fields such as `today_hours`
 
 Keep this runtime gate green before deployment or further feature expansion.
@@ -26,7 +26,7 @@ If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that a
 
 The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
 
-The smoke test verifies precise coordinates, `distance_km`, nearest-first sorting, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
+The smoke test verifies precise coordinates, `distance_km`, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
 
 ## Required Tools
 - Node.js and npm
@@ -225,7 +225,7 @@ The smoke test passes only when:
 - one or more vendors are returned
 - every vendor includes `vendor_id`, `name`, `latitude`, `longitude`, `distance_km`, `is_open_now`, and `today_hours`
 - `distance_km` is numeric and non-negative
-- vendors are sorted nearest first
+- the response shape remains valid for the current discovery ranking layer
 - invalid and partial coordinate requests return `VALIDATION_ERROR`
 - fallback requests return `location.source = default_city`
 

@@ -90,6 +90,52 @@ test("filters nearby vendors by radius and sorts nearest first", () => {
     ["near", "middle"],
   );
   assert.ok(results[0].distance_km < results[1].distance_km);
+  assert.equal(results[0].ranking_score, 0);
+});
+
+test("sorts nearby vendors by usage ranking score before distance", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "near-low-score",
+      name: "Near Low Score",
+      latitude: 0,
+      longitude: 0.01,
+    },
+    {
+      ...baseVendor,
+      id: "far-high-score",
+      name: "Far High Score",
+      latitude: 0,
+      longitude: 0.03,
+    },
+  ];
+
+  const results = findNearbyVendors(
+    vendors,
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-04-28T12:00:00Z"),
+    new Map([
+      ["near-low-score", 1],
+      ["far-high-score", 8],
+    ]),
+  );
+
+  assert.deepEqual(
+    results.map((vendor) => ({
+      id: vendor.vendor_id,
+      ranking_score: vendor.ranking_score,
+    })),
+    [
+      { id: "far-high-score", ranking_score: 8 },
+      { id: "near-low-score", ranking_score: 1 },
+    ],
+  );
 });
 
 test("includes one featured dish summary when present", () => {

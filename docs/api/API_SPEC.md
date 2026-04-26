@@ -60,6 +60,7 @@ Returns:
 - `today_hours`, a compact current-day summary such as `9:00 AM - 6:00 PM`, `Closed`, or `Hours not listed`
 - summary fields for cards
 - `price_band`, `area`, `average_rating`, and `review_count` for compact vendor card display
+- `ranking_score` for lightweight usage-signal vendor ranking
 
 Current nearby response does **not** include vendor profile images. Vendor cards do not depend on image payloads from `/api/vendors/nearby`. Vendor images are loaded on the vendor detail route.
 
@@ -75,7 +76,12 @@ Behavior:
 - Candidate vendors are fetched with a latitude/longitude bounding box before precise distance calculation.
 - `distance_km` is calculated dynamically with the Haversine formula.
 - Results are filtered by `radius_km` after exact distance calculation.
-- Results are sorted nearest first.
+- Base candidate filtering for `search` currently matches vendor name, short description, and area.
+- Final discovery ordering prioritizes:
+  1. vendors that are open now
+  2. stronger client-side search relevance
+  3. higher `ranking_score`
+  4. shorter distance
 - Distance is not stored in the database.
 - If the Supabase schema has not been migrated, the API returns `UPSTREAM_ERROR` from the failed Supabase query.
 
@@ -108,6 +114,7 @@ Vendor card fields in the nearby response:
   "price_band": "standard",
   "average_rating": 0,
   "review_count": 0,
+  "ranking_score": 0,
   "distance_km": 3.11,
   "is_open_now": true,
   "featured_dish": {
@@ -143,6 +150,30 @@ Detail image shape:
 - `images` contains vendor profile image records for that vendor
 - public rendering should use the returned browser-ready `image_url`
 - storage-backed rows are normalized from `storage_object_path` when needed
+
+### POST /api/vendors/:slug/ratings
+Purpose: store a lightweight public vendor rating
+
+Route file:
+- `app/api/vendors/[slug]/ratings/route.ts`
+
+Request body:
+- `score`: integer from `1` to `5`
+
+Returns:
+- resolved `vendor_id`
+- updated `rating_summary` with:
+  - `average_rating`
+  - `review_count`
+
+Behavior:
+- no login required for the initial lightweight flow
+- validates the vendor slug and rating score
+- inserts a row into `ratings`
+- updates vendor aggregate rating fields after insert
+- does not support review comments
+- returns `NOT_FOUND` when the vendor slug does not resolve to an active vendor
+- returns `UPSTREAM_ERROR` when the rating write or aggregate update fails
 
 ### GET /api/categories
 Purpose: fetch filter categories

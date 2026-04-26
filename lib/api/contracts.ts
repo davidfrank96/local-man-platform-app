@@ -19,13 +19,14 @@ export const apiEndpoints = {
     requestShape:
       "Query params: lat, lng, radius_km, open_now, category, price_band, search.",
     responseShape:
-      "Vendor list with vendor_id, name, coordinates, computed distance_km, is_open_now, one featured dish summary when available, and card fields.",
+      "Vendor list with vendor_id, name, coordinates, computed ranking_score, computed distance_km, is_open_now, one featured dish summary when available, and card fields.",
     validationBoundary: [
       "coordinates must be valid numbers",
       "radius_km must be a positive number when provided",
       "open_now must be boolean-like when provided",
       "category and price_band must map to supported values when provided",
       "search must be sanitized before querying",
+      "usage-signal ranking must stay deterministic and server-side",
     ],
   },
   getVendorBySlug: {
@@ -36,6 +37,18 @@ export const apiEndpoints = {
     responseShape:
       "Vendor info with hours, categories, featured dishes, images, and rating summary.",
     validationBoundary: ["slug must match the documented slug format"],
+  },
+  createVendorRating: {
+    access: "public",
+    method: "POST",
+    path: "/api/vendors/[slug]/ratings",
+    requestShape: "Route param: slug. JSON body with score = 1 through 5.",
+    responseShape: "Vendor id and updated rating summary for the rated vendor.",
+    validationBoundary: [
+      "slug must match the documented slug format",
+      "score must be an integer from 1 through 5",
+      "rating writes must remain lightweight and comment-free",
+    ],
   },
   getCategories: {
     access: "public",

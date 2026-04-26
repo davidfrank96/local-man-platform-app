@@ -16,6 +16,13 @@ import {
   ensurePublicTrackingSession,
   trackPublicUserAction,
 } from "../../lib/public/user-action-tracking.ts";
+import {
+  createRetainedVendorPreview,
+  readLastSelectedVendor,
+  readRecentlyViewedVendors,
+  rememberLastSelectedVendor,
+  type RetainedVendorPreview,
+} from "../../lib/public/vendor-retention.ts";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   fetchNearbyVendors,
@@ -24,6 +31,10 @@ import {
 } from "../../lib/vendors/public-api-client.ts";
 import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
 import { getVendorOpenStateDisplay } from "../../lib/vendors/card-display.ts";
+import {
+  getPopularVendorIds,
+  sortDiscoveryVendors,
+} from "../../lib/vendors/discovery-ranking.ts";
 import {
   getMillisecondsUntilNextPublicTimeTheme,
   getPublicTimeTheme,
@@ -242,6 +253,9 @@ export function PublicDiscovery({
     parsedUrlState.selectedVendorSlug,
   );
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
+  const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
+  const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
+    useState<RetainedVendorPreview | null>(null);
   const nearbyRequestIdRef = useRef(0);
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -283,12 +297,36 @@ export function PublicDiscovery({
     [activeLocationSource, filters, pathname, selectedVendorSlug],
   );
 
+  const hydrateRetentionState = useCallback(() => {
+    setRecentlyViewedVendors(readRecentlyViewedVendors());
+    setLastSelectedVendorMemory(readLastSelectedVendor());
+  }, []);
+
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
       nearbyRequestIdRef.current += 1;
     };
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      hydrateRetentionState();
+    }, 0);
+
+    function refreshRetentionState() {
+      hydrateRetentionState();
+    }
+
+    window.addEventListener("focus", refreshRetentionState);
+    window.addEventListener("pageshow", refreshRetentionState);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus", refreshRetentionState);
+      window.removeEventListener("pageshow", refreshRetentionState);
+    };
+  }, [hydrateRetentionState]);
 
   useEffect(() => {
     void ensurePublicTrackingSession({
@@ -493,6 +531,13 @@ export function PublicDiscovery({
             return current;
           }
 
+          if (
+            lastSelectedVendorMemory &&
+            result.vendors.some((vendor) => vendor.slug === lastSelectedVendorMemory.slug)
+          ) {
+            return lastSelectedVendorMemory.slug;
+          }
+
           return result.vendors[0]?.slug ?? null;
         });
       } catch (error) {
@@ -509,7 +554,7 @@ export function PublicDiscovery({
         }
       }
     },
-    [],
+    [lastSelectedVendorMemory],
   );
 
   useEffect(() => {
@@ -531,7 +576,15 @@ export function PublicDiscovery({
     };
   }, [filters, loadNearbyVendors, location, locationStatus]);
 
-  const vendors = useMemo(() => nearbyData?.vendors ?? [], [nearbyData]);
+  const vendors = useMemo(
+    () => sortDiscoveryVendors(nearbyData?.vendors ?? [], filters),
+    [filters, nearbyData],
+  );
+  const popularVendorIds = useMemo(() => getPopularVendorIds(vendors), [vendors]);
+  const popularVendors = useMemo(
+    () => vendors.filter((vendor) => popularVendorIds.has(vendor.vendor_id)).slice(0, 3),
+    [popularVendorIds, vendors],
+  );
   const resolvedLocation = location ?? nearbyData?.location ?? null;
   const selectedVendor = useMemo(
     () => vendors.find((vendor) => vendor.slug === selectedVendorSlug) ?? null,
@@ -542,6 +595,13 @@ export function PublicDiscovery({
     [selectedVendor?.is_open_now],
   );
   const selectedVendorId = selectedVendor?.vendor_id ?? null;
+  const rememberedSelectedVendor = useMemo(
+    () =>
+      lastSelectedVendorMemory
+        ? vendors.find((vendor) => vendor.slug === lastSelectedVendorMemory.slug) ?? null
+        : null,
+    [lastSelectedVendorMemory, vendors],
+  );
   const isResolvingLocation = locationStatus === "resolving";
   const isLoading = isResolvingLocation || isFetchingVendors;
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
@@ -579,6 +639,12 @@ export function PublicDiscovery({
         metadata: { source },
         filters: {},
       });
+    }
+
+    if (vendor) {
+      const retainedVendor = createRetainedVendorPreview(vendor);
+      rememberLastSelectedVendor(retainedVendor);
+      setLastSelectedVendorMemory(retainedVendor);
     }
 
     setSelectedVendorSlug(vendor?.slug ?? null);
@@ -638,10 +704,122 @@ export function PublicDiscovery({
           />
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
+          <section className="retention-panel">
+            <div className="result-heading">
+              <strong>Last selected vendor</strong>
+              <span>{lastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}</span>
+            </div>
+            {lastSelectedVendorMemory ? (
+              <div className="retention-list">
+                <div className="retention-item">
+                  <div className="retention-item-copy">
+                    <strong>{lastSelectedVendorMemory.name}</strong>
+                    <span>
+                      {lastSelectedVendorMemory.area ?? "Area not set"} • Today:{" "}
+                      {lastSelectedVendorMemory.today_hours}
+                    </span>
+                  </div>
+                  {rememberedSelectedVendor ? (
+                    <button
+                      className="button-secondary compact-button"
+                      type="button"
+                      onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
+                    >
+                      Preview again
+                    </button>
+                  ) : (
+                    <Link
+                      className="button-secondary compact-button"
+                      href={buildVendorDetailHref(lastSelectedVendorMemory.slug, discoveryReturnTo)}
+                    >
+                      View details
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="runtime-note">Your last selected vendor will stay here.</p>
+            )}
+          </section>
+
+          <section className="retention-panel">
+            <div className="result-heading">
+              <strong>Recently viewed vendors</strong>
+              <span>
+                {recentlyViewedVendors.length > 0
+                  ? `${recentlyViewedVendors.length} saved`
+                  : "No recent views yet"}
+              </span>
+            </div>
+            {recentlyViewedVendors.length > 0 ? (
+              <div className="retention-list">
+                {recentlyViewedVendors.map((vendor) => (
+                  <div key={vendor.vendor_id} className="retention-item">
+                    <div className="retention-item-copy">
+                      <strong>{vendor.name}</strong>
+                      <span>
+                        {vendor.area ?? "Area not set"} • Today: {vendor.today_hours}
+                      </span>
+                    </div>
+                    <Link
+                      className="button-secondary compact-button"
+                      href={buildVendorDetailHref(vendor.slug, discoveryReturnTo)}
+                    >
+                      Open
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="runtime-note">Viewed vendor details will appear here.</p>
+            )}
+          </section>
+
+          <section className="retention-panel">
+            <div className="result-heading">
+              <strong>Popular vendors near you</strong>
+              <span>
+                {popularVendors.length > 0 ? "Based on recent usage" : "No popularity signal yet"}
+              </span>
+            </div>
+            {popularVendors.length > 0 ? (
+              <div className="retention-list">
+                {popularVendors.map((vendor) => (
+                  <div key={vendor.vendor_id} className="retention-item">
+                    <div className="retention-item-copy">
+                      <strong>{vendor.name}</strong>
+                      <span>
+                        {formatVendorCardDistance(vendor.distance_km, isApproximateDistance)} •{" "}
+                        Today: {vendor.today_hours}
+                      </span>
+                    </div>
+                    <button
+                      className="button-secondary compact-button"
+                      type="button"
+                      onClick={() => selectVendorById(vendor.vendor_id, "card")}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="runtime-note">Popular nearby vendors will appear as usage builds.</p>
+            )}
+          </section>
+
           <section className="vendor-results" aria-live="polite">
             <div className="result-heading">
               <strong>{vendors.length} vendors</strong>
-              <span>{isLoading ? "Loading…" : "Nearest first"}</span>
+              <span>
+                {isLoading
+                  ? "Loading…"
+                  : filters.search
+                    ? "Best search matches first"
+                    : filters.openNow
+                      ? "Open now only"
+                      : "Open now, then popular, then distance"}
+              </span>
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
             {!nearbyError && vendors.length === 0 && !isLoading ? (
@@ -660,6 +838,7 @@ export function PublicDiscovery({
                   ),
                 )}
                 key={vendor.vendor_id}
+                isPopular={popularVendorIds.has(vendor.vendor_id)}
                 locationSource={activeLocationSource ?? null}
                 selected={vendor.slug === selectedVendorSlug}
                 vendor={vendor}

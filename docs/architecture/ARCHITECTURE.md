@@ -42,9 +42,12 @@ Handles:
 - discovery homepage
 - nearby vendor loading
 - search and filters
+- open-now and usage-signal-aware discovery ordering
 - selected vendor state
+- local retention surfaces for recent and last-selected vendors
 - navigation restoration
 - vendor detail rendering
+- lightweight public vendor rating
 - trust-first location display
 - time-based theming
 
@@ -64,6 +67,7 @@ Handles:
 Handle:
 - public nearby vendor reads
 - public vendor detail reads
+- public vendor rating writes
 - non-blocking public event writes
 - reverse geocoding
 - authenticated admin writes
@@ -95,8 +99,9 @@ Stores:
 2. Browser geolocation is attempted
 3. The app resolves precise, approximate, or default-city browse mode
 4. `/api/vendors/nearby` returns nearby vendors
-5. Vendors render in the list, map, and selected preview
-6. User opens vendor detail or actions
+5. Discovery ordering prioritizes open-now state, then stronger search matches, then usage ranking, then distance
+6. Vendors render in the list, map, selected preview, and lightweight retention panels
+7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
 
 ## User Location Handling
 
@@ -200,6 +205,7 @@ Rules:
 - analytics reads stay admin-only through `/api/admin/analytics`
 - `user_events` is append-only for lightweight interaction capture
 - session-level drop-off analysis depends on `session_id` coverage; the admin analytics page must tolerate historical rows without that field
+- discovery ranking can read aggregated `user_events` signals server-side, but public browsing must still work when no usage signal data exists
 
 ## Usage Signal Pipeline
 
@@ -209,8 +215,9 @@ Public usage signals use this path:
 2. client sends a small payload to `/api/events`
 3. server validates the payload
 4. server writes to `public.user_events`
-5. admin analytics reads and aggregates those rows server-side
-6. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
+5. nearby discovery can derive a simple vendor `ranking_score` from those rows
+6. admin analytics reads and aggregates those rows server-side
+7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
 
 Tracked event types:
 - `session_started`
@@ -222,6 +229,33 @@ Tracked event types:
 - `directions_clicked`
 - `search_used`
 - `filter_applied`
+
+## Vendor Rating Pipeline
+
+Public vendor ratings use this path:
+
+1. user submits a 1-5 star score on vendor detail
+2. `/api/vendors/[slug]/ratings` validates the score and resolves the vendor by slug
+3. server inserts a lightweight `ratings` row
+4. vendor aggregate fields update:
+   - `average_rating`
+   - `review_count`
+5. public discovery and detail render `★ <rating>` when ratings exist or `New` when they do not
+
+Rules:
+- no login is required for the current lightweight rating flow
+- no comments or full review system exist yet
+- rating writes stay separate from `user_events`
+
+## Discovery Retention State
+
+The public app keeps a small amount of client-only memory:
+
+- `localStorage` stores recently viewed vendors
+- `localStorage` stores the last selected vendor
+- vendor detail visits update recently viewed memory
+- list selection updates last-selected memory
+- these helpers improve return navigation without requiring login or backend persistence
 
 ## Core Product Logic
 
@@ -249,7 +283,12 @@ Current implementation:
 - API validates user `lat` and `lng`.
 - Supabase candidate query uses a latitude/longitude bounding box to reduce scanned rows.
 - Application logic calculates exact Haversine distance for each candidate.
-- Application logic applies radius filtering and sorts vendors nearest first.
+- Application logic applies radius filtering and returns `distance_km` for each candidate.
+- Final discovery ordering is handled as:
+  1. open-now priority
+  2. stronger search relevance
+  3. usage-signal `ranking_score`
+  4. distance as the final tie-breaker
 - Default nearby radius is 10 km when `radius_km` is not provided.
 - Missing user coordinates resolve to the Abuja default city view before the nearby query runs.
 

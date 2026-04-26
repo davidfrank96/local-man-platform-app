@@ -74,9 +74,20 @@ Status: completed
 - admin-only analytics dashboard at `/admin/analytics`
 - vendor performance ranking and recent activity review
 - drop-off signal visibility for search, selection, and detail-action gaps
+- discovery ordering informed by usage signals:
+  - open-now priority
+  - stronger search relevance
+  - ranking score before distance
+- lightweight client-side retention:
+  - recently viewed vendors
+  - last selected vendor memory
+  - popular vendors near you
+- simple public vendor ratings with aggregate score display
 - stronger pilot observation
 - operator-facing signal review workflows
 - evidence-based prioritization for the next product changes
+
+Status: completed
 
 ## After Phase 6
 Potential future work only after real usage signals justify it:

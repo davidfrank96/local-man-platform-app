@@ -3,6 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
+type MockNearbyVendor = Omit<NearbyVendor, "ranking_score"> & {
+  ranking_score?: number;
+};
 
 function trackClientErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -28,7 +31,7 @@ function uuid(index: number): string {
   return `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
 }
 
-function createVendor(index: number, overrides: Partial<NearbyVendor> = {}): NearbyVendor {
+function createVendor(index: number, overrides: Partial<MockNearbyVendor> = {}): NearbyVendor {
   return {
     vendor_id: uuid(index + 1),
     name: `Vendor ${index + 1}`,
@@ -41,6 +44,7 @@ function createVendor(index: number, overrides: Partial<NearbyVendor> = {}): Nea
     price_band: "standard",
     average_rating: 4.5,
     review_count: 24,
+    ranking_score: 0,
     distance_km: Number((0.12 + index * 0.08).toFixed(2)),
     is_open_now: index % 2 === 0,
     featured_dish: {
@@ -204,15 +208,16 @@ test.describe("Layout stress", () => {
 
     await expect(page.locator(".vendor-card")).toHaveCount(30);
 
+    let expectedSelectedVendorName = "";
+
     for (const index of [0, 4, 9, 14, 19]) {
-      await page
-        .locator(".vendor-card")
-        .nth(index)
-        .getByRole("button", { name: /Preview .* on map/ })
-        .click();
+      const card = page.locator(".vendor-card").nth(index);
+      expectedSelectedVendorName =
+        (await card.locator("h3").textContent())?.trim() ?? expectedSelectedVendorName;
+      await card.getByRole("button", { name: /Preview .* on map/ }).click();
     }
 
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText("Vendor 20");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(expectedSelectedVendorName);
 
     await page.getByRole("textbox", { name: "Search" }).fill("rice");
     let applyButton = page.getByRole("button", { name: "Apply" });

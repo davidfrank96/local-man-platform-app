@@ -54,6 +54,11 @@ Runtime smoke coverage:
 ### Public Discovery Logic
 Test:
 - public nearby API client sends location, radius, search, category, price, and open-now filters
+- discovery sorting keeps open vendors above closed vendors
+- stronger search matches sort above weaker ones
+- vendors with higher usage ranking can beat farther vendors when other discovery signals are equal
+- popular-vendor highlighting stays bounded and deterministic
+- recently viewed vendors and last selected vendor memory restore cleanly from browser storage
 - call links normalize phone numbers
 - directions links target Google Maps coordinates
 - categories route returns public category summaries
@@ -75,8 +80,23 @@ Test:
 Current automated coverage:
 - `tests/public-api-client.test.ts`
 - `tests/public-routes.test.ts`
+- `tests/discovery-ranking.test.ts`
+- `tests/vendor-retention.test.ts`
 - `tests/e2e/app-smoke.spec.ts`
 - `tests/e2e/layout-stress.spec.ts`
+
+### Public Rating Logic
+Test:
+- valid 1-5 vendor rating is accepted
+- invalid scores are rejected
+- unknown vendor slug returns `NOT_FOUND`
+- rating summary updates:
+  - `average_rating`
+  - `review_count`
+- vendor cards and detail continue to show `New` when no ratings exist
+
+Current automated coverage:
+- `tests/public-rating-route.test.ts`
 
 ### Admin Foundation Logic
 Test:
@@ -105,6 +125,7 @@ Test:
 - admin analytics route aggregates summary counts correctly
 - admin analytics route tolerates empty `user_events`
 - admin analytics helper logic handles empty vendor performance and recent activity safely
+- usage-signal vendor ranking helper aggregates weighted vendor event counts safely
 
 Current automated coverage:
 - `tests/admin-auth.test.ts`
@@ -114,6 +135,7 @@ Current automated coverage:
 - `tests/admin-vendor-routes.test.ts`
 - `tests/admin-vendor-subresources.test.ts`
 - `tests/admin-api-client.test.ts`
+- `tests/vendor-usage-ranking.test.ts`
 
 Manual admin UI smoke coverage:
 - open `/admin` and confirm redirect to `/admin/login`
