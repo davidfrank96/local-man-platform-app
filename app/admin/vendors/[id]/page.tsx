@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AdminShell } from "../../../../components/admin/admin-shell.tsx";
 import { AdminConsole } from "../../../../components/admin/admin-console.tsx";
 import { AdminRouteGuard } from "../../../../components/admin/admin-route-guard.tsx";
 
@@ -15,20 +15,12 @@ export default async function AdminVendorEditPage({
 
   return (
     <AdminRouteGuard>
-      <main className="page-shell">
-        <p className="eyebrow">Admin vendors</p>
-        <h1>Edit vendor</h1>
-        <p className="page-intro">Load vendors to select and update this record.</p>
-        <div className="action-row admin-route-links">
-          <Link className="button-secondary" href="/admin">
-            Admin home
-          </Link>
-          <Link className="button-secondary" href="/admin/vendors">
-            Vendor list
-          </Link>
-        </div>
-        <AdminConsole initialSelectedVendorId={id} />
-      </main>
+      <AdminShell
+        title="Edit vendor"
+        intro="Manage one vendor across details, hours, featured dishes, and profile images from a dedicated editing workspace."
+      >
+        <AdminConsole initialSelectedVendorId={id} mode="edit" />
+      </AdminShell>
     </AdminRouteGuard>
   );
 }

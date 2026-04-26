@@ -1,11 +1,13 @@
 import { z } from "zod";
 import {
+  adminVendorSummarySchema,
   vendorFeaturedDishSchema,
   vendorHoursSchema,
   vendorImageSchema,
   vendorSchema,
   vendorSummarySchema,
 } from "../validation/schemas.ts";
+import { dayOfWeekSchema, uuidSchema } from "../validation/common.ts";
 import {
   getAdminAuthConfig,
   type AdminAuthConfig,
@@ -13,11 +15,14 @@ import {
 } from "./auth.ts";
 import { AdminServiceError } from "./errors.ts";
 import {
-  buildVendorImagePublicUrl,
   buildVendorImageStoragePath,
+  buildVendorImagePublicUrl,
   deleteVendorImageObject,
   uploadVendorImageObject,
 } from "./storage.ts";
+import {
+  normalizeVendorImageRows,
+} from "../vendors/images.ts";
 import type {
   AdminVendorsQuery,
   CreateVendorDishesRequest,
@@ -29,7 +34,7 @@ import type {
 } from "../../types/index.ts";
 
 export type VendorRecord = z.infer<typeof vendorSchema>;
-export type VendorSummaryRecord = z.infer<typeof vendorSummarySchema>;
+export type VendorSummaryRecord = z.infer<typeof adminVendorSummarySchema>;
 export type VendorHoursRecord = z.infer<typeof vendorHoursSchema>;
 export type VendorImageRecord = z.infer<typeof vendorImageSchema>;
 export type VendorFeaturedDishRecord = z.infer<typeof vendorFeaturedDishSchema>;
@@ -156,7 +161,16 @@ function parseReturnedVendor(payload: unknown): VendorRecord {
 }
 
 function parseReturnedVendors(payload: unknown): VendorSummaryRecord[] {
-  return parseSupabasePayload(z.array(vendorSummarySchema), payload);
+  return parseSupabasePayload(z.array(adminVendorSummarySchema), payload);
+}
+
+function toAdminVendorSummaryRecord(vendor: unknown): VendorSummaryRecord {
+  return adminVendorSummarySchema.parse({
+    ...vendorSummarySchema.parse(vendor),
+    hours_count: 0,
+    images_count: 0,
+    featured_dishes_count: 0,
+  });
 }
 
 function parseReturnedHours(payload: unknown): VendorHoursRecord[] {
@@ -272,7 +286,107 @@ export async function listVendors(
     },
     fetchImpl,
   );
-  const vendors = parseReturnedVendors(payload);
+  const vendorRows = parseSupabasePayload(z.array(vendorSummarySchema), payload);
+
+  if (vendorRows.length === 0) {
+    return {
+      vendors: [],
+      pagination: {
+        limit: query.limit,
+        offset: query.offset,
+        count: 0,
+      },
+    };
+  }
+
+  const vendorIds = vendorRows.map((vendor) => vendor.id);
+  const vendorIdFilter = `in.(${vendorIds.join(",")})`;
+
+  const [hoursPayload, imagesPayload, dishesPayload] = await Promise.all([
+    fetchJson(
+      createRestUrl(resolvedConfig, "vendor_hours", {
+        vendor_id: vendorIdFilter,
+        select: "vendor_id,day_of_week",
+      }),
+      {
+        method: "GET",
+        headers: createHeaders(session, resolvedConfig, ""),
+      },
+      fetchImpl,
+    ),
+    fetchJson(
+      createRestUrl(resolvedConfig, "vendor_images", {
+        vendor_id: vendorIdFilter,
+        select: "vendor_id",
+      }),
+      {
+        method: "GET",
+        headers: createHeaders(session, resolvedConfig, ""),
+      },
+      fetchImpl,
+    ),
+    fetchJson(
+      createRestUrl(resolvedConfig, "vendor_featured_dishes", {
+        vendor_id: vendorIdFilter,
+        select: "vendor_id",
+      }),
+      {
+        method: "GET",
+        headers: createHeaders(session, resolvedConfig, ""),
+      },
+      fetchImpl,
+    ),
+  ]);
+
+  const vendorHoursRows = parseSupabasePayload(
+    z.array(
+      z.object({
+        vendor_id: uuidSchema,
+        day_of_week: dayOfWeekSchema,
+      }),
+    ),
+    hoursPayload,
+  );
+  const vendorImageRows = parseSupabasePayload(
+    z.array(
+      z.object({
+        vendor_id: uuidSchema,
+      }),
+    ),
+    imagesPayload,
+  );
+  const vendorDishRows = parseSupabasePayload(
+    z.array(
+      z.object({
+        vendor_id: uuidSchema,
+      }),
+    ),
+    dishesPayload,
+  );
+
+  const hoursCountByVendor = new Map<string, number>();
+  for (const row of vendorHoursRows) {
+    hoursCountByVendor.set(row.vendor_id, (hoursCountByVendor.get(row.vendor_id) ?? 0) + 1);
+  }
+
+  const imagesCountByVendor = new Map<string, number>();
+  for (const row of vendorImageRows) {
+    imagesCountByVendor.set(row.vendor_id, (imagesCountByVendor.get(row.vendor_id) ?? 0) + 1);
+  }
+
+  const dishesCountByVendor = new Map<string, number>();
+  for (const row of vendorDishRows) {
+    dishesCountByVendor.set(row.vendor_id, (dishesCountByVendor.get(row.vendor_id) ?? 0) + 1);
+  }
+
+  const vendors = parseReturnedVendors(
+    vendorRows.map((vendor) => ({
+      ...vendor,
+      hours_count: hoursCountByVendor.get(vendor.id) ?? 0,
+      images_count: imagesCountByVendor.get(vendor.id) ?? 0,
+      featured_dishes_count: dishesCountByVendor.get(vendor.id) ?? 0,
+    })),
+  );
 
   return {
     vendors,
@@ -315,7 +429,7 @@ export async function createVendor(
     },
   );
 
-  return vendorSummarySchema.parse(vendor);
+  return toAdminVendorSummaryRecord(vendor);
 }
 
 export async function updateVendor(
@@ -354,7 +468,7 @@ export async function updateVendor(
     },
   );
 
-  return vendorSummarySchema.parse(vendor);
+  return toAdminVendorSummaryRecord(vendor);
 }
 
 export async function softDeleteVendor(
@@ -449,6 +563,33 @@ export async function replaceVendorHours(
   return hours;
 }
 
+export async function listVendorHours(
+  params: VendorIdParams,
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorHoursRecord[]> {
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_hours", {
+      vendor_id: `eq.${params.id}`,
+      order: "day_of_week.asc",
+      select: "*",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+
+  return parseReturnedHours(payload).toSorted(
+    (left, right) => left.day_of_week - right.day_of_week,
+  );
+}
+
 export async function createVendorImages(
   params: VendorIdParams,
   data: VendorImageMetadataRequest,
@@ -512,13 +653,14 @@ export async function listVendorImages(
     fetchImpl,
   );
 
-  return parseReturnedImages(payload);
+  return parseReturnedImages(normalizeVendorImageRows(resolvedConfig.supabaseUrl, payload));
 }
 
 export async function uploadVendorImage(
   params: VendorIdParams,
   data: {
     file: File;
+    fileBytes: Uint8Array;
     sort_order: number;
   },
   {
@@ -536,15 +678,34 @@ export async function uploadVendorImage(
   );
   const imageUrl = buildVendorImagePublicUrl(resolvedConfig, storageObjectPath);
 
+  console.info("[admin][vendor-image] uploading storage object", {
+    vendorId: params.id,
+    imageId,
+    storageObjectPath,
+    fileName: data.file.name,
+    sortOrder: data.sort_order,
+  });
+
   await uploadVendorImageObject({
     config: resolvedConfig,
     session,
     storageObjectPath,
     file: data.file,
+    fileBytes: data.fileBytes,
     fetchImpl,
   });
 
+  console.info("[admin][vendor-image] storage upload complete", {
+    vendorId: params.id,
+    storageObjectPath,
+  });
+
   try {
+    console.info("[admin][vendor-image] inserting vendor_images row", {
+      vendorId: params.id,
+      storageObjectPath,
+      imageUrl,
+    });
     const payload = await fetchJson(
       createRestUrl(resolvedConfig, "vendor_images", { select: "*" }),
       {
@@ -561,7 +722,16 @@ export async function uploadVendorImage(
       },
       fetchImpl,
     );
-    const images = parseReturnedImages(payload);
+    const images = parseReturnedImages(
+      normalizeVendorImageRows(resolvedConfig.supabaseUrl, payload),
+    );
+
+    console.info("[admin][vendor-image] vendor_images insert complete", {
+      vendorId: params.id,
+      imageCount: images.length,
+      imageId: images[0]?.id ?? null,
+      imageUrl: images[0]?.image_url ?? null,
+    });
 
     await writeAuditLog(
       { session, config: resolvedConfig, fetchImpl },
@@ -577,6 +747,14 @@ export async function uploadVendorImage(
 
     return images;
   } catch (error) {
+    console.error("[admin][vendor-image] insert failed, removing uploaded object", {
+      vendorId: params.id,
+      storageObjectPath,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown vendor image insert failure.",
+    });
     await deleteVendorImageObject({
       config: resolvedConfig,
       session,
@@ -608,7 +786,9 @@ export async function deleteVendorImage(
     },
     fetchImpl,
   );
-  const image = parseReturnedImage(imagePayload);
+  const image = parseReturnedImage(
+    normalizeVendorImageRows(resolvedConfig.supabaseUrl, imagePayload),
+  );
 
   if (image.storage_object_path) {
     await deleteVendorImageObject({
@@ -687,4 +867,84 @@ export async function createVendorDishes(
   );
 
   return dishes;
+}
+
+export async function listVendorDishes(
+  params: VendorIdParams,
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorFeaturedDishRecord[]> {
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_featured_dishes", {
+      vendor_id: `eq.${params.id}`,
+      order: "created_at.asc",
+      select: "*",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+
+  return parseReturnedDishes(payload);
+}
+
+export async function deleteVendorDish(
+  params: VendorIdParams & { dishId: string },
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorFeaturedDishRecord> {
+  const resolvedConfig = requireServiceConfig(config);
+  const dishPayload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_featured_dishes", {
+      id: `eq.${params.dishId}`,
+      vendor_id: `eq.${params.id}`,
+      select: "*",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+  const dishes = parseReturnedDishes(dishPayload);
+  const dish = dishes[0];
+
+  if (!dish) {
+    throw new AdminServiceError("NOT_FOUND", "Vendor dish was not found.", 404);
+  }
+
+  await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_featured_dishes", {
+      id: `eq.${params.dishId}`,
+      vendor_id: `eq.${params.id}`,
+    }),
+    {
+      method: "DELETE",
+      headers: createHeaders(session, resolvedConfig, "return=minimal"),
+    },
+    fetchImpl,
+  );
+
+  await writeAuditLog(
+    { session, config: resolvedConfig, fetchImpl },
+    {
+      entityId: params.id,
+      action: "vendor.dish_deleted",
+      metadata: {
+        dish_id: dish.id,
+        dish_name: dish.dish_name,
+      },
+    },
+  );
+
+  return dish;
 }

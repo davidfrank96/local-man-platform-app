@@ -26,7 +26,11 @@ export type AdminVendorSummary = Pick<
   | "review_count"
   | "is_active"
   | "is_open_override"
->;
+> & {
+  hours_count: number;
+  images_count: number;
+  featured_dishes_count: number;
+};
 
 export type AdminVendorListResult = {
   vendors: AdminVendorSummary[];
@@ -42,6 +46,8 @@ export type AdminVendorFilters = {
   area?: string;
   is_active?: boolean;
   price_band?: PriceBand;
+  limit?: number;
+  offset?: number;
 };
 
 export class AdminApiError extends Error {
@@ -139,8 +145,8 @@ export async function listAdminVendors(
   options: AdminApiClientOptions,
 ): Promise<AdminVendorListResult> {
   const params = new URLSearchParams({
-    limit: "50",
-    offset: "0",
+    limit: String(filters.limit ?? 100),
+    offset: String(filters.offset ?? 0),
   });
   appendDefinedParam(params, "search", filters.search);
   appendDefinedParam(params, "area", filters.area);
@@ -216,6 +222,18 @@ export async function replaceAdminVendorHours(
   return result.hours;
 }
 
+export async function listAdminVendorHours(
+  vendorId: string,
+  options: AdminApiClientOptions,
+): Promise<VendorHours[]> {
+  const result = await requestAdminApi<{ hours: VendorHours[] }>(
+    `/api/admin/vendors/${vendorId}/hours`,
+    options,
+  );
+
+  return result.hours;
+}
+
 export async function createAdminVendorImages(
   vendorId: string,
   data: FormData,
@@ -276,4 +294,32 @@ export async function createAdminVendorDishes(
   );
 
   return result.dishes;
+}
+
+export async function listAdminVendorDishes(
+  vendorId: string,
+  options: AdminApiClientOptions,
+): Promise<VendorFeaturedDish[]> {
+  const result = await requestAdminApi<{ dishes: VendorFeaturedDish[] }>(
+    `/api/admin/vendors/${vendorId}/dishes`,
+    options,
+  );
+
+  return result.dishes;
+}
+
+export async function deleteAdminVendorDish(
+  vendorId: string,
+  dishId: string,
+  options: AdminApiClientOptions,
+): Promise<VendorFeaturedDish> {
+  const result = await requestAdminApi<{ dish: VendorFeaturedDish }>(
+    `/api/admin/vendors/${vendorId}/dishes/${dishId}`,
+    options,
+    {
+      method: "DELETE",
+    },
+  );
+
+  return result.dish;
 }

@@ -99,7 +99,7 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
         clearStoredAdminSession();
         setSession(null);
         setStatus("forbidden");
-        setError("Authenticated account is not listed as an admin.");
+        setError("This account signed in successfully, but it is not listed in admin_users.");
         return;
       }
 
@@ -140,7 +140,7 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
       ) {
         clearStoredAdminSession();
         setStatus("forbidden");
-        setError("Authenticated account is not listed as an admin.");
+        setError("This account signed in successfully, but it is not listed in admin_users.");
         return;
       }
 

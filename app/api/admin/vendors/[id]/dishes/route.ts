@@ -5,7 +5,10 @@ import {
 } from "../../../../../../lib/api/validation.ts";
 import { requireAdmin } from "../../../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../../../lib/admin/errors.ts";
-import { createVendorDishes } from "../../../../../../lib/admin/vendor-service.ts";
+import {
+  createVendorDishes,
+  listVendorDishes,
+} from "../../../../../../lib/admin/vendor-service.ts";
 import {
   createVendorDishesRequestSchema,
   vendorIdParamsSchema,
@@ -16,6 +19,30 @@ type VendorDishesRouteContext = {
     id: string;
   }>;
 };
+
+export async function GET(request: Request, { params }: VendorDishesRouteContext) {
+  const admin = await requireAdmin(request);
+
+  if (!admin.success) {
+    return admin.response;
+  }
+
+  const routeParams = validateInput(vendorIdParamsSchema, await params);
+
+  if (!routeParams.success) {
+    return routeParams.response;
+  }
+
+  try {
+    const dishes = await listVendorDishes(routeParams.data, {
+      session: admin.session,
+    });
+
+    return apiSuccess({ dishes });
+  } catch (error) {
+    return handleAdminServiceError(error, "Unable to load vendor dishes.");
+  }
+}
 
 export async function POST(_request: Request, { params }: VendorDishesRouteContext) {
   const admin = await requireAdmin(_request);

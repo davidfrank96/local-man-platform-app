@@ -64,15 +64,28 @@ export async function POST(request: Request, { params }: VendorImagesRouteContex
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      const file = formData.get("image");
+      const fileEntry = formData.get("image");
 
-      if (!(file instanceof File)) {
+      if (!(fileEntry instanceof File)) {
+        console.error("[admin][vendor-image] multipart upload request missing file", {
+          vendorId: routeParams.data.id,
+          hasImageField: formData.has("image"),
+        });
         return apiError("VALIDATION_ERROR", "An image file is required.", 400);
       }
+
+      const file = fileEntry;
 
       const fileValidationError = validateVendorImageFile(file);
 
       if (fileValidationError) {
+        console.error("[admin][vendor-image] multipart upload request rejected", {
+          vendorId: routeParams.data.id,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+          error: fileValidationError,
+        });
         return apiError("VALIDATION_ERROR", fileValidationError, 400);
       }
 
@@ -86,10 +99,27 @@ export async function POST(request: Request, { params }: VendorImagesRouteContex
         );
       }
 
+      const arrayBuffer = await file.arrayBuffer();
+      const fileBytes = new Uint8Array(arrayBuffer);
+
+      if (fileBytes.byteLength <= 0) {
+        return apiError("VALIDATION_ERROR", "Image file is empty.", 400);
+      }
+
+      console.info("[admin][vendor-image] multipart upload request accepted", {
+        vendorId: routeParams.data.id,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        sortOrder: sortOrderValue,
+        hasBytes: fileBytes.byteLength > 0,
+      });
+
       const images = await uploadVendorImage(
         routeParams.data,
         {
           file,
+          fileBytes,
           sort_order: sortOrderValue,
         },
         {
@@ -112,6 +142,16 @@ export async function POST(request: Request, { params }: VendorImagesRouteContex
 
     return apiSuccess({ images }, 201);
   } catch (error) {
+      console.error("[admin][vendor-image] upload route failed", {
+      vendorId: routeParams.success ? routeParams.data.id : null,
+      error: error instanceof Error ? error.message : "Unknown image upload error.",
+      details:
+        typeof error === "object" &&
+        error !== null &&
+        "details" in error
+          ? (error as { details?: unknown }).details
+          : undefined,
+    });
     return handleAdminServiceError(error, "Unable to create vendor images.");
   }
 }

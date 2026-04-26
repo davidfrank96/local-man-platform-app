@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 import {
   formatVendorCardDistance,
+  getVendorOpenStateDisplay,
   formatVendorCardPriceBand,
   formatVendorCardRating,
 } from "../../lib/vendors/card-display.ts";
@@ -39,6 +40,7 @@ export function VendorCard({
     vendor.average_rating,
     vendor.review_count,
   );
+  const openState = getVendorOpenStateDisplay(vendor.is_open_now);
 
   return (
     <article className={selected ? "vendor-card selected" : "vendor-card"}>
@@ -54,11 +56,7 @@ export function VendorCard({
           <p className="vendor-card-status-line">
             <span>{formatVendorCardDistance(vendor.distance_km, approximateDistance)}</span>
             <span aria-hidden="true">•</span>
-            <span
-              className={vendor.is_open_now ? "vendor-card-status-open" : "vendor-card-status-closed"}
-            >
-              {vendor.is_open_now ? "Open" : "Closed"}
-            </span>
+            <span className={openState.toneClassName}>{openState.label}</span>
           </p>
           <p className="vendor-card-hours-line">
             <span className="vendor-card-hours-label">Today:</span> {vendor.today_hours}

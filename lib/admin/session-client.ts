@@ -58,6 +58,15 @@ export class AdminSessionError extends Error {
   }
 }
 
+function logAdminSessionEvent(
+  level: "info" | "warn" | "error",
+  message: string,
+  details: Record<string, unknown>,
+) {
+  const logger = console[level] ?? console.info;
+  logger(`[admin][session] ${message}`, details);
+}
+
 function getClientConfig(): SessionClientConfig {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -150,19 +159,36 @@ export async function signInAdminSession(
   password: string,
   fetchImpl?: typeof fetch,
 ): Promise<StoredAdminSession> {
-  const payload = await requestSupabaseAuth(
-    "/auth/v1/token?grant_type=password",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        email,
-        password,
-      }),
-    },
-    fetchImpl,
-  );
+  try {
+    const payload = await requestSupabaseAuth(
+      "/auth/v1/token?grant_type=password",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      },
+      fetchImpl,
+    );
 
-  return createSessionFromPayload(payload);
+    const session = createSessionFromPayload(payload);
+
+    logAdminSessionEvent("info", "password sign-in succeeded", {
+      email,
+      userId: session.user.id,
+    });
+
+    return session;
+  } catch (error) {
+    logAdminSessionEvent("warn", "password sign-in failed", {
+      email,
+      code: error instanceof AdminSessionError ? error.code : "UNKNOWN_ERROR",
+      status: error instanceof AdminSessionError ? error.status : null,
+      message: error instanceof Error ? error.message : "Admin authentication failed.",
+    });
+    throw error;
+  }
 }
 
 export async function refreshAdminSession(
@@ -255,6 +281,11 @@ export async function fetchAdminSessionIdentity(
     | null;
 
   if (!response.ok || !payload?.success || !payload.data) {
+    logAdminSessionEvent("warn", "admin identity validation failed", {
+      status: response.status,
+      code: payload?.error?.code ?? "SESSION_ERROR",
+      message: payload?.error?.message ?? "Unable to validate admin session.",
+    });
     throw new AdminSessionError(
       payload?.error?.code ?? "SESSION_ERROR",
       payload?.error?.message ?? "Unable to validate admin session.",
@@ -262,6 +293,11 @@ export async function fetchAdminSessionIdentity(
       payload?.error?.details,
     );
   }
+
+  logAdminSessionEvent("info", "admin identity validated", {
+    userId: payload.data.user.id,
+    role: payload.data.adminUser.role,
+  });
 
   return payload.data;
 }

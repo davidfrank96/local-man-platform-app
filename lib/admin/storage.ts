@@ -40,12 +40,25 @@ export function getVendorImageExtension(file: File): string {
   return extension;
 }
 
+function sanitizeVendorImageStem(fileName: string): string {
+  const stem = fileName.replace(/\.[^.]+$/, "").trim().toLowerCase();
+  const sanitized = stem
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return sanitized || "vendor-image";
+}
+
 export function buildVendorImageStoragePath(
   vendorId: string,
   imageId: string,
   file: File,
 ): string {
-  return `vendors/${vendorId}/${imageId}.${getVendorImageExtension(file)}`;
+  const extension = getVendorImageExtension(file);
+  const sanitizedStem = sanitizeVendorImageStem(file.name);
+
+  return `${vendorId}/${imageId}-${sanitizedStem}.${extension}`;
 }
 
 export function buildVendorImagePublicUrl(
@@ -58,54 +71,140 @@ export function buildVendorImagePublicUrl(
   ).toString();
 }
 
+type AdminStorageConfig = {
+  supabaseUrl: string;
+  supabaseServiceRoleKey: string;
+};
+
+function requireAdminStorageConfig(config: AdminAuthConfig): AdminStorageConfig {
+  if (!config.supabaseServiceRoleKey) {
+    throw new AdminServiceError(
+      "CONFIGURATION_ERROR",
+      "SUPABASE_SERVICE_ROLE_KEY is required for vendor image uploads.",
+      503,
+      {
+        bucket: VENDOR_IMAGE_BUCKET,
+      },
+    );
+  }
+
+  return {
+    supabaseUrl: config.supabaseUrl,
+    supabaseServiceRoleKey: config.supabaseServiceRoleKey,
+  };
+}
+
 async function readStorageResponse(response: Response): Promise<unknown> {
   try {
     return await response.json();
   } catch {
-    return null;
+    try {
+      const text = await response.text();
+      return text.length > 0 ? { message: text } : null;
+    } catch {
+      return null;
+    }
   }
+}
+
+function getStorageErrorDetails(payload: unknown): {
+  upstreamCode: string | null;
+  upstreamMessage: string | null;
+} {
+  if (!payload || typeof payload !== "object") {
+    return {
+      upstreamCode: null,
+      upstreamMessage: null,
+    };
+  }
+
+  const record = payload as Record<string, unknown>;
+  const upstreamCode =
+    typeof record.code === "string" && record.code.trim().length > 0
+      ? record.code.trim()
+      : typeof record.error === "string" && record.error.trim().length > 0
+        ? record.error.trim()
+        : null;
+  const upstreamMessage =
+    typeof record.message === "string" && record.message.trim().length > 0
+      ? record.message.trim()
+      : null;
+
+  return {
+    upstreamCode,
+    upstreamMessage,
+  };
 }
 
 export async function uploadVendorImageObject(
   {
     config,
-    session,
     storageObjectPath,
     file,
+    fileBytes,
     fetchImpl = fetch,
   }: {
     config: AdminAuthConfig;
     session: AdminSession;
     storageObjectPath: string;
     file: File;
+    fileBytes: Uint8Array;
     fetchImpl?: typeof fetch;
   },
 ): Promise<void> {
+  const storageConfig = requireAdminStorageConfig(config);
+
+  console.info("[admin][vendor-image] storage upload request", {
+    bucket: VENDOR_IMAGE_BUCKET,
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+    hasBuffer: fileBytes.byteLength > 0,
+    storageObjectPath,
+  });
+
   const response = await fetchImpl(
     new URL(
       `/storage/v1/object/${VENDOR_IMAGE_BUCKET}/${storageObjectPath}`,
-      config.supabaseUrl,
+      storageConfig.supabaseUrl,
     ),
     {
       method: "POST",
       headers: {
-        apikey: config.supabaseAnonKey,
-        authorization: `Bearer ${session.accessToken}`,
+        apikey: storageConfig.supabaseServiceRoleKey,
+        authorization: `Bearer ${storageConfig.supabaseServiceRoleKey}`,
         "content-type": file.type,
         "x-upsert": "true",
       },
-      body: await file.arrayBuffer(),
+      body: Buffer.from(fileBytes),
     },
   );
 
   if (!response.ok) {
     const payload = await readStorageResponse(response);
+    const { upstreamCode, upstreamMessage } = getStorageErrorDetails(payload);
+
+    console.error("[admin][vendor-image] storage upload failed", {
+      bucket: VENDOR_IMAGE_BUCKET,
+      httpStatus: response.status,
+      storageObjectPath,
+      upstreamCode,
+      upstreamMessage,
+      payload,
+    });
 
     throw new AdminServiceError(
       "UPSTREAM_ERROR",
-      "Unable to upload vendor image.",
+      `Storage upload failed${upstreamCode ? ` (${upstreamCode})` : ""}${upstreamMessage ? `: ${upstreamMessage}` : ` with HTTP ${response.status}.`}`,
       502,
-      payload,
+      {
+        bucket: VENDOR_IMAGE_BUCKET,
+        storage_object_path: storageObjectPath,
+        http_status: response.status,
+        upstream_code: upstreamCode,
+        upstream_message: upstreamMessage,
+        upstream: payload,
+      },
     );
   }
 }
@@ -113,7 +212,6 @@ export async function uploadVendorImageObject(
 export async function deleteVendorImageObject(
   {
     config,
-    session,
     storageObjectPath,
     fetchImpl = fetch,
   }: {
@@ -123,28 +221,37 @@ export async function deleteVendorImageObject(
     fetchImpl?: typeof fetch;
   },
 ): Promise<void> {
+  const storageConfig = requireAdminStorageConfig(config);
   const response = await fetchImpl(
     new URL(
       `/storage/v1/object/${VENDOR_IMAGE_BUCKET}/${storageObjectPath}`,
-      config.supabaseUrl,
+      storageConfig.supabaseUrl,
     ),
     {
       method: "DELETE",
       headers: {
-        apikey: config.supabaseAnonKey,
-        authorization: `Bearer ${session.accessToken}`,
+        apikey: storageConfig.supabaseServiceRoleKey,
+        authorization: `Bearer ${storageConfig.supabaseServiceRoleKey}`,
       },
     },
   );
 
   if (!response.ok) {
     const payload = await readStorageResponse(response);
+    const { upstreamCode, upstreamMessage } = getStorageErrorDetails(payload);
 
     throw new AdminServiceError(
       "UPSTREAM_ERROR",
-      "Unable to delete vendor image.",
+      `Storage delete failed${upstreamCode ? ` (${upstreamCode})` : ""}${upstreamMessage ? `: ${upstreamMessage}` : ` with HTTP ${response.status}.`}`,
       502,
-      payload,
+      {
+        bucket: VENDOR_IMAGE_BUCKET,
+        storage_object_path: storageObjectPath,
+        http_status: response.status,
+        upstream_code: upstreamCode,
+        upstream_message: upstreamMessage,
+        upstream: payload,
+      },
     );
   }
 }

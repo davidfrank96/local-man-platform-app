@@ -93,6 +93,35 @@ function createAdminFetchMock(calls: string[]): typeof fetch {
       ]);
     }
 
+    if (url.pathname === "/rest/v1/vendor_hours") {
+      return Response.json([
+        {
+          vendor_id: vendorId,
+          day_of_week: 1,
+        },
+        {
+          vendor_id: vendorId,
+          day_of_week: 2,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendor_images") {
+      return Response.json([
+        {
+          vendor_id: vendorId,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendor_featured_dishes") {
+      return Response.json([
+        {
+          vendor_id: vendorId,
+        },
+      ]);
+    }
+
     if (url.pathname === "/rest/v1/audit_logs") {
       return new Response(null, { status: 201 });
     }
@@ -149,6 +178,9 @@ test("admin list vendors route returns filtered vendor list", async () => {
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
     assert.equal(body.data.vendors[0].slug, "test-vendor");
+    assert.equal(body.data.vendors[0].hours_count, 2);
+    assert.equal(body.data.vendors[0].images_count, 1);
+    assert.equal(body.data.vendors[0].featured_dishes_count, 1);
     assert.deepEqual(body.data.pagination, {
       limit: 10,
       offset: 5,
@@ -167,6 +199,9 @@ test("admin list vendors route returns filtered vendor list", async () => {
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "GET /rest/v1/vendors",
+      "GET /rest/v1/vendor_hours",
+      "GET /rest/v1/vendor_images",
+      "GET /rest/v1/vendor_featured_dishes",
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -227,6 +262,14 @@ test("admin list vendors route returns controlled error for malformed upstream p
 
     if (url.pathname === "/rest/v1/vendors") {
       return Response.json([{ id: vendorId }]);
+    }
+
+    if (
+      url.pathname === "/rest/v1/vendor_hours" ||
+      url.pathname === "/rest/v1/vendor_images" ||
+      url.pathname === "/rest/v1/vendor_featured_dishes"
+    ) {
+      return Response.json([]);
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -316,6 +359,7 @@ test("admin update vendor route patches vendor and writes audit log", async () =
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
     assert.equal(body.data.vendor.name, "Updated Vendor");
+    assert.equal(body.data.vendor.slug, "test-vendor");
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",

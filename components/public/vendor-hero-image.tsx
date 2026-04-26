@@ -1,21 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { isSeedPlaceholderUrl } from "../../lib/vendors/images.ts";
 
 type VendorHeroImageProps = {
   imageUrl: string | null;
   alt: string;
 };
 
-function isSeedPlaceholderUrl(imageUrl: string): boolean {
-  return imageUrl.startsWith("/seed-images/");
-}
-
 export function VendorHeroImage({ imageUrl, alt }: VendorHeroImageProps) {
   const [hasFailed, setHasFailed] = useState(false);
 
   if (!imageUrl || hasFailed || isSeedPlaceholderUrl(imageUrl)) {
-    return <span>No photo added yet</span>;
+    return <span>No image available</span>;
   }
 
   return (

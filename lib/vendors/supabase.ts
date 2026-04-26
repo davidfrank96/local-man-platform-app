@@ -4,6 +4,7 @@ import {
   vendorCategorySchema,
   vendorDetailResponseDataSchema,
 } from "../validation/index.ts";
+import { normalizeVendorImageRows } from "./images.ts";
 import type {
   Vendor,
   VendorCategory,
@@ -64,15 +65,24 @@ async function fetchSupabaseJson<T>(
   url: URL,
   config: SupabaseRestConfig,
   errorLabel: string,
+  options?: {
+    cache?: RequestCache;
+    revalidate?: number;
+  },
 ): Promise<T> {
   const response = await fetch(url, {
     headers: {
       apikey: config.anonKey,
       authorization: `Bearer ${config.anonKey}`,
     },
-    next: {
-      revalidate: 30,
-    },
+    ...(options?.cache ? { cache: options.cache } : {}),
+    ...(!options?.cache
+      ? {
+          next: {
+            revalidate: options?.revalidate ?? 30,
+          },
+        }
+      : {}),
   });
 
   if (!response.ok) {
@@ -158,6 +168,9 @@ export async function fetchVendorDetailBySlugFromSupabase(
     url,
     config,
     "Supabase vendor detail query failed",
+    {
+      cache: "no-store",
+    },
   );
   const vendor = rows[0];
 
@@ -173,8 +186,9 @@ export async function fetchVendorDetailBySlugFromSupabase(
     vendor.vendor_hours?.toSorted((left, right) => left.day_of_week - right.day_of_week) ??
     [];
   const images =
-    vendor.vendor_images?.toSorted((left, right) => left.sort_order - right.sort_order) ??
-    [];
+    (
+      normalizeVendorImageRows(config.url, vendor.vendor_images ?? []) as VendorImage[]
+    ).toSorted((left, right) => left.sort_order - right.sort_order) ?? [];
   const featuredDishes =
     vendor.vendor_featured_dishes?.filter((dish) => dish.is_featured) ?? [];
 

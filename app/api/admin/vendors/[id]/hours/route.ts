@@ -5,7 +5,10 @@ import {
 } from "../../../../../../lib/api/validation.ts";
 import { requireAdmin } from "../../../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../../../lib/admin/errors.ts";
-import { replaceVendorHours } from "../../../../../../lib/admin/vendor-service.ts";
+import {
+  listVendorHours,
+  replaceVendorHours,
+} from "../../../../../../lib/admin/vendor-service.ts";
 import {
   replaceVendorHoursRequestSchema,
   vendorIdParamsSchema,
@@ -16,6 +19,30 @@ type VendorHoursRouteContext = {
     id: string;
   }>;
 };
+
+export async function GET(request: Request, { params }: VendorHoursRouteContext) {
+  const admin = await requireAdmin(request);
+
+  if (!admin.success) {
+    return admin.response;
+  }
+
+  const routeParams = validateInput(vendorIdParamsSchema, await params);
+
+  if (!routeParams.success) {
+    return routeParams.response;
+  }
+
+  try {
+    const hours = await listVendorHours(routeParams.data, {
+      session: admin.session,
+    });
+
+    return apiSuccess({ hours });
+  } catch (error) {
+    return handleAdminServiceError(error, "Unable to load vendor hours.");
+  }
+}
 
 export async function POST(_request: Request, { params }: VendorHoursRouteContext) {
   const admin = await requireAdmin(_request);

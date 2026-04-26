@@ -14,7 +14,7 @@
     "test:e2e": "playwright test",
     "runtime:check-env": "node scripts/check-runtime-env.mjs",
     "runtime:check-db-env": "node scripts/check-runtime-env.mjs --db",
-    "db:migrate": "node scripts/run-sql.mjs supabase/migrations/20260422180000_initial_schema.sql",
+    "db:migrate": "node scripts/run-migrations.mjs",
     "db:seed:abuja": "node scripts/run-sql.mjs supabase/seed/20260422_abuja_pilot_seed.sql",
     "smoke:nearby": "node scripts/smoke-nearby.mjs"
   },

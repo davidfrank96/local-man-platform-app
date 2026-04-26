@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import type { NearbyVendorsResponseData } from "../../types/index.ts";
+
+type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
+
 function trackClientErrors(page: Page): string[] {
   const errors: string[] = [];
 
@@ -24,6 +28,47 @@ function parseRgbChannels(value: string) {
   const match = value.match(/\d+(\.\d+)?/g) ?? [];
 
   return match.slice(0, 3).map((channel) => Number(channel));
+}
+
+async function mockNearbyDiscovery(page: Page, vendors: NearbyVendor[]) {
+  await page.route("**/api/vendors/nearby**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          location: {
+            source: "precise",
+            label: "Current location",
+            coordinates: {
+              lat: 9.08,
+              lng: 7.4,
+            },
+            isApproximate: false,
+          },
+          vendors,
+        },
+        error: null,
+      }),
+    });
+  });
+}
+
+async function readVendorCardStateSnapshot(page: Page) {
+  return page.locator(".vendor-card").evaluateAll((cards) =>
+    cards.map((card) => {
+      const name = card.querySelector("h3")?.textContent?.trim() ?? "";
+      const statusLine = card.querySelector(".vendor-card-status-line")?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      const hoursLine = card.querySelector(".vendor-card-hours-line")?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+
+      return {
+        name,
+        statusLine,
+        hoursLine,
+      };
+    }),
+  );
 }
 
 type MockGeolocationMode =
@@ -277,7 +322,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
-  test("denied geolocation falls back to Abuja without stale approximate claims", async ({ page }) => {
+  test("denied geolocation keeps frontend location copy neutral while vendors still load", async ({ page }) => {
     const errors = trackClientErrors(page);
 
     await installMockGeolocation(page, {
@@ -287,14 +332,14 @@ test.describe("Phase 3 browser smoke", () => {
     });
     await page.goto("/");
 
-    await expect(page.locator(".location-panel strong")).toHaveText("Showing Abuja");
+    await expect(page.locator(".location-panel strong")).toHaveText("Showing nearby vendors");
     await expect(page.locator(".location-panel div > span").first()).toHaveText(
-      "Location access is off. Turn it on for vendors closer to you.",
+      "Turn on location for more accurate nearby vendors.",
     );
-    await expect(page.locator(".location-panel p")).toHaveText(
-      "Location access was denied and approximate location is unavailable.",
-    );
+    await expect(page.locator(".location-panel p")).toHaveCount(0);
     await expect(page.locator(".location-trust-line")).toHaveCount(0);
+    await expect(page.getByText("Showing Abuja")).toHaveCount(0);
+    await expect(page.getByText("Approximate location was unavailable.")).toHaveCount(0);
     await expect(page.locator(".vendor-card").first()).toBeVisible();
 
     await expectNoClientErrors(errors);
@@ -319,10 +364,11 @@ test.describe("Phase 3 browser smoke", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
-    await expect(page.locator(".location-panel strong")).toHaveText("Showing Abuja");
-    await expect(page.locator(".location-panel p")).toHaveText(
-      "Location access was denied and approximate location is unavailable.",
+    await expect(page.locator(".location-panel strong")).toHaveText("Showing nearby vendors");
+    await expect(page.locator(".location-panel div > span").first()).toHaveText(
+      "Turn on location for more accurate nearby vendors.",
     );
+    await expect(page.locator(".location-panel p")).toHaveCount(0);
 
     await setMockGeolocationMode(page, {
       kind: "success",
@@ -342,6 +388,108 @@ test.describe("Phase 3 browser smoke", () => {
 
     expect(nearbyUrls.some((url) => !url.includes("lat=") && !url.includes("lng="))).toBe(true);
     expect(nearbyUrls.some((url) => url.includes("lat=") && url.includes("lng="))).toBe(true);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("selection keeps open and closed status consistent across card and selected preview", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await mockNearbyDiscovery(page, [
+      {
+        vendor_id: "30000000-0000-4000-8000-000000000001",
+        name: "Closed Sunday Lunch Bowl",
+        slug: "closed-sunday-lunch-bowl",
+        short_description: "Closed vendor regression case.",
+        phone_number: "+2348000000001",
+        area: "Jabi",
+        latitude: 9.0606,
+        longitude: 7.4219,
+        price_band: "standard",
+        average_rating: 0,
+        review_count: 0,
+        distance_km: 3.11,
+        is_open_now: false,
+        featured_dish: {
+          dish_name: "Rice bowl",
+          description: null,
+        },
+        today_hours: "Closed",
+      },
+      {
+        vendor_id: "30000000-0000-4000-8000-000000000002",
+        name: "Opens Later Rice Corner",
+        slug: "opens-later-rice-corner",
+        short_description: "Future open regression case.",
+        phone_number: "+2348000000002",
+        area: "Jabi",
+        latitude: 9.0643,
+        longitude: 7.4291,
+        price_band: "standard",
+        average_rating: 4.2,
+        review_count: 11,
+        distance_km: 4.02,
+        is_open_now: false,
+        featured_dish: {
+          dish_name: "Jollof rice",
+          description: null,
+        },
+        today_hours: "5:00 PM - 10:00 PM",
+      },
+      {
+        vendor_id: "30000000-0000-4000-8000-000000000003",
+        name: "Open Evening Grill",
+        slug: "open-evening-grill",
+        short_description: "Open vendor regression case.",
+        phone_number: "+2348000000003",
+        area: "Wuse",
+        latitude: 9.071,
+        longitude: 7.43,
+        price_band: "premium",
+        average_rating: 4.7,
+        review_count: 32,
+        distance_km: 2.45,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Grilled chicken",
+          description: null,
+        },
+        today_hours: "10:00 AM - 11:00 PM",
+      },
+    ]);
+
+    await page.goto("/");
+    await expect.poll(async () => page.locator(".vendor-card").count()).toBe(3);
+
+    const beforeSelectionSnapshot = await readVendorCardStateSnapshot(page);
+
+    const closedCard = page.locator(".vendor-card").filter({ hasText: "Closed Sunday Lunch Bowl" });
+    await expect(closedCard.locator(".vendor-card-status-line")).toContainText("Closed");
+    await expect(closedCard.locator(".vendor-card-hours-line")).toContainText("Closed");
+    await closedCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(closedCard.locator(".vendor-card-status-line")).toContainText("Closed");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("Closed");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-hours-line")).toContainText("Closed");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("3.1 km");
+
+    const laterCard = page.locator(".vendor-card").filter({ hasText: "Opens Later Rice Corner" });
+    await expect(laterCard.locator(".vendor-card-status-line")).toContainText("Closed");
+    await laterCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(laterCard.locator(".vendor-card-status-line")).toContainText("Closed");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("Closed");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-hours-line")).toContainText("5:00 PM - 10:00 PM");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("4.0 km");
+
+    const openCard = page.locator(".vendor-card").filter({ hasText: "Open Evening Grill" });
+    await expect(openCard.locator(".vendor-card-status-line")).toContainText("Open");
+    await openCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(openCard.locator(".vendor-card-status-line")).toContainText("Open");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("Open");
+
+    const afterSelectionSnapshot = await readVendorCardStateSnapshot(page);
+    expect(afterSelectionSnapshot).toEqual(beforeSelectionSnapshot);
 
     await expectNoClientErrors(errors);
   });
@@ -382,6 +530,15 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator('select[name="radiusKm"]')).toHaveValue("30");
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
 
+    const restoredApplyButton = page.getByRole("button", { name: "Apply" });
+    await expect(restoredApplyButton).toBeEnabled();
+    await page.getByRole("textbox", { name: "Search" }).fill("grill");
+    await restoredApplyButton.click();
+
+    await expect(page).toHaveURL(/q=grill/);
+    await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
+    await expect(page.locator(".vendor-card").first().getByText(/^Today:/)).toBeVisible();
+
     await expectNoClientErrors(errors);
   });
 
@@ -418,6 +575,15 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator('select[name="radiusKm"]')).toHaveValue("30");
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
 
+    const restoredApplyButton = page.getByRole("button", { name: "Apply" });
+    await expect(restoredApplyButton).toBeEnabled();
+    await page.locator('select[name="priceBand"]').selectOption("budget");
+    await restoredApplyButton.click();
+
+    await expect(page).toHaveURL(/price_band=budget/);
+    await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
+    await expect(page.locator(".vendor-card").first().getByText(/^Today:/)).toBeVisible();
+
     await expectNoClientErrors(errors);
   });
 
@@ -428,6 +594,36 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
     await expect(page.getByLabel("Password")).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin vendors route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/vendors");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin create vendor route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/vendors/new");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin edit vendor route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/vendors/00000000-0000-4000-8000-000000000001");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 
     await expectNoClientErrors(errors);
   });
@@ -518,6 +714,38 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("morning theme applies from local browser time", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await setMockClientTime(page, "2026-04-25T08:00:00");
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const shell = page.locator(".public-shell");
+    await expect(shell).toHaveAttribute("data-time-theme", "morning");
+    await expect(page.locator(".discovery-heading")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("afternoon theme applies from local browser time", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await setMockClientTime(page, "2026-04-25T14:00:00");
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const shell = page.locator(".public-shell");
+    await expect(shell).toHaveAttribute("data-time-theme", "afternoon");
+    await expect(page.locator(".discovery-heading")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
   test("precise location falls back to coordinates when reverse geocoding fails", async ({ page }) => {
     const errors = trackClientErrors(page);
 
@@ -529,6 +757,37 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".location-panel div > span").first()).toHaveText(
       "9.08000, 7.40000",
     );
+    await expect(page.locator(".location-trust-line")).toHaveText("High accuracy");
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("unavailable location keeps fallback copy calm on desktop and mobile", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await installMockGeolocation(page, {
+      kind: "error",
+      code: 2,
+      message: "Geolocation unavailable.",
+    });
+    await page.goto("/");
+
+    await expect(page.locator(".location-panel strong")).toHaveText("Showing nearby vendors");
+    await expect(page.locator(".location-panel div > span").first()).toHaveText(
+      "Turn on location for more accurate nearby vendors.",
+    );
+    await expect(page.locator(".location-trust-line")).toHaveCount(0);
+    await expect(page.getByText("Showing Abuja")).toHaveCount(0);
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+
+    await expect(page.locator(".location-panel strong")).toHaveText("Showing nearby vendors");
+    await expect(page.locator(".location-panel div > span").first()).toHaveText(
+      "Turn on location for more accurate nearby vendors.",
+    );
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
 
     await expectNoClientErrors(errors);
   });

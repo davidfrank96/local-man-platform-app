@@ -13,7 +13,6 @@ export type DiscoveryFilters = {
 type VendorFiltersProps = {
   filters: DiscoveryFilters;
   categories: PublicCategory[];
-  disabled: boolean;
   onChange: (filters: DiscoveryFilters) => void;
 };
 
@@ -35,7 +34,6 @@ function readFormFilters(form: HTMLFormElement): DiscoveryFilters {
 export function VendorFilters({
   filters,
   categories,
-  disabled,
   onChange,
 }: VendorFiltersProps) {
   const [draftFilters, setDraftFilters] = useState<DiscoveryFilters>(filters);
@@ -135,7 +133,7 @@ export function VendorFilters({
         />
         <span>Open now</span>
       </label>
-      <button className="button-primary compact-button" disabled={disabled} type="submit">
+      <button className="button-primary compact-button" type="submit">
         Apply
       </button>
     </form>
