@@ -7,7 +7,7 @@ type VendorMapProps = {
   vendors: NearbyVendor[];
   userLocation: Coordinates;
   selectedVendorId: string | null;
-  onSelectVendor: (vendorId: string) => void;
+  onSelectVendor: (vendorId: string, source: "map") => void;
 };
 
 function getMarkerStyle(
@@ -72,7 +72,7 @@ export function VendorMap({
               bounds,
             )}
             type="button"
-            onClick={() => onSelectVendor(vendor.vendor_id)}
+            onClick={() => onSelectVendor(vendor.vendor_id, "map")}
           >
             {index + 1}
           </button>

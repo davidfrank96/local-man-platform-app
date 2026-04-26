@@ -73,6 +73,9 @@ npm run runtime:check-db-env
 Migration files:
 - `supabase/migrations/20260422180000_initial_schema.sql`
 - `supabase/migrations/20260423120000_vendor_image_storage.sql`
+- `supabase/migrations/20260426190000_user_action_events.sql`
+- `supabase/migrations/20260426203000_user_events_alignment.sql`
+- `supabase/migrations/20260426213000_user_events_session_flow.sql`
 
 Preferred command when `psql` is available:
 
@@ -90,8 +93,9 @@ Dashboard fallback:
 1. Open the Supabase project.
 2. Go to SQL Editor.
 3. Run both migration files in filename order.
-4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, and `audit_logs`.
+4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, and `app_schema_migrations`.
 5. Confirm `public.vendor_images` includes `storage_object_path`.
+6. Confirm `public.user_events` exists for Phase 6 analytics.
 
 ## Abuja Seed Data
 Seed file:
@@ -103,7 +107,12 @@ The seed creates:
 - category mappings
 - weekly hours for every vendor
 - one featured dish per vendor
-- one image placeholder per vendor
+- development placeholder image rows for vendors
+
+Seed image note:
+- placeholder `vendor_images.image_url` rows that point to `/seed-images/...` are development-only
+- public vendor detail rendering now prefers storage-backed vendor images with `storage_object_path`
+- production image testing should use real uploads into the `vendor-images` bucket
 
 Preferred command when `psql` is available:
 

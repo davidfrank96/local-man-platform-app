@@ -2,9 +2,14 @@
 The Local Man — Current Sprint
 
 ## Sprint Goal
-Close out Phase 5 `UX Polish & Real-User Iteration` cleanly and document readiness for Phase 6 `Usage signals`.
+Start Phase 6 `Usage Signals` with lightweight, trustworthy internal analytics while keeping the Phase 5 surface stable.
 
 ## In Scope
+- keep Phase 5 public discovery and admin workflows stable
+- add internal analytics visibility for real usage signals
+- keep public event tracking lightweight and non-blocking
+- expose admin-only analytics at `/admin/analytics`
+- summarize sessions, events, vendor performance, and drop-off signals safely
 - keep public discovery, vendor cards, selected state, and vendor detail flows aligned with current behavior
 - preserve back-navigation and `Back to map` state restoration
 - keep location handling honest, trust-first, and retryable across precise, approximate, and default-city modes
@@ -25,17 +30,15 @@ Close out Phase 5 `UX Polish & Real-User Iteration` cleanly and document readine
 - broad product expansion beyond discovery, vendor detail, and admin maintenance
 
 ## Done Criteria
-Phase 5 is done when:
-- docs describe the current UX and location behavior accurately
-- vendor cards consistently show all required fields, including `Today:` hours
-- selected vendor states remain readable and obvious across morning, afternoon, and night themes
-- browser back and `Back to map` restore discovery state without manual reload, and restored search and filter controls remain usable immediately
-- precise location, fallback behavior, retry behavior, and reverse location display remain stable
-- default-city fallback remains internal when needed and is not presented as the user’s exact location
-- admin vendor maintenance flows remain functional
+Phase 6 signal visibility is ready when:
+- docs describe the current analytics behavior accurately
+- public tracking remains fire-and-forget and non-blocking
+- `/admin/analytics` is protected by admin auth
+- analytics summaries, vendor performance, drop-off panels, and recent activity load without breaking when data is sparse
+- Phase 5 public and admin workflows remain green under the full regression gate
 - lint, typecheck, unit tests, browser smoke tests, build, and nearby smoke all pass
 
-## Current Phase 5 Status
+## Current Platform Status
 - Vendor cards use a compact food-discovery layout with required actions and status fields.
 - Vendor cards show compact `Today:` hours and preserve those fields after selection.
 - Selected vendor cards and selected vendor preview panels use a stronger, readable highlight treatment.
@@ -51,18 +54,19 @@ Phase 5 is done when:
 - Admin media editing now distinguishes vendor profile images from optional featured dish image URLs, with remove actions for current featured dishes.
 - Admin workspace is split cleanly across dashboard, vendor registry, create vendor, and focused vendor edit routes.
 - Create vendor now supports a fuller onboarding flow with basic details, hours, featured dishes, image selection, acknowledgements, and review before create.
+- Public event tracking records session, selection, detail, call, directions, search, and filter signals in `user_events`.
+- Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent activity.
 
-## Current Phase 5 Warnings
+## Current Warnings
 - IP approximation is still an interface only; there is no live provider yet.
 - Reverse geocoding is best-effort and depends on external availability.
 - The public map is still the lightweight MVP map surface rather than a full SDK integration.
 - Admin auth still uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
 - Pilot quality still depends on complete and accurate vendor data entry.
+- Historical `user_events` rows may not include `session_id`, so exact session drop-off reporting can be incomplete until newer traffic accumulates.
 
-## Readiness for Phase 6
-Phase 5 is functionally complete when the regression gate, runtime gate, and documentation gate remain green together.
-
-Phase 6 should focus on usage signals and real behavior tracking rather than new surface-area expansion.
+## Readiness
+Phase 6 can continue as long as the regression gate, runtime gate, and documentation gate remain green together.
 
 ## Phase 5 Boundaries
 Allowed:

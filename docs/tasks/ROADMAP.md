@@ -70,6 +70,10 @@ Status: completed
 
 ## Phase 6 — Usage Signals
 - usage signals and real behavior tracking
+- lightweight first-party event tracking in `user_events`
+- admin-only analytics dashboard at `/admin/analytics`
+- vendor performance ranking and recent activity review
+- drop-off signal visibility for search, selection, and detail-action gaps
 - stronger pilot observation
 - operator-facing signal review workflows
 - evidence-based prioritization for the next product changes

@@ -608,6 +608,16 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("admin analytics route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/analytics");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
   test("admin create vendor route loads behind auth", async ({ page }) => {
     const errors = trackClientErrors(page);
 

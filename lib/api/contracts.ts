@@ -45,6 +45,34 @@ export const apiEndpoints = {
     responseShape: "List of category names and slugs.",
     validationBoundary: ["no client input expected"],
   },
+  trackUserAction: {
+    access: "public",
+    method: "POST",
+    path: "/api/events",
+    requestShape:
+      "JSON body with event_type, session_id, optional vendor_id, device_type, location_source, and optional lightweight page/filter metadata.",
+    responseShape: "Accepted event write acknowledgement.",
+    validationBoundary: [
+      "event_type must be one of the documented public action events",
+      "session_id should be a client-generated UUID when provided",
+      "vendor_id must be a valid UUID when provided",
+      "device_type must be a supported lightweight client classification",
+    ],
+  },
+  getAdminAnalytics: {
+    access: "admin",
+    method: "GET",
+    path: "/api/admin/analytics",
+    requestShape: "Optional query param: range = 24h | 7d | 30d | all.",
+    responseShape:
+      "Summary counts, vendor performance rankings, drop-off metrics, and recent usage events from user_events.",
+    validationBoundary: [
+      "admin authentication required",
+      "range must be one of the documented analytics windows",
+      "analytics reads must remain read-only",
+      "historical rows without session_id must degrade safely",
+    ],
+  },
   createVendor: {
     access: "admin",
     method: "POST",

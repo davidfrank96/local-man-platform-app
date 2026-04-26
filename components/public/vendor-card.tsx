@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { NearbyVendorsResponseData } from "../../types/index.ts";
+import type { LocationSource, NearbyVendorsResponseData } from "../../types/index.ts";
 import {
   formatVendorCardDistance,
   getVendorOpenStateDisplay,
@@ -15,7 +15,8 @@ type VendorCardProps = {
   selected: boolean;
   approximateDistance: boolean;
   detailHref: string;
-  onSelect: (vendorId: string) => void;
+  locationSource?: LocationSource | null;
+  onSelect: (vendorId: string, source: "card") => void;
 };
 
 function getVendorCue(vendor: NearbyVendor): string | null {
@@ -27,6 +28,7 @@ export function VendorCard({
   selected,
   approximateDistance,
   detailHref,
+  locationSource,
   onSelect,
 }: VendorCardProps) {
   const metaLine = [
@@ -49,7 +51,7 @@ export function VendorCard({
         aria-pressed={selected}
         className="vendor-card-preview"
         type="button"
-        onClick={() => onSelect(vendor.vendor_id)}
+        onClick={() => onSelect(vendor.vendor_id, "card")}
       >
         <div className="vendor-card-main">
           <h3>{vendor.name}</h3>
@@ -76,6 +78,10 @@ export function VendorCard({
           latitude={vendor.latitude}
           longitude={vendor.longitude}
           phoneNumber={vendor.phone_number}
+          source="card"
+          vendorId={vendor.vendor_id}
+          vendorSlug={vendor.slug}
+          locationSource={locationSource}
         />
         <Link className="vendor-card-detail-link" href={detailHref}>
           View details →

@@ -52,6 +52,7 @@ Handles:
 Handles:
 - admin login and session validation
 - dashboard overview
+- analytics dashboard
 - vendor registry management
 - vendor creation
 - vendor editing
@@ -63,8 +64,10 @@ Handles:
 Handle:
 - public nearby vendor reads
 - public vendor detail reads
+- non-blocking public event writes
 - reverse geocoding
 - authenticated admin writes
+- authenticated admin analytics reads
 - admin subresource loading
 
 ### Database
@@ -77,6 +80,7 @@ Stores:
 - ratings
 - admin_users
 - audit_logs
+- user_events
 
 ## Architecture Principles
 1. Keep the public app read-heavy and simple.
@@ -189,6 +193,35 @@ Rules:
 - admin login uses Supabase email/password auth
 - browser-stored session is validated against `admin_users`
 - protected routes resolve through the admin route guard
+
+### Usage Signal State
+- public tracking is fire-and-forget and must never block UI
+- public event writes go through `/api/events`
+- analytics reads stay admin-only through `/api/admin/analytics`
+- `user_events` is append-only for lightweight interaction capture
+- session-level drop-off analysis depends on `session_id` coverage; the admin analytics page must tolerate historical rows without that field
+
+## Usage Signal Pipeline
+
+Public usage signals use this path:
+
+1. public UI records a lightweight interaction
+2. client sends a small payload to `/api/events`
+3. server validates the payload
+4. server writes to `public.user_events`
+5. admin analytics reads and aggregates those rows server-side
+6. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
+
+Tracked event types:
+- `session_started`
+- `first_interaction`
+- `last_interaction`
+- `vendor_selected`
+- `vendor_detail_opened`
+- `call_clicked`
+- `directions_clicked`
+- `search_used`
+- `filter_applied`
 
 ## Core Product Logic
 

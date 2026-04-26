@@ -159,6 +159,31 @@ Behavior:
 - Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
 - Returns `UPSTREAM_ERROR` when the Supabase category query fails.
 
+### POST /api/events
+Purpose: store lightweight public usage signals
+
+Route file:
+- `app/api/events/route.ts`
+
+Tracked events:
+- `session_started`
+- `first_interaction`
+- `last_interaction`
+- `vendor_selected`
+- `vendor_detail_opened`
+- `call_clicked`
+- `directions_clicked`
+- `search_used`
+- `filter_applied`
+
+Behavior:
+- accepts lightweight JSON only
+- validates event type and optional metadata
+- writes to `public.user_events`
+- uses server-side credentials only
+- returns `202` instead of surfacing public UX failures when tracking is unavailable
+- must not block or degrade public interactions
+
 ## Admin Endpoints
 Admin endpoint rules:
 - Requests must include `Authorization: Bearer <supabase-access-token>`.
@@ -182,6 +207,29 @@ Behavior:
 - verifies the Supabase user
 - verifies that the authenticated user exists in `admin_users`
 - returns the authenticated user and matching admin user record
+
+### GET /api/admin/analytics
+Read lightweight internal usage analytics
+
+Route file:
+- `app/api/admin/analytics/route.ts`
+
+Query params:
+- `range`: `24h`, `7d`, `30d`, or `all`
+
+Returns:
+- summary counts
+- vendor performance rankings
+- drop-off metrics when session-level data is available
+- recent events with vendor, device, location source, and timestamp
+
+Behavior:
+- requires admin auth
+- reads only from `user_events`
+- stays read-only
+- aggregates server-side
+- tolerates empty data
+- tolerates historical event rows without `session_id` by returning safe empty session-dropoff metrics
 
 ### GET /api/admin/vendors
 List vendors

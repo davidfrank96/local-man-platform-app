@@ -154,6 +154,65 @@ export const auditLogSchema = z.object({
   created_at: timestampSchema,
 });
 
+export const userActionEventNameSchema = z.enum([
+  "session_started",
+  "first_interaction",
+  "last_interaction",
+  "vendor_selected",
+  "vendor_detail_opened",
+  "call_clicked",
+  "directions_clicked",
+  "search_used",
+  "filter_applied",
+]);
+
+export const analyticsEventTypeSchema = z.union([
+  userActionEventNameSchema,
+  z.literal("filters_applied"),
+]);
+
+export const deviceTypeSchema = z.enum([
+  "mobile",
+  "tablet",
+  "desktop",
+  "unknown",
+]);
+
+const userActionEventFiltersSchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  radiusKm: z.coerce.number().positive().max(100).optional(),
+  openNow: z.boolean().optional(),
+  priceBand: z.union([priceBandSchema, z.literal("")]).optional(),
+  category: z.union([slugSchema, z.literal("")]).optional(),
+});
+
+const userActionEventMetadataSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+);
+
+export const userActionEventSchema = z.object({
+  event_type: userActionEventNameSchema,
+  session_id: uuidSchema.optional(),
+  vendor_id: uuidSchema.optional(),
+  timestamp: timestampSchema.optional(),
+  device_type: deviceTypeSchema.default("unknown"),
+  location_source: locationSourceSchema.nullable().optional(),
+  vendor_slug: slugSchema.optional(),
+  page_path: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .refine((value) => value.startsWith("/"), {
+      message: "page_path must start with '/'.",
+    })
+    .optional(),
+  search_query: z.string().trim().max(120).optional(),
+  filters: userActionEventFiltersSchema.default({}),
+  metadata: userActionEventMetadataSchema.default({}),
+});
+
 export const nearbyVendorsQuerySchema = z
   .object({
     lat: latitudeSchema.optional(),
@@ -218,6 +277,61 @@ export const adminVendorsQuerySchema = paginationQuerySchema.extend({
   area: z.string().trim().max(120).optional(),
   is_active: booleanLikeSchema.optional(),
   price_band: priceBandSchema.optional(),
+});
+
+export const adminAnalyticsRangeSchema = z.enum(["24h", "7d", "30d", "all"]).default("7d");
+
+export const adminAnalyticsQuerySchema = z.object({
+  range: adminAnalyticsRangeSchema.default("7d"),
+});
+
+export const adminAnalyticsSummarySchema = z.object({
+  total_sessions: z.coerce.number().int().min(0),
+  total_events: z.coerce.number().int().min(0),
+  vendor_selections: z.coerce.number().int().min(0),
+  vendor_detail_opens: z.coerce.number().int().min(0),
+  call_clicks: z.coerce.number().int().min(0),
+  directions_clicks: z.coerce.number().int().min(0),
+  searches_used: z.coerce.number().int().min(0),
+  filters_applied: z.coerce.number().int().min(0),
+});
+
+export const adminAnalyticsVendorMetricSchema = z.object({
+  vendor_id: uuidSchema.nullable(),
+  vendor_name: z.string().nullable(),
+  vendor_slug: slugSchema.nullable().optional(),
+  count: z.coerce.number().int().min(0),
+});
+
+export const adminAnalyticsDropoffSchema = z.object({
+  session_metrics_available: z.boolean(),
+  sessions_without_meaningful_interaction: z.coerce.number().int().min(0).nullable(),
+  sessions_with_search_without_vendor_click: z.coerce.number().int().min(0).nullable(),
+  sessions_with_detail_without_action: z.coerce.number().int().min(0).nullable(),
+});
+
+export const adminAnalyticsRecentEventSchema = z.object({
+  id: uuidSchema,
+  event_type: analyticsEventTypeSchema,
+  vendor_id: uuidSchema.nullable(),
+  vendor_name: z.string().nullable(),
+  vendor_slug: slugSchema.nullable().optional(),
+  device_type: deviceTypeSchema,
+  location_source: locationSourceSchema.nullable(),
+  timestamp: timestampSchema,
+});
+
+export const adminAnalyticsResponseDataSchema = z.object({
+  range: adminAnalyticsRangeSchema,
+  summary: adminAnalyticsSummarySchema,
+  vendor_performance: z.object({
+    most_selected_vendors: z.array(adminAnalyticsVendorMetricSchema),
+    most_viewed_vendor_details: z.array(adminAnalyticsVendorMetricSchema),
+    most_call_clicks: z.array(adminAnalyticsVendorMetricSchema),
+    most_directions_clicks: z.array(adminAnalyticsVendorMetricSchema),
+  }),
+  dropoff: adminAnalyticsDropoffSchema,
+  recent_events: z.array(adminAnalyticsRecentEventSchema),
 });
 
 export const replaceVendorHoursRequestSchema = z.object({

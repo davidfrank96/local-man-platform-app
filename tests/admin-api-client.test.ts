@@ -6,6 +6,7 @@ import {
   deleteAdminVendorDish,
   createAdminVendor,
   createAdminVendorImages,
+  fetchAdminAnalytics,
   listAdminVendorDishes,
   listAdminVendorHours,
   listAdminVendors,
@@ -372,6 +373,62 @@ test("admin API client can list vendor hours", async () => {
 
   assert.equal(hours[0].day_of_week, 1);
   assert.equal(hours[0].open_time, "08:00");
+});
+
+test("admin API client can fetch analytics", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+
+    return Response.json({
+      success: true,
+      data: {
+        range: "30d",
+        summary: {
+          total_sessions: 2,
+          total_events: 12,
+          vendor_selections: 3,
+          vendor_detail_opens: 4,
+          call_clicks: 1,
+          directions_clicks: 1,
+          searches_used: 2,
+          filters_applied: 2,
+        },
+        vendor_performance: {
+          most_selected_vendors: [],
+          most_viewed_vendor_details: [],
+          most_call_clicks: [],
+          most_directions_clicks: [],
+        },
+        dropoff: {
+          session_metrics_available: false,
+          sessions_without_meaningful_interaction: null,
+          sessions_with_search_without_vendor_click: null,
+          sessions_with_detail_without_action: null,
+        },
+        recent_events: [],
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const analytics = await fetchAdminAnalytics(
+    { range: "30d" },
+    {
+      accessToken: "admin-token",
+      fetchImpl,
+    },
+  );
+
+  assert.equal(analytics.summary.total_events, 12);
+  assert.equal(
+    new URL(requestedUrls[0], "http://localhost").pathname,
+    "/api/admin/analytics",
+  );
+  assert.equal(
+    new URL(requestedUrls[0], "http://localhost").searchParams.get("range"),
+    "30d",
+  );
 });
 
 test("admin API client can delete vendor images", async () => {

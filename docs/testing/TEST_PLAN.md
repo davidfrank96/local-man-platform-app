@@ -2,7 +2,7 @@
 The Local Man — Test Plan
 
 ## Test Goal
-Ensure the runtime, admin operations, public discovery surface, and Phase 5 UX polish remain coherent before commit, deployment, or pilot use.
+Ensure the runtime, admin operations, public discovery surface, Phase 5 UX polish, and Phase 6 usage signals remain coherent before commit, deployment, or pilot use.
 
 ## Documentation Validation
 Check:
@@ -101,10 +101,16 @@ Test:
 - empty image and dish arrays are rejected
 - invalid image type and oversize uploads are rejected before storage writes
 - malformed Supabase payloads return controlled `UPSTREAM_ERROR` responses
+- admin analytics route requires admin auth
+- admin analytics route aggregates summary counts correctly
+- admin analytics route tolerates empty `user_events`
+- admin analytics helper logic handles empty vendor performance and recent activity safely
 
 Current automated coverage:
 - `tests/admin-auth.test.ts`
 - `tests/admin-session-client.test.ts`
+- `tests/admin-analytics-route.test.ts`
+- `tests/admin-analytics-view.test.ts`
 - `tests/admin-vendor-routes.test.ts`
 - `tests/admin-vendor-subresources.test.ts`
 - `tests/admin-api-client.test.ts`
@@ -112,6 +118,7 @@ Current automated coverage:
 Manual admin UI smoke coverage:
 - open `/admin` and confirm redirect to `/admin/login`
 - open `/admin/vendors` and confirm the protected route still resolves to the admin login gate when signed out
+- open `/admin/analytics` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/new` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/[id]` and confirm the protected route still resolves to the admin login gate when signed out
 - sign in with an email/password account that exists in `admin_users`

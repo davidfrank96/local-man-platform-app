@@ -13,6 +13,7 @@ type AdminShellProps = {
 
 const adminNavItems = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/analytics", label: "Analytics" },
   { href: "/admin/vendors", label: "Manage vendors" },
   { href: "/admin/vendors/new", label: "Create vendor" },
 ];

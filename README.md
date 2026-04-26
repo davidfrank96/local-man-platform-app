@@ -27,6 +27,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
 ### Admin
 - Supabase email/password admin login
 - admin dashboard overview cards and quick actions
+- admin analytics dashboard for lightweight usage signals
 - vendor registry with completeness badges
 - vendor create workflow with:
   - basic details
@@ -112,6 +113,23 @@ Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/franken
 - Phase 4 — Usability & admin baseline
 - Phase 5 — UX polish & real-user iteration
 - Phase 6 — Usage signals
+
+## Phase 6 Summary
+Phase 6 currently covers:
+- lightweight first-party public event tracking
+- tracked events:
+  - `session_started`
+  - `first_interaction`
+  - `last_interaction`
+  - `vendor_selected`
+  - `vendor_detail_opened`
+  - `call_clicked`
+  - `directions_clicked`
+  - `search_used`
+  - `filter_applied`
+- admin-only analytics route at `/admin/analytics`
+- summary cards, vendor performance, drop-off signals, and recent activity
+- non-blocking tracking writes that must never interfere with public discovery
 
 ## Phase 5 Summary
 Phase 5 delivered:
