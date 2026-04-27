@@ -49,6 +49,7 @@ export function VendorCard({
     vendor.average_rating,
     vendor.review_count,
   );
+  const isNewRating = ratingLabel === "New";
   const openState = getVendorOpenStateDisplay(vendor.is_open_now);
   const statusBadgeClassName =
     openState.toneClassName === "vendor-card-status-open"
@@ -96,8 +97,8 @@ export function VendorCard({
                     </svg>
                   </CardIcon>
                   <span>{formatVendorCardDistance(vendor.distance_km, approximateDistance)}</span>
-                  <span aria-hidden="true">•</span>
-                  <span className={openState.toneClassName}>{openState.label}</span>
+                  <span className="vendor-card-status-separator" aria-hidden="true">•</span>
+                  <span className={`vendor-card-status-text ${openState.toneClassName}`}>{openState.label}</span>
                 </p>
                 <p className="vendor-card-hours-line">
                   <CardIcon>
@@ -107,7 +108,9 @@ export function VendorCard({
                     </svg>
                   </CardIcon>
                   <span>
-                    <span className="vendor-card-hours-label">Today:</span> {vendor.today_hours}
+                    <span className="vendor-card-hours-label vendor-card-hours-label-desktop">Active hours:</span>
+                    <span className="vendor-card-hours-label vendor-card-hours-label-mobile">Active hours:</span>{" "}
+                    {vendor.today_hours}
                   </span>
                 </p>
                 {metaLine ? (
@@ -122,7 +125,7 @@ export function VendorCard({
                     <span>{metaLine}</span>
                   </p>
                 ) : null}
-                <span className="vendor-card-rating">
+                <span className={isNewRating ? "vendor-card-rating vendor-card-rating-new" : "vendor-card-rating"}>
                   <CardIcon>
                     <svg viewBox="0 0 16 16" fill="currentColor">
                       <path d="M8 1.8 9.8 5.6l4.2.6-3 2.9.7 4.1L8 11.1 4.3 13.2 5 9.1 2 6.2l4.2-.6L8 1.8Z" />

@@ -254,6 +254,8 @@ export function PublicDiscovery({
   const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(
     parsedUrlState.selectedVendorSlug,
   );
+  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeMobileVendorSection, setActiveMobileVendorSection] =
     useState<MobileVendorSection>("nearby");
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
@@ -626,6 +628,8 @@ export function PublicDiscovery({
   function applyFilters(nextFilters: DiscoveryFilters) {
     setFilters(nextFilters);
     setActiveMobileVendorSection("nearby");
+    setDesktopFiltersOpen(false);
+    setMobileFiltersOpen(false);
   }
 
   function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
@@ -680,6 +684,19 @@ export function PublicDiscovery({
             <p>Nearby local vendors. Act quickly.</p>
           </div>
 
+          <div className="desktop-discovery-filters">
+            <VendorFilters
+              categories={categories}
+              filters={filters}
+              key={`desktop-${filterFormKey}`}
+              locationSource={activeLocationSource ?? null}
+              panelOpen={desktopFiltersOpen}
+              variant="desktopFloating"
+              onChange={applyFilters}
+              onTogglePanel={() => setDesktopFiltersOpen((current) => !current)}
+            />
+          </div>
+
           <section className="location-panel" aria-live="polite">
             <div>
               <strong>{locationDisplay.headline}</strong>
@@ -699,14 +716,6 @@ export function PublicDiscovery({
               Retry location
             </button>
           </section>
-
-          <VendorFilters
-            categories={categories}
-            filters={filters}
-            key={filterFormKey}
-            locationSource={activeLocationSource ?? null}
-            onChange={applyFilters}
-          />
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
           <section className="vendor-section-nav" aria-label="Vendor sections">
@@ -903,18 +912,32 @@ export function PublicDiscovery({
         </div>
 
         <div className="discovery-main">
-          {resolvedLocation ? (
-            <VendorMap
-              selectedVendorId={selectedVendorId}
-              userLocation={resolvedLocation.coordinates}
-              vendors={vendors}
-              onSelectVendor={selectVendorById}
-            />
-          ) : (
-            <section className="discovery-map waiting-map">
-              <strong>Resolving map location</strong>
-            </section>
-          )}
+          <div className="mobile-map-stack">
+            <div className="mobile-discovery-filters">
+              <VendorFilters
+                categories={categories}
+                filters={filters}
+                key={`mobile-${filterFormKey}`}
+                locationSource={activeLocationSource ?? null}
+                panelOpen={mobileFiltersOpen}
+                variant="mobileFloating"
+                onChange={applyFilters}
+                onTogglePanel={() => setMobileFiltersOpen((current) => !current)}
+              />
+            </div>
+            {resolvedLocation ? (
+              <VendorMap
+                selectedVendorId={selectedVendorId}
+                userLocation={resolvedLocation.coordinates}
+                vendors={vendors}
+                onSelectVendor={selectVendorById}
+              />
+            ) : (
+              <section className="discovery-map waiting-map">
+                <strong>Resolving map location</strong>
+              </section>
+            )}
+          </div>
 
           <section className="selected-vendor-panel">
             <p className="eyebrow">Selected vendor</p>
