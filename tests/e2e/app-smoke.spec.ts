@@ -264,6 +264,19 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".location-panel strong")).toHaveText("Using your current location");
     await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
     await expect(page.locator(".location-trust-line")).toHaveText("High accuracy");
+    await expect(page.locator(".desktop-vendor-section-nav")).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Nearby" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Recent" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Popular" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Last selected" }),
+    ).toBeVisible();
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     const firstCard = page.locator(".vendor-card").first();
     await expect(firstCard).toBeVisible();
@@ -539,10 +552,11 @@ test.describe("Phase 3 browser smoke", () => {
 
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     const firstCard = page.locator(".vendor-card").first();
-    const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(firstCard).toHaveClass(/selected/);
+    const selectedVendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
 
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
     await expect(page).toHaveURL(/selected=/);
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
@@ -556,7 +570,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("textbox", { name: "Search" })).toHaveValue("rice");
     await openDiscoveryFilters(page);
     await expect(page.locator('select[name="radiusKm"]:visible')).toHaveValue("30");
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
 
     const restoredApplyButton = page.locator('button:has-text("Apply"):visible');
     await expect(restoredApplyButton).toBeEnabled();
@@ -586,9 +600,10 @@ test.describe("Phase 3 browser smoke", () => {
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
 
     const firstCard = page.locator(".vendor-card").first();
-    const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(firstCard).toHaveClass(/selected/);
+    const selectedVendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
     await expect(page).toHaveURL(/returnTo=/);
@@ -603,7 +618,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("textbox", { name: "Search" })).toHaveValue("rice");
     await openDiscoveryFilters(page);
     await expect(page.locator('select[name="radiusKm"]:visible')).toHaveValue("30");
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
 
     const restoredApplyButton = page.locator('button:has-text("Apply"):visible');
     await expect(restoredApplyButton).toBeEnabled();

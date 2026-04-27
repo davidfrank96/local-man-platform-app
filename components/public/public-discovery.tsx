@@ -656,6 +656,14 @@ export function PublicDiscovery({
       setLastSelectedVendorMemory(retainedVendor);
     }
 
+    if (snapshotHydrated && typeof window !== "undefined") {
+      writeDiscoverySnapshot(discoverySnapshotKey, {
+        nearbyData,
+        selectedVendorSlug: vendor?.slug ?? null,
+        scrollY: window.scrollY,
+      });
+    }
+
     setSelectedVendorSlug(vendor?.slug ?? null);
   }
 
