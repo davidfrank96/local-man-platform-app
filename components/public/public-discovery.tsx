@@ -258,10 +258,12 @@ export function PublicDiscovery({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeVendorSection, setActiveVendorSection] =
     useState<VendorSection>("nearby");
+  const [showLocationReminder, setShowLocationReminder] = useState(true);
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
     useState<RetainedVendorPreview | null>(null);
+  const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
   const nearbyRequestIdRef = useRef(0);
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -307,6 +309,10 @@ export function PublicDiscovery({
     setRecentlyViewedVendors(readRecentlyViewedVendors());
     setLastSelectedVendorMemory(readLastSelectedVendor());
   }, []);
+
+  useEffect(() => {
+    lastSelectedVendorMemoryRef.current = lastSelectedVendorMemory;
+  }, [lastSelectedVendorMemory]);
 
   useEffect(() => {
     return () => {
@@ -360,6 +366,16 @@ export function PublicDiscovery({
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setShowLocationReminder(false);
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
     };
   }, []);
 
@@ -537,11 +553,13 @@ export function PublicDiscovery({
             return current;
           }
 
+          const rememberedVendor = lastSelectedVendorMemoryRef.current;
+
           if (
-            lastSelectedVendorMemory &&
-            result.vendors.some((vendor) => vendor.slug === lastSelectedVendorMemory.slug)
+            rememberedVendor &&
+            result.vendors.some((vendor) => vendor.slug === rememberedVendor.slug)
           ) {
-            return lastSelectedVendorMemory.slug;
+            return rememberedVendor.slug;
           }
 
           return result.vendors[0]?.slug ?? null;
@@ -560,7 +578,7 @@ export function PublicDiscovery({
         }
       }
     },
-    [lastSelectedVendorMemory],
+    [],
   );
 
   useEffect(() => {
@@ -635,6 +653,10 @@ export function PublicDiscovery({
   function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
     const vendor = vendors.find((entry) => entry.vendor_id === vendorId);
 
+    if (vendor?.slug === selectedVendorSlug) {
+      return;
+    }
+
     if (vendor) {
       trackPublicUserAction({
         event_type: "vendor_selected",
@@ -704,6 +726,32 @@ export function PublicDiscovery({
               onTogglePanel={() => setDesktopFiltersOpen((current) => !current)}
             />
           </div>
+
+          {showLocationReminder ? (
+            <section
+              className="location-reminder-toast"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="location-reminder-copy">
+                <span className="location-reminder-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path d="M8 14s4-3.9 4-7A4 4 0 1 0 4 7c0 3.1 4 7 4 7Z" strokeLinejoin="round" />
+                    <circle cx="8" cy="7" r="1.5" />
+                  </svg>
+                </span>
+                <p>Turn on your location to find accurate vendors near you.</p>
+              </div>
+              <button
+                aria-label="Close location reminder"
+                className="location-reminder-close"
+                type="button"
+                onClick={() => setShowLocationReminder(false)}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </section>
+          ) : null}
 
           <section className="location-panel" aria-live="polite">
             <div>
