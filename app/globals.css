@@ -1735,6 +1735,7 @@ h2 {
   opacity: 0.96;
 }
 
+.desktop-vendor-section-nav,
 .vendor-section-nav {
   display: none;
 }
@@ -1795,6 +1796,43 @@ h2 {
   flex: 0 0 15px;
   background: var(--food-mark) center / 15px 15px no-repeat;
   opacity: 0.72;
+}
+
+@media (min-width: 1024px) {
+  .desktop-vendor-section-nav {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding-bottom: 2px;
+  }
+
+  .desktop-vendor-section-nav .vendor-section-tab {
+    display: inline-flex;
+    min-height: 38px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(37, 41, 36, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.84);
+    padding: 0 14px;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 800;
+  }
+
+  .desktop-vendor-section-nav .vendor-section-tab.active {
+    border-color: rgba(36, 97, 79, 0.22);
+    background: rgba(36, 97, 79, 0.1);
+    color: var(--color-green);
+  }
+
+  .vendor-section-pane[data-desktop-active="false"],
+  .retention-panel-secondary[data-desktop-active="false"] {
+    display: none;
+  }
 }
 
 .vendor-card {
