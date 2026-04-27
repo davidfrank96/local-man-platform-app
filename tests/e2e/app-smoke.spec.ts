@@ -27,6 +27,26 @@ async function expectNoClientErrors(errors: string[]) {
   expect(errors, errors.join("\n")).toEqual([]);
 }
 
+async function openDiscoveryFilters(page: Page) {
+  const visibleRadiusSelect = page.locator('select[name="radiusKm"]:visible');
+  if ((await visibleRadiusSelect.count()) > 0) {
+    return;
+  }
+
+  const openToggle = page.locator('button[aria-label="Open filters"]:visible').first();
+  if ((await openToggle.count()) > 0) {
+    await openToggle.click();
+    return;
+  }
+
+  const closeToggle = page.locator('button[aria-label="Close filters"]:visible').first();
+  if ((await closeToggle.count()) > 0) {
+    return;
+  }
+
+  throw new Error("Discovery filters are not reachable in the current viewport state.");
+}
+
 function parseRgbChannels(value: string) {
   const match = value.match(/\d+(\.\d+)?/g) ?? [];
 
@@ -244,12 +264,25 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".location-panel strong")).toHaveText("Using your current location");
     await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
     await expect(page.locator(".location-trust-line")).toHaveText("High accuracy");
+    await expect(page.locator(".desktop-vendor-section-nav")).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Nearby" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Recent" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Popular" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Last selected" }),
+    ).toBeVisible();
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     const firstCard = page.locator(".vendor-card").first();
     await expect(firstCard).toBeVisible();
     await expect(firstCard.locator(".vendor-card-cue")).toBeVisible();
     await expect(firstCard.locator(".vendor-card-rating")).toBeVisible();
-    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours:");
     await expect(firstCard.getByText("Tap to preview on map")).toBeVisible();
     await expect(firstCard.getByRole("link", { name: "Call" })).toBeVisible();
     await expect(firstCard.getByRole("link", { name: "Directions" })).toBeVisible();
@@ -258,7 +291,7 @@ test.describe("Phase 3 browser smoke", () => {
     const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(firstCard).toHaveClass(/selected/);
-    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours:");
     await expect(firstCard.locator(".vendor-card-status-line")).toContainText("km");
     await expect(firstCard.locator(".vendor-card-status-line")).toContainText(/Open|Closed/);
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
@@ -508,8 +541,9 @@ test.describe("Phase 3 browser smoke", () => {
     await page.goto("/");
 
     await page.getByRole("textbox", { name: "Search" }).fill("rice");
-    await page.locator('select[name="radiusKm"]').selectOption("30");
-    const applyButton = page.getByRole("button", { name: "Apply" });
+    await openDiscoveryFilters(page);
+    await page.locator('select[name="radiusKm"]:visible').selectOption("30");
+    const applyButton = page.locator('button:has-text("Apply"):visible');
     await applyButton.scrollIntoViewIfNeeded();
     await applyButton.click();
 
@@ -518,10 +552,11 @@ test.describe("Phase 3 browser smoke", () => {
 
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     const firstCard = page.locator(".vendor-card").first();
-    const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(firstCard).toHaveClass(/selected/);
+    const selectedVendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
 
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
     await expect(page).toHaveURL(/selected=/);
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
@@ -533,17 +568,18 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page).toHaveURL(/radius_km=30/);
     await expect(page.locator(".vendor-card").first()).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search" })).toHaveValue("rice");
-    await expect(page.locator('select[name="radiusKm"]')).toHaveValue("30");
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await openDiscoveryFilters(page);
+    await expect(page.locator('select[name="radiusKm"]:visible')).toHaveValue("30");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
 
-    const restoredApplyButton = page.getByRole("button", { name: "Apply" });
+    const restoredApplyButton = page.locator('button:has-text("Apply"):visible');
     await expect(restoredApplyButton).toBeEnabled();
     await page.getByRole("textbox", { name: "Search" }).fill("grill");
     await restoredApplyButton.click();
 
     await expect(page).toHaveURL(/q=grill/);
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
-    await expect(page.locator(".vendor-card").first().getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".vendor-card").first().locator(".vendor-card-hours-line")).toContainText("Active hours:");
 
     await expectNoClientErrors(errors);
   });
@@ -556,16 +592,18 @@ test.describe("Phase 3 browser smoke", () => {
     await page.goto("/");
 
     await page.getByRole("textbox", { name: "Search" }).fill("rice");
-    await page.locator('select[name="radiusKm"]').selectOption("30");
-    await page.getByRole("button", { name: "Apply" }).click();
+    await openDiscoveryFilters(page);
+    await page.locator('select[name="radiusKm"]:visible').selectOption("30");
+    await page.locator('button:has-text("Apply"):visible').click();
 
     await expect(page).toHaveURL(/q=rice/);
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
 
     const firstCard = page.locator(".vendor-card").first();
-    const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(firstCard).toHaveClass(/selected/);
+    const selectedVendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
     await expect(page).toHaveURL(/returnTo=/);
@@ -578,17 +616,18 @@ test.describe("Phase 3 browser smoke", () => {
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     await expect(page.locator(".vendor-card").first()).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search" })).toHaveValue("rice");
-    await expect(page.locator('select[name="radiusKm"]')).toHaveValue("30");
-    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await openDiscoveryFilters(page);
+    await expect(page.locator('select[name="radiusKm"]:visible')).toHaveValue("30");
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
 
-    const restoredApplyButton = page.getByRole("button", { name: "Apply" });
+    const restoredApplyButton = page.locator('button:has-text("Apply"):visible');
     await expect(restoredApplyButton).toBeEnabled();
-    await page.locator('select[name="priceBand"]').selectOption("budget");
+    await page.locator('select[name="priceBand"]:visible').selectOption("budget");
     await restoredApplyButton.click();
 
     await expect(page).toHaveURL(/price_band=budget/);
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
-    await expect(page.locator(".vendor-card").first().getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".vendor-card").first().locator(".vendor-card-hours-line")).toContainText("Active hours:");
 
     await expectNoClientErrors(errors);
   });
@@ -676,7 +715,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".vendor-card .vendor-card-footer").first()).toBeVisible();
     await page.locator(".vendor-card").first().getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(page.locator(".vendor-card").first()).toHaveClass(/selected/);
-    await expect(page.locator(".vendor-card").first().getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".vendor-card").first().locator(".vendor-card-hours-line")).toContainText("Active hours:");
     await expect(page.locator(".vendor-card").first().locator(".vendor-card-status-line")).toContainText("km");
 
     const hasHorizontalOverflow = await page.evaluate(
@@ -701,10 +740,10 @@ test.describe("Phase 3 browser smoke", () => {
 
     const firstCard = page.locator(".vendor-card").first();
     await expect(firstCard).toBeVisible();
-    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours:");
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(firstCard).toHaveClass(/selected/);
-    await expect(firstCard.getByText(/^Today:/)).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours:");
     await expect(firstCard.locator(".vendor-card-status-line")).toContainText("km");
     await expect(firstCard.locator(".vendor-card-status-line")).toContainText(/Open|Closed/);
 

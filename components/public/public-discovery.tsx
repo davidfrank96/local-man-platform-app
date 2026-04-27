@@ -54,7 +54,7 @@ type PublicDiscoveryProps = {
   initialSearch?: string;
 };
 
-type MobileVendorSection = "nearby" | "recent" | "popular";
+type VendorSection = "nearby" | "recent" | "popular" | "lastSelected";
 
 const defaultFilters: DiscoveryFilters = {
   search: "",
@@ -254,8 +254,10 @@ export function PublicDiscovery({
   const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(
     parsedUrlState.selectedVendorSlug,
   );
-  const [activeMobileVendorSection, setActiveMobileVendorSection] =
-    useState<MobileVendorSection>("nearby");
+  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [activeVendorSection, setActiveVendorSection] =
+    useState<VendorSection>("nearby");
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
@@ -625,7 +627,9 @@ export function PublicDiscovery({
 
   function applyFilters(nextFilters: DiscoveryFilters) {
     setFilters(nextFilters);
-    setActiveMobileVendorSection("nearby");
+    setActiveVendorSection("nearby");
+    setDesktopFiltersOpen(false);
+    setMobileFiltersOpen(false);
   }
 
   function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
@@ -650,6 +654,14 @@ export function PublicDiscovery({
       const retainedVendor = createRetainedVendorPreview(vendor);
       rememberLastSelectedVendor(retainedVendor);
       setLastSelectedVendorMemory(retainedVendor);
+    }
+
+    if (snapshotHydrated && typeof window !== "undefined") {
+      writeDiscoverySnapshot(discoverySnapshotKey, {
+        nearbyData,
+        selectedVendorSlug: vendor?.slug ?? null,
+        scrollY: window.scrollY,
+      });
     }
 
     setSelectedVendorSlug(vendor?.slug ?? null);
@@ -680,6 +692,19 @@ export function PublicDiscovery({
             <p>Nearby local vendors. Act quickly.</p>
           </div>
 
+          <div className="desktop-discovery-filters">
+            <VendorFilters
+              categories={categories}
+              filters={filters}
+              key={`desktop-${filterFormKey}`}
+              locationSource={activeLocationSource ?? null}
+              panelOpen={desktopFiltersOpen}
+              variant="desktopFloating"
+              onChange={applyFilters}
+              onTogglePanel={() => setDesktopFiltersOpen((current) => !current)}
+            />
+          </div>
+
           <section className="location-panel" aria-live="polite">
             <div>
               <strong>{locationDisplay.headline}</strong>
@@ -699,50 +724,93 @@ export function PublicDiscovery({
               Retry location
             </button>
           </section>
-
-          <VendorFilters
-            categories={categories}
-            filters={filters}
-            key={filterFormKey}
-            locationSource={activeLocationSource ?? null}
-            onChange={applyFilters}
-          />
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
-          <section className="vendor-section-nav" aria-label="Vendor sections">
+          <section className="desktop-vendor-section-nav" aria-label="Vendor sections">
             <button
-              aria-pressed={activeMobileVendorSection === "nearby"}
+              aria-pressed={activeVendorSection === "nearby"}
               className={
-                activeMobileVendorSection === "nearby"
+                activeVendorSection === "nearby"
                   ? "vendor-section-tab active"
                   : "vendor-section-tab"
               }
               type="button"
-              onClick={() => setActiveMobileVendorSection("nearby")}
+              onClick={() => setActiveVendorSection("nearby")}
             >
               Nearby
             </button>
             <button
-              aria-pressed={activeMobileVendorSection === "recent"}
+              aria-pressed={activeVendorSection === "recent"}
               className={
-                activeMobileVendorSection === "recent"
+                activeVendorSection === "recent"
                   ? "vendor-section-tab active"
                   : "vendor-section-tab"
               }
               type="button"
-              onClick={() => setActiveMobileVendorSection("recent")}
+              onClick={() => setActiveVendorSection("recent")}
             >
               Recent
             </button>
             <button
-              aria-pressed={activeMobileVendorSection === "popular"}
+              aria-pressed={activeVendorSection === "popular"}
               className={
-                activeMobileVendorSection === "popular"
+                activeVendorSection === "popular"
                   ? "vendor-section-tab active"
                   : "vendor-section-tab"
               }
               type="button"
-              onClick={() => setActiveMobileVendorSection("popular")}
+              onClick={() => setActiveVendorSection("popular")}
+            >
+              Popular
+            </button>
+            <button
+              aria-pressed={activeVendorSection === "lastSelected"}
+              className={
+                activeVendorSection === "lastSelected"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveVendorSection("lastSelected")}
+            >
+              Last selected
+            </button>
+          </section>
+
+          <section className="vendor-section-nav" aria-label="Vendor sections">
+            <button
+              aria-pressed={activeVendorSection === "nearby"}
+              className={
+                activeVendorSection === "nearby"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveVendorSection("nearby")}
+            >
+              Nearby
+            </button>
+            <button
+              aria-pressed={activeVendorSection === "recent"}
+              className={
+                activeVendorSection === "recent"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveVendorSection("recent")}
+            >
+              Recent
+            </button>
+            <button
+              aria-pressed={activeVendorSection === "popular"}
+              className={
+                activeVendorSection === "popular"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveVendorSection("popular")}
             >
               Popular
             </button>
@@ -751,7 +819,8 @@ export function PublicDiscovery({
           <section
             aria-live="polite"
             className="vendor-results vendor-section-pane"
-            data-mobile-active={activeMobileVendorSection === "nearby"}
+            data-desktop-active={activeVendorSection === "nearby"}
+            data-mobile-active={activeVendorSection === "nearby"}
           >
             <div className="result-heading">
               <strong>Nearby vendors</strong>
@@ -793,7 +862,8 @@ export function PublicDiscovery({
 
           <section
             className="retention-panel retention-panel-muted vendor-section-pane"
-            data-mobile-active={activeMobileVendorSection === "recent"}
+            data-desktop-active={activeVendorSection === "recent"}
+            data-mobile-active={activeVendorSection === "recent"}
           >
             <div className="result-heading">
               <strong>Recently viewed vendors</strong>
@@ -829,7 +899,8 @@ export function PublicDiscovery({
 
           <section
             className="retention-panel retention-panel-muted vendor-section-pane"
-            data-mobile-active={activeMobileVendorSection === "popular"}
+            data-desktop-active={activeVendorSection === "popular"}
+            data-mobile-active={activeVendorSection === "popular"}
           >
             <div className="result-heading">
               <strong>Popular vendors near you</strong>
@@ -863,7 +934,10 @@ export function PublicDiscovery({
             )}
           </section>
 
-          <section className="retention-panel retention-panel-muted retention-panel-secondary">
+          <section
+            className="retention-panel retention-panel-muted retention-panel-secondary"
+            data-desktop-active={activeVendorSection === "lastSelected"}
+          >
             <div className="result-heading">
               <strong>Last selected vendor</strong>
               <span>{lastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}</span>
@@ -903,18 +977,32 @@ export function PublicDiscovery({
         </div>
 
         <div className="discovery-main">
-          {resolvedLocation ? (
-            <VendorMap
-              selectedVendorId={selectedVendorId}
-              userLocation={resolvedLocation.coordinates}
-              vendors={vendors}
-              onSelectVendor={selectVendorById}
-            />
-          ) : (
-            <section className="discovery-map waiting-map">
-              <strong>Resolving map location</strong>
-            </section>
-          )}
+          <div className="mobile-map-stack">
+            <div className="mobile-discovery-filters">
+              <VendorFilters
+                categories={categories}
+                filters={filters}
+                key={`mobile-${filterFormKey}`}
+                locationSource={activeLocationSource ?? null}
+                panelOpen={mobileFiltersOpen}
+                variant="mobileFloating"
+                onChange={applyFilters}
+                onTogglePanel={() => setMobileFiltersOpen((current) => !current)}
+              />
+            </div>
+            {resolvedLocation ? (
+              <VendorMap
+                selectedVendorId={selectedVendorId}
+                userLocation={resolvedLocation.coordinates}
+                vendors={vendors}
+                onSelectVendor={selectVendorById}
+              />
+            ) : (
+              <section className="discovery-map waiting-map">
+                <strong>Resolving map location</strong>
+              </section>
+            )}
+          </div>
 
           <section className="selected-vendor-panel">
             <p className="eyebrow">Selected vendor</p>

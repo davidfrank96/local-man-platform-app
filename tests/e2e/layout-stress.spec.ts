@@ -27,6 +27,11 @@ async function expectNoClientErrors(errors: string[]) {
   expect(errors, errors.join("\n")).toEqual([]);
 }
 
+async function openDiscoveryFilters(page: Page) {
+  const toggle = page.locator('button[aria-label="Open filters"]:visible').first();
+  await toggle.click();
+}
+
 function uuid(index: number): string {
   return `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
 }
@@ -220,11 +225,13 @@ test.describe("Layout stress", () => {
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(expectedSelectedVendorName);
 
     await page.getByRole("textbox", { name: "Search" }).fill("rice");
-    let applyButton = page.getByRole("button", { name: "Apply" });
+    await openDiscoveryFilters(page);
+    let applyButton = page.locator('button:has-text("Apply"):visible');
     await applyButton.scrollIntoViewIfNeeded();
     await applyButton.click();
     await page.getByRole("textbox", { name: "Search" }).fill("spicy");
-    applyButton = page.getByRole("button", { name: "Apply" });
+    await openDiscoveryFilters(page);
+    applyButton = page.locator('button:has-text("Apply"):visible');
     await applyButton.scrollIntoViewIfNeeded();
     await applyButton.click();
 
