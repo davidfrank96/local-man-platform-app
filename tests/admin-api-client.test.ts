@@ -17,6 +17,28 @@ import {
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 
+function setSupabasePublicEnv(): () => void {
+  const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+
+  return () => {
+    if (previousUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = previousUrl;
+    }
+
+    if (previousAnonKey === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previousAnonKey;
+    }
+  };
+}
+
 test("admin API client sends bearer token and query params", async () => {
   const requestedUrls: string[] = [];
   const requestedHeaders: Headers[] = [];
@@ -299,6 +321,89 @@ test("admin API client rejects invalid audit log filters before request", async 
   assert.equal(result.error?.code, "VALIDATION_ERROR");
   assert.equal(result.error?.detail, "user_role must be either admin or agent.");
   assert.equal(called, false);
+});
+
+test("admin API client fetches audit logs directly from Supabase", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const requestedUrls: string[] = [];
+  const requestedHeaders: Headers[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    requestedUrls.push(String(input));
+    requestedHeaders.push(new Headers(init?.headers));
+
+    return Response.json([
+      {
+        id: "30000000-0000-4000-8000-000000000001",
+        admin_user_id: "40000000-0000-4000-8000-000000000001",
+        user_role: "admin",
+        entity_type: "vendor",
+        entity_id: vendorId,
+        action: "CREATE_VENDOR",
+        metadata: {
+          actor_label: "Admin User",
+          target_name: "Test Vendor",
+        },
+        created_at: "2026-04-28T12:00:00.000Z",
+      },
+    ]);
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchAdminAuditLogs(
+      {
+        limit: 10,
+        offset: 0,
+        user_role: "admin",
+        action: "CREATE_VENDOR",
+      },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    const url = new URL(requestedUrls[0]);
+    assert.equal(result.error, null);
+    assert.equal(result.data?.auditLogs.length, 1);
+    assert.equal(requestedHeaders[0].get("apikey"), "anon-key");
+    assert.equal(url.pathname, "/rest/v1/audit_logs");
+    assert.equal(url.searchParams.get("order"), "created_at.desc");
+    assert.equal(url.searchParams.get("user_role"), "eq.admin");
+    assert.equal(url.searchParams.get("action"), "eq.CREATE_VENDOR");
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client returns safe error result for direct Supabase audit log failures", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const fetchImpl = (async () =>
+    Response.json(
+      {
+        code: "42501",
+        message: "permission denied for table audit_logs",
+      },
+      { status: 403 },
+    )) as typeof fetch;
+
+  try {
+    const result = await fetchAdminAuditLogs(
+      {
+        limit: 10,
+        offset: 0,
+      },
+      {
+        accessToken: "agent-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(result.data, null);
+    assert.equal(result.error?.code, "FORBIDDEN");
+    assert.equal(result.error?.message, "You do not have access to analytics");
+  } finally {
+    restoreEnv();
+  }
 });
 
 test("admin API client uploads image files without forcing json headers", async () => {
