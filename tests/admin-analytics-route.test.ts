@@ -7,9 +7,11 @@ const vendorId = "00000000-0000-4000-8000-000000000001";
 function setAdminEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
   return () => {
     if (previousUrl === undefined) {
@@ -22,6 +24,12 @@ function setAdminEnv(): () => void {
       delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     } else {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previousAnonKey;
+    }
+
+    if (previousServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
     }
   };
 }
@@ -251,6 +259,67 @@ test("admin analytics route returns safe empty analytics payload", async () => {
     assert.equal(body.data.vendor_performance.most_selected_vendors.length, 0);
     assert.equal(body.data.dropoff.session_metrics_available, false);
     assert.equal(body.data.recent_events.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin analytics route uses service role credentials for analytics reads when configured", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ pathname: string; apikey: string | null; authorization: string | null }> = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const headers = new Headers(init?.headers);
+
+    requests.push({
+      pathname: url.pathname,
+      apikey: headers.get("apikey"),
+      authorization: headers.get("authorization"),
+    });
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/user_events") {
+      return Response.json([]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=24h"),
+    );
+
+    assert.equal(response.status, 200);
+
+    const analyticsReadRequest = requests.find((request) => request.pathname === "/rest/v1/user_events");
+    assert.ok(analyticsReadRequest);
+    assert.equal(analyticsReadRequest.apikey, "service-role-key");
+    assert.equal(analyticsReadRequest.authorization, "Bearer service-role-key");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
