@@ -11,6 +11,19 @@ The Local Man — UI Rules
 
 ## Public UI Rules
 - Homepage must open into a map-first layout.
+- Mobile discovery currently uses this order:
+  - Local Man header
+  - floating search/navbar
+  - location reminder toast when visible
+  - map
+  - selected vendor card
+  - location status / retry panel
+  - vendor section navbar
+  - active section content
+  - last selected vendor at the bottom
+- Web discovery currently uses:
+  - left column for header, search/filter, reminder toast, location panel, vendor section navbar, and vendor content
+  - right column for map and selected vendor preview
 - Vendor cards must be readable in one quick glance.
 - Use strong visual separation between vendors.
 - Show open/closed state clearly.
@@ -48,7 +61,7 @@ The Local Man — UI Rules
 - distance
 - open/closed state
 - one featured dish summary when available
-- today’s hours only, shown as a compact `Today:` line
+- active hours only, shown as a compact `Active hours:` line
 - short description only when no featured dish summary is available
 - compact price label: `Budget-friendly`, `Everyday price`, or `Higher price`
 - area
@@ -59,10 +72,13 @@ The Local Man — UI Rules
 - helper text: `Tap to preview on map`
 - visible detail link text: `View details →`
 - tapping the card body should preview the vendor on the map without interfering with call, directions, or details
-- `Today:`, distance, and open/closed state must remain visible before and after the card is selected.
+- `Active hours:`, distance, and open/closed state must remain visible before and after the card is selected.
 - compact card density matters: metadata rows should scan quickly without making the card tall
 - selected cards must stay readable in every time theme and use a clear but compact highlight treatment
 - browser back and `Back to map` must restore discovery state without leaving the search and filter controls blocked or requiring a manual reload
+- `New` must not display a star icon
+- numeric ratings must keep the star icon
+- plain duplicate `Open` text must not compete with the primary status badge
 
 ## Vendor Detail Rules
 - a compact hero image is allowed only on the detail page
@@ -148,6 +164,7 @@ The Local Man — UI Rules
 - Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Today:`, distance, open/closed state, featured dish, price, area, rating, and actions easy to read.
 - Selected vendor preview panels should stay compact and action-oriented, with `View details`, `Call`, and `Directions` visible on mobile.
 - Selected vendor preview panels on desktop should keep `Call`, `Directions`, and `View details` on one row when space allows.
+- Selected vendor preview panels currently remain below the map on mobile and in the map column on desktop.
 - Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
 - Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.
 - Night background tones should feel like evening discovery with deeper blue/slate washes and readable light cards, not harsh black surfaces.

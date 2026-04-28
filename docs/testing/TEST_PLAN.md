@@ -78,6 +78,8 @@ Test:
 - public shell applies the correct browser-local theme attribute for morning, afternoon, and night
 - uploaded vendor images appear on vendor detail pages
 - vendor detail layout stays compact on desktop and mobile without hiding sections
+- location reminder toast appears on discovery load and can be closed without blocking the page
+- location reminder toast auto-dismisses after roughly five seconds
 
 Current automated coverage:
 - `tests/public-api-client.test.ts`
