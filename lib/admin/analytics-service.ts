@@ -44,8 +44,11 @@ type VendorLookupRow = {
 };
 
 const LEGACY_FILTER_EVENT = "filters_applied";
-const MAX_ANALYTICS_EVENTS = 5000;
+const MAX_ANALYTICS_EVENTS = 1500;
 const RECENT_EVENTS_LIMIT = 25;
+const analyticsCacheTtlMs = 30_000;
+const analyticsQueryWarnThresholdMs = 3_000;
+const analyticsFetchTimeoutMs = 4_000;
 const meaningfulInteractionEvents = new Set([
   "vendor_selected",
   "vendor_detail_opened",
@@ -55,6 +58,17 @@ const meaningfulInteractionEvents = new Set([
   "filter_applied",
   LEGACY_FILTER_EVENT,
 ]);
+
+type CachedAnalyticsResult = {
+  expiresAt: number;
+  payload: AdminAnalyticsResponseData;
+};
+
+const adminAnalyticsCache = new Map<AdminAnalyticsRange, CachedAnalyticsResult>();
+
+export function clearAdminAnalyticsCache(): void {
+  adminAnalyticsCache.clear();
+}
 
 function requireServiceConfig(
   config: AdminAuthConfig | null | undefined,
@@ -117,6 +131,28 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+function readCachedAnalytics(range: AdminAnalyticsRange): AdminAnalyticsResponseData | null {
+  const cached = adminAnalyticsCache.get(range);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    adminAnalyticsCache.delete(range);
+    return null;
+  }
+
+  return cached.payload;
+}
+
+function writeCachedAnalytics(range: AdminAnalyticsRange, payload: AdminAnalyticsResponseData): void {
+  adminAnalyticsCache.set(range, {
+    expiresAt: Date.now() + analyticsCacheTtlMs,
+    payload,
+  });
+}
+
 function isMissingSessionIdColumn(details: unknown): boolean {
   const text = JSON.stringify(details ?? {});
   return text.includes("session_id");
@@ -168,10 +204,49 @@ async function fetchEventRows(
     filters.timestamp = `gte.${rangeStart}`;
   }
 
-  const response = await fetchImpl(createRestUrl(config, "user_events", filters), {
-    method: "GET",
-    headers: createHeaders(session, config),
-  });
+  const url = createRestUrl(config, "user_events", filters);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort("ANALYTICS_EVENTS_TIMEOUT");
+  }, analyticsFetchTimeoutMs);
+  const startedAt = Date.now();
+  let response: Response;
+
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: createHeaders(session, config),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted)
+    ) {
+      throw new AdminServiceError(
+        "NETWORK_ERROR",
+        "Analytics event query timed out.",
+        504,
+        { timeoutMs: analyticsFetchTimeoutMs },
+        "Activity temporarily unavailable.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > analyticsQueryWarnThresholdMs) {
+    logStructuredEvent("warn", {
+      type: "ANALYTICS_EVENTS_SLOW_QUERY",
+      requestId: session.requestId,
+      range,
+      durationMs,
+      url: url.toString(),
+    });
+  }
   const payload = await readJson(response);
 
   if (!response.ok) {
@@ -214,16 +289,56 @@ async function fetchVendorLookup(
     return new Map();
   }
 
-  const response = await fetchImpl(
-    createRestUrl(config, "vendors", {
+  const url = createRestUrl(config, "vendors", {
       select: "id,name,slug",
       id: `in.(${vendorIds.join(",")})`,
-    }),
-    {
+    });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort("ANALYTICS_VENDOR_LOOKUP_TIMEOUT");
+  }, analyticsFetchTimeoutMs);
+  const startedAt = Date.now();
+
+  let response: Response;
+
+  try {
+    response = await fetchImpl(
+      url,
+      {
       method: "GET",
       headers: createHeaders(session, config),
+      signal: controller.signal,
     },
-  );
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted)
+    ) {
+      throw new AdminServiceError(
+        "NETWORK_ERROR",
+        "Vendor lookup for analytics timed out.",
+        504,
+        { timeoutMs: analyticsFetchTimeoutMs },
+        "Activity temporarily unavailable.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > analyticsQueryWarnThresholdMs) {
+    logStructuredEvent("warn", {
+      type: "ANALYTICS_VENDOR_LOOKUP_SLOW_QUERY",
+      requestId: session.requestId,
+      durationMs,
+      vendorCount: vendorIds.length,
+      url: url.toString(),
+    });
+  }
   const payload = await readJson(response);
 
   if (!response.ok) {
@@ -251,6 +366,27 @@ async function fetchVendorLookup(
 
 function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
   return rows.filter((row) => row.event_type === eventType).length;
+}
+
+function getTopVendorIds(
+  rows: AnalyticsEventRow[],
+  eventTypes: string[],
+  limit = 5,
+): string[] {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+      continue;
+    }
+
+    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([vendorId]) => vendorId);
 }
 
 function rankVendorEvents(
@@ -363,7 +499,20 @@ export async function getAdminAnalytics(
     fetchImpl = fetch,
   }: AdminAnalyticsServiceContext,
 ): Promise<AdminAnalyticsResponseData> {
+  const cached = readCachedAnalytics(range);
+
+  if (cached) {
+    logStructuredEvent("info", {
+      type: "ANALYTICS_CACHE_HIT",
+      requestId: session.requestId,
+      range,
+      resultCount: cached.summary.total_events,
+    });
+    return cached;
+  }
+
   const resolvedConfig = requireServiceConfig(config);
+  const startedAt = Date.now();
   const eventResult = await fetchEventRows(
     {
       session,
@@ -376,7 +525,16 @@ export async function getAdminAnalytics(
   const rows = [...eventResult.rows].sort(
     (left, right) => new Date(right.timestamp).valueOf() - new Date(left.timestamp).valueOf(),
   );
-  const vendorIds = [...new Set(rows.flatMap((row) => (row.vendor_id ? [row.vendor_id] : [])))];
+  const recentVendorIds = rows
+    .slice(0, RECENT_EVENTS_LIMIT)
+    .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
+  const rankedVendorIds = [
+    ...getTopVendorIds(rows, ["vendor_selected"]),
+    ...getTopVendorIds(rows, ["vendor_detail_opened"]),
+    ...getTopVendorIds(rows, ["call_clicked"]),
+    ...getTopVendorIds(rows, ["directions_clicked"]),
+  ];
+  const vendorIds = [...new Set([...recentVendorIds, ...rankedVendorIds])];
   const vendorLookup = await fetchVendorLookup(
     {
       session,
@@ -435,6 +593,10 @@ export async function getAdminAnalytics(
     recent_events: recentEvents,
   };
 
+  const parsedPayload = adminAnalyticsResponseDataSchema.parse(payload);
+  writeCachedAnalytics(range, parsedPayload);
+
+  const durationMs = Date.now() - startedAt;
   logStructuredEvent("info", {
     type: "ANALYTICS_FETCH",
     requestId: session.requestId,
@@ -442,9 +604,21 @@ export async function getAdminAnalytics(
     resultCount: rows.length,
     vendorCount: vendorIds.length,
     recentEventCount: recentEvents.length,
+    durationMs,
     supabaseHost: new URL(resolvedConfig.supabaseUrl).host,
     usingServiceRole: true,
   });
 
-  return adminAnalyticsResponseDataSchema.parse(payload);
+  if (durationMs > analyticsQueryWarnThresholdMs) {
+    logStructuredEvent("warn", {
+      type: "ANALYTICS_SLOW_REQUEST",
+      requestId: session.requestId,
+      range,
+      durationMs,
+      resultCount: rows.length,
+      vendorCount: vendorIds.length,
+    });
+  }
+
+  return parsedPayload;
 }
