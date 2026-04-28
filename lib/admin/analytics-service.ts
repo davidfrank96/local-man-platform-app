@@ -84,9 +84,11 @@ function createRestUrl(
 }
 
 function createHeaders(session: AdminSession, config: AdminAuthConfig): HeadersInit {
+  const serviceRoleKey = config.supabaseServiceRoleKey?.trim() || null;
+
   return {
-    apikey: config.supabaseAnonKey,
-    authorization: `Bearer ${session.accessToken}`,
+    apikey: serviceRoleKey || config.supabaseAnonKey,
+    authorization: `Bearer ${serviceRoleKey || session.accessToken}`,
     "content-type": "application/json",
   };
 }

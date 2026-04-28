@@ -5,7 +5,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
 ## Product Surface
 
 ### Public
-- discovery homepage with nearby vendors, search, filters, and map preview
+- discovery homepage with map-first nearby vendors, floating mobile search, desktop search/filter bar, and map preview
 - discovery ordering that prioritizes:
   - open vendors first
   - stronger search matches
@@ -15,7 +15,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - name
   - distance
   - open/closed state
-  - `Today:` hours
+  - `Active hours:` on discovery cards
   - featured dish
   - price band
   - area
@@ -23,7 +23,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - call, directions, and detail actions
   - no vendor card photos or thumbnails
 - popular-vendor highlighting when ranking signals exist
-- selected vendor preview
+- selected vendor preview below the map on mobile and beside the map on web
 - vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
 - lightweight vendor rating input with 1-5 stars and no comments
 - local retention helpers:
@@ -34,6 +34,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - precise browser geolocation
   - approximate location only when usable and clearly labeled
   - Abuja default city fallback without claiming it is the user’s exact location
+- lightweight location reminder toast on discovery load with auto-dismiss and manual close
 - morning, afternoon, and night discovery themes based on browser-local time
 
 ### Admin
@@ -73,6 +74,15 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - `tests/` - unit and browser tests
 - `docs/` - architecture, API, UI, ops, testing, and task docs
 - `supabase/` - migrations, seeds, and ops SQL
+
+## UI Documentation
+- [docs/ui.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ui.md) - current UI overview and behavior
+- [docs/layout.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/layout.md) - mobile/web layout structure and ordering
+- [docs/navigation.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/navigation.md) - search, filters, section navigation, and route-return behavior
+- [docs/vendor-cards.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/vendor-cards.md) - discovery-card and selected-vendor rules
+- [docs/location.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/location.md) - popup, retry UI, and location trust behavior
+- [docs/performance.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/performance.md) - low-bandwidth and UI-stability constraints
+- [docs/qa-checklist.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/qa-checklist.md) - release and regression checklist
 
 ## Local Setup
 1. Install dependencies:
@@ -157,7 +167,7 @@ Phase 6 currently covers:
 ## Phase 5 Summary
 Phase 5 delivered:
 - vendor card redesign
-- `Today:` hours on cards
+- `Active hours:` on discovery cards
 - selected vendor highlight behavior
 - browser-back and `Back to map` restoration
 - Apply button restoration after navigation
