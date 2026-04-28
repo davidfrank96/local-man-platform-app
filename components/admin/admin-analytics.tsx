@@ -716,7 +716,6 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
           : "No usage data yet.",
       );
     } catch (error) {
-      console.error(error);
       if (
         error instanceof AdminApiError &&
         (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")
@@ -839,7 +838,6 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
           : "No admin activity found for the current filters.",
       );
     } catch (error) {
-      console.error(error);
       if (
         error instanceof AdminApiError &&
         (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")
@@ -876,7 +874,6 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     try {
       await loadAnalytics(nextRange);
     } catch (error) {
-      console.error(error);
       const visibleError = handleAppError(error, {
         fallbackMessage: "Unable to load activity right now",
         role: "admin",
@@ -893,7 +890,6 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     try {
       await loadAuditLogs(filters, options);
     } catch (error) {
-      console.error(error);
       const visibleError = handleAppError(error, {
         fallbackMessage: "Unable to load activity right now",
         role: "admin",

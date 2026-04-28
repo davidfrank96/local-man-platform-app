@@ -160,10 +160,70 @@ test("admin can list audit logs without filters and pagination is forwarded", as
 
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
-    assert.equal(auditUrl?.searchParams.get("limit"), "26");
+    assert.equal(auditUrl?.searchParams.get("limit"), "21");
     assert.equal(auditUrl?.searchParams.get("offset"), "30");
     assert.equal(auditUrl?.searchParams.get("user_role"), null);
     assert.equal(auditUrl?.searchParams.get("action"), null);
+    assert.equal(
+      auditUrl?.searchParams.get("select"),
+      "id,admin_user_id,user_role,entity_type,entity_id,action,metadata,created_at",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("timed out audit log fetch returns structured 504 error", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "00000000-0000-4000-8000-000000000111",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000111",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+          created_at: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/audit_logs") {
+      const signal = init?.signal;
+
+      await new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => {
+          const error = new Error("The operation was aborted.");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await listAuditLogsRoute(
+      createNextRequest("http://localhost/api/admin/audit-logs?offset=91"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 504);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "NETWORK_ERROR");
+    assert.equal(body.error.detail, "Activity temporarily unavailable.");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

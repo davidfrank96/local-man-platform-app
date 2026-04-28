@@ -25,6 +25,16 @@ type AuditLogServiceContext = {
 };
 
 type AuditLogQuery = z.infer<typeof auditLogsQuerySchema>;
+const auditLogsCacheTtlMs = 30_000;
+const auditLogsTimeoutMs = 4_000;
+const maxAuditLogsPageSize = 20;
+
+type CachedAuditLogResult = {
+  expiresAt: number;
+  result: AuditLogListResult;
+};
+
+const auditLogsReadCache = new Map<string, CachedAuditLogResult>();
 
 export type AuditLogListResult = {
   auditLogs: AuditLog[];
@@ -116,6 +126,41 @@ async function readJson(response: Response): Promise<unknown> {
 
 function buildActorLabel(session: AdminSession): string {
   return session.adminUser.full_name?.trim() || session.adminUser.email;
+}
+
+function createAuditLogCacheKey(query: AuditLogQuery): string {
+  return JSON.stringify({
+    limit: query.limit ?? 10,
+    offset: query.offset ?? 0,
+    user_role: query.user_role ?? null,
+    action: query.action ?? null,
+    entity_type: query.entity_type ?? null,
+    entity_id: query.entity_id ?? null,
+    since: query.since ?? null,
+  });
+}
+
+function readCachedAuditLogs(query: AuditLogQuery): AuditLogListResult | null {
+  const cacheKey = createAuditLogCacheKey(query);
+  const cached = auditLogsReadCache.get(cacheKey);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    auditLogsReadCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.result;
+}
+
+function writeCachedAuditLogs(query: AuditLogQuery, result: AuditLogListResult): void {
+  auditLogsReadCache.set(createAuditLogCacheKey(query), {
+    expiresAt: Date.now() + auditLogsCacheTtlMs,
+    result,
+  });
 }
 
 export async function writeAuditLog(
@@ -214,48 +259,96 @@ export async function listAuditLogs(
     );
   }
 
-  const limit = validatedQuery.data.limit ?? 10;
+  const cacheableQuery = validatedQuery.data;
+  const cachedResult = readCachedAuditLogs(cacheableQuery);
+
+  if (cachedResult) {
+    logStructuredEvent("info", {
+      type: "AUDIT_LOGS_CACHE_HIT",
+      requestId: session.requestId,
+      query: cacheableQuery,
+      resultCount: cachedResult.auditLogs.length,
+    });
+    return cachedResult;
+  }
+
+  const limit = cacheableQuery.limit ?? 10;
   const offset = validatedQuery.data.offset ?? 0;
-  const pageSize = Math.min(limit, 50);
+  const pageSize = Math.min(limit, maxAuditLogsPageSize);
   const url = createRestUrl(resolvedConfig, "audit_logs", {
     select:
-      "id,admin_user_id,user_role,entity_type,entity_id,action,metadata,created_at,admin_user:admin_users(id,email,full_name,role)",
+      "id,admin_user_id,user_role,entity_type,entity_id,action,metadata,created_at",
     order: "created_at.desc",
     limit: String(pageSize + 1),
     offset: String(offset),
   });
 
-  if (validatedQuery.data.user_role) {
-    url.searchParams.set("user_role", `eq.${validatedQuery.data.user_role}`);
+  if (cacheableQuery.user_role) {
+    url.searchParams.set("user_role", `eq.${cacheableQuery.user_role}`);
   }
 
-  if (validatedQuery.data.action) {
-    url.searchParams.set("action", `eq.${validatedQuery.data.action}`);
+  if (cacheableQuery.action) {
+    url.searchParams.set("action", `eq.${cacheableQuery.action}`);
   }
 
-  if (validatedQuery.data.entity_type) {
-    url.searchParams.set("entity_type", `eq.${validatedQuery.data.entity_type}`);
+  if (cacheableQuery.entity_type) {
+    url.searchParams.set("entity_type", `eq.${cacheableQuery.entity_type}`);
   }
 
-  if (validatedQuery.data.entity_id) {
-    url.searchParams.set("entity_id", `eq.${validatedQuery.data.entity_id}`);
+  if (cacheableQuery.entity_id) {
+    url.searchParams.set("entity_id", `eq.${cacheableQuery.entity_id}`);
   }
 
-  if (validatedQuery.data.since) {
-    url.searchParams.set("created_at", `gte.${validatedQuery.data.since}`);
+  if (cacheableQuery.since) {
+    url.searchParams.set("created_at", `gte.${cacheableQuery.since}`);
   }
 
   logStructuredEvent("info", {
     type: "AUDIT_LOGS_SUPABASE_REQUEST",
     requestId: session.requestId,
-    query: validatedQuery.data,
+    query: cacheableQuery,
     supabaseUrl: url.toString(),
   });
 
-  const response = await fetchImpl(url, {
-    method: "GET",
-    headers: createReadHeaders(session, resolvedConfig),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort("AUDIT_LOGS_TIMEOUT");
+  }, auditLogsTimeoutMs);
+
+  let response: Response;
+
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: createReadHeaders(session, resolvedConfig),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted)
+    ) {
+      logStructuredEvent("warn", {
+        type: "AUDIT_LOGS_TIMEOUT",
+        requestId: session.requestId,
+        query: cacheableQuery,
+        supabaseUrl: url.toString(),
+        timeoutMs: auditLogsTimeoutMs,
+      });
+      throw new AdminServiceError(
+        "NETWORK_ERROR",
+        "Audit log request timed out.",
+        504,
+        { timeoutMs: auditLogsTimeoutMs },
+        "Activity temporarily unavailable.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
   const payload = await readJson(response);
 
   if (!response.ok) {
@@ -263,7 +356,7 @@ export async function listAuditLogs(
       type: "AUDIT_LOGS_SUPABASE_ERROR",
       requestId: session.requestId,
       status: response.status,
-      query: validatedQuery.data,
+      query: cacheableQuery,
       supabaseUrl: url.toString(),
       payload,
     });
@@ -284,13 +377,13 @@ export async function listAuditLogs(
     resultCount: rows.length,
     offset,
     limit: pageSize,
-    userRole: validatedQuery.data.user_role ?? "all",
-    action: validatedQuery.data.action ?? "all",
+    userRole: cacheableQuery.user_role ?? "all",
+    action: cacheableQuery.action ?? "all",
     supabaseHost: new URL(resolvedConfig.supabaseUrl).host,
     usingServiceRole: true,
   });
 
-  return {
+  const result: AuditLogListResult = {
     auditLogs: rows.slice(0, pageSize),
     pagination: {
       limit: pageSize,
@@ -298,6 +391,10 @@ export async function listAuditLogs(
       has_more: rows.length > pageSize,
     },
   };
+
+  writeCachedAuditLogs(cacheableQuery, result);
+
+  return result;
 }
 
 export function getAuditActionOptions(): AuditActionType[] {
