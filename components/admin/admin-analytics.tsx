@@ -628,6 +628,18 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditHasMore, setAuditHasMore] = useState(initialAuditCache?.pagination.has_more ?? false);
 
+  const logAnalyticsFetch = useCallback((payload: {
+    scope: "analytics" | "audit_logs";
+    count: number;
+    duration: number;
+    status: "success" | "error" | "cache_hit";
+  }) => {
+    console.warn({
+      type: "ANALYTICS_FETCH",
+      ...payload,
+    });
+  }, []);
+
   const setSafeAnalyticsFallbackState = useCallback((message: string) => {
     setAnalytics(null);
     setAnalyticsErrorMessage(message);
@@ -658,6 +670,12 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     setRange(nextRange);
 
     if (cachedAnalytics) {
+      logAnalyticsFetch({
+        scope: "analytics",
+        count: cachedAnalytics.recent_events.length,
+        duration: 0,
+        status: "cache_hit",
+      });
       setAnalytics(cachedAnalytics);
       setAnalyticsErrorMessage(null);
       setStatus(
@@ -674,11 +692,18 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     setStatus("Loading analytics…");
 
     try {
+      const startedAt = performance.now();
       const result = await fetchAdminAnalytics(
         { range: nextRange },
         { accessToken },
       );
       if (result.error) {
+        logAnalyticsFetch({
+          scope: "analytics",
+          count: 0,
+          duration: performance.now() - startedAt,
+          status: "error",
+        });
         const accessMessage = getAnalyticsAccessErrorMessage(
           result.error,
         );
@@ -702,11 +727,23 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       }
 
       if (!result.data) {
+        logAnalyticsFetch({
+          scope: "analytics",
+          count: 0,
+          duration: performance.now() - startedAt,
+          status: "error",
+        });
         setSafeAnalyticsFallbackState("Unable to load activity right now");
         return;
       }
 
       const analytics = result.data;
+      logAnalyticsFetch({
+        scope: "analytics",
+        count: analytics.recent_events.length,
+        duration: performance.now() - startedAt,
+        status: "success",
+      });
       writeAnalyticsCache(nextRange, analytics);
       setAnalytics(analytics);
       setAnalyticsErrorMessage(null);
@@ -746,7 +783,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, setSafeAnalyticsFallbackState, signOut]);
+  }, [accessToken, logAnalyticsFetch, setSafeAnalyticsFallbackState, signOut]);
 
   const loadAuditLogs = useCallback(async (
     filters: AuditLogFilterState,
@@ -770,6 +807,12 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       const cachedAuditLogs = readAuditLogCache(auditLogCacheKey);
 
       if (cachedAuditLogs) {
+        logAnalyticsFetch({
+          scope: "audit_logs",
+          count: cachedAuditLogs.auditLogs.length,
+          duration: 0,
+          status: "cache_hit",
+        });
         setAuditLogs(cachedAuditLogs.auditLogs);
         setAuditErrorMessage(null);
         setAuditHasMore(cachedAuditLogs.pagination.has_more);
@@ -788,6 +831,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     setAuditStatus(append ? "Loading more admin activity…" : "Loading admin activity…");
 
     try {
+      const startedAt = performance.now();
       const response = await fetchAdminAuditLogs(
         {
           limit: auditLogsPageSize,
@@ -798,6 +842,12 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
         { accessToken },
       );
       if (response.error) {
+        logAnalyticsFetch({
+          scope: "audit_logs",
+          count: 0,
+          duration: performance.now() - startedAt,
+          status: "error",
+        });
         const accessMessage = getAnalyticsAccessErrorMessage(
           response.error,
         );
@@ -822,11 +872,23 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       }
 
       if (!response.data || !isAuditLogListResult(response.data)) {
+        logAnalyticsFetch({
+          scope: "audit_logs",
+          count: 0,
+          duration: performance.now() - startedAt,
+          status: "error",
+        });
         const malformedMessage = "Unable to load activity right now";
         setSafeAuditFallbackState(malformedMessage, { append });
         return;
       }
       const result = response.data;
+      logAnalyticsFetch({
+        scope: "audit_logs",
+        count: result.auditLogs.length,
+        duration: performance.now() - startedAt,
+        status: "success",
+      });
       writeAuditLogCache(auditLogCacheKey, result);
 
       setAuditLogs((current) => append ? [...current, ...result.auditLogs] : result.auditLogs);
@@ -868,7 +930,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     } finally {
       setIsAuditLoading(false);
     }
-  }, [accessToken, setSafeAuditFallbackState, signOut]);
+  }, [accessToken, logAnalyticsFetch, setSafeAuditFallbackState, signOut]);
 
   const runAnalyticsLoadSafely = useCallback(async (nextRange: AdminAnalyticsRange) => {
     try {

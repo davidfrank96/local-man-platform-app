@@ -114,9 +114,16 @@ export function readVendorArtifactCache(
 }
 
 type AdminAnalyticsCache = {
-  analyticsByRange: Partial<Record<AdminAnalyticsRange, AdminAnalyticsResponseData>>;
-  auditLogsByFilterKey: Record<string, AdminAuditLogListResult>;
+  analyticsByRange: Partial<Record<AdminAnalyticsRange, CacheEntry<AdminAnalyticsResponseData>>>;
+  auditLogsByFilterKey: Record<string, CacheEntry<AdminAuditLogListResult>>;
 };
+
+type CacheEntry<T> = {
+  value: T;
+  cachedAt: number;
+};
+
+const analyticsCacheTtlMs = 30_000;
 
 const adminAnalyticsCache: AdminAnalyticsCache = {
   analyticsByRange: {},
@@ -124,14 +131,28 @@ const adminAnalyticsCache: AdminAnalyticsCache = {
 };
 
 export function readAnalyticsCache(range: AdminAnalyticsRange): AdminAnalyticsResponseData | null {
-  return adminAnalyticsCache.analyticsByRange[range] ?? null;
+  const entry = adminAnalyticsCache.analyticsByRange[range];
+
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() - entry.cachedAt > analyticsCacheTtlMs) {
+    delete adminAnalyticsCache.analyticsByRange[range];
+    return null;
+  }
+
+  return entry.value;
 }
 
 export function writeAnalyticsCache(
   range: AdminAnalyticsRange,
   data: AdminAnalyticsResponseData,
 ): void {
-  adminAnalyticsCache.analyticsByRange[range] = data;
+  adminAnalyticsCache.analyticsByRange[range] = {
+    value: data,
+    cachedAt: Date.now(),
+  };
 }
 
 export function createAuditLogCacheKey(filters: {
@@ -149,14 +170,28 @@ export function createAuditLogCacheKey(filters: {
 }
 
 export function readAuditLogCache(cacheKey: string): AdminAuditLogListResult | null {
-  return adminAnalyticsCache.auditLogsByFilterKey[cacheKey] ?? null;
+  const entry = adminAnalyticsCache.auditLogsByFilterKey[cacheKey];
+
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() - entry.cachedAt > analyticsCacheTtlMs) {
+    delete adminAnalyticsCache.auditLogsByFilterKey[cacheKey];
+    return null;
+  }
+
+  return entry.value;
 }
 
 export function writeAuditLogCache(
   cacheKey: string,
   data: AdminAuditLogListResult,
 ): void {
-  adminAnalyticsCache.auditLogsByFilterKey[cacheKey] = data;
+  adminAnalyticsCache.auditLogsByFilterKey[cacheKey] = {
+    value: data,
+    cachedAt: Date.now(),
+  };
 }
 
 let adminUsersCache: AdminUser[] | null = null;

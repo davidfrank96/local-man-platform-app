@@ -1,6 +1,8 @@
+import { createClient } from "@supabase/supabase-js";
 import type { ApiResponse } from "../api/responses.ts";
 import { AppError } from "../errors/app-error.ts";
 import type { AppErrorCode } from "../api/contracts.ts";
+import { auditLogSchema } from "../validation/schemas.ts";
 import type {
   AdminRole,
   AdminUser,
@@ -190,6 +192,11 @@ type AdminApiClientOptions = {
   fetchImpl?: typeof fetch;
 };
 
+type AdminClientSupabaseConfig = {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+};
+
 function createAdminHeaders(
   accessToken: string,
   body?: BodyInit | null,
@@ -218,17 +225,37 @@ function appendDefinedParam(params: URLSearchParams, key: string, value: unknown
   params.set(key, String(value));
 }
 
+function getAdminClientSupabaseConfig(): AdminClientSupabaseConfig {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new AdminApiError(
+      "CONFIG_ERROR",
+      "System configuration error.",
+      503,
+      { missing: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] },
+      "Supabase public environment variables are required for analytics reads.",
+    );
+  }
+
+  return {
+    supabaseUrl,
+    supabaseAnonKey,
+  };
+}
+
 function normalizeAuditLogFilters(filters: AdminAuditLogFilters): AdminAuditLogFilters {
   const normalizedLimit = filters.limit ?? 10;
   const normalizedOffset = filters.offset ?? 0;
 
-  if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1 || normalizedLimit > 100) {
+  if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1 || normalizedLimit > 10) {
     throw new AdminApiError(
       "VALIDATION_ERROR",
       "Invalid audit log filters.",
       400,
       { field: "limit", value: filters.limit ?? null },
-      "limit must be an integer between 1 and 100.",
+      "limit must be an integer between 1 and 10.",
     );
   }
 
@@ -426,18 +453,109 @@ export async function fetchAdminAuditLogs(
     };
   }
 
-  const params = new URLSearchParams({
-    limit: String(normalizedFilters.limit),
-    offset: String(normalizedFilters.offset),
-  });
-  appendDefinedParam(params, "user_role", normalizedFilters.user_role);
-  appendDefinedParam(params, "action", normalizedFilters.action);
-  appendDefinedParam(params, "since", normalizedFilters.since);
+  try {
+    const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
+    const pageSize = Math.min(normalizedFilters.limit ?? 10, 10);
+    const offset = normalizedFilters.offset ?? 0;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        fetch: options.fetchImpl,
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      accessToken: async () => options.accessToken,
+    });
 
-  return requestAdminApiResult<AdminAuditLogListResult>(
-    `/api/admin/audit-logs?${params.toString()}`,
-    options,
-  );
+    let query = supabase
+      .from("audit_logs")
+      .select("id,user_role,entity_type,entity_id,action,metadata,created_at")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize);
+
+    if (normalizedFilters.user_role) {
+      query = query.eq("user_role", normalizedFilters.user_role);
+    }
+
+    if (normalizedFilters.action) {
+      query = query.eq("action", normalizedFilters.action);
+    }
+
+    if (normalizedFilters.since) {
+      query = query.gte("created_at", normalizedFilters.since);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      const normalizedMessage = error.message.toLowerCase();
+      const errorCode = error.code === "42501" || normalizedMessage.includes("permission denied")
+        ? "FORBIDDEN"
+        : normalizedMessage.includes("jwt") || normalizedMessage.includes("auth")
+          ? "UNAUTHORIZED"
+          : "UPSTREAM_ERROR";
+
+      return {
+        data: null,
+        error: {
+          code: errorCode,
+          message: errorCode === "FORBIDDEN"
+            ? "You do not have access to analytics"
+            : errorCode === "UNAUTHORIZED"
+              ? "Admin session expired. Sign in again."
+              : "Activity temporarily unavailable.",
+          detail: error.message,
+        },
+      };
+    }
+
+    const parsed = auditLogSchema.array().safeParse(data ?? []);
+
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: {
+          code: "INVALID_RESPONSE",
+          message: "Activity temporarily unavailable.",
+          detail: "Supabase returned an unexpected audit log payload.",
+        },
+      };
+    }
+
+    return {
+      data: {
+        auditLogs: parsed.data.slice(0, pageSize),
+        pagination: {
+          limit: pageSize,
+          offset,
+          has_more: parsed.data.length > pageSize,
+        },
+      },
+      error: null,
+    };
+  } catch (error) {
+    if (error instanceof AdminApiError) {
+      return {
+        data: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          detail: error.detail ?? undefined,
+        },
+      };
+    }
+
+    return {
+      data: null,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Activity temporarily unavailable.",
+        detail: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
 }
 
 export async function listAdminUsers(
