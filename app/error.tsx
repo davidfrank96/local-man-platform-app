@@ -1,28 +1,35 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect } from "react";
+import { handleAppError } from "../lib/errors/ui-error.ts";
 
-type ErrorProps = {
+export default function AppError({
+  error,
+  reset,
+}: {
   error: Error & { digest?: string };
   reset: () => void;
-};
+}) {
+  useEffect(() => {
+    handleAppError(error, {
+      fallbackMessage: "Something went wrong. Please refresh.",
+      role: "user",
+      context: "app_error_boundary",
+    });
+  }, [error]);
 
-export default function Error({ reset }: ErrorProps) {
   return (
-    <main className="page-shell narrow-shell" aria-live="polite">
-      <p className="eyebrow">Error</p>
-      <h1>Something went wrong</h1>
-      <p className="page-intro">
-        The page failed to load. Try again or return home.
-      </p>
+    <div className="global-error-fallback" role="alert">
+      <h1>Something went wrong.</h1>
+      <p>Please refresh.</p>
       <div className="action-row">
         <button className="button-primary" type="button" onClick={() => reset()}>
           Try again
         </button>
-        <Link className="button-secondary" href="/">
-          Return home
-        </Link>
+        <button className="button-secondary" type="button" onClick={() => window.location.reload()}>
+          Refresh
+        </button>
       </div>
-    </main>
+    </div>
   );
 }

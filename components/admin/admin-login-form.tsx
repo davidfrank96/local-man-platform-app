@@ -3,24 +3,24 @@
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { sanitizeAdminNextPath } from "../../lib/admin/navigation.ts";
+import { resolveAdminNextPath } from "../../lib/admin/navigation.ts";
 import { useAdminSession } from "./admin-session-provider.tsx";
 
 export function AdminLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { status, error, signIn, signOut } = useAdminSession();
+  const { status, error, session, signIn, signOut } = useAdminSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const nextPath = sanitizeAdminNextPath(searchParams.get("next"));
+  const nextPath = searchParams.get("next");
 
   useEffect(() => {
-    if (status === "authenticated") {
-      router.replace(nextPath);
+    if (status === "authenticated" && session) {
+      router.replace(resolveAdminNextPath(session.adminUser.role, nextPath));
     }
-  }, [nextPath, router, status]);
+  }, [nextPath, router, session, status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

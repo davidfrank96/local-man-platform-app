@@ -1,13 +1,13 @@
 import type { NextRequest } from "next/server";
 import { apiSuccess } from "../../../../lib/api/responses.ts";
 import { validateSearchParams } from "../../../../lib/api/validation.ts";
-import { requireAdmin } from "../../../../lib/admin/auth.ts";
+import { requireAdminPermission } from "../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../lib/admin/errors.ts";
 import { getAdminAnalytics } from "../../../../lib/admin/analytics-service.ts";
 import { adminAnalyticsQuerySchema } from "../../../../lib/validation/index.ts";
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminPermission(request, "analytics:read");
 
   if (!admin.success) {
     return admin.response;

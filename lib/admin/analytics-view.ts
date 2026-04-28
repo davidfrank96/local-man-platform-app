@@ -31,3 +31,18 @@ export function hasAnalyticsVendorPerformance(data: AdminAnalyticsResponseData):
 export function hasRecentAnalyticsEvents(data: AdminAnalyticsResponseData): boolean {
   return data.recent_events.length > 0;
 }
+
+export function getVisibleRecentAnalyticsEvents<T>(
+  events: T[],
+  visibleCount: number,
+): T[] {
+  return events.slice(0, Math.max(visibleCount, 0));
+}
+
+export function getNextRecentAnalyticsEventCount(
+  currentCount: number,
+  totalCount: number,
+  pageSize: number,
+): number {
+  return Math.min(totalCount, currentCount + pageSize);
+}

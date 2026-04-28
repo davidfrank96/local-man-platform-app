@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   buildAnalyticsMetricCards,
   formatAnalyticsEventLabel,
+  getNextRecentAnalyticsEventCount,
+  getVisibleRecentAnalyticsEvents,
   hasAnalyticsVendorPerformance,
   hasRecentAnalyticsEvents,
 } from "../lib/admin/analytics-view.ts";
@@ -74,4 +76,12 @@ test("analytics view helpers expose recent activity and vendor performance", () 
   assert.equal(hasAnalyticsVendorPerformance(analytics), true);
   assert.equal(hasRecentAnalyticsEvents(analytics), true);
   assert.equal(formatAnalyticsEventLabel("vendor_selected"), "Vendor Selected");
+});
+
+test("analytics view helpers paginate recent activity safely", () => {
+  const recentEvents = Array.from({ length: 12 }, (_, index) => ({ id: index + 1 }));
+
+  assert.equal(getVisibleRecentAnalyticsEvents(recentEvents, 5).length, 5);
+  assert.equal(getNextRecentAnalyticsEventCount(5, 12, 5), 10);
+  assert.equal(getNextRecentAnalyticsEventCount(10, 12, 5), 12);
 });

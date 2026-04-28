@@ -74,3 +74,43 @@ Use this checklist before pushing or releasing UI work.
 - [ ] no hydration errors
 - [ ] no obvious remount loops
 - [ ] no broken import or runtime crash
+
+## Admin and agent workspace
+
+- [ ] admin login succeeds
+- [ ] agent login succeeds
+- [ ] admin lands on `/admin/dashboard`
+- [ ] agent lands on `/admin/agent`
+- [ ] admin can access analytics
+- [ ] admin can access team management
+- [ ] agent cannot access analytics
+- [ ] agent cannot access team management
+- [ ] agent cannot access audit logs
+
+## Audit logs and analytics
+
+- [ ] public event tracking still records events
+- [ ] admin analytics page loads summary data
+- [ ] recent user events render correctly
+- [ ] recent team activity renders correctly
+- [ ] analytics reads use a configured `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] audit-log reads use a configured `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] analytics empty state is real data absence, not auth/config failure
+
+## CSV intake
+
+- [ ] quick add vendor works for agent role
+- [ ] CSV template downloads
+- [ ] CSV preview shows valid and invalid rows
+- [ ] invalid cells show inline issues
+- [ ] duplicate rows in file are flagged
+- [ ] duplicate existing vendors are flagged
+- [ ] valid rows still upload when invalid rows are present
+- [ ] CSV rows without coordinates are rejected clearly
+
+## Error handling
+
+- [ ] toast messages appear for handled UI failures
+- [ ] global error boundary fallback renders on forced render failure
+- [ ] admin-facing errors show safe code/detail only
+- [ ] agent/public errors do not expose raw upstream details

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import type { AppErrorCode } from "../../lib/api/contracts.ts";
+import { AppError } from "../../lib/errors/app-error.ts";
+import { handleAppError } from "../../lib/errors/ui-error.ts";
 import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
 
 type VendorRatingProps = {
@@ -56,13 +59,20 @@ export function VendorRating({
         error?: {
           code?: string;
           message?: string;
+          detail?: string;
         } | null;
       };
 
       if (!response.ok || !payload.success || payload.data?.vendor_id !== vendorId) {
-        const errorCode = payload.error?.code ?? "UPSTREAM_ERROR";
+        const errorCode = (payload.error?.code ?? "UPSTREAM_ERROR") as AppErrorCode;
         const errorMessage = payload.error?.message ?? "Unable to save vendor rating.";
-        throw new Error(`${errorCode}: ${errorMessage}`);
+        throw new AppError(
+          errorCode,
+          errorMessage,
+          response.status,
+          undefined,
+          payload.error?.detail,
+        );
       }
 
       setSummary({
@@ -71,7 +81,13 @@ export function VendorRating({
       });
       setStatus("Rating saved.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to save vendor rating.");
+      setStatus(
+        handleAppError(error, {
+          fallbackMessage: "Unable to save vendor rating.",
+          role: "user",
+          context: "vendor_rating_submit",
+        }).message,
+      );
     } finally {
       setIsSubmitting(false);
     }

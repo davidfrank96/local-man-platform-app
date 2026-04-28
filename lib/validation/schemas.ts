@@ -140,18 +140,46 @@ export const adminUserSchema = z.object({
   id: uuidSchema,
   email: z.email(),
   full_name: z.string().nullable(),
-  role: nonEmptyTextSchema,
+  role: z.enum(["admin", "agent"]),
   created_at: timestampSchema,
 });
+
+export const auditActionTypeSchema = z.enum([
+  "CREATE_VENDOR",
+  "UPDATE_VENDOR",
+  "UPDATE_VENDOR_STATUS",
+  "DELETE_VENDOR",
+  "UPDATE_VENDOR_HOURS",
+  "CREATE_VENDOR_IMAGES",
+  "UPLOAD_VENDOR_IMAGE",
+  "DELETE_VENDOR_IMAGE",
+  "CREATE_VENDOR_DISHES",
+  "DELETE_VENDOR_DISH",
+  "CREATE_ADMIN_USER",
+  "UPDATE_ADMIN_USER",
+  "DELETE_ADMIN_USER",
+  "CHANGE_ADMIN_USER_ROLE",
+]);
+
+export const auditEntityTypeSchema = z.enum(["vendor", "admin_user"]);
+
+export const auditLogActorSchema = z.object({
+  id: uuidSchema,
+  email: z.email(),
+  full_name: z.string().nullable(),
+  role: z.enum(["admin", "agent"]),
+}).nullable();
 
 export const auditLogSchema = z.object({
   id: uuidSchema,
   admin_user_id: uuidSchema.nullable(),
-  entity_type: nonEmptyTextSchema,
+  user_role: z.enum(["admin", "agent"]),
+  entity_type: auditEntityTypeSchema,
   entity_id: uuidSchema.nullable(),
-  action: nonEmptyTextSchema,
+  action: auditActionTypeSchema,
   metadata: z.record(z.string(), z.unknown()),
   created_at: timestampSchema,
+  admin_user: auditLogActorSchema.optional(),
 });
 
 export const userActionEventNameSchema = z.enum([
@@ -272,6 +300,26 @@ export const createVendorRequestSchema = z.object({
 
 export const updateVendorRequestSchema = createVendorRequestSchema.partial();
 
+const vendorIntakeRawTextSchema = z.union([z.string(), z.number(), z.null()]).optional();
+
+export const vendorIntakeRowInputSchema = z.object({
+  row_number: z.coerce.number().int().positive().optional(),
+  vendor_name: vendorIntakeRawTextSchema,
+  category: vendorIntakeRawTextSchema,
+  address: vendorIntakeRawTextSchema,
+  latitude: vendorIntakeRawTextSchema,
+  longitude: vendorIntakeRawTextSchema,
+  phone: vendorIntakeRawTextSchema,
+  opening_time: vendorIntakeRawTextSchema,
+  closing_time: vendorIntakeRawTextSchema,
+  description: vendorIntakeRawTextSchema,
+});
+
+export const vendorIntakeRequestSchema = z.object({
+  action: z.enum(["preview", "upload"]),
+  rows: z.array(vendorIntakeRowInputSchema).min(1).max(500),
+});
+
 export const adminVendorsQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().max(120).optional(),
   area: z.string().trim().max(120).optional(),
@@ -284,6 +332,22 @@ export const adminAnalyticsRangeSchema = z.enum(["24h", "7d", "30d", "all"]).def
 export const adminAnalyticsQuerySchema = z.object({
   range: adminAnalyticsRangeSchema.default("7d"),
 });
+
+export const createAdminUserRequestSchema = z.object({
+  email: z.email(),
+  password: z.string().trim().min(8).max(200),
+  full_name: optionalTextSchema,
+  role: z.enum(["admin", "agent"]),
+});
+
+export const updateAdminUserRequestSchema = z
+  .object({
+    full_name: optionalTextSchema.optional(),
+    role: z.enum(["admin", "agent"]).optional(),
+  })
+  .refine((value) => value.full_name !== undefined || value.role !== undefined, {
+    message: "At least one admin user field must be provided.",
+  });
 
 export const adminAnalyticsSummarySchema = z.object({
   total_sessions: z.coerce.number().int().min(0),
@@ -386,8 +450,11 @@ export const vendorRatingResponseDataSchema = z.object({
 });
 
 export const auditLogsQuerySchema = paginationQuerySchema.extend({
-  entity_type: z.string().trim().max(80).optional(),
+  user_role: z.enum(["admin", "agent"]).optional(),
+  action: auditActionTypeSchema.optional(),
+  entity_type: auditEntityTypeSchema.optional(),
   entity_id: uuidSchema.optional(),
+  since: timestampSchema.optional(),
 });
 
 export const vendorDetailResponseDataSchema = vendorSchema.extend({

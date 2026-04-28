@@ -1,3 +1,7 @@
+import type { AdminRole } from "../../types/index.ts";
+import { AppError, mapExternalError } from "../errors/app-error.ts";
+import { logStructuredEvent } from "../observability.ts";
+
 const ADMIN_SESSION_STORAGE_KEY = "local-man-admin-session";
 
 export type StoredAdminSession = {
@@ -19,7 +23,7 @@ export type AdminSessionIdentity = {
     id: string;
     email: string;
     full_name: string | null;
-    role: string;
+    role: AdminRole;
   };
 };
 
@@ -41,30 +45,19 @@ type SessionClientConfig = {
   supabaseAnonKey: string;
 };
 
-export class AdminSessionError extends Error {
-  code: string;
-
-  status: number;
-
-  details: unknown;
-
-  constructor(code: string, message: string, status: number, details?: unknown) {
-    super(message);
-    this.name = "AdminSessionError";
-    this.code = code;
-    this.status = status;
-    this.details = details;
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
+export class AdminSessionError extends AppError {}
 
 function logAdminSessionEvent(
   level: "info" | "warn" | "error",
   message: string,
   details: Record<string, unknown>,
 ) {
-  const logger = console[level] ?? console.info;
-  logger(`[admin][session] ${message}`, details);
+  logStructuredEvent(level, {
+    type: level === "error" ? "ERROR" : "ADMIN_SESSION_EVENT",
+    message,
+    context: "admin_session",
+    ...details,
+  });
 }
 
 function getClientConfig(): SessionClientConfig {
@@ -73,9 +66,11 @@ function getClientConfig(): SessionClientConfig {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new AdminSessionError(
-      "CONFIGURATION_ERROR",
-      "Supabase public environment variables are required for admin login.",
+      "CONFIG_ERROR",
+      "System configuration error.",
       503,
+      { missing: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] },
+      "Supabase public environment variables are required for admin login.",
     );
   }
 
@@ -101,8 +96,10 @@ function createSessionFromPayload(payload: SupabaseAuthPayload): StoredAdminSess
   if (!payload.access_token || !payload.user?.id) {
     throw new AdminSessionError(
       "INVALID_RESPONSE",
-      "Supabase login did not return a valid session.",
+      "Unable to restore the admin session.",
       502,
+      payload,
+      "Supabase login did not return a valid session.",
     );
   }
 
@@ -140,14 +137,17 @@ async function requestSupabaseAuth(
       payload?.error_description ?? payload?.msg ?? "Admin authentication failed.",
       response.status,
       payload,
+      "Supabase authentication rejected the login request.",
     );
   }
 
   if (!payload) {
     throw new AdminSessionError(
       "INVALID_RESPONSE",
-      "Supabase authentication returned an empty response.",
+      "Unable to restore the admin session.",
       502,
+      undefined,
+      "Supabase authentication returned an empty response.",
     );
   }
 
@@ -181,13 +181,22 @@ export async function signInAdminSession(
 
     return session;
   } catch (error) {
+    const mapped = error instanceof AdminSessionError
+      ? error
+      : mapExternalError(error, {
+        code: "UNKNOWN_ERROR",
+        message: "Admin authentication failed.",
+        status: 502,
+        detail: "The login flow failed unexpectedly.",
+      });
     logAdminSessionEvent("warn", "password sign-in failed", {
       email,
-      code: error instanceof AdminSessionError ? error.code : "UNKNOWN_ERROR",
-      status: error instanceof AdminSessionError ? error.status : null,
-      message: error instanceof Error ? error.message : "Admin authentication failed.",
+      code: mapped.code,
+      status: mapped.status ?? null,
+      detail: mapped.detail ?? null,
+      message: mapped.message,
     });
-    throw error;
+    throw mapped;
   }
 }
 
@@ -265,6 +274,7 @@ export async function fetchAdminSessionIdentity(
   const response = await fetchImpl("/api/admin/session", {
     headers: {
       authorization: `Bearer ${accessToken}`,
+      "x-request-id": crypto.randomUUID(),
     },
   });
 
@@ -275,6 +285,7 @@ export async function fetchAdminSessionIdentity(
         error?: {
           code?: string;
           message?: string;
+          detail?: string;
           details?: unknown;
         } | null;
       }
@@ -287,10 +298,11 @@ export async function fetchAdminSessionIdentity(
       message: payload?.error?.message ?? "Unable to validate admin session.",
     });
     throw new AdminSessionError(
-      payload?.error?.code ?? "SESSION_ERROR",
+      (payload?.error?.code as import("../api/contracts.ts").AppErrorCode | undefined) ?? "SESSION_ERROR",
       payload?.error?.message ?? "Unable to validate admin session.",
       response.status,
       payload?.error?.details,
+      payload?.error?.detail,
     );
   }
 

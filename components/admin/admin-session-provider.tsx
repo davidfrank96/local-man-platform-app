@@ -21,6 +21,7 @@ import {
   type AdminSessionIdentity,
   type StoredAdminSession,
 } from "../../lib/admin/session-client.ts";
+import { handleAppError } from "../../lib/errors/ui-error.ts";
 
 export type AdminSessionState = {
   status: "loading" | "authenticated" | "unauthenticated" | "forbidden";
@@ -105,7 +106,11 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
 
       await resetToSignedOut();
       setError(
-        error instanceof Error ? error.message : "Unable to restore the admin session.",
+        handleAppError(error, {
+          fallbackMessage: "Unable to restore the admin session.",
+          role: "user",
+          context: "admin_session_restore",
+        }).message,
       );
     }
   }, [resetToSignedOut]);
@@ -145,7 +150,13 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
       }
 
       setStatus("unauthenticated");
-      setError(error instanceof Error ? error.message : "Admin login failed.");
+      setError(
+        handleAppError(error, {
+          fallbackMessage: "Admin login failed.",
+          role: "user",
+          context: "admin_sign_in",
+        }).message,
+      );
       throw error;
     }
   }, []);

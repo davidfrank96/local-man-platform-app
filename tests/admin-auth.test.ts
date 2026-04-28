@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as adminSessionRoute } from "../app/api/admin/session/route.ts";
-import { getBearerToken, requireAdmin } from "../lib/admin/auth.ts";
+import {
+  getBearerToken,
+  requireAdmin,
+  requireAdminPermission,
+} from "../lib/admin/auth.ts";
 
 const config = {
   supabaseUrl: "https://example.supabase.co",
@@ -106,6 +110,182 @@ test("accepts authenticated admin users", async () => {
     assert.equal(result.session.accessToken, "admin-token");
     assert.equal(result.session.user.id, "admin-id");
     assert.equal(result.session.adminUser.role, "admin");
+  }
+});
+
+test("accepts authenticated agent users for general admin workspace access", async () => {
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/vendors", {
+      headers: {
+        authorization: "Bearer agent-token",
+      },
+    }),
+    {
+      config,
+      fetchImpl: (async (input: URL | RequestInfo) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "agent-id",
+            email: "agent@example.com",
+          });
+        }
+
+        return Response.json([
+          {
+            id: "agent-id",
+            email: "agent@example.com",
+            full_name: "Agent User",
+            role: "agent",
+          },
+        ]);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.adminUser.role, "agent");
+  }
+});
+
+test("auto-creates a default agent admin_users row for authenticated auth-only users", async () => {
+  const requests: Array<{
+    pathname: string;
+    method: string;
+    authorization: string | null;
+    apikey: string | null;
+    body?: unknown;
+  }> = [];
+
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/vendors", {
+      headers: {
+        authorization: "Bearer fresh-user-token",
+      },
+    }),
+    {
+      config: {
+        ...config,
+        supabaseServiceRoleKey: "service-role-key",
+      },
+      fetchImpl: (async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+        const headers = new Headers(init?.headers);
+        const method = init?.method ?? "GET";
+
+        requests.push({
+          pathname: url.pathname,
+          method,
+          authorization: headers.get("authorization"),
+          apikey: headers.get("apikey"),
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "fresh-user-id",
+            email: "fresh@example.com",
+          });
+        }
+
+        if (url.pathname === "/rest/v1/admin_users" && method === "GET") {
+          return Response.json([]);
+        }
+
+        if (url.pathname === "/rest/v1/admin_users" && method === "POST") {
+          return Response.json([
+            {
+              id: "fresh-user-id",
+              email: "fresh@example.com",
+              full_name: null,
+              role: "agent",
+            },
+          ]);
+        }
+
+        throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.adminUser.id, "fresh-user-id");
+    assert.equal(result.session.adminUser.email, "fresh@example.com");
+    assert.equal(result.session.adminUser.role, "agent");
+  }
+
+  assert.deepEqual(requests, [
+    {
+      pathname: "/auth/v1/user",
+      method: "GET",
+      authorization: "Bearer fresh-user-token",
+      apikey: "anon-key",
+      body: undefined,
+    },
+    {
+      pathname: "/rest/v1/admin_users",
+      method: "GET",
+      authorization: "Bearer service-role-key",
+      apikey: "service-role-key",
+      body: undefined,
+    },
+    {
+      pathname: "/rest/v1/admin_users",
+      method: "POST",
+      authorization: "Bearer service-role-key",
+      apikey: "service-role-key",
+      body: {
+        id: "fresh-user-id",
+        email: "fresh@example.com",
+        full_name: null,
+        role: "agent",
+      },
+    },
+  ]);
+});
+
+test("blocks agent users from admin-only permissions", async () => {
+  const result = await requireAdminPermission(
+    new Request("http://localhost/api/admin/analytics", {
+      headers: {
+        authorization: "Bearer agent-token",
+      },
+    }),
+    "analytics:read",
+    {
+      config,
+      fetchImpl: (async (input: URL | RequestInfo) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "agent-id",
+            email: "agent@example.com",
+          });
+        }
+
+        return Response.json([
+          {
+            id: "agent-id",
+            email: "agent@example.com",
+            full_name: "Agent User",
+            role: "agent",
+          },
+        ]);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, false);
+
+  if (!result.success) {
+    assert.equal(result.response.status, 403);
+    assert.equal((await result.response.json()).error.code, "FORBIDDEN");
   }
 });
 

@@ -1,5 +1,11 @@
 import type { ApiResponse } from "../api/responses.ts";
+import { AppError } from "../errors/app-error.ts";
+import type { AppErrorCode } from "../api/contracts.ts";
 import type {
+  AdminRole,
+  AdminUser,
+  AuditActionType,
+  AuditLog,
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
   CreateVendorDishesRequest,
@@ -56,22 +62,128 @@ export type AdminAnalyticsFilters = {
   range?: AdminAnalyticsRange;
 };
 
-export class AdminApiError extends Error {
+export type AdminAuditLogFilters = {
+  limit?: number;
+  offset?: number;
+  user_role?: AdminRole;
+  action?: AuditActionType;
+  since?: string;
+};
+
+export type AdminAuditLogListResult = {
+  auditLogs: AuditLog[];
+  pagination: {
+    limit: number;
+    offset: number;
+    has_more: boolean;
+  };
+};
+
+export type CreateAdminUserRequest = {
+  email: string;
+  password: string;
+  full_name?: string | null;
+  role: AdminRole;
+};
+
+export type VendorIntakeRowInput = {
+  row_number?: number | null;
+  vendor_name?: string | number | null;
+  category?: string | number | null;
+  address?: string | number | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  phone?: string | number | null;
+  opening_time?: string | number | null;
+  closing_time?: string | number | null;
+  description?: string | number | null;
+};
+
+export type VendorIntakePreviewRow = {
+  rowNumber: number;
+  vendor_name: string | null;
+  slug: string | null;
+  category: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  phone: string | null;
+  opening_time: string | null;
+  closing_time: string | null;
+  description: string | null;
+  issues: VendorIntakeIssue[];
+  errors: string[];
+};
+
+export type VendorIntakeIssue = {
+  row: number;
+  field: string;
+  error: string;
   code: string;
+};
 
-  status: number;
+export type VendorIntakePreviewResult = {
+  totalRows: number;
+  rows: VendorIntakePreviewRow[];
+  validRows: VendorIntakePreviewRow[];
+  invalidRows: VendorIntakePreviewRow[];
+};
 
-  details: unknown;
+export type VendorIntakeUploadResult = VendorIntakePreviewResult & {
+  uploadedRows: Array<{
+    rowNumber: number;
+    vendor: Pick<AdminVendorSummary, "id" | "name" | "slug">;
+  }>;
+  failedRows: Array<{
+    rowNumber: number;
+    vendor_name: string | null;
+    error: string;
+  }>;
+  successCount: number;
+  failedCount: number;
+  errors: VendorIntakeIssue[];
+};
 
-  constructor(code: string, message: string, status: number, details?: unknown) {
-    super(`${code}: ${message}`);
-    this.name = "AdminApiError";
-    this.code = code;
-    this.status = status;
-    this.details = details;
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
+export type UpdateAdminUserRequest = {
+  full_name?: string | null;
+  role?: AdminRole;
+};
+
+export class AdminApiError extends AppError {}
+
+export type AdminApiSafeError = {
+  code: AppErrorCode | string;
+  message: string;
+  detail?: string;
+};
+
+export type AdminApiSafeResult<T> =
+  | {
+      data: T;
+      error: null;
+    }
+  | {
+      data: null;
+      error: AdminApiSafeError;
+    };
+
+const adminAuditRoles = new Set<AdminRole>(["admin", "agent"]);
+const adminAuditActions = new Set<AuditActionType>([
+  "CREATE_VENDOR",
+  "UPDATE_VENDOR",
+  "UPDATE_VENDOR_STATUS",
+  "DELETE_VENDOR",
+  "UPDATE_VENDOR_HOURS",
+  "CREATE_VENDOR_IMAGES",
+  "UPLOAD_VENDOR_IMAGE",
+  "DELETE_VENDOR_IMAGE",
+  "CREATE_VENDOR_DISHES",
+  "DELETE_VENDOR_DISH",
+  "CREATE_ADMIN_USER",
+  "UPDATE_ADMIN_USER",
+  "DELETE_ADMIN_USER",
+  "CHANGE_ADMIN_USER_ROLE",
+]);
 
 type AdminApiClientOptions = {
   accessToken: string;
@@ -82,8 +194,10 @@ function createAdminHeaders(
   accessToken: string,
   body?: BodyInit | null,
 ): HeadersInit {
+  const requestId = crypto.randomUUID();
   const headers: HeadersInit = {
     authorization: `Bearer ${accessToken}`,
+    "x-request-id": requestId,
   };
 
   if (body instanceof FormData) {
@@ -104,6 +218,57 @@ function appendDefinedParam(params: URLSearchParams, key: string, value: unknown
   params.set(key, String(value));
 }
 
+function normalizeAuditLogFilters(filters: AdminAuditLogFilters): AdminAuditLogFilters {
+  const normalizedLimit = filters.limit ?? 10;
+  const normalizedOffset = filters.offset ?? 0;
+
+  if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1 || normalizedLimit > 100) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid audit log filters.",
+      400,
+      { field: "limit", value: filters.limit ?? null },
+      "limit must be an integer between 1 and 100.",
+    );
+  }
+
+  if (!Number.isInteger(normalizedOffset) || normalizedOffset < 0) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid audit log filters.",
+      400,
+      { field: "offset", value: filters.offset ?? null },
+      "offset must be a non-negative integer.",
+    );
+  }
+
+  if (filters.user_role && !adminAuditRoles.has(filters.user_role)) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid audit log filters.",
+      400,
+      { field: "user_role", value: filters.user_role },
+      "user_role must be either admin or agent.",
+    );
+  }
+
+  if (filters.action && !adminAuditActions.has(filters.action)) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid audit log filters.",
+      400,
+      { field: "action", value: filters.action },
+      "action must be a supported audit action.",
+    );
+  }
+
+  return {
+    ...filters,
+    limit: normalizedLimit,
+    offset: normalizedOffset,
+  };
+}
+
 async function requestAdminApi<T>(
   path: string,
   { accessToken, fetchImpl = fetch }: AdminApiClientOptions,
@@ -121,10 +286,16 @@ async function requestAdminApi<T>(
   try {
     payload = (await response.json()) as ApiResponse<T>;
   } catch {
-    throw new Error(
+    throw new AdminApiError(
+      response.ok ? "INVALID_RESPONSE" : "UPSTREAM_ERROR",
       response.ok
         ? "INVALID_RESPONSE: API returned a response that could not be parsed."
         : `HTTP_ERROR: API request failed with status ${response.status}.`,
+      response.status,
+      undefined,
+      response.ok
+        ? "The API returned a response that could not be parsed."
+        : `The API request failed with HTTP ${response.status}.`,
     );
   }
 
@@ -133,17 +304,64 @@ async function requestAdminApi<T>(
     payload === null ||
     typeof payload.success !== "boolean"
   ) {
-    throw new Error("INVALID_RESPONSE: API returned an unexpected response shape.");
+    throw new AdminApiError(
+      "INVALID_RESPONSE",
+      "INVALID_RESPONSE: API returned an unexpected response shape.",
+      response.status || 502,
+      undefined,
+      "The API returned a response shape that does not match the shared contract.",
+    );
   }
 
   if (!payload.success) {
     const code = payload.error?.code ?? "UNKNOWN_ERROR";
     const message = payload.error?.message ?? "API request failed.";
+    const detail = payload.error?.detail ?? null;
 
-    throw new AdminApiError(code, message, response.status, payload.error?.details);
+    throw new AdminApiError(
+      code,
+      message,
+      response.status,
+      payload.error?.details,
+      detail ?? undefined,
+    );
   }
 
   return payload.data;
+}
+
+async function requestAdminApiResult<T>(
+  path: string,
+  options: AdminApiClientOptions,
+  init: RequestInit = {},
+): Promise<AdminApiSafeResult<T>> {
+  try {
+    const data = await requestAdminApi<T>(path, options, init);
+    return {
+      data,
+      error: null,
+    };
+  } catch (error) {
+    if (error instanceof AdminApiError) {
+      return {
+        data: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          detail: error.detail ?? undefined,
+        },
+      };
+    }
+
+    return {
+      data: null,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "API request failed.",
+        detail: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
 }
 
 export async function listAdminVendors(
@@ -168,14 +386,117 @@ export async function listAdminVendors(
 export async function fetchAdminAnalytics(
   filters: AdminAnalyticsFilters,
   options: AdminApiClientOptions,
-): Promise<AdminAnalyticsResponseData> {
+): Promise<AdminApiSafeResult<AdminAnalyticsResponseData>> {
   const params = new URLSearchParams();
   appendDefinedParam(params, "range", filters.range ?? "7d");
 
-  return requestAdminApi<AdminAnalyticsResponseData>(
+  return requestAdminApiResult<AdminAnalyticsResponseData>(
     `/api/admin/analytics?${params.toString()}`,
     options,
   );
+}
+
+export async function fetchAdminAuditLogs(
+  filters: AdminAuditLogFilters,
+  options: AdminApiClientOptions,
+): Promise<AdminApiSafeResult<AdminAuditLogListResult>> {
+  let normalizedFilters: AdminAuditLogFilters;
+
+  try {
+    normalizedFilters = normalizeAuditLogFilters(filters);
+  } catch (error) {
+    if (error instanceof AdminApiError) {
+      return {
+        data: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          detail: error.detail ?? undefined,
+        },
+      };
+    }
+
+    return {
+      data: null,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Invalid audit log filters.",
+        detail: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+
+  const params = new URLSearchParams({
+    limit: String(normalizedFilters.limit),
+    offset: String(normalizedFilters.offset),
+  });
+  appendDefinedParam(params, "user_role", normalizedFilters.user_role);
+  appendDefinedParam(params, "action", normalizedFilters.action);
+  appendDefinedParam(params, "since", normalizedFilters.since);
+
+  return requestAdminApiResult<AdminAuditLogListResult>(
+    `/api/admin/audit-logs?${params.toString()}`,
+    options,
+  );
+}
+
+export async function listAdminUsers(
+  options: AdminApiClientOptions,
+): Promise<AdminUser[]> {
+  const result = await requestAdminApi<{ adminUsers: AdminUser[] }>(
+    "/api/admin/admin-users",
+    options,
+  );
+
+  return result.adminUsers;
+}
+
+export async function createManagedAdminUser(
+  data: CreateAdminUserRequest,
+  options: AdminApiClientOptions,
+): Promise<AdminUser> {
+  const result = await requestAdminApi<{ adminUser: AdminUser }>(
+    "/api/admin/admin-users",
+    options,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+
+  return result.adminUser;
+}
+
+export async function updateManagedAdminUserRole(
+  adminUserId: string,
+  data: UpdateAdminUserRequest,
+  options: AdminApiClientOptions,
+): Promise<AdminUser> {
+  const result = await requestAdminApi<{ adminUser: AdminUser }>(
+    `/api/admin/admin-users/${adminUserId}`,
+    options,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    },
+  );
+
+  return result.adminUser;
+}
+
+export async function deleteManagedAdminUser(
+  adminUserId: string,
+  options: AdminApiClientOptions,
+): Promise<{ adminUserId: string }> {
+  const result = await requestAdminApi<{ adminUserId: string }>(
+    `/api/admin/admin-users/${adminUserId}`,
+    options,
+    {
+      method: "DELETE",
+    },
+  );
+
+  return { adminUserId: result.adminUserId };
 }
 
 export async function createAdminVendor(
@@ -192,6 +513,23 @@ export async function createAdminVendor(
   );
 
   return result.vendor;
+}
+
+export async function submitAdminVendorIntake(
+  data: {
+    action: "preview" | "upload";
+    rows: VendorIntakeRowInput[];
+  },
+  options: AdminApiClientOptions,
+): Promise<VendorIntakePreviewResult | VendorIntakeUploadResult> {
+  return requestAdminApi<VendorIntakePreviewResult | VendorIntakeUploadResult>(
+    "/api/admin/vendors/intake",
+    options,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 export async function updateAdminVendor(

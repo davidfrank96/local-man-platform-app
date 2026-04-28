@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  memo,
   useCallback,
   type FormEvent,
   useEffect,
@@ -26,8 +27,19 @@ import {
   type AdminVendorFilters,
   type AdminVendorSummary,
 } from "../../lib/admin/api-client.ts";
+import { handleAppError } from "../../lib/errors/ui-error.ts";
 import { extractValidationFeedback } from "../../lib/admin/form-errors.ts";
 import { useAdminSession } from "./admin-session-provider.tsx";
+import {
+  AgentQuickAddPanel,
+  VendorCsvUploadPanel,
+} from "./admin-vendor-intake.tsx";
+import {
+  getVendorWorkspaceSnapshot,
+  readVendorArtifactCache,
+  updateVendorArtifactCache,
+  updateVendorWorkspaceSnapshot,
+} from "../../lib/admin/workspace-cache.ts";
 import type {
   CreateVendorDishesRequest,
   CreateVendorRequest,
@@ -47,6 +59,10 @@ import {
   parseStoredTimeForAdmin,
 } from "../../lib/admin/hours-input.ts";
 import {
+  getAdminRoleLabel,
+  hasAdminPermission,
+} from "../../lib/admin/rbac.ts";
+import {
   extractCreateVendorImageUpload,
   getVendorCompletenessLabels,
   validateVendorCreateIntent,
@@ -54,6 +70,7 @@ import {
 import { slugPattern } from "../../lib/validation/common.ts";
 
 const priceBands: PriceBand[] = ["budget", "standard", "premium"];
+const dashboardFollowUpPreviewCount = 5;
 const dayLabels = [
   "Sunday",
   "Monday",
@@ -243,15 +260,12 @@ type AdminFormProps = {
 };
 
 function formatAdminErrorStatus(error: unknown, fallbackMessage: string): string {
-  if (error instanceof AdminApiError) {
-    return `${error.code}: ${error.message.replace(/^[A-Z_]+:\s*/, "")}`;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return fallbackMessage;
+  const visibleError = handleAppError(error, {
+    fallbackMessage,
+    role: "agent",
+    context: "admin_console",
+  });
+  return visibleError.message;
 }
 
 function getAdminStatusTone(status: string, isLoading: boolean): "neutral" | "success" | "error" {
@@ -305,65 +319,130 @@ function getVendorSummaryStatusLabels(vendor: AdminVendorSummary): string[] {
 
 type AdminConsoleProps = {
   initialSelectedVendorId?: string | null;
-  mode?: "dashboard" | "vendors" | "create" | "edit";
+  mode?: "dashboard" | "agent" | "vendors" | "create" | "edit";
 };
 
 export function AdminConsole({
   initialSelectedVendorId = null,
   mode = "dashboard",
 }: AdminConsoleProps) {
-  const [filters, setFilters] = useState<AdminVendorFilters>({
-    limit: 100,
-    offset: 0,
-  });
-  const [vendors, setVendors] = useState<AdminVendorSummary[]>([]);
-  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(
-    initialSelectedVendorId,
+  const { session, signOut } = useAdminSession();
+  const role = session?.adminUser.role ?? "admin";
+  const workspaceCacheScope = `role:${role}`;
+  const workspaceCacheSnapshot = useMemo(
+    () => getVendorWorkspaceSnapshot(workspaceCacheScope),
+    [workspaceCacheScope],
   );
+  const initialCachedVendorId = initialSelectedVendorId ?? workspaceCacheSnapshot.selectedVendorId;
+  const [filters, setFilters] = useState<AdminVendorFilters>(() => workspaceCacheSnapshot.filters);
+  const [vendors, setVendors] = useState<AdminVendorSummary[]>(() => workspaceCacheSnapshot.vendors);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(() => initialCachedVendorId);
   const [status, setStatus] = useState("Admin session ready. Load vendors when needed.");
   const [isLoading, setIsLoading] = useState(false);
-  const [vendorHours, setVendorHours] = useState<VendorHours[]>([]);
-  const [vendorImages, setVendorImages] = useState<VendorImage[]>([]);
-  const [vendorDishes, setVendorDishes] = useState<VendorFeaturedDish[]>([]);
+  const [vendorHours, setVendorHours] = useState<VendorHours[]>(() =>
+    initialCachedVendorId
+      ? (readVendorArtifactCache(workspaceCacheScope, initialCachedVendorId, "hours") as VendorHours[] | null) ?? []
+      : [],
+  );
+  const [vendorImages, setVendorImages] = useState<VendorImage[]>(() =>
+    initialCachedVendorId
+      ? (readVendorArtifactCache(workspaceCacheScope, initialCachedVendorId, "images") as VendorImage[] | null) ?? []
+      : [],
+  );
+  const [vendorDishes, setVendorDishes] = useState<VendorFeaturedDish[]>(() =>
+    initialCachedVendorId
+      ? (readVendorArtifactCache(workspaceCacheScope, initialCachedVendorId, "dishes") as VendorFeaturedDish[] | null) ?? []
+      : [],
+  );
+  const [showAllFollowUpVendors, setShowAllFollowUpVendors] = useState(false);
   const vendorImagesRequestId = useRef(0);
   const vendorHoursRequestId = useRef(0);
   const vendorDishesRequestId = useRef(0);
-  const { session, signOut } = useAdminSession();
+  const canReadAnalytics = hasAdminPermission(role, "analytics:read");
+  const canManageAdminUsers = hasAdminPermission(role, "admin_users:manage");
+  const canDeleteVendor = hasAdminPermission(role, "vendor:delete");
 
   const selectedVendor = useMemo(
     () => vendors.find((vendor) => vendor.id === selectedVendorId) ?? null,
     [selectedVendorId, vendors],
   );
-  const vendorsMissingHours = useMemo(
-    () => vendors.filter((vendor) => vendor.hours_count < 7),
-    [vendors],
-  );
-  const vendorsMissingImages = useMemo(
-    () => vendors.filter((vendor) => vendor.images_count < 1),
-    [vendors],
-  );
-  const vendorsMissingDishes = useMemo(
-    () => vendors.filter((vendor) => vendor.featured_dishes_count < 1),
-    [vendors],
-  );
-  const incompleteVendors = useMemo(
+  const {
+    activeVendorCount,
+    vendorsMissingHours,
+    vendorsMissingImages,
+    vendorsMissingDishes,
+    incompleteVendors,
+  } = useMemo(() => {
+    const active: AdminVendorSummary[] = [];
+    const missingHours: AdminVendorSummary[] = [];
+    const missingImages: AdminVendorSummary[] = [];
+    const missingDishes: AdminVendorSummary[] = [];
+    const incomplete: AdminVendorSummary[] = [];
+
+    for (const vendor of vendors) {
+      if (vendor.is_active) {
+        active.push(vendor);
+      }
+
+      const hasMissingHours = vendor.hours_count < 7;
+      const hasMissingImages = vendor.images_count < 1;
+      const hasMissingDishes = vendor.featured_dishes_count < 1;
+
+      if (hasMissingHours) {
+        missingHours.push(vendor);
+      }
+
+      if (hasMissingImages) {
+        missingImages.push(vendor);
+      }
+
+      if (hasMissingDishes) {
+        missingDishes.push(vendor);
+      }
+
+      if (hasMissingHours || hasMissingImages || hasMissingDishes) {
+        incomplete.push(vendor);
+      }
+    }
+
+    return {
+      activeVendorCount: active.length,
+      vendorsMissingHours: missingHours,
+      vendorsMissingImages: missingImages,
+      vendorsMissingDishes: missingDishes,
+      incompleteVendors: incomplete,
+    };
+  }, [vendors]);
+  const visibleIncompleteVendors = useMemo(
     () =>
-      vendors.filter(
-        (vendor) =>
-          vendor.hours_count < 7 ||
-          vendor.images_count < 1 ||
-          vendor.featured_dishes_count < 1,
-      ),
-    [vendors],
+      showAllFollowUpVendors
+        ? incompleteVendors
+        : incompleteVendors.slice(0, dashboardFollowUpPreviewCount),
+    [incompleteVendors, showAllFollowUpVendors],
   );
   const statusTone = getAdminStatusTone(status, isLoading);
 
-  async function loadVendorImages(
+  useEffect(() => {
+    updateVendorWorkspaceSnapshot(workspaceCacheScope, {
+      filters,
+      vendors,
+      selectedVendorId,
+    });
+  }, [filters, selectedVendorId, vendors, workspaceCacheScope]);
+
+  const loadVendorImages = useCallback(async function loadVendorImages(
     vendorId: string | null,
     accessToken: string | undefined,
   ) {
     if (!vendorId || !accessToken) {
       setVendorImages([]);
+      return;
+    }
+
+    const cachedImages = readVendorArtifactCache(workspaceCacheScope, vendorId, "images");
+
+    if (cachedImages) {
+      setVendorImages(cachedImages as VendorImage[]);
       return;
     }
 
@@ -374,15 +453,23 @@ export function AdminConsole({
 
     if (requestId === vendorImagesRequestId.current) {
       setVendorImages(images);
+      updateVendorArtifactCache(workspaceCacheScope, vendorId, "images", images);
     }
-  }
+  }, [workspaceCacheScope]);
 
-  async function loadVendorHours(
+  const loadVendorHours = useCallback(async function loadVendorHours(
     vendorId: string | null,
     accessToken: string | undefined,
   ) {
     if (!vendorId || !accessToken) {
       setVendorHours([]);
+      return;
+    }
+
+    const cachedHours = readVendorArtifactCache(workspaceCacheScope, vendorId, "hours");
+
+    if (cachedHours) {
+      setVendorHours(cachedHours as VendorHours[]);
       return;
     }
 
@@ -393,15 +480,23 @@ export function AdminConsole({
 
     if (requestId === vendorHoursRequestId.current) {
       setVendorHours(hours);
+      updateVendorArtifactCache(workspaceCacheScope, vendorId, "hours", hours);
     }
-  }
+  }, [workspaceCacheScope]);
 
-  async function loadVendorDishes(
+  const loadVendorDishes = useCallback(async function loadVendorDishes(
     vendorId: string | null,
     accessToken: string | undefined,
   ) {
     if (!vendorId || !accessToken) {
       setVendorDishes([]);
+      return;
+    }
+
+    const cachedDishes = readVendorArtifactCache(workspaceCacheScope, vendorId, "dishes");
+
+    if (cachedDishes) {
+      setVendorDishes(cachedDishes as VendorFeaturedDish[]);
       return;
     }
 
@@ -412,8 +507,9 @@ export function AdminConsole({
 
     if (requestId === vendorDishesRequestId.current) {
       setVendorDishes(dishes);
+      updateVendorArtifactCache(workspaceCacheScope, vendorId, "dishes", dishes);
     }
-  }
+  }, [workspaceCacheScope]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -426,7 +522,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [selectedVendor?.id, session?.accessToken]);
+  }, [loadVendorImages, selectedVendor?.id, session?.accessToken]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -439,7 +535,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [selectedVendor?.id, session?.accessToken]);
+  }, [loadVendorHours, selectedVendor?.id, session?.accessToken]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -452,7 +548,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [selectedVendor?.id, session?.accessToken]);
+  }, [loadVendorDishes, selectedVendor?.id, session?.accessToken]);
 
   const runAdminAction = useCallback(async function runAdminAction<T>(
     action: () => Promise<T>,
@@ -510,7 +606,11 @@ export function AdminConsole({
 
       return result.vendors[0]?.id ?? null;
     });
-  }, [initialSelectedVendorId]);
+    updateVendorWorkspaceSnapshot(workspaceCacheScope, {
+      filters,
+      vendors: result.vendors,
+    });
+  }, [filters, initialSelectedVendorId, workspaceCacheScope]);
 
   const refreshVendors = useCallback(async function refreshVendors(nextFilters = filters) {
     const result = await runAdminAction(
@@ -522,6 +622,16 @@ export function AdminConsole({
       applyVendorListResult(result);
     }
   }, [applyVendorListResult, filters, runAdminAction, session?.accessToken]);
+
+  const handleIntakeVendorsUploaded = useCallback(async (
+    uploadedVendors: Array<{ id: string; name: string; slug: string }>,
+  ) => {
+    if (uploadedVendors[0]?.id) {
+      setSelectedVendorId(uploadedVendors[0].id);
+    }
+
+    await refreshVendors();
+  }, [refreshVendors]);
 
   useEffect(() => {
     if (!session?.accessToken || isLoading || vendors.length > 0) {
@@ -620,6 +730,9 @@ export function AdminConsole({
       setVendorHours(createdHours ?? []);
       setVendorDishes(createdDishes ?? []);
       setVendorImages(createdImages ?? []);
+      updateVendorArtifactCache(workspaceCacheScope, createdVendor.id, "hours", createdHours ?? []);
+      updateVendorArtifactCache(workspaceCacheScope, createdVendor.id, "dishes", createdDishes ?? []);
+      updateVendorArtifactCache(workspaceCacheScope, createdVendor.id, "images", createdImages ?? []);
 
       try {
         const refreshed = await listAdminVendors(filters, {
@@ -700,8 +813,9 @@ export function AdminConsole({
       "Hours updated successfully.",
     );
 
-    if (hours) {
+    if (hours && selectedVendor) {
       setVendorHours(hours);
+      updateVendorArtifactCache(workspaceCacheScope, selectedVendor.id, "hours", hours);
     }
   }
 
@@ -719,9 +833,17 @@ export function AdminConsole({
       "Image uploaded successfully.",
     );
 
-    if (uploadedImages) {
+    if (uploadedImages && selectedVendor) {
       setVendorImages((current) =>
         [...current, ...uploadedImages].toSorted(
+          (left, right) => left.sort_order - right.sort_order,
+        ),
+      );
+      updateVendorArtifactCache(
+        workspaceCacheScope,
+        selectedVendor.id,
+        "images",
+        [...vendorImages, ...uploadedImages].toSorted(
           (left, right) => left.sort_order - right.sort_order,
         ),
       );
@@ -744,8 +866,10 @@ export function AdminConsole({
       "Image removed successfully.",
     );
 
-    if (deletedImage) {
-      setVendorImages((current) => current.filter((image) => image.id !== deletedImage.id));
+    if (deletedImage && selectedVendor) {
+      const nextImages = vendorImages.filter((image) => image.id !== deletedImage.id);
+      setVendorImages(nextImages);
+      updateVendorArtifactCache(workspaceCacheScope, selectedVendor.id, "images", nextImages);
     }
   }
 
@@ -763,8 +887,10 @@ export function AdminConsole({
       "Featured dishes updated successfully.",
     );
 
-    if (dishes) {
-      setVendorDishes((current) => [...current, ...dishes]);
+    if (dishes && selectedVendor) {
+      const nextDishes = [...vendorDishes, ...dishes];
+      setVendorDishes(nextDishes);
+      updateVendorArtifactCache(workspaceCacheScope, selectedVendor.id, "dishes", nextDishes);
     }
   }
 
@@ -782,8 +908,10 @@ export function AdminConsole({
       "Featured dish removed successfully.",
     );
 
-    if (deletedDish) {
-      setVendorDishes((current) => current.filter((dish) => dish.id !== deletedDish.id));
+    if (deletedDish && selectedVendor) {
+      const nextDishes = vendorDishes.filter((dish) => dish.id !== deletedDish.id);
+      setVendorDishes(nextDishes);
+      updateVendorArtifactCache(workspaceCacheScope, selectedVendor.id, "dishes", nextDishes);
     }
   }
 
@@ -820,7 +948,7 @@ export function AdminConsole({
             </article>
             <article className="admin-metric-panel">
               <span>Loaded active vendors</span>
-              <strong>{vendors.filter((vendor) => vendor.is_active).length}</strong>
+              <strong>{activeVendorCount}</strong>
               <small>Available to users</small>
             </article>
             <article className="admin-metric-panel">
@@ -841,28 +969,56 @@ export function AdminConsole({
           </section>
 
           <section className="admin-grid admin-grid-dashboard">
-            <section className="admin-panel" aria-labelledby="admin-dashboard-actions">
-              <div className="admin-section-header">
-                <div>
-                  <p className="eyebrow">Quick actions</p>
-                  <h2 id="admin-dashboard-actions">Next actions</h2>
+            <div className="admin-stack">
+              <section className="admin-panel" aria-labelledby="admin-dashboard-actions">
+                <div className="admin-section-header">
+                  <div>
+                    <p className="eyebrow">Quick actions</p>
+                    <h2 id="admin-dashboard-actions">Next actions</h2>
+                  </div>
                 </div>
-              </div>
-              <div className="admin-action-cards">
-                <Link className="admin-action-card" href="/admin/vendors/new">
-                  <strong>Create vendor</strong>
-                  <span>Add a new vendor record and acknowledge any missing data intentionally.</span>
-                </Link>
-                <Link className="admin-action-card" href="/admin/vendors">
-                  <strong>Manage vendors</strong>
-                  <span>Search the registry, inspect completeness, and open edit workspaces.</span>
-                </Link>
-                <Link className="admin-action-card" href="/admin/vendors">
-                  <strong>Review incomplete vendors</strong>
-                  <span>Focus on vendors still missing hours, images, or featured dishes.</span>
-                </Link>
-              </div>
-            </section>
+                <div className="admin-action-cards">
+                  <Link className="admin-action-card" href="/admin/vendors/new">
+                    <strong>Create vendor</strong>
+                    <span>Add a new vendor record and acknowledge any missing data intentionally.</span>
+                  </Link>
+                  <Link className="admin-action-card" href="/admin/vendors">
+                    <strong>Manage vendors</strong>
+                    <span>Search the registry, inspect completeness, and open edit workspaces.</span>
+                  </Link>
+                  <Link className="admin-action-card" href="/admin/vendors">
+                    <strong>Review incomplete vendors</strong>
+                    <span>Focus on vendors still missing hours, images, or featured dishes.</span>
+                  </Link>
+                  {canReadAnalytics ? (
+                    <Link className="admin-action-card" href="/admin/analytics">
+                      <strong>Review analytics</strong>
+                      <span>Inspect usage signals, drop-off, and vendor engagement.</span>
+                    </Link>
+                  ) : null}
+                  {canManageAdminUsers ? (
+                    <Link className="admin-action-card" href="/admin/team">
+                      <strong>Manage team access</strong>
+                      <span>Create admin or agent accounts and keep roles explicit.</span>
+                    </Link>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="admin-panel" aria-labelledby="admin-dashboard-role">
+                <div className="admin-section-header">
+                  <div>
+                    <p className="eyebrow">Current role</p>
+                    <h2 id="admin-dashboard-role">{getAdminRoleLabel(role)}</h2>
+                  </div>
+                </div>
+                <p className="form-note">
+                  {role === "admin"
+                    ? "Full access: vendor operations, analytics, and team access management."
+                    : "Restricted access: vendor creation and editing only. Analytics and team access are hidden and blocked server-side."}
+                </p>
+              </section>
+            </div>
 
             <section className="admin-panel" aria-labelledby="admin-dashboard-incomplete">
               <div className="admin-section-header">
@@ -873,15 +1029,118 @@ export function AdminConsole({
                 <span>{incompleteVendors.length} vendors</span>
               </div>
               <VendorRegistryList
-                vendors={incompleteVendors}
+                vendors={visibleIncompleteVendors}
                 selectedVendorId={selectedVendorId}
                 onSelectVendor={setSelectedVendorId}
                 emptyMessage="All loaded vendors have hours, images, and featured dishes."
                 compact
               />
+              {incompleteVendors.length > dashboardFollowUpPreviewCount ? (
+                <div className="admin-list-toggle-row">
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    aria-expanded={showAllFollowUpVendors}
+                    onClick={() => {
+                      setShowAllFollowUpVendors((current) => !current);
+                    }}
+                  >
+                    {showAllFollowUpVendors ? "Read less" : "Read more"}
+                  </button>
+                  <span>
+                    Showing {visibleIncompleteVendors.length} of {incompleteVendors.length}
+                  </span>
+                </div>
+              ) : null}
             </section>
           </section>
         </>
+      ) : null}
+
+      {mode === "agent" ? (
+        <section className="admin-grid admin-grid-dashboard">
+          <AgentQuickAddPanel
+            accessToken={session?.accessToken}
+            disabled={isLoading}
+            onVendorsUploaded={handleIntakeVendorsUploaded}
+          />
+
+          <section className="admin-panel" aria-labelledby="agent-dashboard-actions">
+            <div className="admin-section-header">
+              <div>
+                <p className="eyebrow">Quick actions</p>
+                <h2 id="agent-dashboard-actions">Vendor tasks</h2>
+              </div>
+            </div>
+            <div className="admin-action-cards">
+              <Link className="admin-action-card" href="/admin/vendors/new">
+                <strong>Create vendor</strong>
+                <span>Add a new vendor record and capture the required identity fields.</span>
+              </Link>
+              <Link className="admin-action-card" href="/admin/vendors">
+                <strong>Manage vendors</strong>
+                <span>Search the registry, inspect completeness, and open edit workspaces.</span>
+              </Link>
+              <Link className="admin-action-card" href="/admin/vendors">
+                <strong>Review incomplete vendors</strong>
+                <span>Focus on vendors still missing hours, images, or featured dishes.</span>
+              </Link>
+            </div>
+          </section>
+
+          <section className="admin-panel" aria-labelledby="agent-dashboard-vendors">
+            <div className="admin-section-header">
+              <div>
+                <p className="eyebrow">Vendor registry</p>
+                <h2 id="agent-dashboard-vendors">Loaded vendors</h2>
+              </div>
+              <span>{vendors.length} vendors</span>
+            </div>
+            <VendorRegistryList
+              vendors={vendors}
+              selectedVendorId={selectedVendorId}
+              onSelectVendor={setSelectedVendorId}
+              emptyMessage="No vendors are loaded yet. Refresh or create a vendor to begin."
+              compact
+            />
+          </section>
+
+          <section className="admin-panel" aria-labelledby="agent-dashboard-selection">
+            <div className="admin-section-header">
+              <div>
+                <p className="eyebrow">Selection</p>
+                <h2 id="agent-dashboard-selection">
+                  {selectedVendor ? selectedVendor.name : "Select a vendor"}
+                </h2>
+              </div>
+            </div>
+            <p className="form-note">
+              Review completeness and continue into the edit workspace for this vendor.
+            </p>
+            {selectedVendor ? (
+              <>
+                <ul className="admin-completeness-list">
+                  {getVendorSummaryStatusLabels(selectedVendor).map((label) => (
+                    <li key={label}>{label}</li>
+                  ))}
+                </ul>
+                <div className="admin-selection-actions">
+                  <Link className="button-primary" href={`/admin/vendors/${selectedVendor.id}`}>
+                    Open edit workspace
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <p className="empty-state">Select a vendor to continue editing.</p>
+            )}
+          </section>
+
+          <VendorCsvUploadPanel
+            accessToken={session?.accessToken}
+            disabled={isLoading}
+            onVendorsUploaded={handleIntakeVendorsUploaded}
+          />
+        </section>
       ) : null}
 
       {mode === "vendors" ? (
@@ -946,6 +1205,11 @@ export function AdminConsole({
             disabled={isLoading}
             onCreateVendor={handleCreateVendor}
           />
+          <VendorCsvUploadPanel
+            accessToken={session?.accessToken}
+            disabled={isLoading}
+            onVendorsUploaded={handleIntakeVendorsUploaded}
+          />
           <section className="admin-panel" aria-labelledby="create-vendor-guidance">
             <p className="eyebrow">Workflow</p>
             <h2 id="create-vendor-guidance">Create flow</h2>
@@ -970,6 +1234,7 @@ export function AdminConsole({
             onSubmitFilters={submitFilters}
           />
           <EditVendorWorkspace
+            canDeleteVendor={canDeleteVendor}
             disabled={isLoading}
             selectedVendor={selectedVendor}
             vendorDishes={vendorDishes}
@@ -989,7 +1254,7 @@ export function AdminConsole({
   );
 }
 
-function VendorRegistryPanel({
+const VendorRegistryPanel = memo(function VendorRegistryPanel({
   disabled,
   filters,
   selectedVendorId,
@@ -1059,9 +1324,9 @@ function VendorRegistryPanel({
       />
     </section>
   );
-}
+});
 
-function VendorRegistryList({
+const VendorRegistryList = memo(function VendorRegistryList({
   vendors,
   selectedVendorId,
   onSelectVendor,
@@ -1110,7 +1375,7 @@ function VendorRegistryList({
       })}
     </ul>
   );
-}
+});
 
 function AdminCreateVendorSection({
   disabled,
@@ -1573,6 +1838,7 @@ function AdminCreateVendorSection({
 }
 
 function EditVendorWorkspace({
+  canDeleteVendor,
   disabled,
   selectedVendor,
   vendorHours,
@@ -1585,7 +1851,9 @@ function EditVendorWorkspace({
   onDeleteImage,
   onCreateDishes,
   onDeleteDish,
-}: Omit<AdminFormProps, "onCreateVendor">) {
+}: Omit<AdminFormProps, "onCreateVendor"> & {
+  canDeleteVendor: boolean;
+}) {
   const completenessLabels = useMemo(
     () =>
       getVendorCompletenessLabels({
@@ -1656,6 +1924,7 @@ function EditVendorWorkspace({
       <div className="admin-edit-sections">
         <div id="edit-basic-details">
           <UpdateVendorSection
+            canDeleteVendor={canDeleteVendor}
             disabled={disabled}
             onDeactivateVendor={onDeactivateVendor}
             onUpdateVendor={onUpdateVendor}
@@ -1914,12 +2183,14 @@ function FeaturedDishesSection({
 function UpdateVendorSection({
   selectedVendor,
   completenessLabels,
+  canDeleteVendor,
   disabled,
   onUpdateVendor,
   onDeactivateVendor,
 }: {
   selectedVendor: AdminVendorSummary | null;
   completenessLabels: string[];
+  canDeleteVendor: boolean;
   disabled: boolean;
   onUpdateVendor: (data: UpdateVendorRequest) => Promise<void>;
   onDeactivateVendor: () => Promise<void>;
@@ -1964,18 +2235,20 @@ function UpdateVendorSection({
           <button className="button-primary" disabled={disabled || !selectedVendor} type="submit">
             Update vendor
           </button>
-          <button
-            className="button-danger"
-            disabled={disabled || !selectedVendor}
-            type="button"
-            onClick={() => {
-              if (confirm("Deactivate this vendor?")) {
-                void onDeactivateVendor();
-              }
-            }}
-          >
-            Deactivate
-          </button>
+          {canDeleteVendor ? (
+            <button
+              className="button-danger"
+              disabled={disabled || !selectedVendor}
+              type="button"
+              onClick={() => {
+                if (confirm("Deactivate this vendor?")) {
+                  void onDeactivateVendor();
+                }
+              }}
+            >
+              Deactivate
+            </button>
+          ) : null}
         </div>
       </form>
     </section>

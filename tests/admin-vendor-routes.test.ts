@@ -56,7 +56,14 @@ function setAdminEnv(): () => void {
   };
 }
 
-function createAdminFetchMock(calls: string[]): typeof fetch {
+function createAdminFetchMock(
+  calls: string[],
+  options?: {
+    role?: "admin" | "agent";
+  },
+): typeof fetch {
+  const role = options?.role ?? "admin";
+
   return (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = input instanceof URL ? input : new URL(String(input));
     const method = init?.method ?? "GET";
@@ -72,10 +79,10 @@ function createAdminFetchMock(calls: string[]): typeof fetch {
     if (url.pathname === "/rest/v1/admin_users") {
       return Response.json([
         {
-          id: "admin-id",
-          email: "admin@example.com",
-          full_name: "Admin User",
-          role: "admin",
+          id: role === "admin" ? "admin-id" : "agent-id",
+          email: role === "admin" ? "admin@example.com" : "agent@example.com",
+          full_name: role === "admin" ? "Admin User" : "Agent User",
+          role,
         },
       ]);
     }
@@ -303,11 +310,27 @@ test("admin create vendor route writes vendor and audit log", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
-  globalThis.fetch = createAdminFetchMock(calls);
+  const auditBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/audit_logs" && init?.body) {
+      auditBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+    }
+
+    return createAdminFetchMock(calls)(input, init);
+  }) as typeof fetch;
 
   try {
     const response = await createVendorRoute(
-      createAdminRequest("POST", {
+      new Request("http://localhost/api/admin/vendors", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer admin-token",
+          "content-type": "application/json",
+          "x-request-id": "req-audit-123",
+        },
+        body: JSON.stringify({
         name: "Test Vendor",
         slug: "test-vendor",
         short_description: "Test vendor",
@@ -320,6 +343,7 @@ test("admin create vendor route writes vendor and audit log", async () => {
         latitude: 9.0813,
         longitude: 7.4694,
         price_band: "budget",
+        }),
       }),
     );
     const body = await response.json();
@@ -327,6 +351,12 @@ test("admin create vendor route writes vendor and audit log", async () => {
     assert.equal(response.status, 201);
     assert.equal(body.success, true);
     assert.equal(body.data.vendor.slug, "test-vendor");
+    assert.equal(auditBodies.length, 1);
+    assert.equal(auditBodies[0]?.user_role, "admin");
+    assert.equal(
+      (auditBodies[0]?.metadata as Record<string, unknown>)?.request_id,
+      "req-audit-123",
+    );
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -372,6 +402,78 @@ test("admin update vendor route patches vendor and writes audit log", async () =
   }
 });
 
+test("admin create vendor route still succeeds when audit logging fails", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url.pathname}`);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRecord]);
+    }
+
+    if (url.pathname === "/rest/v1/audit_logs") {
+      return Response.json({ message: "audit failed" }, { status: 500 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await createVendorRoute(
+      createAdminRequest("POST", {
+        name: "Test Vendor",
+        slug: "test-vendor",
+        short_description: "Test vendor",
+        phone_number: "+2340000000000",
+        address_text: "Test address",
+        city: "Abuja",
+        area: "Wuse",
+        state: "FCT",
+        country: "Nigeria",
+        latitude: 9.0813,
+        longitude: 7.4694,
+        price_band: "budget",
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.equal(body.data.vendor.slug, "test-vendor");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "POST /rest/v1/vendors",
+      "POST /rest/v1/audit_logs",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin delete vendor route soft-disables vendor and writes audit log", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -395,6 +497,118 @@ test("admin delete vendor route soft-disables vendor and writes audit log", asyn
       "GET /rest/v1/admin_users",
       "PATCH /rest/v1/vendors",
       "POST /rest/v1/audit_logs",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("agent create vendor route remains allowed", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await createVendorRoute(
+      new Request("http://localhost/api/admin/vendors", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Test Vendor",
+          slug: "test-vendor",
+          short_description: "Test vendor",
+          phone_number: "+2340000000000",
+          address_text: "Test address",
+          city: "Abuja",
+          area: "Wuse",
+          state: "FCT",
+          country: "Nigeria",
+          latitude: 9.0813,
+          longitude: 7.4694,
+          price_band: "budget",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "POST /rest/v1/vendors",
+      "POST /rest/v1/audit_logs",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("agent update vendor route remains allowed", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await updateVendorRoute(
+      new Request("http://localhost/api/admin/vendors", {
+        method: "PUT",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Updated Vendor",
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: vendorId }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.vendor.name, "Updated Vendor");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("agent delete vendor route is forbidden", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await deleteVendorRoute(
+      new Request("http://localhost/api/admin/vendors", {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+      }),
+      {
+        params: Promise.resolve({ id: vendorId }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(body.error.code, "FORBIDDEN");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
     ]);
   } finally {
     globalThis.fetch = originalFetch;

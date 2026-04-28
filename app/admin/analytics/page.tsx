@@ -4,7 +4,7 @@ import { AdminShell } from "../../../components/admin/admin-shell.tsx";
 
 export default function AdminAnalyticsPage() {
   return (
-    <AdminRouteGuard>
+    <AdminRouteGuard requiredPermission="analytics:read">
       <AdminShell
         title="Analytics"
         intro="Review lightweight usage signals, vendor engagement, and drop-off patterns without leaving the admin workspace."

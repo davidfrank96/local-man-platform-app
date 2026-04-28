@@ -39,9 +39,14 @@ The Local Man is a location-based food discovery product for finding nearby loca
 
 ### Admin
 - Supabase email/password admin login
+- role-aware admin landing and dashboards:
+  - `/admin/dashboard` for admins
+  - `/admin/agent` for agents
 - admin dashboard overview cards and quick actions
-- admin analytics dashboard for lightweight usage signals
+- admin analytics dashboard for lightweight usage signals and team activity
 - vendor registry with completeness badges
+- fast agent intake with Quick Add Vendor
+- CSV vendor intake with preview, row validation, partial valid-row upload, and downloadable template
 - vendor create workflow with:
   - basic details
   - opening hours
@@ -54,6 +59,11 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - hours
   - featured dishes
   - vendor images
+- workspace team management for admins:
+  - create admin/agent
+  - update admin/agent role and name
+  - delete admin/agent
+- centralized UI error boundary and toast notifications
 
 ## Tech Stack
 - Next.js App Router
@@ -83,6 +93,10 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - [docs/location.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/location.md) - popup, retry UI, and location trust behavior
 - [docs/performance.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/performance.md) - low-bandwidth and UI-stability constraints
 - [docs/qa-checklist.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/qa-checklist.md) - release and regression checklist
+- [docs/rbac.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rbac.md) - admin and agent role rules
+- [docs/audit-logs.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/audit-logs.md) - workspace audit logging behavior
+- [docs/analytics.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/analytics.md) - public event tracking and admin analytics reads
+- [docs/error-handling.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/error-handling.md) - shared error contract, toast system, and error boundary
 
 ## Local Setup
 1. Install dependencies:
@@ -108,6 +122,13 @@ NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 ```
+
+`SUPABASE_SERVICE_ROLE_KEY` is required for:
+
+- admin user creation
+- admin analytics reads
+- admin audit-log reads
+- vendor image uploads
 
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 
@@ -163,6 +184,34 @@ Phase 6 currently covers:
 - admin-only analytics route at `/admin/analytics`
 - summary cards, vendor performance, drop-off signals, and recent activity
 - non-blocking tracking writes that must never interfere with public discovery
+- service-role-backed analytics reads to avoid environment-specific RLS drift
+
+## Admin and Agent Summary
+
+Current admin workspace behavior:
+
+- `admin`
+  - full dashboard
+  - analytics
+  - team management
+  - audit-log visibility
+  - vendor create/edit/delete
+- `agent`
+  - redirected to `/admin/agent`
+  - vendor list
+  - quick add vendor
+  - vendor edit workspace
+  - CSV vendor intake
+  - no analytics, no team management, no audit-log access
+
+Current CSV intake behavior:
+
+- preview validates every row before insert
+- valid rows can upload even when other rows fail
+- duplicate detection runs:
+  - within the CSV
+  - against existing vendors
+- coordinates are currently required for CSV intake because the vendor schema and create-vendor pipeline require them
 
 ## Phase 5 Summary
 Phase 5 delivered:
