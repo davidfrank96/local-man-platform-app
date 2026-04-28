@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as analyticsRoute } from "../app/api/admin/analytics/route.ts";
+import { clearAdminAnalyticsCache } from "../lib/admin/analytics-service.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 
 function setAdminEnv(): () => void {
+  clearAdminAnalyticsCache();
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -35,6 +37,7 @@ function setAdminEnv(): () => void {
 }
 
 function setAdminEnvWithoutServiceRole(): () => void {
+  clearAdminAnalyticsCache();
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -420,6 +423,120 @@ test("admin analytics route uses service role credentials for analytics reads wh
     assert.ok(analyticsReadRequest);
     assert.equal(analyticsReadRequest.apikey, "service-role-key");
     assert.equal(analyticsReadRequest.authorization, "Bearer service-role-key");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin analytics route uses a bounded user_events query", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: URL[] = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    requestedUrls.push(url);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/user_events") {
+      return Response.json([]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=24h"),
+    );
+
+    assert.equal(response.status, 200);
+    const analyticsReadRequest = requestedUrls.find((url) => url.pathname === "/rest/v1/user_events");
+    assert.ok(analyticsReadRequest);
+    assert.equal(analyticsReadRequest?.searchParams.get("limit"), "1500");
+    assert.equal(analyticsReadRequest?.searchParams.get("order"), "timestamp.desc");
+    assert.equal(
+      analyticsReadRequest?.searchParams.get("select"),
+      "id,event_type,vendor_id,vendor_slug,page_path,device_type,location_source,timestamp,session_id",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin analytics route returns structured 504 on analytics timeout", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/user_events") {
+      const signal = init?.signal;
+
+      await new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => {
+          const error = new Error("The operation was aborted.");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=24h"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 504);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "NETWORK_ERROR");
+    assert.equal(body.error.detail, "Activity temporarily unavailable.");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
