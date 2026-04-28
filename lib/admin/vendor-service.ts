@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   adminVendorSummarySchema,
+  vendorCategorySchema,
   vendorFeaturedDishSchema,
   vendorHoursSchema,
   vendorImageSchema,
@@ -20,6 +21,7 @@ import {
   deleteVendorImageObject,
   uploadVendorImageObject,
 } from "./storage.ts";
+import { writeAuditLogSafely } from "./audit-log-service.ts";
 import {
   normalizeVendorImageRows,
 } from "../vendors/images.ts";
@@ -35,9 +37,14 @@ import type {
 
 export type VendorRecord = z.infer<typeof vendorSchema>;
 export type VendorSummaryRecord = z.infer<typeof adminVendorSummarySchema>;
+export type VendorCategoryRecord = z.infer<typeof vendorCategorySchema>;
 export type VendorHoursRecord = z.infer<typeof vendorHoursSchema>;
 export type VendorImageRecord = z.infer<typeof vendorImageSchema>;
 export type VendorFeaturedDishRecord = z.infer<typeof vendorFeaturedDishSchema>;
+export type VendorDuplicateCandidateRecord = Pick<
+  VendorRecord,
+  "id" | "name" | "slug" | "address_text" | "area" | "latitude" | "longitude"
+>;
 
 export type DeleteVendorResult = {
   vendor_id: string;
@@ -196,39 +203,12 @@ function parseReturnedDishes(payload: unknown): VendorFeaturedDishRecord[] {
   return parseSupabasePayload(z.array(vendorFeaturedDishSchema), payload);
 }
 
-function sanitizeSupabaseSearch(value: string): string {
-  return value.replaceAll("*", "").replaceAll(",", " ").trim();
+function parseReturnedCategories(payload: unknown): VendorCategoryRecord[] {
+  return parseSupabasePayload(z.array(vendorCategorySchema), payload);
 }
 
-async function writeAuditLog(
-  {
-    session,
-    config,
-    fetchImpl,
-  }: Required<Pick<AdminVendorServiceContext, "session" | "fetchImpl">> & {
-    config: AdminAuthConfig;
-  },
-  input: {
-    entityId: string;
-    action: string;
-    metadata: Record<string, unknown>;
-  },
-): Promise<void> {
-  await fetchJson(
-    createRestUrl(config, "audit_logs"),
-    {
-      method: "POST",
-      headers: createHeaders(session, config, "return=minimal"),
-      body: JSON.stringify({
-        admin_user_id: session.adminUser.id,
-        entity_type: "vendor",
-        entity_id: input.entityId,
-        action: input.action,
-        metadata: input.metadata,
-      }),
-    },
-    fetchImpl,
-  );
+function sanitizeSupabaseSearch(value: string): string {
+  return value.replaceAll("*", "").replaceAll(",", " ").trim();
 }
 
 export async function listVendors(
@@ -398,6 +378,154 @@ export async function listVendors(
   };
 }
 
+export async function listVendorCategories(
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorCategoryRecord[]> {
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendor_categories", {
+      select: "id,name,slug,created_at",
+      order: "name.asc",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+
+  return parseReturnedCategories(payload);
+}
+
+export async function listExistingVendorSlugs(
+  slugs: string[],
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<string[]> {
+  if (slugs.length === 0) {
+    return [];
+  }
+
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendors", {
+      select: "slug",
+      slug: `in.(${slugs.join(",")})`,
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+  const rows = parseSupabasePayload(
+    z.array(
+      z.object({
+        slug: z.string(),
+      }),
+    ),
+    payload,
+  );
+
+  return rows.map((row) => row.slug);
+}
+
+export async function listPotentialDuplicateVendors(
+  slugs: string[],
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<VendorDuplicateCandidateRecord[]> {
+  if (slugs.length === 0) {
+    return [];
+  }
+
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendors", {
+      select: "id,name,slug,address_text,area,latitude,longitude",
+      slug: `in.(${slugs.join(",")})`,
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+  const rows = parseSupabasePayload(
+    z.array(
+      vendorSchema.pick({
+        id: true,
+        name: true,
+        slug: true,
+        address_text: true,
+        area: true,
+        latitude: true,
+        longitude: true,
+      }),
+    ),
+    payload,
+  );
+
+  return rows;
+}
+
+export async function attachVendorCategory(
+  params: VendorIdParams,
+  categoryId: string,
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<void> {
+  const resolvedConfig = requireServiceConfig(config);
+  const useServiceRole = Boolean(resolvedConfig.supabaseServiceRoleKey);
+  const headers: HeadersInit = {
+    apikey: useServiceRole
+      ? resolvedConfig.supabaseServiceRoleKey ?? resolvedConfig.supabaseAnonKey
+      : resolvedConfig.supabaseAnonKey,
+    authorization: `Bearer ${
+      useServiceRole
+        ? resolvedConfig.supabaseServiceRoleKey ?? session.accessToken
+        : session.accessToken
+    }`,
+    "content-type": "application/json",
+    prefer: "return=minimal",
+  };
+
+  const response = await fetchImpl(
+    createRestUrl(resolvedConfig, "vendor_category_map"),
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        vendor_id: params.id,
+        category_id: categoryId,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const payload = await readJson(response);
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      "Unable to save the vendor category.",
+      502,
+      payload,
+    );
+  }
+}
+
 export async function createVendor(
   data: CreateVendorRequest,
   {
@@ -418,15 +546,17 @@ export async function createVendor(
   );
   const vendor = parseReturnedVendor(payload);
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: vendor.id,
-      action: "vendor.created",
+      entityType: "vendor",
+      action: "CREATE_VENDOR",
       metadata: {
-        slug: vendor.slug,
+        target_name: vendor.name,
+        target_slug: vendor.slug,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return toAdminVendorSummaryRecord(vendor);
@@ -455,17 +585,25 @@ export async function updateVendor(
     fetchImpl,
   );
   const vendor = parseReturnedVendor(payload);
+  const changedFields = Object.keys(data);
+  const action = changedFields.some((field) =>
+    field === "is_active" || field === "is_open_override"
+  )
+    ? "UPDATE_VENDOR_STATUS"
+    : "UPDATE_VENDOR";
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: vendor.id,
-      action: "vendor.updated",
+      entityType: "vendor",
+      action,
       metadata: {
-        changed_fields: Object.keys(data),
-        slug: vendor.slug,
+        changed_fields: changedFields,
+        target_name: vendor.name,
+        target_slug: vendor.slug,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return toAdminVendorSummaryRecord(vendor);
@@ -496,15 +634,17 @@ export async function softDeleteVendor(
   );
   const vendor = parseReturnedVendor(payload);
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: vendor.id,
-      action: "vendor.soft_deleted",
+      entityType: "vendor",
+      action: "DELETE_VENDOR",
       metadata: {
-        slug: vendor.slug,
+        target_name: vendor.name,
+        target_slug: vendor.slug,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return {
@@ -549,15 +689,16 @@ export async function replaceVendorHours(
   );
   const hours = parseReturnedHours(payload);
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: params.id,
-      action: "vendor.hours_replaced",
+      entityType: "vendor",
+      action: "UPDATE_VENDOR_HOURS",
       metadata: {
-        days: hours.length,
+        day_count: hours.length,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return hours;
@@ -617,15 +758,16 @@ export async function createVendorImages(
   );
   const images = parseReturnedImages(payload);
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: params.id,
-      action: "vendor.images_created",
+      entityType: "vendor",
+      action: "CREATE_VENDOR_IMAGES",
       metadata: {
         count: images.length,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return images;
@@ -733,16 +875,17 @@ export async function uploadVendorImage(
       imageUrl: images[0]?.image_url ?? null,
     });
 
-    await writeAuditLog(
-      { session, config: resolvedConfig, fetchImpl },
+    void writeAuditLogSafely(
       {
         entityId: params.id,
-        action: "vendor.image_uploaded",
+        entityType: "vendor",
+        action: "UPLOAD_VENDOR_IMAGE",
         metadata: {
           image_id: images[0]?.id ?? null,
           storage_object_path: storageObjectPath,
         },
       },
+      { session, config: resolvedConfig, fetchImpl },
     );
 
     return images;
@@ -811,16 +954,17 @@ export async function deleteVendorImage(
     fetchImpl,
   );
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: params.id,
-      action: "vendor.image_deleted",
+      entityType: "vendor",
+      action: "DELETE_VENDOR_IMAGE",
       metadata: {
         image_id: image.id,
         storage_object_path: image.storage_object_path,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return image;
@@ -855,15 +999,16 @@ export async function createVendorDishes(
   );
   const dishes = parseReturnedDishes(payload);
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: params.id,
-      action: "vendor.dishes_created",
+      entityType: "vendor",
+      action: "CREATE_VENDOR_DISHES",
       metadata: {
         count: dishes.length,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return dishes;
@@ -934,16 +1079,17 @@ export async function deleteVendorDish(
     fetchImpl,
   );
 
-  await writeAuditLog(
-    { session, config: resolvedConfig, fetchImpl },
+  void writeAuditLogSafely(
     {
       entityId: params.id,
-      action: "vendor.dish_deleted",
+      entityType: "vendor",
+      action: "DELETE_VENDOR_DISH",
       metadata: {
         dish_id: dish.id,
         dish_name: dish.dish_name,
       },
     },
+    { session, config: resolvedConfig, fetchImpl },
   );
 
   return dish;

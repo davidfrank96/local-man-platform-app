@@ -7,10 +7,12 @@ import {
   createAdminVendor,
   createAdminVendorImages,
   fetchAdminAnalytics,
+  fetchAdminAuditLogs,
   listAdminVendorDishes,
   listAdminVendorHours,
   listAdminVendors,
   listAdminVendorImages,
+  submitAdminVendorIntake,
 } from "../lib/admin/api-client.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
@@ -113,7 +115,11 @@ test("admin API client throws standard API errors", async () => {
           fetchImpl,
         },
       ),
-    /UNAUTHORIZED: Admin token is required\./,
+    (error) =>
+      error instanceof AdminApiError &&
+      error.code === "UNAUTHORIZED" &&
+      error.status === 401 &&
+      error.message === "Admin token is required.",
   );
 });
 
@@ -210,6 +216,91 @@ test("admin API client preserves validation details", async () => {
   );
 });
 
+test("admin API client preserves safe debug detail for admin forms", async () => {
+  const fetchImpl = (async () =>
+    Response.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: "USER_ALREADY_EXISTS",
+          message: "This user already exists.",
+          detail: "Supabase auth rejected a duplicate email.",
+          details: {
+            provider: "supabase_auth",
+            reason: "duplicate_email",
+          },
+        },
+      },
+      { status: 409 },
+    )) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      createAdminVendor(
+        {
+          name: "Test Vendor",
+          slug: "test-vendor",
+          short_description: null,
+          phone_number: null,
+          address_text: null,
+          city: "Abuja",
+          area: "Wuse",
+          state: "FCT",
+          country: "Nigeria",
+          latitude: 9.0813,
+          longitude: 7.4694,
+          price_band: "budget",
+          is_active: true,
+          is_open_override: null,
+        },
+        {
+          accessToken: "bad-token",
+          fetchImpl,
+        },
+      ),
+    (error) =>
+      error instanceof AdminApiError &&
+      error.code === "USER_ALREADY_EXISTS" &&
+      error.status === 409 &&
+      error.detail === "Supabase auth rejected a duplicate email.",
+  );
+});
+
+test("admin API client rejects invalid audit log filters before request", async () => {
+  let called = false;
+  const fetchImpl = (async () => {
+    called = true;
+    return Response.json({
+      success: true,
+      data: {
+        auditLogs: [],
+        pagination: {
+          limit: 10,
+          offset: 0,
+          has_more: false,
+        },
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const result = await fetchAdminAuditLogs(
+    {
+      user_role: "owner" as never,
+    },
+    {
+      accessToken: "admin-token",
+      fetchImpl,
+    },
+  );
+
+  assert.equal(result.data, null);
+  assert.equal(result.error?.code, "VALIDATION_ERROR");
+  assert.equal(result.error?.detail, "user_role must be either admin or agent.");
+  assert.equal(called, false);
+});
+
 test("admin API client uploads image files without forcing json headers", async () => {
   const requestedHeaders: Headers[] = [];
   const requestedBodies: unknown[] = [];
@@ -285,7 +376,7 @@ test("admin API client surfaces readable image upload failures", async () => {
     (error) =>
       error instanceof AdminApiError &&
       error.code === "VALIDATION_ERROR" &&
-      error.message === "VALIDATION_ERROR: Only JPEG, PNG, and WebP images are allowed.",
+      error.message === "Only JPEG, PNG, and WebP images are allowed.",
   );
 });
 
@@ -420,7 +511,8 @@ test("admin API client can fetch analytics", async () => {
     },
   );
 
-  assert.equal(analytics.summary.total_events, 12);
+  assert.equal(analytics.error, null);
+  assert.equal(analytics.data?.summary.total_events, 12);
   assert.equal(
     new URL(requestedUrls[0], "http://localhost").pathname,
     "/api/admin/analytics",
@@ -429,6 +521,73 @@ test("admin API client can fetch analytics", async () => {
     new URL(requestedUrls[0], "http://localhost").searchParams.get("range"),
     "30d",
   );
+});
+
+test("admin API client returns safe error result for analytics failures", async () => {
+  const fetchImpl = (async () =>
+    Response.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: "UPSTREAM_ERROR",
+          message: "Supabase audit log read failed with HTTP 400.",
+          detail: "Bad analytics query.",
+        },
+      },
+      { status: 502 },
+    )) as typeof fetch;
+
+  const result = await fetchAdminAnalytics(
+    { range: "7d" },
+    {
+      accessToken: "admin-token",
+      fetchImpl,
+    },
+  );
+
+  assert.equal(result.data, null);
+  assert.equal(result.error?.code, "UPSTREAM_ERROR");
+  assert.equal(result.error?.message, "Supabase audit log read failed with HTTP 400.");
+});
+
+test("admin API client can submit vendor intake preview requests", async () => {
+  const requestedUrls: string[] = [];
+  const requestedMethods: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    requestedUrls.push(String(input));
+    requestedMethods.push(init?.method ?? "GET");
+
+    return Response.json({
+      success: true,
+      data: {
+        totalRows: 1,
+        validRows: [],
+        invalidRows: [],
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const result = await submitAdminVendorIntake(
+    {
+      action: "preview",
+      rows: [
+        {
+          row_number: 2,
+          vendor_name: "Mama Put Rice",
+        },
+      ],
+    },
+    {
+      accessToken: "admin-token",
+      fetchImpl,
+    },
+  );
+
+  assert.equal(result.totalRows, 1);
+  assert.equal(new URL(requestedUrls[0], "http://localhost").pathname, "/api/admin/vendors/intake");
+  assert.equal(requestedMethods[0], "POST");
 });
 
 test("admin API client can delete vendor images", async () => {

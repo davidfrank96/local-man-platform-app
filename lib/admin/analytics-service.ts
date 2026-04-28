@@ -7,6 +7,7 @@ import {
   type AdminSession,
 } from "./auth.ts";
 import { AdminServiceError } from "./errors.ts";
+import { logStructuredEvent } from "../observability.ts";
 import type {
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
@@ -83,12 +84,27 @@ function createRestUrl(
   return url;
 }
 
+function requireReadServiceRoleKey(config: AdminAuthConfig): string {
+  const serviceRoleKey = config.supabaseServiceRoleKey?.trim() || "";
+
+  if (!serviceRoleKey) {
+    throw new AdminServiceError(
+      "CONFIGURATION_ERROR",
+      "SUPABASE_SERVICE_ROLE_KEY is required for admin analytics reads.",
+      503,
+      { missing: "SUPABASE_SERVICE_ROLE_KEY" },
+    );
+  }
+
+  return serviceRoleKey;
+}
+
 function createHeaders(session: AdminSession, config: AdminAuthConfig): HeadersInit {
-  const serviceRoleKey = config.supabaseServiceRoleKey?.trim() || null;
+  const serviceRoleKey = requireReadServiceRoleKey(config);
 
   return {
-    apikey: serviceRoleKey || config.supabaseAnonKey,
-    authorization: `Bearer ${serviceRoleKey || session.accessToken}`,
+    apikey: serviceRoleKey,
+    authorization: `Bearer ${serviceRoleKey}`,
     "content-type": "application/json",
   };
 }
@@ -418,6 +434,17 @@ export async function getAdminAnalytics(
     dropoff: buildDropoffSummary(rows, eventResult.sessionIdAvailable),
     recent_events: recentEvents,
   };
+
+  logStructuredEvent("info", {
+    type: "ANALYTICS_FETCH",
+    requestId: session.requestId,
+    range,
+    resultCount: rows.length,
+    vendorCount: vendorIds.length,
+    recentEventCount: recentEvents.length,
+    supabaseHost: new URL(resolvedConfig.supabaseUrl).host,
+    usingServiceRole: true,
+  });
 
   return adminAnalyticsResponseDataSchema.parse(payload);
 }

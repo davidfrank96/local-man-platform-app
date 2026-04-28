@@ -1,4 +1,5 @@
 import { apiSuccess } from "../../../lib/api/responses.ts";
+import { getOrCreateRequestId, logStructuredEvent } from "../../../lib/observability.ts";
 import { userActionEventSchema } from "../../../lib/validation/index.ts";
 
 type EventWriteConfig = {
@@ -34,10 +35,16 @@ async function readUpstreamError(response: Response): Promise<unknown> {
 }
 
 export async function POST(request: Request) {
+  const requestId = getOrCreateRequestId(request);
   const config = getEventWriteConfig();
 
   if (!config) {
-    console.warn("[public][events] tracking skipped because write config is missing");
+    logStructuredEvent("warn", {
+      type: "PUBLIC_EVENT_TRACKING_SKIPPED",
+      requestId,
+      reason: "tracking_unconfigured",
+      message: "Tracking skipped because write config is missing.",
+    });
     return apiSuccess({ accepted: false, reason: "tracking_unconfigured" }, 202);
   }
 
@@ -46,14 +53,23 @@ export async function POST(request: Request) {
   try {
     payload = await request.json();
   } catch {
-    console.warn("[public][events] tracking skipped because request JSON was invalid");
+    logStructuredEvent("warn", {
+      type: "PUBLIC_EVENT_TRACKING_SKIPPED",
+      requestId,
+      reason: "invalid_payload",
+      message: "Tracking skipped because request JSON was invalid.",
+    });
     return apiSuccess({ accepted: false, reason: "invalid_payload" }, 202);
   }
 
   const parsedEvent = userActionEventSchema.safeParse(payload);
 
   if (!parsedEvent.success) {
-    console.warn("[public][events] tracking skipped because payload validation failed", {
+    logStructuredEvent("warn", {
+      type: "PUBLIC_EVENT_TRACKING_SKIPPED",
+      requestId,
+      reason: "invalid_payload",
+      message: "Tracking skipped because payload validation failed.",
       issues: parsedEvent.error.issues,
     });
     return apiSuccess({ accepted: false, reason: "invalid_payload" }, 202);
@@ -81,21 +97,33 @@ export async function POST(request: Request) {
         page_path: event.page_path ?? null,
         search_query: event.search_query ?? null,
         filters: event.filters ?? {},
-        metadata: event.metadata ?? {},
+        metadata: {
+          ...(event.metadata ?? {}),
+          request_id: requestId,
+        },
       }),
     });
 
     if (!response.ok) {
       const details = await readUpstreamError(response);
 
-      console.error("[public][events] tracking insert failed", details ?? { status: response.status });
+      logStructuredEvent("error", {
+        type: "PUBLIC_EVENT_TRACKING_FAILED",
+        requestId,
+        eventType: event.event_type,
+        status: response.status,
+        details: details ?? { status: response.status },
+      });
       return apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202);
     }
 
     return apiSuccess({ accepted: true }, 201);
   } catch (error) {
-    console.error("[public][events] tracking insert failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    logStructuredEvent("error", {
+      type: "PUBLIC_EVENT_TRACKING_FAILED",
+      requestId,
+      eventType: event.event_type,
+      error: error instanceof Error ? error.message : "Unknown error",
     });
     return apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202);
   }

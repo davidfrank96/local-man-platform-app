@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiError } from "./responses.ts";
+import { formatZodIssues } from "../errors/app-error.ts";
 
 type ValidationResult<T> =
   | {
@@ -11,18 +12,6 @@ type ValidationResult<T> =
       response: Response;
     };
 
-type Issue = {
-  path: string;
-  message: string;
-};
-
-function formatIssues(error: z.ZodError): Issue[] {
-  return error.issues.map((issue) => ({
-    path: issue.path.join("."),
-    message: issue.message,
-  }));
-}
-
 export function validateInput<T>(
   schema: z.ZodType<T>,
   input: unknown,
@@ -32,9 +21,15 @@ export function validateInput<T>(
   if (!result.success) {
     return {
       success: false,
-      response: apiError("VALIDATION_ERROR", "Invalid request.", 400, {
-        issues: formatIssues(result.error),
-      }),
+      response: apiError(
+        "VALIDATION_ERROR",
+        "Invalid input.",
+        400,
+        {
+          issues: formatZodIssues(result.error),
+        },
+        "One or more fields failed validation.",
+      ),
     };
   }
 
@@ -62,7 +57,13 @@ export async function validateJsonBody<T>(
   } catch {
     return {
       success: false,
-      response: apiError("VALIDATION_ERROR", "Invalid JSON request body.", 400),
+      response: apiError(
+        "VALIDATION_ERROR",
+        "Invalid input.",
+        400,
+        undefined,
+        "The request body could not be parsed as JSON.",
+      ),
     };
   }
 }

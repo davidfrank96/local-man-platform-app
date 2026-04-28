@@ -1,17 +1,12 @@
-import type { ApiEndpointContract } from "@/lib/api/contracts";
+import type {
+  ApiEndpointContract,
+  AppErrorCode as ApiErrorCode,
+  AppErrorContract,
+} from "@/lib/api/contracts";
 
-export type ApiErrorCode =
-  | "CONFIGURATION_ERROR"
-  | "NOT_IMPLEMENTED"
-  | "UPSTREAM_ERROR"
-  | "VALIDATION_ERROR"
-  | "UNAUTHORIZED"
-  | "FORBIDDEN"
-  | "NOT_FOUND";
+export type { ApiErrorCode };
 
-export type ApiError = {
-  code: ApiErrorCode;
-  message: string;
+export type ApiError = AppErrorContract & {
   details?: unknown;
 };
 
@@ -43,6 +38,7 @@ export function apiError(
   message: string,
   status: number,
   details?: unknown,
+  detail?: string,
 ): Response {
   return Response.json(
     {
@@ -51,6 +47,8 @@ export function apiError(
       error: {
         code,
         message,
+        status,
+        ...(detail === undefined ? {} : { detail }),
         ...(details === undefined ? {} : { details }),
       },
     } satisfies ApiResponse<never>,

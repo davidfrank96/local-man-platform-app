@@ -2,6 +2,31 @@ export type ApiAccess = "public" | "admin";
 
 export type ApiMethod = "GET" | "POST" | "PUT" | "DELETE";
 
+export type AppErrorCode =
+  | "CONFIGURATION_ERROR"
+  | "CONFIG_ERROR"
+  | "NOT_IMPLEMENTED"
+  | "UPSTREAM_ERROR"
+  | "AUTH_PROVIDER_ERROR"
+  | "AUTH_ERROR"
+  | "SESSION_ERROR"
+  | "USER_ALREADY_EXISTS"
+  | "INVALID_PASSWORD"
+  | "VALIDATION_ERROR"
+  | "NETWORK_ERROR"
+  | "INVALID_RESPONSE"
+  | "UNKNOWN_ERROR"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "NOT_FOUND";
+
+export type AppErrorContract = {
+  code: AppErrorCode;
+  message: string;
+  detail?: string;
+  status?: number;
+};
+
 export type ApiEndpointContract = {
   access: ApiAccess;
   method: ApiMethod;
@@ -101,6 +126,22 @@ export const apiEndpoints = {
       "phone number must be sanitized",
     ],
   },
+  intakeVendors: {
+    access: "admin",
+    method: "POST",
+    path: "/api/admin/vendors/intake",
+    requestShape:
+      "JSON body with action = preview | upload and rows containing vendor_name, category, address, latitude, longitude, optional phone, optional opening_time, optional closing_time, and optional description.",
+    responseShape:
+      "Preview or upload result with row-by-row validation issues, valid rows, invalid rows, and uploaded vendor summaries when action = upload.",
+    validationBoundary: [
+      "admin authentication required",
+      "rows must be validated before any upload begins",
+      "category must map to a real vendor category",
+      "coordinates must be valid when provided",
+      "duplicate vendors within the batch and existing vendor set must be flagged before insert",
+    ],
+  },
   updateVendor: {
     access: "admin",
     method: "PUT",
@@ -195,11 +236,13 @@ export const apiEndpoints = {
     access: "admin",
     method: "GET",
     path: "/api/admin/audit-logs",
-    requestShape: "Optional pagination and entity filters.",
-    responseShape: "Audit log entries.",
+    requestShape:
+      "Optional pagination plus user_role, action, entity_type, entity_id, and since filters.",
+    responseShape: "Paginated audit log entries with actor details and lightweight metadata.",
     validationBoundary: [
       "admin authentication required",
       "pagination values must be bounded",
+      "role and action filters must be supported enum values",
       "entity filters must be sanitized",
     ],
   },

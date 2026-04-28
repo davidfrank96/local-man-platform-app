@@ -34,6 +34,36 @@ function setAdminEnv(): () => void {
   };
 }
 
+function setAdminEnvWithoutServiceRole(): () => void {
+  const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  return () => {
+    if (previousUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = previousUrl;
+    }
+
+    if (previousAnonKey === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previousAnonKey;
+    }
+
+    if (previousServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+    }
+  };
+}
+
 function createAdminNextRequest(url: string): Parameters<typeof analyticsRoute>[0] {
   const request = new Request(url, {
     headers: {
@@ -232,6 +262,76 @@ test("admin analytics route blocks non-admin access", async () => {
     assert.equal(response.status, 403);
     assert.equal(body.success, false);
     assert.equal(body.error.code, "FORBIDDEN");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin analytics route blocks agent access", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = createAnalyticsFetchMock({
+    isAdmin: true,
+  });
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "agent-id",
+        email: "agent@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "agent-id",
+          email: "agent@example.com",
+          full_name: "Agent User",
+          role: "agent",
+        },
+      ]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=7d"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "FORBIDDEN");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin analytics route fails clearly when the service role key is missing", async () => {
+  const restoreEnv = setAdminEnvWithoutServiceRole();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = createAnalyticsFetchMock({
+    events: [],
+    vendors: [],
+  });
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=7d"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "CONFIGURATION_ERROR");
+    assert.match(body.error.message, /SUPABASE_SERVICE_ROLE_KEY/);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

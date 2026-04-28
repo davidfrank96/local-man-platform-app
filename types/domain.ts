@@ -8,6 +8,8 @@ import type {
   adminAnalyticsSummarySchema,
   adminAnalyticsVendorMetricSchema,
   adminAnalyticsDropoffSchema,
+  auditActionTypeSchema,
+  auditEntityTypeSchema,
   adminVendorsQuerySchema,
   auditLogSchema,
   createVendorDishesRequestSchema,
@@ -50,6 +52,9 @@ export type VendorImage = z.infer<typeof vendorImageSchema>;
 export type Rating = z.infer<typeof ratingSchema>;
 export type RatingSummary = z.infer<typeof ratingSummarySchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
+export type AdminRole = AdminUser["role"];
+export type AuditActionType = z.infer<typeof auditActionTypeSchema>;
+export type AuditEntityType = z.infer<typeof auditEntityTypeSchema>;
 export type AuditLog = z.infer<typeof auditLogSchema>;
 export type UserActionEventName = z.infer<typeof userActionEventNameSchema>;
 export type UserActionEvent = z.infer<typeof userActionEventSchema>;

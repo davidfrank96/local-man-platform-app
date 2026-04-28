@@ -1,4 +1,11 @@
 import { apiError } from "../api/responses.ts";
+import { getOrCreateRequestId, logStructuredEvent } from "../observability.ts";
+import {
+  hasAdminPermission,
+  isAdminRole,
+  type AdminPermission,
+  type AdminRole,
+} from "./rbac.ts";
 
 export type AdminAuthConfig = {
   supabaseUrl: string;
@@ -15,10 +22,11 @@ export type AdminUserRecord = {
   id: string;
   email: string;
   full_name: string | null;
-  role: string;
+  role: AdminRole;
 };
 
 export type AdminSession = {
+  requestId: string;
   accessToken: string;
   user: SupabaseAuthUser;
   adminUser: AdminUserRecord;
@@ -46,8 +54,11 @@ function logAdminAuthEvent(
   message: string,
   details: Record<string, unknown>,
 ) {
-  const logger = console[level] ?? console.info;
-  logger(`[admin][auth] ${message}`, details);
+  logStructuredEvent(level, {
+    type: "ADMIN_AUTH_EVENT",
+    message,
+    ...details,
+  });
 }
 
 export function getAdminAuthConfig(): AdminAuthConfig | null {
@@ -122,9 +133,108 @@ async function fetchAdminUser(
     throw new Error(`Admin user lookup failed: ${response.status}`);
   }
 
-  const rows = (await response.json()) as AdminUserRecord[];
+  const rows = (await response.json()) as Array<{
+    id: string;
+    email: string;
+    full_name: string | null;
+    role: string;
+  }>;
+  const adminUser = rows[0] ?? null;
 
-  return rows[0] ?? null;
+  if (!adminUser) {
+    return null;
+  }
+
+  if (!isAdminRole(adminUser.role)) {
+    throw new Error(`Unsupported admin role: ${adminUser.role}`);
+  }
+
+  return {
+    ...adminUser,
+    role: adminUser.role,
+  };
+}
+
+async function createDefaultAdminUserRecord(
+  user: SupabaseAuthUser,
+  requestId: string,
+  config: AdminAuthConfig,
+  fetchImpl: typeof fetch,
+): Promise<AdminUserRecord | null> {
+  const serviceRoleKey = config.supabaseServiceRoleKey?.trim() ?? "";
+
+  if (!serviceRoleKey || !user.email?.trim()) {
+    return null;
+  }
+
+  const url = new URL("/rest/v1/admin_users", config.supabaseUrl);
+  const payload = {
+    id: user.id,
+    email: user.email,
+    full_name: null,
+    role: "agent" as const,
+  };
+
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+      "content-type": "application/json",
+      prefer: "return=representation",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (response.ok) {
+    const rows = (await response.json()) as Array<{
+      id: string;
+      email: string;
+      full_name: string | null;
+      role: string;
+    }>;
+    const created = rows[0] ?? null;
+
+    if (!created || !isAdminRole(created.role)) {
+      logStructuredEvent("warn", {
+        type: "ADMIN_USER_AUTO_CREATE_FAILED",
+        requestId,
+        userId: user.id,
+        email: user.email,
+        status: response.status,
+        details: rows,
+        reason: "invalid_payload",
+      });
+
+      return await fetchAdminUser(user.id, serviceRoleKey, config, fetchImpl);
+    }
+
+    logStructuredEvent("info", {
+      type: "ADMIN_USER_AUTO_CREATED",
+      requestId,
+      userId: created.id,
+      email: created.email,
+      role: created.role,
+    });
+
+    return {
+      ...created,
+      role: created.role,
+    };
+  }
+
+  const details = await response.json().catch(() => null);
+
+  logStructuredEvent("warn", {
+    type: "ADMIN_USER_AUTO_CREATE_FAILED",
+    requestId,
+    userId: user.id,
+    email: user.email,
+    status: response.status,
+    details,
+  });
+
+  return await fetchAdminUser(user.id, serviceRoleKey, config, fetchImpl);
 }
 
 export async function requireAdmin(
@@ -135,6 +245,7 @@ export async function requireAdmin(
   }: RequireAdminOptions = {},
 ): Promise<AdminAuthResult> {
   const accessToken = getBearerToken(request);
+  const requestId = getOrCreateRequestId(request);
 
   if (!accessToken) {
     return {
@@ -163,6 +274,7 @@ export async function requireAdmin(
 
     if (!user) {
       logAdminAuthEvent("warn", "session rejected because auth user lookup returned no user", {
+        requestId,
         hasAccessToken: true,
       });
       return {
@@ -172,14 +284,27 @@ export async function requireAdmin(
     }
 
     logAdminAuthEvent("info", "auth user verified", {
+      requestId,
       userId: user.id,
       email: user.email ?? null,
     });
 
     const adminUser = await fetchAdminUser(user.id, accessToken, config, fetchImpl);
 
-    if (!adminUser) {
+    const resolvedAdminUser = adminUser ?? await (async () => {
+      logStructuredEvent("warn", {
+        type: "ADMIN_USER_MISSING",
+        requestId,
+        userId: user.id,
+        email: user.email ?? null,
+      });
+
+      return await createDefaultAdminUserRecord(user, requestId, config, fetchImpl);
+    })();
+
+    if (!resolvedAdminUser) {
       logAdminAuthEvent("warn", "authenticated user is not present in admin_users", {
+        requestId,
         userId: user.id,
         email: user.email ?? null,
       });
@@ -194,22 +319,25 @@ export async function requireAdmin(
     }
 
     logAdminAuthEvent("info", "admin membership verified", {
+      requestId,
       userId: user.id,
       email: user.email ?? null,
-      role: adminUser.role,
+      role: resolvedAdminUser.role,
       lookupMode: config.supabaseServiceRoleKey ? "service_role" : "user_token",
     });
 
     return {
       success: true,
       session: {
+        requestId,
         accessToken,
         user,
-        adminUser,
+        adminUser: resolvedAdminUser,
       },
     };
   } catch (error) {
     logAdminAuthEvent("error", "admin session verification failed", {
+      requestId,
       message: error instanceof Error ? error.message : "Unknown error",
     });
     return {
@@ -222,4 +350,40 @@ export async function requireAdmin(
       ),
     };
   }
+}
+
+export function requireAdminPermissionResult(
+  session: AdminSession,
+  permission: AdminPermission,
+): AdminAuthFailure | null {
+  if (hasAdminPermission(session.adminUser.role, permission)) {
+    return null;
+  }
+
+  return {
+    success: false,
+    response: apiError(
+      "FORBIDDEN",
+      `This account does not have permission to ${permission}.`,
+      403,
+      {
+        role: session.adminUser.role,
+        permission,
+      },
+    ),
+  };
+}
+
+export async function requireAdminPermission(
+  request: Request,
+  permission: AdminPermission,
+  options?: RequireAdminOptions,
+): Promise<AdminAuthResult> {
+  const admin = await requireAdmin(request, options);
+
+  if (!admin.success) {
+    return admin;
+  }
+
+  return requireAdminPermissionResult(admin.session, permission) ?? admin;
 }

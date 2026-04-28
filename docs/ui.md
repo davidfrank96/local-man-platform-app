@@ -62,10 +62,28 @@ The vendor list is the primary interaction surface.
 - time-based themes: morning, afternoon, night
 - trust-first location copy
 - lightweight location reminder toast
+- global toast notifications for success, error, and info messages
+- global client error boundary with safe fallback copy
 - browser-local retention helpers:
   - recently viewed vendors
   - popular vendors near you
   - last selected vendor
+
+## Workspace UI surfaces
+
+The admin workspace now has two user-facing shells:
+
+- admin dashboard:
+  - analytics
+  - team management
+  - vendor registry and edit/create workflows
+- agent dashboard:
+  - vendor list
+  - quick add vendor
+  - vendor edit workspace
+  - CSV vendor intake
+
+Restricted workspace areas are hidden before render based on resolved session role. Server-side route and API checks remain the source of truth.
 
 ## Source of truth
 

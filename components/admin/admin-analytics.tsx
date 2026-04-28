@@ -1,18 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AdminApiError,
   fetchAdminAnalytics,
+  fetchAdminAuditLogs,
 } from "../../lib/admin/api-client.ts";
+import { handleAppError } from "../../lib/errors/ui-error.ts";
 import {
   buildAnalyticsMetricCards,
   formatAnalyticsEventLabel,
+  getNextRecentAnalyticsEventCount,
+  getVisibleRecentAnalyticsEvents,
 } from "../../lib/admin/analytics-view.ts";
 import { useAdminSession } from "./admin-session-provider.tsx";
+import {
+  createAuditLogCacheKey,
+  readAnalyticsCache,
+  readAuditLogCache,
+  writeAnalyticsCache,
+  writeAuditLogCache,
+} from "../../lib/admin/workspace-cache.ts";
 import type {
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
+  AdminRole,
+  AuditActionType,
+  AuditLog,
 } from "../../types/index.ts";
 
 const analyticsRanges: Array<{ value: AdminAnalyticsRange; label: string }> = [
@@ -21,6 +35,30 @@ const analyticsRanges: Array<{ value: AdminAnalyticsRange; label: string }> = [
   { value: "30d", label: "Last 30 days" },
   { value: "all", label: "All time" },
 ];
+const recentEventsPageSize = 8;
+const auditLogsPageSize = 10;
+const auditRoleOptions: Array<{ value: "all" | AdminRole; label: string }> = [
+  { value: "all", label: "All roles" },
+  { value: "admin", label: "Admins" },
+  { value: "agent", label: "Agents" },
+];
+const auditActionOptions: Array<{ value: "all" | AuditActionType; label: string }> = [
+  { value: "all", label: "All actions" },
+  { value: "CREATE_VENDOR", label: "Vendor created" },
+  { value: "UPDATE_VENDOR", label: "Vendor updated" },
+  { value: "UPDATE_VENDOR_STATUS", label: "Vendor status changed" },
+  { value: "DELETE_VENDOR", label: "Vendor deleted" },
+  { value: "UPLOAD_VENDOR_IMAGE", label: "Vendor image uploaded" },
+  { value: "CREATE_ADMIN_USER", label: "Workspace user created" },
+  { value: "UPDATE_ADMIN_USER", label: "Workspace user updated" },
+  { value: "DELETE_ADMIN_USER", label: "Workspace user deleted" },
+  { value: "CHANGE_ADMIN_USER_ROLE", label: "Role changed" },
+];
+
+type AuditLogFilterState = {
+  userRole: "all" | AdminRole;
+  action: "all" | AuditActionType;
+};
 
 type AdminAnalyticsProps = {
   initialData?: AdminAnalyticsResponseData | null;
@@ -28,22 +66,76 @@ type AdminAnalyticsProps = {
 
 type AdminAnalyticsViewProps = {
   analytics: AdminAnalyticsResponseData | null;
+  auditLogs: AuditLog[];
+  auditFilters: AuditLogFilterState;
+  auditStatus: string;
+  auditErrorMessage: string | null;
+  auditHasMore: boolean;
+  isAuditLoading: boolean;
   range: AdminAnalyticsRange;
   status: string;
+  analyticsErrorMessage: string | null;
   isLoading: boolean;
   onSelectRange: (range: AdminAnalyticsRange) => void;
+  onAuditFilterChange: (filters: AuditLogFilterState) => void;
+  onLoadMoreAuditLogs: () => void;
 };
 
 function formatAdminErrorStatus(error: unknown, fallbackMessage: string): string {
-  if (error instanceof AdminApiError) {
-    return `${error.code}: ${error.message.replace(/^[A-Z_]+:\s*/, "")}`;
+  try {
+    const visibleError = handleAppError(error, {
+      fallbackMessage,
+      role: "admin",
+      context: "admin_analytics",
+      toast: false,
+    });
+    const message = typeof visibleError.message === "string" && visibleError.message.trim()
+      ? visibleError.message
+      : fallbackMessage;
+
+    return visibleError.code ? `${message} (${visibleError.code})` : message;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
+function getAnalyticsAccessErrorMessage(error: { code: string; message: string }): string {
+  if (error.code === "FORBIDDEN" || error.code === "UNAUTHORIZED") {
+    return "You do not have access to analytics";
   }
 
-  if (error instanceof Error) {
-    return error.message;
+  return error.message;
+}
+
+function isAuditLog(value: unknown): value is AuditLog {
+  if (!value || typeof value !== "object") {
+    return false;
   }
 
-  return fallbackMessage;
+  const candidate = value as Partial<AuditLog>;
+
+  return typeof candidate.id === "string" &&
+    typeof candidate.action === "string" &&
+    typeof candidate.user_role === "string" &&
+    typeof candidate.created_at === "string";
+}
+
+function isAuditLogListResult(
+  value: unknown,
+): value is { auditLogs: AuditLog[]; pagination: { has_more: boolean; offset: number } } {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as {
+    auditLogs?: unknown;
+    pagination?: { has_more?: unknown; offset?: unknown };
+  };
+
+  return Array.isArray(candidate.auditLogs) &&
+    candidate.auditLogs.every(isAuditLog) &&
+    typeof candidate.pagination?.has_more === "boolean" &&
+    typeof candidate.pagination?.offset === "number";
 }
 
 function formatTimestamp(value: string): string {
@@ -55,6 +147,54 @@ function formatTimestamp(value: string): string {
   } catch {
     return value;
   }
+}
+
+function formatAuditActionLabel(log: AuditLog): string {
+  const targetRole = typeof log.metadata.target_role === "string"
+    ? log.metadata.target_role
+    : "workspace user";
+
+  switch (log.action) {
+    case "CREATE_ADMIN_USER":
+      return `created ${targetRole}`;
+    case "UPDATE_ADMIN_USER":
+      return `updated ${targetRole}`;
+    case "DELETE_ADMIN_USER":
+      return `deleted ${targetRole}`;
+    case "CHANGE_ADMIN_USER_ROLE":
+      return `changed ${targetRole} role`;
+    default:
+      return log.action
+        .toLowerCase()
+        .replaceAll("_", " ");
+  }
+}
+
+function getAuditActorLabel(log: AuditLog): string {
+  const actor = log.admin_user;
+  const metadataActor = typeof log.metadata.actor_label === "string"
+    ? log.metadata.actor_label
+    : null;
+
+  return actor?.full_name?.trim() || actor?.email || metadataActor || "Unknown workspace user";
+}
+
+function getAuditTargetLabel(log: AuditLog): string {
+  const metadata = log.metadata;
+
+  if (typeof metadata.target_name === "string" && metadata.target_name.trim()) {
+    return metadata.target_name;
+  }
+
+  if (typeof metadata.target_email === "string" && metadata.target_email.trim()) {
+    return metadata.target_email;
+  }
+
+  if (typeof metadata.target_slug === "string" && metadata.target_slug.trim()) {
+    return metadata.target_slug;
+  }
+
+  return log.entity_id ?? "Unknown target";
 }
 
 function AnalyticsRankingTable({
@@ -107,19 +247,32 @@ function AnalyticsRankingTable({
   );
 }
 
-export function AdminAnalyticsView({
+const AdminAnalyticsView = memo(function AdminAnalyticsView({
   analytics,
+  auditLogs,
+  auditFilters,
+  auditStatus,
+  auditErrorMessage,
+  auditHasMore,
+  isAuditLoading,
   range,
   status,
+  analyticsErrorMessage,
   isLoading,
   onSelectRange,
+  onAuditFilterChange,
+  onLoadMoreAuditLogs,
 }: AdminAnalyticsViewProps) {
   const metricCards = useMemo(
     () => (analytics ? buildAnalyticsMetricCards(analytics.summary) : []),
     [analytics],
   );
-
-  const recentEvents = analytics?.recent_events ?? [];
+  const [visibleRecentEventsCount, setVisibleRecentEventsCount] = useState(recentEventsPageSize);
+  const recentEvents = analytics?.recent_events;
+  const visibleRecentEvents = useMemo(
+    () => getVisibleRecentAnalyticsEvents(recentEvents ?? [], visibleRecentEventsCount),
+    [recentEvents, visibleRecentEventsCount],
+  );
   const dropoff = analytics?.dropoff ?? null;
 
   return (
@@ -214,53 +367,186 @@ export function AdminAnalyticsView({
               )}
             </section>
 
-            <section className="admin-panel analytics-panel" aria-labelledby="recent-activity">
+      <section className="admin-panel analytics-panel" aria-labelledby="recent-activity">
               <div className="admin-section-header">
                 <div>
-                  <h2 id="recent-activity">Recent activity</h2>
-                  <span>Latest events captured in the selected range.</span>
+                  <h2 id="recent-activity">Recent user events</h2>
+                  <span>Latest public usage events captured in the selected range.</span>
                 </div>
               </div>
 
-              {recentEvents.length === 0 ? (
+              {(recentEvents?.length ?? 0) === 0 ? (
                 <div className="analytics-empty-state">
                   <strong>No usage data yet</strong>
                   <p>Recent events will appear here after real public activity is tracked.</p>
                 </div>
               ) : (
+                <>
+                  <div className="analytics-table-wrap">
+                    <table className="analytics-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Event</th>
+                          <th scope="col">Vendor</th>
+                          <th scope="col">Device</th>
+                          <th scope="col">Location</th>
+                          <th scope="col">Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleRecentEvents.map((event) => (
+                          <tr key={event.id}>
+                            <td>{formatAnalyticsEventLabel(event.event_type)}</td>
+                            <td>{event.vendor_name ?? event.vendor_slug ?? "—"}</td>
+                            <td>
+                              <span className="analytics-badge">{event.device_type}</span>
+                            </td>
+                            <td>
+                              <span className="analytics-badge">
+                                {event.location_source ?? "unknown"}
+                              </span>
+                            </td>
+                            <td>{formatTimestamp(event.timestamp)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {visibleRecentEvents.length < (recentEvents?.length ?? 0) ? (
+                    <div className="analytics-load-more">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() =>
+                          setVisibleRecentEventsCount((current) =>
+                            getNextRecentAnalyticsEventCount(
+                              current,
+                              recentEvents?.length ?? 0,
+                              recentEventsPageSize,
+                            ),
+                          )
+                        }
+                      >
+                      View more activity
+                      </button>
+                      <span>
+                        Showing {visibleRecentEvents.length} of {recentEvents?.length ?? 0}
+                      </span>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </section>
+          </div>
+
+          <section className="admin-panel analytics-panel" aria-labelledby="audit-activity">
+            <div className="admin-section-header">
+              <div>
+                <h2 id="audit-activity">Recent team activity</h2>
+                <span>Admin and agent actions written to the audit log.</span>
+              </div>
+            </div>
+
+            <div className="analytics-audit-filter-bar" role="group" aria-label="Audit log filters">
+              <label className="analytics-filter-field">
+                <span>Role</span>
+                <select
+                  className="admin-user-inline-input"
+                  value={auditFilters.userRole}
+                  onChange={(event) =>
+                    onAuditFilterChange({
+                      ...auditFilters,
+                      userRole: event.target.value as AuditLogFilterState["userRole"],
+                    })
+                  }
+                >
+                  {auditRoleOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="analytics-filter-field">
+                <span>Action</span>
+                <select
+                  className="admin-user-inline-input"
+                  value={auditFilters.action}
+                  onChange={(event) =>
+                    onAuditFilterChange({
+                      ...auditFilters,
+                      action: event.target.value as AuditLogFilterState["action"],
+                    })
+                  }
+                >
+                  {auditActionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <p className="analytics-audit-status" aria-live="polite">
+              {auditStatus}
+            </p>
+
+            {auditLogs.length === 0 ? (
+              <div className="analytics-empty-state">
+                <strong>{auditErrorMessage ? "Team activity unavailable" : "No team activity yet"}</strong>
+                <p>
+                  {auditErrorMessage
+                    ? auditErrorMessage
+                    : "Audit log entries will appear here after admin or agent actions are completed."}
+                </p>
+              </div>
+            ) : (
+              <>
                 <div className="analytics-table-wrap">
                   <table className="analytics-table">
                     <thead>
                       <tr>
-                        <th scope="col">Event</th>
-                        <th scope="col">Vendor</th>
-                        <th scope="col">Device</th>
-                        <th scope="col">Location</th>
+                        <th scope="col">User</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Action</th>
+                        <th scope="col">Target</th>
                         <th scope="col">Time</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {recentEvents.map((event) => (
-                        <tr key={event.id}>
-                          <td>{formatAnalyticsEventLabel(event.event_type)}</td>
-                          <td>{event.vendor_name ?? event.vendor_slug ?? "—"}</td>
+                      {auditLogs.map((log) => (
+                        <tr key={log.id}>
+                          <td>{getAuditActorLabel(log)}</td>
                           <td>
-                            <span className="analytics-badge">{event.device_type}</span>
+                            <span className="analytics-badge">{log.user_role}</span>
                           </td>
-                          <td>
-                            <span className="analytics-badge">
-                              {event.location_source ?? "unknown"}
-                            </span>
-                          </td>
-                          <td>{formatTimestamp(event.timestamp)}</td>
+                          <td>{formatAuditActionLabel(log)}</td>
+                          <td>{getAuditTargetLabel(log)}</td>
+                          <td>{formatTimestamp(log.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </section>
-          </div>
+
+                {auditHasMore ? (
+                  <div className="analytics-load-more">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={onLoadMoreAuditLogs}
+                      disabled={isAuditLoading}
+                    >
+                      {isAuditLoading ? "Loading…" : "View more activity"}
+                    </button>
+                    <span>Showing {auditLogs.length} recent audit entries</span>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
 
           <div className="analytics-performance-grid">
             <AnalyticsRankingTable
@@ -285,6 +571,15 @@ export function AdminAnalyticsView({
             />
           </div>
         </>
+      ) : analyticsErrorMessage ? (
+        !isLoading && (
+          <section className="admin-panel analytics-panel" aria-labelledby="analytics-error">
+            <div className="analytics-empty-state">
+              <strong id="analytics-error">Analytics unavailable</strong>
+              <p>{analyticsErrorMessage}</p>
+            </div>
+          </section>
+        )
       ) : (
         !isLoading && (
           <section className="admin-panel analytics-panel" aria-labelledby="analytics-empty">
@@ -297,18 +592,61 @@ export function AdminAnalyticsView({
       )}
     </div>
   );
-}
+});
 
 export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
   const { session, signOut } = useAdminSession();
   const accessToken = session?.accessToken ?? null;
   const initialRange = initialData?.range ?? "7d";
-  const [range, setRange] = useState<AdminAnalyticsRange>(initialRange);
-  const [analytics, setAnalytics] = useState<AdminAnalyticsResponseData | null>(initialData);
-  const [status, setStatus] = useState(
-    initialData ? "Analytics loaded." : "Load usage signals when ready.",
+  const initialAnalytics = initialData ?? readAnalyticsCache(initialRange);
+  const initialAuditCache = readAuditLogCache(
+    createAuditLogCacheKey({
+      userRole: "all",
+      action: "all",
+      offset: 0,
+      limit: auditLogsPageSize,
+    }),
   );
-  const [isLoading, setIsLoading] = useState(!initialData);
+  const [range, setRange] = useState<AdminAnalyticsRange>(initialRange);
+  const [analytics, setAnalytics] = useState<AdminAnalyticsResponseData | null>(initialAnalytics);
+  const [status, setStatus] = useState(
+    initialAnalytics ? "Analytics loaded." : "Load usage signals when ready.",
+  );
+  const [analyticsErrorMessage, setAnalyticsErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(!initialAnalytics);
+  const [auditFilters, setAuditFilters] = useState<AuditLogFilterState>({
+    userRole: "all",
+    action: "all",
+  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => initialAuditCache?.auditLogs ?? []);
+  const [auditStatus, setAuditStatus] = useState(
+    initialAuditCache?.auditLogs.length
+      ? "Admin activity loaded."
+      : "Load admin activity when ready.",
+  );
+  const [auditErrorMessage, setAuditErrorMessage] = useState<string | null>(null);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditHasMore, setAuditHasMore] = useState(initialAuditCache?.pagination.has_more ?? false);
+
+  const setSafeAnalyticsFallbackState = useCallback((message: string) => {
+    setAnalytics(null);
+    setAnalyticsErrorMessage(message);
+    setStatus(message);
+    setIsLoading(false);
+  }, []);
+
+  const setSafeAuditFallbackState = useCallback((
+    message: string,
+    options?: { append?: boolean },
+  ) => {
+    if (!options?.append) {
+      setAuditLogs([]);
+    }
+    setAuditErrorMessage(message);
+    setAuditStatus(message);
+    setAuditHasMore(false);
+    setIsAuditLoading(false);
+  }, []);
 
   const loadAnalytics = useCallback(async (nextRange: AdminAnalyticsRange) => {
     if (!accessToken) {
@@ -316,8 +654,23 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       return;
     }
 
+    const cachedAnalytics = readAnalyticsCache(nextRange);
     setRange(nextRange);
+
+    if (cachedAnalytics) {
+      setAnalytics(cachedAnalytics);
+      setAnalyticsErrorMessage(null);
+      setStatus(
+        cachedAnalytics.summary.total_events > 0
+          ? "Analytics loaded."
+          : "No usage data yet.",
+      );
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
+    setAnalyticsErrorMessage(null);
     setStatus("Loading analytics…");
 
     try {
@@ -325,50 +678,279 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
         { range: nextRange },
         { accessToken },
       );
-      setAnalytics(result);
+      if (result.error) {
+        const accessMessage = getAnalyticsAccessErrorMessage(
+          result.error,
+        );
+        handleAppError(result.error, {
+          fallbackMessage: accessMessage === result.error.message
+            ? "Unable to load activity right now"
+            : accessMessage,
+          role: "admin",
+          context: "admin_analytics_load",
+        });
+        setSafeAnalyticsFallbackState(
+          result.error.code === "FORBIDDEN" || result.error.code === "UNAUTHORIZED"
+            ? accessMessage
+            : "Unable to load activity right now",
+        );
+
+        if (result.error.code === "UNAUTHORIZED") {
+          void signOut();
+        }
+        return;
+      }
+
+      if (!result.data) {
+        setSafeAnalyticsFallbackState("Unable to load activity right now");
+        return;
+      }
+
+      const analytics = result.data;
+      writeAnalyticsCache(nextRange, analytics);
+      setAnalytics(analytics);
+      setAnalyticsErrorMessage(null);
       setStatus(
-        result.summary.total_events > 0
+        analytics.summary.total_events > 0
           ? "Analytics loaded."
           : "No usage data yet.",
       );
     } catch (error) {
+      console.error(error);
       if (
         error instanceof AdminApiError &&
         (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")
       ) {
-        setStatus(formatAdminErrorStatus(error, "Admin session expired. Sign in again."));
-        void signOut();
+        const accessMessage = getAnalyticsAccessErrorMessage(error);
+        handleAppError(error, {
+          fallbackMessage: accessMessage,
+          role: "admin",
+          context: "admin_analytics_load",
+        });
+        setSafeAnalyticsFallbackState(accessMessage);
+
+        if (error.code === "UNAUTHORIZED") {
+          void signOut();
+        }
       } else {
-        setStatus(formatAdminErrorStatus(error, "Unable to load analytics."));
+        const visibleError = handleAppError(error, {
+          fallbackMessage: "Unable to load activity right now",
+          role: "admin",
+          context: "admin_analytics_load",
+        });
+        const nextStatus = formatAdminErrorStatus(
+          error,
+          visibleError.message || "Unable to load activity right now",
+        );
+        setSafeAnalyticsFallbackState(nextStatus);
       }
-      setAnalytics(null);
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, signOut]);
+  }, [accessToken, setSafeAnalyticsFallbackState, signOut]);
+
+  const loadAuditLogs = useCallback(async (
+    filters: AuditLogFilterState,
+    options?: { append?: boolean; offset?: number },
+  ) => {
+    if (!accessToken) {
+      setAuditStatus("Admin session is missing. Sign in again.");
+      return;
+    }
+
+    const append = options?.append ?? false;
+    const nextOffset = options?.offset ?? 0;
+    const auditLogCacheKey = createAuditLogCacheKey({
+      userRole: filters.userRole,
+      action: filters.action,
+      offset: nextOffset,
+      limit: auditLogsPageSize,
+    });
+
+    if (!append) {
+      const cachedAuditLogs = readAuditLogCache(auditLogCacheKey);
+
+      if (cachedAuditLogs) {
+        setAuditLogs(cachedAuditLogs.auditLogs);
+        setAuditErrorMessage(null);
+        setAuditHasMore(cachedAuditLogs.pagination.has_more);
+        setAuditStatus(
+          cachedAuditLogs.auditLogs.length > 0
+            ? "Admin activity loaded."
+            : "No admin activity found for the current filters.",
+        );
+        setIsAuditLoading(false);
+        return;
+      }
+    }
+
+    setIsAuditLoading(true);
+    setAuditErrorMessage(null);
+    setAuditStatus(append ? "Loading more admin activity…" : "Loading admin activity…");
+
+    try {
+      const response = await fetchAdminAuditLogs(
+        {
+          limit: auditLogsPageSize,
+          offset: nextOffset,
+          user_role: filters.userRole === "all" ? undefined : filters.userRole,
+          action: filters.action === "all" ? undefined : filters.action,
+        },
+        { accessToken },
+      );
+      if (response.error) {
+        const accessMessage = getAnalyticsAccessErrorMessage(
+          response.error,
+        );
+        handleAppError(response.error, {
+          fallbackMessage: accessMessage === response.error.message
+            ? "Unable to load activity right now"
+            : accessMessage,
+          role: "admin",
+          context: "admin_audit_logs_load",
+        });
+        setSafeAuditFallbackState(
+          response.error.code === "FORBIDDEN" || response.error.code === "UNAUTHORIZED"
+            ? accessMessage
+            : "Unable to load activity right now",
+          { append },
+        );
+
+        if (response.error.code === "UNAUTHORIZED") {
+          void signOut();
+        }
+        return;
+      }
+
+      if (!response.data || !isAuditLogListResult(response.data)) {
+        const malformedMessage = "Unable to load activity right now";
+        setSafeAuditFallbackState(malformedMessage, { append });
+        return;
+      }
+      const result = response.data;
+      writeAuditLogCache(auditLogCacheKey, result);
+
+      setAuditLogs((current) => append ? [...current, ...result.auditLogs] : result.auditLogs);
+      setAuditErrorMessage(null);
+      setAuditHasMore(result.pagination.has_more);
+      setAuditStatus(
+        result.auditLogs.length > 0 || append
+          ? "Admin activity loaded."
+          : "No admin activity found for the current filters.",
+      );
+    } catch (error) {
+      console.error(error);
+      if (
+        error instanceof AdminApiError &&
+        (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")
+      ) {
+        const accessMessage = getAnalyticsAccessErrorMessage(error);
+        handleAppError(error, {
+          fallbackMessage: accessMessage,
+          role: "admin",
+          context: "admin_audit_logs_load",
+        });
+        setSafeAuditFallbackState(accessMessage, { append });
+
+        if (error.code === "UNAUTHORIZED") {
+          void signOut();
+        }
+      } else {
+        const visibleError = handleAppError(error, {
+          fallbackMessage: "Unable to load activity right now",
+          role: "admin",
+          context: "admin_audit_logs_load",
+        });
+        const nextStatus = formatAdminErrorStatus(
+          error,
+          visibleError.message || "Unable to load activity right now",
+        );
+        setSafeAuditFallbackState(nextStatus, { append });
+      }
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, [accessToken, setSafeAuditFallbackState, signOut]);
+
+  const runAnalyticsLoadSafely = useCallback(async (nextRange: AdminAnalyticsRange) => {
+    try {
+      await loadAnalytics(nextRange);
+    } catch (error) {
+      console.error(error);
+      const visibleError = handleAppError(error, {
+        fallbackMessage: "Unable to load activity right now",
+        role: "admin",
+        context: "admin_analytics_run",
+      });
+      setSafeAnalyticsFallbackState(visibleError.message || "Unable to load activity right now");
+    }
+  }, [loadAnalytics, setSafeAnalyticsFallbackState]);
+
+  const runAuditLoadSafely = useCallback(async (
+    filters: AuditLogFilterState,
+    options?: { append?: boolean; offset?: number },
+  ) => {
+    try {
+      await loadAuditLogs(filters, options);
+    } catch (error) {
+      console.error(error);
+      const visibleError = handleAppError(error, {
+        fallbackMessage: "Unable to load activity right now",
+        role: "admin",
+        context: "admin_audit_logs_run",
+      });
+      setSafeAuditFallbackState(
+        visibleError.message || "Unable to load activity right now",
+        { append: options?.append },
+      );
+    }
+  }, [loadAuditLogs, setSafeAuditFallbackState]);
 
   useEffect(() => {
-    if (initialData) {
+    if (initialAnalytics) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
-      void loadAnalytics(initialRange);
+      void runAnalyticsLoadSafely(initialRange);
     }, 0);
 
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [initialData, initialRange, loadAnalytics]);
+  }, [initialAnalytics, initialRange, runAnalyticsLoadSafely]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void runAuditLoadSafely(auditFilters);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [auditFilters, runAuditLoadSafely]);
 
   return (
     <AdminAnalyticsView
       analytics={analytics}
+      auditLogs={auditLogs}
+      auditFilters={auditFilters}
+      auditStatus={auditStatus}
+      auditErrorMessage={auditErrorMessage}
+      auditHasMore={auditHasMore}
+      isAuditLoading={isAuditLoading}
       range={range}
       status={status}
+      analyticsErrorMessage={analyticsErrorMessage}
       isLoading={isLoading}
       onSelectRange={(nextRange) => {
-        void loadAnalytics(nextRange);
+        void runAnalyticsLoadSafely(nextRange);
+      }}
+      onAuditFilterChange={(nextFilters) => {
+        setAuditFilters(nextFilters);
+      }}
+      onLoadMoreAuditLogs={() => {
+        void runAuditLoadSafely(auditFilters, { append: true, offset: auditLogs.length });
       }}
     />
   );

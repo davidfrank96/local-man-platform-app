@@ -3,7 +3,10 @@ import {
   validateInput,
   validateJsonBody,
 } from "../../../../../lib/api/validation.ts";
-import { requireAdmin } from "../../../../../lib/admin/auth.ts";
+import {
+  requireAdmin,
+  requireAdminPermission,
+} from "../../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../../lib/admin/errors.ts";
 import {
   softDeleteVendor,
@@ -54,7 +57,7 @@ export async function DELETE(
   _request: Request,
   { params }: AdminVendorRouteContext,
 ) {
-  const admin = await requireAdmin(_request);
+  const admin = await requireAdminPermission(_request, "vendor:delete");
 
   if (!admin.success) {
     return admin.response;
