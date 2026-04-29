@@ -355,9 +355,15 @@ test("admin API client fetches audit logs directly from Supabase", async () => {
     return Response.json([
       {
         id: "30000000-0000-4000-8000-000000000001",
+        admin_user_id: "30000000-0000-4000-8000-000000000099",
         user_role: "admin",
         entity_type: "vendor",
+        entity_id: "30000000-0000-4000-8000-000000000050",
         action: "CREATE_VENDOR",
+        metadata: {
+          actor_label: "Admin User",
+          target_name: "Test Vendor",
+        },
         created_at: "2026-04-28T12:00:00.000Z",
       },
     ]);
@@ -381,12 +387,17 @@ test("admin API client fetches audit logs directly from Supabase", async () => {
     assert.equal(result.data?.auditLogs.length, 1);
     assert.equal(requestedHeaders[0].get("apikey"), "anon-key");
     assert.equal(url.pathname, "/rest/v1/audit_logs");
-    assert.equal(url.searchParams.get("select"), "id,user_role,entity_type,action,created_at");
+    assert.equal(url.searchParams.get("select"), "id,admin_user_id,user_role,entity_type,entity_id,action,metadata,created_at");
     assert.equal(url.searchParams.get("order"), "created_at.desc");
-    assert.equal(url.searchParams.get("limit"), "10");
+    assert.equal(url.searchParams.get("limit"), "11");
     assert.equal(url.searchParams.get("user_role"), "eq.admin");
-    assert.equal(url.searchParams.get("action"), "eq.CREATE_VENDOR");
-    assert.deepEqual(result.data?.auditLogs[0]?.metadata, {});
+    assert.equal(url.searchParams.get("action"), "in.(CREATE_VENDOR,vendor.created)");
+    assert.deepEqual(result.data?.auditLogs[0]?.metadata, {
+      actor_label: "Admin User",
+      target_name: "Test Vendor",
+    });
+    assert.equal(result.data?.auditLogs[0]?.admin_user_id, "30000000-0000-4000-8000-000000000099");
+    assert.equal(result.data?.auditLogs[0]?.entity_id, "30000000-0000-4000-8000-000000000050");
     assert.equal(result.data?.pagination.next_cursor, null);
   } finally {
     restoreEnv();
@@ -425,9 +436,50 @@ test("admin API client applies audit log cursor pagination directly in Supabase"
     const url = new URL(requestedUrls[0]);
     assert.equal(result.error, null);
     assert.equal(url.searchParams.get("created_at"), "lt.2026-04-28T12:00:00.000Z");
-    assert.equal(url.searchParams.get("limit"), "10");
+    assert.equal(url.searchParams.get("limit"), "11");
     assert.equal(result.data?.pagination.has_more, false);
     assert.equal(result.data?.pagination.next_cursor, null);
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client normalizes legacy audit log action names and preserves metadata", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const fetchImpl = (async () =>
+    Response.json([
+      {
+        id: "30000000-0000-4000-8000-000000000101",
+        admin_user_id: "30000000-0000-4000-8000-000000000099",
+        user_role: "admin",
+        entity_type: "vendor",
+        entity_id: "30000000-0000-4000-8000-000000000050",
+        action: "vendor.hours_replaced",
+        metadata: {
+          actor_label: "Admin User",
+          target_slug: "test-vendor",
+        },
+        created_at: "2026-04-28T10:00:00.000Z",
+      },
+    ])) as typeof fetch;
+
+  try {
+    const result = await fetchAdminAuditLogs(
+      {
+        limit: 10,
+      },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(result.error, null);
+    assert.equal(result.data?.auditLogs[0]?.action, "UPDATE_VENDOR_HOURS");
+    assert.deepEqual(result.data?.auditLogs[0]?.metadata, {
+      actor_label: "Admin User",
+      target_slug: "test-vendor",
+    });
   } finally {
     restoreEnv();
   }
@@ -743,6 +795,7 @@ test("admin API client can fetch analytics", async () => {
           device_type: "mobile",
           location_source: "precise",
           timestamp: "2026-04-29T10:00:00.000Z",
+          session_id: "90000000-0000-4000-8000-000000000001",
         },
         {
           id: "00000000-0000-4000-8000-000000000102",
@@ -755,6 +808,7 @@ test("admin API client can fetch analytics", async () => {
           device_type: "desktop",
           location_source: "approximate",
           timestamp: "2026-04-29T09:00:00.000Z",
+          session_id: "90000000-0000-4000-8000-000000000001",
         },
       ]);
     }
@@ -783,19 +837,155 @@ test("admin API client can fetch analytics", async () => {
 
     assert.equal(analytics.error, null);
     assert.equal(analytics.data?.summary.total_events, 2);
+    assert.equal(analytics.data?.summary.total_sessions, 1);
     assert.equal(analytics.data?.summary.vendor_selections, 1);
     assert.equal(analytics.data?.summary.searches_used, 1);
     assert.equal(new URL(requestedUrls[0]).pathname, "/rest/v1/user_events");
     assert.equal(
       new URL(requestedUrls[0]).searchParams.get("select"),
-      "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source",
+      "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source,session_id",
     );
     assert.equal(new URL(requestedUrls[0]).searchParams.get("order"), "timestamp.desc");
-    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "10");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "1500");
     assert.equal(new URL(requestedUrls[0]).searchParams.get("timestamp"), "gte.2026-03-30T10:00:00.000Z");
     assert.equal(new URL(requestedUrls[1]).pathname, "/rest/v1/vendors");
   } finally {
     Date.now = originalNow;
+    restoreEnv();
+  }
+});
+
+test("admin API client normalizes analytics event aliases and keeps slug-only vendor rankings", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    const url = new URL(String(input), "http://localhost");
+
+    if (url.pathname === "/rest/v1/user_events") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000201",
+          event_type: "call_click",
+          vendor_id: null,
+          vendor_slug: "test-vendor",
+          page_path: "/vendors/test-vendor",
+          search_query: null,
+          metadata: {},
+          device_type: "mobile",
+          location_source: "precise",
+          timestamp: "2026-04-29T10:00:00.000Z",
+          session_id: "90000000-0000-4000-8000-000000000010",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000202",
+          event_type: "directions_click",
+          vendor_id: null,
+          vendor_slug: "test-vendor",
+          page_path: "/vendors/test-vendor",
+          search_query: null,
+          metadata: {},
+          device_type: "mobile",
+          location_source: "precise",
+          timestamp: "2026-04-29T09:59:00.000Z",
+          session_id: "90000000-0000-4000-8000-000000000010",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000203",
+          event_type: "filters_applied",
+          vendor_id: null,
+          vendor_slug: null,
+          page_path: "/",
+          search_query: null,
+          metadata: {},
+          device_type: "desktop",
+          location_source: "default_city",
+          timestamp: "2026-04-29T09:58:00.000Z",
+          session_id: "90000000-0000-4000-8000-000000000011",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([]);
+    }
+
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const analytics = await fetchAdminAnalytics(
+      { range: "30d" },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(analytics.error, null);
+    assert.equal(analytics.data?.summary.call_clicks, 1);
+    assert.equal(analytics.data?.summary.directions_clicks, 1);
+    assert.equal(analytics.data?.summary.filters_applied, 1);
+    assert.equal(analytics.data?.vendor_performance.most_call_clicks[0]?.vendor_slug, "test-vendor");
+    assert.equal(analytics.data?.vendor_performance.most_call_clicks[0]?.vendor_name, "Test Vendor");
+    assert.equal(analytics.data?.recent_events[0]?.event_type, "call_clicked");
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client falls back when session_id column is unavailable", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+    const url = new URL(String(input), "http://localhost");
+    const select = url.searchParams.get("select");
+
+    if (url.pathname === "/rest/v1/user_events" && select?.includes("session_id")) {
+      return Response.json(
+        {
+          code: "42703",
+          message: "column user_events.session_id does not exist",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (url.pathname === "/rest/v1/user_events") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000301",
+          event_type: "session_start",
+          vendor_id: null,
+          vendor_slug: null,
+          page_path: "/",
+          search_query: null,
+          metadata: {},
+          device_type: "desktop",
+          location_source: null,
+          timestamp: "2026-04-29T09:00:00.000Z",
+        },
+      ]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const analytics = await fetchAdminAnalytics(
+      { range: "7d" },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(analytics.error, null);
+    assert.equal(analytics.data?.summary.total_sessions, 1);
+    assert.equal(requestedUrls.length >= 2, true);
+    assert.match(requestedUrls[0] ?? "", /session_id/);
+    assert.doesNotMatch(requestedUrls[1] ?? "", /session_id/);
+    assert.equal(analytics.data?.dropoff.session_metrics_available, false);
+  } finally {
     restoreEnv();
   }
 });

@@ -405,3 +405,62 @@ test("admin session route returns the authenticated admin identity", async () =>
     }
   }
 });
+
+test("admin session route returns the authenticated agent identity", async () => {
+  const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const originalFetch = globalThis.fetch;
+
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "agent-id",
+        email: "agent@example.com",
+      });
+    }
+
+    return Response.json([
+      {
+        id: "agent-id",
+        email: "agent@example.com",
+        full_name: "Agent User",
+        role: "agent",
+      },
+    ]);
+  }) as typeof fetch;
+
+  try {
+    const response = await adminSessionRoute(
+      new Request("http://localhost/api/admin/session", {
+        headers: {
+          authorization: "Bearer agent-token",
+        },
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.user.id, "agent-id");
+    assert.equal(body.data.adminUser.role, "agent");
+  } finally {
+    globalThis.fetch = originalFetch;
+
+    if (previousUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = previousUrl;
+    }
+
+    if (previousAnonKey === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previousAnonKey;
+    }
+  }
+});

@@ -4,6 +4,10 @@ import {
   auditLogsQuerySchema,
 } from "../validation/schemas.ts";
 import {
+  getAuditActionFilterValues,
+  normalizeAuditAction,
+} from "./activity-normalization.ts";
+import {
   getAdminAuthConfig,
   type AdminAuthConfig,
   type AdminSession,
@@ -224,7 +228,37 @@ export async function writeAuditLogSafely(
 }
 
 function parseAuditLogs(payload: unknown): AuditLog[] {
-  const parsed = z.array(auditLogSchema).safeParse(payload);
+  const normalizedPayload = Array.isArray(payload)
+    ? payload.flatMap((row) => {
+      const candidate = row as Partial<AuditLog> | null;
+      const normalizedAction = normalizeAuditAction(
+        typeof candidate?.action === "string" ? candidate.action : null,
+      );
+
+      if (!normalizedAction) {
+        return [];
+      }
+
+      return [{
+        id: typeof candidate?.id === "string" ? candidate.id : "",
+        admin_user_id: typeof candidate?.admin_user_id === "string" ? candidate.admin_user_id : null,
+        user_role: candidate?.user_role,
+        entity_type: candidate?.entity_type,
+        entity_id: typeof candidate?.entity_id === "string" ? candidate.entity_id : null,
+        action: normalizedAction,
+        metadata:
+          candidate?.metadata && typeof candidate.metadata === "object" && !Array.isArray(candidate.metadata)
+            ? candidate.metadata as Record<string, unknown>
+            : {},
+        created_at: typeof candidate?.created_at === "string" ? candidate.created_at : "",
+        admin_user:
+          candidate?.admin_user && typeof candidate.admin_user === "object"
+            ? candidate.admin_user
+            : undefined,
+      }];
+    })
+    : payload;
+  const parsed = z.array(auditLogSchema).safeParse(normalizedPayload);
 
   if (!parsed.success) {
     throw new AdminServiceError(
@@ -288,7 +322,12 @@ export async function listAuditLogs(
   }
 
   if (cacheableQuery.action) {
-    url.searchParams.set("action", `eq.${cacheableQuery.action}`);
+    const actionValues = getAuditActionFilterValues(cacheableQuery.action);
+    if (actionValues.length > 1) {
+      url.searchParams.set("action", `in.(${actionValues.join(",")})`);
+    } else {
+      url.searchParams.set("action", `eq.${actionValues[0] ?? cacheableQuery.action}`);
+    }
   }
 
   if (cacheableQuery.entity_type) {

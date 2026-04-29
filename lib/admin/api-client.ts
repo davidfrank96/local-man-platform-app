@@ -6,6 +6,12 @@ import {
   adminAnalyticsResponseDataSchema,
   auditLogSchema,
 } from "../validation/schemas.ts";
+import {
+  getAuditActionFilterValues,
+  normalizeAnalyticsEventType,
+  normalizeAuditAction,
+  vendorSlugToNameFallback,
+} from "./activity-normalization.ts";
 import type {
   AdminRole,
   AdminUser,
@@ -199,7 +205,7 @@ const adminAuditActions = new Set<AuditActionType>([
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
 ]);
-const legacyFilterEvent = "filters_applied";
+const maxAnalyticsEvents = 1500;
 const recentAnalyticsEventsLimit = 25;
 
 type AnalyticsEventRow = {
@@ -453,6 +459,52 @@ async function fetchAuditLogsViaDevelopmentFallback(
   };
 }
 
+async function fetchAnalyticsEventRows(
+  supabase: ReturnType<typeof buildAdminSupabaseClient>,
+  rangeStart: string | null,
+): Promise<{ rows: AnalyticsEventRow[]; sessionIdAvailable: boolean }> {
+  const baseSelect =
+    "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source";
+
+  const runQuery = async (includeSessionId: boolean) => {
+    let query = supabase
+      .from("user_events")
+      .select(includeSessionId ? `${baseSelect},session_id` : baseSelect)
+      .order("timestamp", { ascending: false })
+      .limit(maxAnalyticsEvents);
+
+    if (rangeStart) {
+      query = query.gte("timestamp", rangeStart);
+    }
+
+    return query;
+  };
+
+  const initialResult = await runQuery(true);
+
+  if (initialResult.error && isMissingSessionIdColumn(initialResult.error.message)) {
+    const fallbackResult = await runQuery(false);
+
+    if (fallbackResult.error) {
+      throw fallbackResult.error;
+    }
+
+    return {
+      rows: Array.isArray(fallbackResult.data) ? fallbackResult.data as unknown as AnalyticsEventRow[] : [],
+      sessionIdAvailable: false,
+    };
+  }
+
+  if (initialResult.error) {
+    throw initialResult.error;
+  }
+
+  return {
+    rows: Array.isArray(initialResult.data) ? initialResult.data as unknown as AnalyticsEventRow[] : [],
+    sessionIdAvailable: true,
+  };
+}
+
 function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {
   const now = Date.now();
 
@@ -468,29 +520,28 @@ function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {
   }
 }
 
-function normalizeAnalyticsEventType(value: string | null | undefined): string {
-  return typeof value === "string" ? value.toLowerCase() : "";
-}
-
 function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
   const expected = normalizeAnalyticsEventType(eventType);
   return rows.filter((row) => normalizeAnalyticsEventType(row.event_type) === expected).length;
 }
 
-function rowSlugToNameFallback(vendorId: string, rows: AnalyticsEventRow[]): string | null {
-  const slug = rows.find((row) => row.vendor_id === vendorId)?.vendor_slug;
-
-  if (!slug) {
-    return null;
-  }
-
-  return slug
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function isMissingSessionIdColumn(detail: string | undefined): boolean {
+  return typeof detail === "string" && detail.toLowerCase().includes("session_id");
 }
 
-function getTopVendorIds(
+function getVendorAggregateKey(row: AnalyticsEventRow): string | null {
+  if (typeof row.vendor_id === "string" && row.vendor_id.length > 0) {
+    return `id:${row.vendor_id}`;
+  }
+
+  if (typeof row.vendor_slug === "string" && row.vendor_slug.length > 0) {
+    return `slug:${row.vendor_slug}`;
+  }
+
+  return null;
+}
+
+function getTopVendorKeys(
   rows: AnalyticsEventRow[],
   eventTypes: string[],
   limit = 5,
@@ -498,17 +549,19 @@ function getTopVendorIds(
   const counts = new Map<string, number>();
 
   for (const row of rows) {
-    if (!row.vendor_id || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
+    const key = getVendorAggregateKey(row);
+
+    if (!key || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
       continue;
     }
 
-    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
   return [...counts.entries()]
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, limit)
-    .map(([vendorId]) => vendorId);
+    .map(([vendorKey]) => vendorKey);
 }
 
 function rankVendorEvents(
@@ -516,25 +569,32 @@ function rankVendorEvents(
   eventTypes: string[],
   vendorLookup: Map<string, VendorLookupRow>,
 ) {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { count: number; vendorId: string | null; vendorSlug: string | null }>();
 
   for (const row of rows) {
-    if (!row.vendor_id || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
+    const key = getVendorAggregateKey(row);
+
+    if (!key || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
       continue;
     }
 
-    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+    const current = counts.get(key);
+    counts.set(key, {
+      count: (current?.count ?? 0) + 1,
+      vendorId: row.vendor_id ?? current?.vendorId ?? null,
+      vendorSlug: row.vendor_slug ?? current?.vendorSlug ?? null,
+    });
   }
 
   return [...counts.entries()]
-    .map(([vendorId, count]) => {
-      const vendor = vendorLookup.get(vendorId);
+    .map(([, value]) => {
+      const vendor = value.vendorId ? vendorLookup.get(value.vendorId) : null;
 
       return {
-        vendor_id: vendorId,
-        vendor_name: vendor?.name ?? rowSlugToNameFallback(vendorId, rows),
-        vendor_slug: vendor?.slug ?? rows.find((row) => row.vendor_id === vendorId)?.vendor_slug ?? null,
-        count,
+        vendor_id: value.vendorId,
+        vendor_name: vendor?.name ?? vendorSlugToNameFallback(value.vendorSlug),
+        vendor_slug: vendor?.slug ?? value.vendorSlug,
+        count: value.count,
       };
     })
     .sort((left, right) => right.count - left.count || (left.vendor_name ?? "").localeCompare(right.vendor_name ?? ""))
@@ -552,7 +612,6 @@ function buildDropoffSummary(
     "directions_clicked",
     "search_used",
     "filter_applied",
-    legacyFilterEvent,
   ]);
   const sessionRows = rows.filter((row) => typeof row.session_id === "string" && row.session_id.length > 0);
 
@@ -758,65 +817,20 @@ export async function fetchAdminAnalytics(
   try {
     const supabase = buildAdminSupabaseClient(options);
     try {
-    const rangeStart = getAnalyticsRangeStart(normalizedRange);
-    let eventQuery = supabase
-      .from("user_events")
-      .select("id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source")
-      .order("timestamp", { ascending: false })
-      .limit(10);
+      const rangeStart = getAnalyticsRangeStart(normalizedRange);
+      let eventResult: { rows: AnalyticsEventRow[]; sessionIdAvailable: boolean };
 
-    if (rangeStart) {
-      eventQuery = eventQuery.gte("timestamp", rangeStart);
-    }
+      try {
+        eventResult = await fetchAnalyticsEventRows(supabase, rangeStart);
+      } catch (error) {
+        const supabaseError = error as { code?: string; message?: string };
+        const normalizedMessage = String(supabaseError?.message ?? "").toLowerCase();
+        const errorCode = supabaseError?.code === "42501" || normalizedMessage.includes("permission denied")
+          ? "FORBIDDEN"
+          : normalizedMessage.includes("jwt") || normalizedMessage.includes("auth")
+            ? "UNAUTHORIZED"
+            : "UPSTREAM_ERROR";
 
-    const eventResult = await eventQuery;
-
-    if (eventResult.error) {
-      const normalizedMessage = eventResult.error.message.toLowerCase();
-      const errorCode = eventResult.error.code === "42501" || normalizedMessage.includes("permission denied")
-        ? "FORBIDDEN"
-        : normalizedMessage.includes("jwt") || normalizedMessage.includes("auth")
-          ? "UNAUTHORIZED"
-          : "UPSTREAM_ERROR";
-
-      if (shouldUseDevelopmentAnalyticsFallback()) {
-        return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
-      }
-
-      return {
-        data: null,
-        error: {
-          code: errorCode,
-          message: errorCode === "FORBIDDEN"
-            ? "You do not have access to analytics"
-            : errorCode === "UNAUTHORIZED"
-              ? "Admin session expired. Sign in again."
-              : "Activity temporarily unavailable.",
-          detail: eventResult.error.message,
-        },
-      };
-    }
-
-    const rows = Array.isArray(eventResult.data) ? eventResult.data as AnalyticsEventRow[] : [];
-    const recentVendorIds = rows
-      .slice(0, recentAnalyticsEventsLimit)
-      .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
-    const rankedVendorIds = [
-      ...getTopVendorIds(rows, ["vendor_selected"]),
-      ...getTopVendorIds(rows, ["vendor_detail_opened"]),
-      ...getTopVendorIds(rows, ["call_clicked"]),
-      ...getTopVendorIds(rows, ["directions_clicked"]),
-    ];
-    const vendorIds = [...new Set([...recentVendorIds, ...rankedVendorIds])];
-    let vendorLookup = new Map<string, VendorLookupRow>();
-
-    if (vendorIds.length > 0) {
-      const vendorResult = await supabase
-        .from("vendors")
-        .select("id,name,slug")
-        .in("id", vendorIds);
-
-      if (vendorResult.error) {
         if (shouldUseDevelopmentAnalyticsFallback()) {
           return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
         }
@@ -824,83 +838,126 @@ export async function fetchAdminAnalytics(
         return {
           data: null,
           error: {
-            code: "UPSTREAM_ERROR",
-            message: "Activity temporarily unavailable.",
-            detail: vendorResult.error.message,
+            code: errorCode,
+            message: errorCode === "FORBIDDEN"
+              ? "You do not have access to analytics"
+              : errorCode === "UNAUTHORIZED"
+                ? "Admin session expired. Sign in again."
+                : "Activity temporarily unavailable.",
+            detail: supabaseError?.message,
           },
         };
       }
 
-      vendorLookup = new Map(
-        (vendorResult.data ?? []).map((vendor) => [vendor.id, vendor as VendorLookupRow]),
+      const rows = eventResult.rows;
+      const recentVendorIds = rows
+        .slice(0, recentAnalyticsEventsLimit)
+        .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
+      const rankedVendorKeys = [
+        ...getTopVendorKeys(rows, ["vendor_selected"]),
+        ...getTopVendorKeys(rows, ["vendor_detail_opened"]),
+        ...getTopVendorKeys(rows, ["call_clicked"]),
+        ...getTopVendorKeys(rows, ["directions_clicked"]),
+      ];
+      const vendorIds = [...new Set([
+        ...recentVendorIds,
+        ...rankedVendorKeys
+          .filter((key) => key.startsWith("id:"))
+          .map((key) => key.slice(3)),
+      ])];
+      let vendorLookup = new Map<string, VendorLookupRow>();
+
+      if (vendorIds.length > 0) {
+        const vendorResult = await supabase
+          .from("vendors")
+          .select("id,name,slug")
+          .in("id", vendorIds);
+
+        if (vendorResult.error) {
+          if (shouldUseDevelopmentAnalyticsFallback()) {
+            return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
+          }
+
+          return {
+            data: null,
+            error: {
+              code: "UPSTREAM_ERROR",
+              message: "Activity temporarily unavailable.",
+              detail: vendorResult.error.message,
+            },
+          };
+        }
+
+        vendorLookup = new Map(
+          (vendorResult.data ?? []).map((vendor) => [vendor.id, vendor as VendorLookupRow]),
+        );
+      }
+
+      const sessionIds = new Set(
+        rows.flatMap((row) =>
+          typeof row.session_id === "string" && row.session_id.length > 0 ? [row.session_id] : []
+        ),
       );
-    }
+      const recentEvents = rows.slice(0, recentAnalyticsEventsLimit).map((row) => {
+        const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
+        const normalizedEventType = normalizeAnalyticsEventType(row.event_type);
 
-    const sessionIds = new Set(
-      rows.flatMap((row) =>
-        typeof row.session_id === "string" && row.session_id.length > 0 ? [row.session_id] : []
-      ),
-    );
-    const recentEvents = rows.slice(0, recentAnalyticsEventsLimit).map((row) => {
-      const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
-      const normalizedEventType = normalizeAnalyticsEventType(row.event_type);
+        return {
+          id: row.id,
+          event_type: normalizedEventType,
+          vendor_id: row.vendor_id ?? null,
+          vendor_name: vendor?.name ?? vendorSlugToNameFallback(row.vendor_slug),
+          vendor_slug: vendor?.slug ?? row.vendor_slug ?? null,
+          device_type: row.device_type === "mobile" || row.device_type === "tablet" || row.device_type === "desktop"
+            ? row.device_type
+            : "unknown",
+          location_source:
+            row.location_source === "precise" ||
+            row.location_source === "approximate" ||
+            row.location_source === "default_city"
+              ? row.location_source
+              : null,
+          timestamp: row.timestamp,
+        };
+      });
 
-      return {
-        id: row.id,
-        event_type: normalizedEventType,
-        vendor_id: row.vendor_id ?? null,
-        vendor_name: vendor?.name ?? rowSlugToNameFallback(row.vendor_id ?? "", rows),
-        vendor_slug: vendor?.slug ?? row.vendor_slug ?? null,
-        device_type: row.device_type === "mobile" || row.device_type === "tablet" || row.device_type === "desktop"
-          ? row.device_type
-          : "unknown",
-        location_source:
-          row.location_source === "precise" ||
-          row.location_source === "approximate" ||
-          row.location_source === "default_city"
-            ? row.location_source
-            : null,
-        timestamp: row.timestamp,
-      };
-    });
-
-    const payload = adminAnalyticsResponseDataSchema.safeParse({
-      range: normalizedRange,
-      summary: {
-        total_sessions: sessionIds.size > 0 ? sessionIds.size : countEventType(rows, "session_started"),
-        total_events: rows.length,
-        vendor_selections: countEventType(rows, "vendor_selected"),
-        vendor_detail_opens: countEventType(rows, "vendor_detail_opened"),
-        call_clicks: countEventType(rows, "call_clicked"),
-        directions_clicks: countEventType(rows, "directions_clicked"),
-        searches_used: countEventType(rows, "search_used"),
-        filters_applied: countEventType(rows, "filter_applied") + countEventType(rows, legacyFilterEvent),
-      },
-      vendor_performance: {
-        most_selected_vendors: rankVendorEvents(rows, ["vendor_selected"], vendorLookup),
-        most_viewed_vendor_details: rankVendorEvents(rows, ["vendor_detail_opened"], vendorLookup),
-        most_call_clicks: rankVendorEvents(rows, ["call_clicked"], vendorLookup),
-        most_directions_clicks: rankVendorEvents(rows, ["directions_clicked"], vendorLookup),
-      },
-      dropoff: buildDropoffSummary(rows, true),
-      recent_events: recentEvents,
-    });
-
-    if (!payload.success) {
-      return {
-        data: null,
-        error: {
-          code: "INVALID_RESPONSE",
-          message: "Activity temporarily unavailable.",
-          detail: "Supabase returned an unexpected analytics payload.",
+      const payload = adminAnalyticsResponseDataSchema.safeParse({
+        range: normalizedRange,
+        summary: {
+          total_sessions: sessionIds.size > 0 ? sessionIds.size : countEventType(rows, "session_started"),
+          total_events: rows.length,
+          vendor_selections: countEventType(rows, "vendor_selected"),
+          vendor_detail_opens: countEventType(rows, "vendor_detail_opened"),
+          call_clicks: countEventType(rows, "call_clicked"),
+          directions_clicks: countEventType(rows, "directions_clicked"),
+          searches_used: countEventType(rows, "search_used"),
+          filters_applied: countEventType(rows, "filter_applied"),
         },
-      };
-    }
+        vendor_performance: {
+          most_selected_vendors: rankVendorEvents(rows, ["vendor_selected"], vendorLookup),
+          most_viewed_vendor_details: rankVendorEvents(rows, ["vendor_detail_opened"], vendorLookup),
+          most_call_clicks: rankVendorEvents(rows, ["call_clicked"], vendorLookup),
+          most_directions_clicks: rankVendorEvents(rows, ["directions_clicked"], vendorLookup),
+        },
+        dropoff: buildDropoffSummary(rows, eventResult.sessionIdAvailable),
+        recent_events: recentEvents,
+      });
 
-    return {
-      data: payload.data,
-      error: null,
-    };
+      if (!payload.success) {
+        return {
+          data: null,
+          error: {
+            code: "INVALID_RESPONSE",
+            message: "Activity temporarily unavailable.",
+            detail: "Supabase returned an unexpected analytics payload.",
+          },
+        };
+      }
+
+      return {
+        data: payload.data,
+        error: null,
+      };
     } finally {
       await disposeAdminSupabaseClient(supabase);
     }
@@ -972,9 +1029,9 @@ export async function fetchAdminAuditLogs(
 
     let query = supabase
       .from("audit_logs")
-      .select("id,user_role,entity_type,action,created_at")
+      .select("id,admin_user_id,user_role,entity_type,entity_id,action,metadata,created_at")
       .order("created_at", { ascending: false })
-      .limit(pageSize);
+      .limit(pageSize + 1);
 
     if (normalizedFilters.cursor) {
       query = query.lt("created_at", normalizedFilters.cursor);
@@ -985,7 +1042,10 @@ export async function fetchAdminAuditLogs(
     }
 
     if (normalizedFilters.action) {
-      query = query.eq("action", normalizedFilters.action);
+      const actionValues = getAuditActionFilterValues(normalizedFilters.action);
+      query = actionValues.length > 1
+        ? query.in("action", actionValues)
+        : query.eq("action", actionValues[0] ?? normalizedFilters.action);
     }
 
     if (normalizedFilters.since) {
@@ -1023,18 +1083,24 @@ export async function fetchAdminAuditLogs(
     const normalizedRows = Array.isArray(data)
       ? data.map((row) => {
         const candidate = row as Partial<AuditLog> | null;
+        const normalizedAction = normalizeAuditAction(
+          typeof candidate?.action === "string" ? candidate.action : null,
+        );
 
         return {
           id: typeof candidate?.id === "string" ? candidate.id : "",
-          admin_user_id: null,
+          admin_user_id: typeof candidate?.admin_user_id === "string" ? candidate.admin_user_id : null,
           user_role: candidate?.user_role,
           entity_type: candidate?.entity_type,
-          entity_id: null,
-          action: candidate?.action,
-          metadata: {},
+          entity_id: typeof candidate?.entity_id === "string" ? candidate.entity_id : null,
+          action: normalizedAction,
+          metadata:
+            candidate?.metadata && typeof candidate.metadata === "object" && !Array.isArray(candidate.metadata)
+              ? candidate.metadata as Record<string, unknown>
+              : {},
           created_at: typeof candidate?.created_at === "string" ? candidate.created_at : "",
         };
-      })
+      }).filter((row) => row.action !== null)
       : [];
     const parsed = auditLogSchema.array().safeParse(normalizedRows);
 
@@ -1063,8 +1129,8 @@ export async function fetchAdminAuditLogs(
         auditLogs: pageRows,
         pagination: {
           limit: pageSize,
-          has_more: pageRows.length === pageSize,
-          next_cursor: pageRows.length === pageSize ? nextCursor : null,
+          has_more: parsed.data.length > pageSize,
+          next_cursor: parsed.data.length > pageSize ? nextCursor : null,
         },
       },
       error: null,

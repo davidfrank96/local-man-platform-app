@@ -117,6 +117,35 @@ test("fetchAdminSessionIdentity returns the validated admin identity", async () 
   assert.equal(identity.adminUser.role, "admin");
 });
 
+test("fetchAdminSessionIdentity returns the validated agent identity", async () => {
+  const identity = await fetchAdminSessionIdentity(
+    "access-token",
+    (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      assert.equal(new Headers(init?.headers).get("authorization"), "Bearer access-token");
+
+      return Response.json({
+        success: true,
+        data: {
+          user: {
+            id: "agent-id",
+            email: "agent@example.com",
+          },
+          adminUser: {
+            id: "agent-id",
+            email: "agent@example.com",
+            full_name: "Agent User",
+            role: "agent",
+          },
+        },
+        error: null,
+      });
+    }) as typeof fetch,
+  );
+
+  assert.equal(identity.user.id, "agent-id");
+  assert.equal(identity.adminUser.role, "agent");
+});
+
 test("fetchAdminSessionIdentity surfaces forbidden responses", async () => {
   await assert.rejects(
     () =>

@@ -310,7 +310,7 @@ export async function requireAdmin(
       });
       return {
         success: false,
-        response: apiError("FORBIDDEN", "Authenticated user is not an admin.", 403, {
+        response: apiError("FORBIDDEN", "Your account does not have access.", 403, {
           userId: user.id,
           email: user.email ?? null,
           table: "admin_users",
