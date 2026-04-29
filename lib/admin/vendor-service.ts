@@ -750,6 +750,7 @@ export async function createVendorImages(
         data.images.map((image) => ({
           vendor_id: params.id,
           image_url: image.image_url,
+          storage_object_path: image.storage_object_path ?? null,
           sort_order: image.sort_order,
         })),
       ),

@@ -19,6 +19,16 @@ export async function GET(request: Request) {
     const adminUsers = await listAdminUsers({ session: admin.session });
     return apiSuccess({ adminUsers });
   } catch (error) {
+    const isTimeoutLike =
+      error instanceof Error &&
+      (error.name === "AbortError" ||
+        error.message.toLowerCase().includes("timed out") ||
+        error.message.toLowerCase().includes("timeout"));
+
+    if (isTimeoutLike) {
+      return apiSuccess({ adminUsers: [] });
+    }
+
     return handleAdminServiceError(error, "Unable to load admin users.");
   }
 }

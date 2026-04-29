@@ -95,7 +95,6 @@ function parseDiscoveryUrlState(
   initialSearch: string,
 ): {
   filters: DiscoveryFilters;
-  selectedVendorSlug: string | null;
   locationSource: LocationSource | null;
 } {
   return {
@@ -106,14 +105,12 @@ function parseDiscoveryUrlState(
       priceBand: parsePriceBand(searchParams.get("price_band")),
       category: searchParams.get("category")?.trim() || "",
     },
-    selectedVendorSlug: searchParams.get("selected")?.trim() || null,
     locationSource: parseLocationSource(searchParams.get("location_source")),
   };
 }
 
 function buildDiscoverySearchParams(
   filters: DiscoveryFilters,
-  selectedVendorSlug: string | null,
   locationSource: LocationSource | null,
 ): URLSearchParams {
   const params = new URLSearchParams();
@@ -138,10 +135,6 @@ function buildDiscoverySearchParams(
     params.set("category", filters.category);
   }
 
-  if (selectedVendorSlug) {
-    params.set("selected", selectedVendorSlug);
-  }
-
   if (locationSource === "default_city") {
     params.set("location_source", locationSource);
   }
@@ -163,12 +156,10 @@ function buildVendorDetailHref(slug: string, returnTo: string): string {
 function buildDiscoveryReturnTo(
   pathname: string,
   filters: DiscoveryFilters,
-  selectedVendorSlug: string | null,
   locationSource: LocationSource | null,
 ): string {
   const queryString = buildDiscoverySearchParams(
     filters,
-    selectedVendorSlug,
     locationSource,
   ).toString();
 
@@ -251,9 +242,7 @@ export function PublicDiscovery({
     key: string;
     label: string;
   } | null>(null);
-  const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(
-    parsedUrlState.selectedVendorSlug,
-  );
+  const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(null);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeVendorSection, setActiveVendorSection] =
@@ -263,7 +252,10 @@ export function PublicDiscovery({
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
     useState<RetainedVendorPreview | null>(null);
+  const nearbyDataRef = useRef<NearbyVendorsResponseData | null>(null);
   const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
+  const preferredSelectedVendorSlugRef = useRef<string | null>(null);
+  const selectedVendorSlugRef = useRef<string | null>(null);
   const nearbyRequestIdRef = useRef(0);
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -277,12 +269,12 @@ export function PublicDiscovery({
   const activeLocationSource = location?.source ?? nearbyData?.location.source ?? urlLocationSource;
   const discoveryQueryString = useMemo(
     () =>
-      buildDiscoverySearchParams(filters, selectedVendorSlug, activeLocationSource).toString(),
-    [activeLocationSource, filters, selectedVendorSlug],
+      buildDiscoverySearchParams(filters, activeLocationSource).toString(),
+    [activeLocationSource, filters],
   );
   const discoverySnapshotQueryString = useMemo(
     () =>
-      buildDiscoverySearchParams(filters, null, activeLocationSource).toString(),
+      buildDiscoverySearchParams(filters, activeLocationSource).toString(),
     [activeLocationSource, filters],
   );
   const filterFormKey = useMemo(
@@ -301,8 +293,8 @@ export function PublicDiscovery({
     [discoverySnapshotQueryString, pathname],
   );
   const discoveryReturnTo = useMemo(
-    () => buildDiscoveryReturnTo(pathname, filters, selectedVendorSlug, activeLocationSource),
-    [activeLocationSource, filters, pathname, selectedVendorSlug],
+    () => buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
+    [activeLocationSource, filters, pathname],
   );
 
   const hydrateRetentionState = useCallback(() => {
@@ -313,6 +305,14 @@ export function PublicDiscovery({
   useEffect(() => {
     lastSelectedVendorMemoryRef.current = lastSelectedVendorMemory;
   }, [lastSelectedVendorMemory]);
+
+  useEffect(() => {
+    nearbyDataRef.current = nearbyData;
+  }, [nearbyData]);
+
+  useEffect(() => {
+    selectedVendorSlugRef.current = selectedVendorSlug;
+  }, [selectedVendorSlug]);
 
   useEffect(() => {
     return () => {
@@ -456,7 +456,8 @@ export function PublicDiscovery({
 
     const timeout = window.setTimeout(() => {
       setNearbyData(snapshot.nearbyData);
-      setSelectedVendorSlug((current) => current ?? snapshot.selectedVendorSlug);
+      preferredSelectedVendorSlugRef.current = snapshot.selectedVendorSlug;
+      setSelectedVendorSlug(snapshot.selectedVendorSlug);
       setSnapshotHydrated(true);
 
       if (!hasRestoredScrollRef.current && shouldRestoreDiscoveryScroll()) {
@@ -487,15 +488,15 @@ export function PublicDiscovery({
 
     function persistScrollPosition() {
       const snapshot = readDiscoverySnapshot(discoverySnapshotKey) ?? {
-        nearbyData,
-        selectedVendorSlug,
+        nearbyData: nearbyDataRef.current,
+        selectedVendorSlug: selectedVendorSlugRef.current,
         scrollY: 0,
       };
 
       writeDiscoverySnapshot(discoverySnapshotKey, {
         ...snapshot,
-        nearbyData,
-        selectedVendorSlug,
+        nearbyData: nearbyDataRef.current,
+        selectedVendorSlug: selectedVendorSlugRef.current,
         scrollY: window.scrollY,
       });
     }
@@ -508,6 +509,26 @@ export function PublicDiscovery({
       window.removeEventListener("pagehide", persistScrollPosition);
     };
   }, [discoverySnapshotKey, nearbyData, selectedVendorSlug, snapshotHydrated]);
+
+  useEffect(() => {
+    function restorePreviewSelectionFromSnapshot() {
+      const snapshot = readDiscoverySnapshot(discoverySnapshotKey);
+
+      if (!snapshot) {
+        return;
+      }
+
+      preferredSelectedVendorSlugRef.current = snapshot.selectedVendorSlug;
+      setSelectedVendorSlug(snapshot.selectedVendorSlug);
+      setNearbyData((current) => current ?? snapshot.nearbyData);
+    }
+
+    window.addEventListener("pageshow", restorePreviewSelectionFromSnapshot);
+
+    return () => {
+      window.removeEventListener("pageshow", restorePreviewSelectionFromSnapshot);
+    };
+  }, [discoverySnapshotKey]);
 
   useEffect(() => {
     let isActive = true;
@@ -549,6 +570,15 @@ export function PublicDiscovery({
 
         setNearbyData(result);
         setSelectedVendorSlug((current) => {
+          const preferredSelectedVendorSlug = preferredSelectedVendorSlugRef.current;
+
+          if (
+            preferredSelectedVendorSlug &&
+            result.vendors.some((vendor) => vendor.slug === preferredSelectedVendorSlug)
+          ) {
+            return preferredSelectedVendorSlug;
+          }
+
           if (current && result.vendors.some((vendor) => vendor.slug === current)) {
             return current;
           }
@@ -678,14 +708,16 @@ export function PublicDiscovery({
       setLastSelectedVendorMemory(retainedVendor);
     }
 
-    if (snapshotHydrated && typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       writeDiscoverySnapshot(discoverySnapshotKey, {
-        nearbyData,
+        nearbyData: nearbyDataRef.current,
         selectedVendorSlug: vendor?.slug ?? null,
         scrollY: window.scrollY,
       });
     }
 
+    preferredSelectedVendorSlugRef.current = vendor?.slug ?? null;
+    selectedVendorSlugRef.current = vendor?.slug ?? null;
     setSelectedVendorSlug(vendor?.slug ?? null);
   }
 
@@ -891,12 +923,7 @@ export function PublicDiscovery({
                 approximateDistance={isApproximateDistance}
                 detailHref={buildVendorDetailHref(
                   vendor.slug,
-                  buildDiscoveryReturnTo(
-                    pathname,
-                    filters,
-                    vendor.slug,
-                    activeLocationSource,
-                  ),
+                  buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
                 )}
                 key={vendor.vendor_id}
                 isPopular={popularVendorIds.has(vendor.vendor_id)}

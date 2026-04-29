@@ -92,6 +92,14 @@ export type CreateAdminUserRequest = {
   role: AdminRole;
 };
 
+const vendorImageBucket = "vendor-images";
+const maxVendorImageBytes = 5 * 1024 * 1024;
+const vendorImageMimeTypes = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
+
 export type VendorIntakeRowInput = {
   row_number?: number | null;
   vendor_name?: string | number | null;
@@ -270,6 +278,57 @@ function getAdminClientSupabaseConfig(): AdminClientSupabaseConfig {
     supabaseUrl,
     supabaseAnonKey,
   };
+}
+
+function buildAdminSupabaseClient(options: AdminApiClientOptions) {
+  const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      fetch: options.fetchImpl,
+    },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    accessToken: async () => options.accessToken,
+  });
+}
+
+async function disposeAdminSupabaseClient(
+  client: ReturnType<typeof buildAdminSupabaseClient>,
+): Promise<void> {
+  await client.removeAllChannels().catch(() => undefined);
+  client.realtime.disconnect();
+}
+
+function validateAdminVendorImageFile(file: File): string | null {
+  if (file.size <= 0) {
+    return "Image file is empty.";
+  }
+
+  if (file.size > maxVendorImageBytes) {
+    return "Image must be 5 MB or smaller.";
+  }
+
+  if (!vendorImageMimeTypes.has(file.type)) {
+    return "Only JPEG, PNG, and WebP images are allowed.";
+  }
+
+  return null;
+}
+
+function buildClientVendorImageStoragePath(vendorId: string, file: File): string {
+  const extension = vendorImageMimeTypes.get(file.type) ?? "bin";
+  const sanitizedBaseName = file.name
+    .replace(/\.[^/.]+$/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "vendor-image";
+
+  return `${vendorId}/${crypto.randomUUID()}-${sanitizedBaseName}.${extension}`;
 }
 
 function normalizeAuditLogFilters(filters: AdminAuditLogFilters): AdminAuditLogFilters {
@@ -697,18 +756,8 @@ export async function fetchAdminAnalytics(
   }
 
   try {
-    const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        fetch: options.fetchImpl,
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-      accessToken: async () => options.accessToken,
-    });
+    const supabase = buildAdminSupabaseClient(options);
+    try {
     const rangeStart = getAnalyticsRangeStart(normalizedRange);
     let eventQuery = supabase
       .from("user_events")
@@ -852,6 +901,9 @@ export async function fetchAdminAnalytics(
       data: payload.data,
       error: null,
     };
+    } finally {
+      await disposeAdminSupabaseClient(supabase);
+    }
   } catch (error) {
     if (error instanceof AdminApiError) {
       if (shouldUseDevelopmentAnalyticsFallback()) {
@@ -914,19 +966,9 @@ export async function fetchAdminAuditLogs(
   }
 
   try {
-    const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
     const pageSize = Math.min(normalizedFilters.limit ?? 10, 10);
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        fetch: options.fetchImpl,
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-      accessToken: async () => options.accessToken,
-    });
+    const supabase = buildAdminSupabaseClient(options);
+    try {
 
     let query = supabase
       .from("audit_logs")
@@ -1027,6 +1069,9 @@ export async function fetchAdminAuditLogs(
       },
       error: null,
     };
+    } finally {
+      await disposeAdminSupabaseClient(supabase);
+    }
   } catch (error) {
     if (error instanceof AdminApiError) {
       if (shouldUseDevelopmentAnalyticsFallback()) {
@@ -1214,16 +1259,97 @@ export async function createAdminVendorImages(
   data: FormData,
   options: AdminApiClientOptions,
 ): Promise<VendorImage[]> {
-  const result = await requestAdminApi<{ images: VendorImage[] }>(
-    `/api/admin/vendors/${vendorId}/images`,
-    options,
-    {
-      method: "POST",
-      body: data,
-    },
-  );
+  const fileEntry = data.get("image");
 
-  return result.images;
+  if (!(fileEntry instanceof File)) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "An image file is required.",
+      400,
+      { field: "image" },
+    );
+  }
+
+  const fileValidationError = validateAdminVendorImageFile(fileEntry);
+
+  if (fileValidationError) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      fileValidationError,
+      400,
+      { field: "image", mime_type: fileEntry.type || null, size: fileEntry.size },
+    );
+  }
+
+  const sortOrderValue = Number(String(data.get("sort_order") ?? "0"));
+
+  if (!Number.isInteger(sortOrderValue) || sortOrderValue < 0) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Sort order must be a non-negative integer.",
+      400,
+      { field: "sort_order", value: data.get("sort_order") ?? null },
+    );
+  }
+
+  const supabase = buildAdminSupabaseClient(options);
+
+  try {
+    const storageObjectPath = buildClientVendorImageStoragePath(vendorId, fileEntry);
+    const uploadResult = await supabase.storage
+      .from(vendorImageBucket)
+      .upload(storageObjectPath, fileEntry, {
+        contentType: fileEntry.type,
+        upsert: true,
+      });
+
+    if (uploadResult.error) {
+      console.error("UPLOAD ERROR:", uploadResult.error);
+      throw new AdminApiError(
+        uploadResult.error.message.toLowerCase().includes("permission")
+          ? "FORBIDDEN"
+          : "UPSTREAM_ERROR",
+        "Unable to upload vendor image.",
+        uploadResult.error.message.toLowerCase().includes("permission") ? 403 : 502,
+        {
+          bucket: vendorImageBucket,
+          path: storageObjectPath,
+        },
+        uploadResult.error.message,
+      );
+    }
+
+    const publicUrlResult = supabase.storage
+      .from(vendorImageBucket)
+      .getPublicUrl(storageObjectPath);
+    const publicUrl = publicUrlResult.data.publicUrl;
+
+    try {
+      const result = await requestAdminApi<{ images: VendorImage[] }>(
+        `/api/admin/vendors/${vendorId}/images`,
+        options,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            images: [
+              {
+                image_url: publicUrl,
+                storage_object_path: storageObjectPath,
+                sort_order: sortOrderValue,
+              },
+            ],
+          }),
+        },
+      );
+
+      return result.images;
+    } catch (error) {
+      await supabase.storage.from(vendorImageBucket).remove([storageObjectPath]);
+      throw error;
+    }
+  } finally {
+    await disposeAdminSupabaseClient(supabase);
+  }
 }
 
 export async function listAdminVendorImages(

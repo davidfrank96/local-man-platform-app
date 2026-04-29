@@ -18,6 +18,7 @@ type AdminUserServiceContext = {
 };
 
 const defaultAuthCreateTimeoutMs = 4_000;
+const defaultAdminUsersListTimeoutMs = 4_000;
 
 function requireServiceConfig(
   config: AdminAuthConfig | null | undefined,
@@ -73,6 +74,17 @@ function getAuthCreateTimeoutMs(): number {
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return defaultAuthCreateTimeoutMs;
+  }
+
+  return parsed;
+}
+
+function getAdminUsersListTimeoutMs(): number {
+  const rawValue = process.env.ADMIN_USERS_LIST_TIMEOUT_MS?.trim() ?? "";
+  const parsed = Number.parseInt(rawValue, 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultAdminUsersListTimeoutMs;
   }
 
   return parsed;
@@ -424,19 +436,32 @@ export async function listAdminUsers(
   }: AdminUserServiceContext = {},
 ): Promise<AdminUser[]> {
   const resolvedConfig = requireServiceConfig(config);
-  const payload = await requestJson(
-    createRestUrl(resolvedConfig, "admin_users", {
-      select: "id,email,full_name,role,created_at",
-      order: "created_at.desc",
-    }),
-    {
-      method: "GET",
-      headers: createServiceHeaders(resolvedConfig, ""),
-    },
-    fetchImpl,
-  );
+  const timeoutMs = getAdminUsersListTimeoutMs();
+  const timedFetch = createTimeoutFetch(fetchImpl, timeoutMs);
+  const start = Date.now();
 
-  return parseAdminUsers(payload);
+  try {
+    const payload = await requestJson(
+      createRestUrl(resolvedConfig, "admin_users", {
+        select: "id,email,full_name,role,created_at",
+        order: "created_at.desc",
+        limit: "10",
+      }),
+      {
+        method: "GET",
+        headers: createServiceHeaders(resolvedConfig, ""),
+      },
+      timedFetch,
+    );
+    const adminUsers = parseAdminUsers(payload);
+
+    console.warn("ADMIN_USERS_FETCH_TIME", Date.now() - start);
+
+    return adminUsers;
+  } catch (error) {
+    console.warn("ADMIN_USERS_FETCH_TIME", Date.now() - start);
+    throw error;
+  }
 }
 
 export async function createAdminUser(

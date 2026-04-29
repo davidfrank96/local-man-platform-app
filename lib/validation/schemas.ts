@@ -435,6 +435,7 @@ export const vendorImageMetadataRequestSchema = z.object({
   images: z.array(
     z.object({
       image_url: nonEmptyTextSchema,
+      storage_object_path: optionalTextSchema,
       sort_order: z.coerce.number().int().min(0).default(0),
     }),
   ).min(1),
