@@ -536,12 +536,20 @@ test("admin API client falls back to backend audit log route in development", as
   }
 });
 
-test("admin API client uploads image files without forcing json headers", async () => {
+test("admin API client uploads image files directly to storage and then saves metadata", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const requestedUrls: string[] = [];
   const requestedHeaders: Headers[] = [];
   const requestedBodies: unknown[] = [];
-  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = new URL(String(input), "http://localhost");
+    requestedUrls.push(url.toString());
     requestedHeaders.push(new Headers(init?.headers));
     requestedBodies.push(init?.body);
+
+    if (url.pathname.startsWith(`/storage/v1/object/vendor-images/${vendorId}/`)) {
+      return Response.json({ Key: `${vendorId}/uploaded-image.jpg` }, { status: 200 });
+    }
 
     return Response.json({
       success: true,
@@ -576,10 +584,22 @@ test("admin API client uploads image files without forcing json headers", async 
     },
   );
 
-  assert.equal(images[0].storage_object_path, "vendor/image.jpg");
-  assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
-  assert.equal(requestedHeaders[0].get("content-type"), null);
-  assert.ok(requestedBodies[0] instanceof FormData);
+  try {
+    assert.equal(images[0].storage_object_path, "vendor/image.jpg");
+    assert.equal(new URL(requestedUrls[0]).pathname.startsWith(`/storage/v1/object/vendor-images/${vendorId}/`), true);
+    assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
+    assert.ok(requestedBodies[0] !== null && requestedBodies[0] !== undefined);
+    assert.notEqual(typeof requestedBodies[0], "string");
+    assert.equal(new URL(requestedUrls[1], "http://localhost").pathname, `/api/admin/vendors/${vendorId}/images`);
+    const metadataBody = JSON.parse(String(requestedBodies[1] ?? "{}")) as {
+      images?: Array<{ image_url?: string; storage_object_path?: string; sort_order?: number }>;
+    };
+    assert.equal(metadataBody.images?.[0]?.sort_order, 2);
+    assert.equal(typeof metadataBody.images?.[0]?.image_url, "string");
+    assert.equal(typeof metadataBody.images?.[0]?.storage_object_path, "string");
+  } finally {
+    restoreEnv();
+  }
 });
 
 test("admin API client surfaces readable image upload failures", async () => {

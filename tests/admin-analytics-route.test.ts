@@ -516,11 +516,15 @@ test("admin analytics route returns structured 504 on analytics timeout", async 
       const signal = init?.signal;
 
       await new Promise((_, reject) => {
-        signal?.addEventListener("abort", () => {
-          const error = new Error("The operation was aborted.");
-          error.name = "AbortError";
-          reject(error);
-        });
+        signal?.addEventListener(
+          "abort",
+          () => {
+            const error = new Error("The operation was aborted.");
+            error.name = "AbortError";
+            reject(error);
+          },
+          { once: true },
+        );
       });
     }
 

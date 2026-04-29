@@ -171,6 +171,108 @@ test("admin can list admin users", async () => {
   }
 });
 
+test("admin user list uses a bounded lightweight query", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  let capturedUrl: URL | null = null;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: adminId,
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users" && method === "GET") {
+      capturedUrl = url;
+      return Response.json([
+        {
+          id: adminId,
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+          created_at: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await listAdminUsersRoute(createRequest("/api/admin/admin-users"));
+    assert.equal(response.status, 200);
+    assert.ok(capturedUrl);
+    const queryUrl = capturedUrl as URL;
+    assert.equal(queryUrl.searchParams.get("select"), "id,email,full_name,role,created_at");
+    assert.equal(queryUrl.searchParams.get("order"), "created_at.desc");
+    assert.equal(queryUrl.searchParams.get("limit"), "10");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin user list returns a safe empty result when the upstream list fetch times out", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: adminId,
+        email: "admin@example.com",
+      });
+    }
+
+    if (
+      url.pathname === "/rest/v1/admin_users" &&
+      (init?.method ?? "GET") === "GET"
+    ) {
+      if (url.searchParams.get("select") !== "id,email,full_name,role,created_at") {
+        return Response.json([
+          {
+            id: adminId,
+            email: "admin@example.com",
+            full_name: "Admin User",
+            role: "admin",
+          },
+        ]);
+      }
+
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          },
+          { once: true },
+        );
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await listAdminUsersRoute(createRequest("/api/admin/admin-users"));
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(body.data.adminUsers, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin can create an agent account", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
