@@ -423,6 +423,47 @@ h2 {
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
 }
 
+.admin-runtime-warning {
+  margin: 16px 16px 0;
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(161, 95, 26, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 244, 227, 0.94);
+  color: #6f4513;
+  padding: 14px 16px;
+  box-shadow: 0 12px 30px rgba(111, 69, 19, 0.08);
+}
+
+.admin-runtime-warning strong {
+  font-size: 0.95rem;
+}
+
+.admin-runtime-warning p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.admin-runtime-warning-critical {
+  border-color: rgba(169, 41, 34, 0.24);
+  background: rgba(255, 237, 234, 0.96);
+  color: #7d2018;
+  box-shadow: 0 12px 30px rgba(125, 32, 24, 0.1);
+}
+
+.admin-runtime-warning-high {
+  border-color: rgba(161, 95, 26, 0.28);
+}
+
+.admin-runtime-warning-medium,
+.admin-runtime-warning-low {
+  border-color: rgba(67, 108, 90, 0.22);
+  background: rgba(239, 247, 242, 0.95);
+  color: #244437;
+  box-shadow: 0 12px 30px rgba(36, 68, 55, 0.08);
+}
+
 .admin-token-panel,
 .admin-section-header,
 .split-panel {

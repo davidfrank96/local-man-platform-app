@@ -106,9 +106,13 @@ The Local Man is a location-based food discovery product for finding nearby loca
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-4. Start the app:
+4. Apply database migrations before local development:
+   - `npm run db:migrate`
+5. Verify local schema, functions, and policies:
+   - `npm run db:check`
+6. Start the app:
    - `npm run dev`
-5. Run the standard verification set:
+7. Run the standard verification set:
    - `npm run lint`
    - `npm run typecheck`
    - `npm test`
