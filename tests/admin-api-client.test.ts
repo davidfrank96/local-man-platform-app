@@ -717,20 +717,24 @@ test("admin API client can fetch analytics", async () => {
           event_type: "vendor_selected",
           vendor_id: vendorId,
           vendor_slug: "test-vendor",
+          page_path: "/vendors/test-vendor",
+          search_query: null,
+          metadata: {},
           device_type: "mobile",
           location_source: "precise",
           timestamp: "2026-04-29T10:00:00.000Z",
-          session_id: "00000000-0000-4000-8000-000000000201",
         },
         {
           id: "00000000-0000-4000-8000-000000000102",
           event_type: "search_used",
           vendor_id: null,
           vendor_slug: null,
+          page_path: "/search",
+          search_query: "rice",
+          metadata: {},
           device_type: "desktop",
           location_source: "approximate",
           timestamp: "2026-04-29T09:00:00.000Z",
-          session_id: "00000000-0000-4000-8000-000000000202",
         },
       ]);
     }
@@ -762,8 +766,12 @@ test("admin API client can fetch analytics", async () => {
     assert.equal(analytics.data?.summary.vendor_selections, 1);
     assert.equal(analytics.data?.summary.searches_used, 1);
     assert.equal(new URL(requestedUrls[0]).pathname, "/rest/v1/user_events");
+    assert.equal(
+      new URL(requestedUrls[0]).searchParams.get("select"),
+      "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source",
+    );
     assert.equal(new URL(requestedUrls[0]).searchParams.get("order"), "timestamp.desc");
-    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "1500");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "10");
     assert.equal(new URL(requestedUrls[0]).searchParams.get("timestamp"), "gte.2026-03-30T10:00:00.000Z");
     assert.equal(new URL(requestedUrls[1]).pathname, "/rest/v1/vendors");
   } finally {
