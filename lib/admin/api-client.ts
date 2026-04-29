@@ -192,7 +192,6 @@ const adminAuditActions = new Set<AuditActionType>([
   "CHANGE_ADMIN_USER_ROLE",
 ]);
 const legacyFilterEvent = "filters_applied";
-const maxAnalyticsEvents = 1500;
 const recentAnalyticsEventsLimit = 25;
 
 type AnalyticsEventRow = {
@@ -200,6 +199,9 @@ type AnalyticsEventRow = {
   event_type: string;
   vendor_id: string | null;
   vendor_slug: string | null;
+  page_path?: string | null;
+  search_query?: string | null;
+  metadata?: Record<string, unknown> | null;
   device_type: string;
   location_source: string | null;
   timestamp: string;
@@ -703,9 +705,9 @@ export async function fetchAdminAnalytics(
     const rangeStart = getAnalyticsRangeStart(normalizedRange);
     let eventQuery = supabase
       .from("user_events")
-      .select("id,event_type,vendor_id,vendor_slug,device_type,location_source,timestamp,session_id")
+      .select("id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source")
       .order("timestamp", { ascending: false })
-      .limit(maxAnalyticsEvents);
+      .limit(10);
 
     if (rangeStart) {
       eventQuery = eventQuery.gte("timestamp", rangeStart);
