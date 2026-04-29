@@ -18,10 +18,12 @@ function setAdminEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousAuthCreateTimeout = process.env.ADMIN_AUTH_CREATE_TIMEOUT_MS;
 
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+  process.env.ADMIN_AUTH_CREATE_TIMEOUT_MS = "4000";
 
   return () => {
     if (previousUrl === undefined) {
@@ -40,6 +42,12 @@ function setAdminEnv(): () => void {
       delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     } else {
       process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+    }
+
+    if (previousAuthCreateTimeout === undefined) {
+      delete process.env.ADMIN_AUTH_CREATE_TIMEOUT_MS;
+    } else {
+      process.env.ADMIN_AUTH_CREATE_TIMEOUT_MS = previousAuthCreateTimeout;
     }
   };
 }
@@ -292,6 +300,98 @@ test("creating a duplicate admin/agent email returns a clear conflict", async ()
       "POST /auth/v1/admin/users",
     ]);
   } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin creation returns a retryable timeout when auth user creation stalls", async () => {
+  const restoreEnv = setAdminEnv();
+  process.env.ADMIN_AUTH_CREATE_TIMEOUT_MS = "10";
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const calls: string[] = [];
+  const loggedErrors: unknown[] = [];
+  console.error = (...args: unknown[]) => {
+    loggedErrors.push(args);
+  };
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url.pathname}`);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: adminId,
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users" && method === "GET") {
+      return Response.json([
+        {
+          id: adminId,
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+          created_at: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/auth/v1/admin/users" && method === "POST") {
+      return await new Promise<Response>((_, reject) => {
+        const signal = init?.signal;
+        if (signal) {
+          signal.addEventListener(
+            "abort",
+            () => {
+              const abortError = new Error("The operation was aborted.");
+              abortError.name = "AbortError";
+              reject(abortError);
+            },
+            { once: true },
+          );
+        }
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await createAdminUserRoute(
+      createRequest("/api/admin/admin-users", "POST", {
+        email: "slow.agent@example.com",
+        password: "temp-pass-123",
+        full_name: "Slow Agent",
+        role: "agent",
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 504);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "NETWORK_ERROR");
+    assert.equal(body.error.message, "User creation failed. Try again.");
+    assert.equal(body.error.detail, "Supabase auth timed out while creating the user.");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "POST /auth/v1/admin/users",
+    ]);
+    assert.equal(
+      loggedErrors.some((entry) => {
+        if (!Array.isArray(entry)) {
+          return false;
+        }
+
+        return entry[0] === "AUTH CREATE ERROR:";
+      }),
+      true,
+    );
+  } finally {
+    console.error = originalConsoleError;
     globalThis.fetch = originalFetch;
     restoreEnv();
   }
