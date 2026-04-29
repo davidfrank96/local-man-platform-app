@@ -2,7 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 import type { ApiResponse } from "../api/responses.ts";
 import { AppError } from "../errors/app-error.ts";
 import type { AppErrorCode } from "../api/contracts.ts";
+import { getCurrentAdminAccessToken } from "./session-client.ts";
 import {
+  adminUserSchema,
   adminAnalyticsResponseDataSchema,
   auditLogSchema,
 } from "../validation/schemas.ts";
@@ -238,6 +240,11 @@ type AdminClientSupabaseConfig = {
   supabaseAnonKey: string;
 };
 
+async function resolveAdminAccessToken(fallbackToken: string): Promise<string> {
+  const liveToken = await getCurrentAdminAccessToken().catch(() => null);
+  return liveToken ?? fallbackToken;
+}
+
 function createAdminHeaders(
   accessToken: string,
   body?: BodyInit | null,
@@ -298,7 +305,7 @@ function buildAdminSupabaseClient(options: AdminApiClientOptions) {
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-    accessToken: async () => options.accessToken,
+    accessToken: async () => resolveAdminAccessToken(options.accessToken),
   });
 }
 
@@ -397,6 +404,23 @@ function normalizeAnalyticsRange(range?: AdminAnalyticsRange): AdminAnalyticsRan
 
 function shouldUseDevelopmentAnalyticsFallback(): boolean {
   return process.env.NODE_ENV === "development";
+}
+
+function mapDirectSupabaseReadError(error: { code?: string; message?: string } | null | undefined, fallbackMessage: string): AdminApiError {
+  const normalizedMessage = error?.message?.toLowerCase() ?? "";
+  const errorCode = error?.code === "42501" || normalizedMessage.includes("permission denied")
+    ? "FORBIDDEN"
+    : error?.code === "PGRST204" || normalizedMessage.includes("could not find")
+    ? "INVALID_RESPONSE"
+    : "UPSTREAM_ERROR";
+
+  return new AdminApiError(
+    errorCode,
+    errorCode === "FORBIDDEN" ? "You do not have access to this resource." : fallbackMessage,
+    errorCode === "FORBIDDEN" ? 403 : 502,
+    error ?? undefined,
+    error?.message ?? fallbackMessage,
+  );
 }
 
 function buildAnalyticsFallbackPath(range: AdminAnalyticsRange): string {
@@ -675,10 +699,11 @@ async function requestAdminApi<T>(
   { accessToken, fetchImpl = fetch }: AdminApiClientOptions,
   init: RequestInit = {},
 ): Promise<T> {
+  const resolvedAccessToken = await resolveAdminAccessToken(accessToken);
   const response = await fetchImpl(path, {
     ...init,
     headers: {
-      ...createAdminHeaders(accessToken, init.body ?? null),
+      ...createAdminHeaders(resolvedAccessToken, init.body ?? null),
       ...init.headers,
     },
   });
@@ -1172,12 +1197,23 @@ export async function fetchAdminAuditLogs(
 export async function listAdminUsers(
   options: AdminApiClientOptions,
 ): Promise<AdminUser[]> {
-  const result = await requestAdminApi<{ adminUsers: AdminUser[] }>(
-    "/api/admin/admin-users",
-    options,
-  );
+  const client = buildAdminSupabaseClient(options);
 
-  return result.adminUsers;
+  try {
+    const response = await client
+      .from("admin_users")
+      .select("id,email,full_name,role,created_at")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (response.error) {
+      throw mapDirectSupabaseReadError(response.error, "Unable to load admin users.");
+    }
+
+    return (response.data ?? []).map((row) => adminUserSchema.parse(row));
+  } finally {
+    await disposeAdminSupabaseClient(client);
+  }
 }
 
 export async function createManagedAdminUser(
