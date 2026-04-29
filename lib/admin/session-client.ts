@@ -355,6 +355,17 @@ export async function fetchAdminSessionIdentity(
   fetchImpl: typeof fetch = fetch,
 ): Promise<AdminSessionIdentity> {
   const resolvedAccessToken = await getCurrentAdminAccessToken().catch(() => null) ?? accessToken;
+
+  if (!resolvedAccessToken) {
+    throw new AdminSessionError(
+      "UNAUTHORIZED",
+      "Admin session is missing. Sign in again.",
+      401,
+      undefined,
+      "No Supabase access token is available for admin session validation.",
+    );
+  }
+
   const response = await fetchImpl("/api/admin/session", {
     headers: {
       authorization: `Bearer ${resolvedAccessToken}`,

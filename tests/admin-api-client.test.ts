@@ -251,6 +251,32 @@ test("admin API client uses the current stored session token for admin API route
   }
 });
 
+test("admin API client does not call backend admin routes when no session token is available", async () => {
+  let called = false;
+  const fetchImpl = (async () => {
+    called = true;
+    return Response.json({});
+  }) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      listAdminVendors(
+        {},
+        {
+          accessToken: "",
+          fetchImpl,
+        },
+      ),
+    (error) =>
+      error instanceof AdminApiError &&
+      error.code === "UNAUTHORIZED" &&
+      error.status === 401 &&
+      error.message === "Admin session is missing. Sign in again.",
+  );
+
+  assert.equal(called, false);
+});
+
 test("admin API client surfaces direct Supabase admin user read failures clearly", async () => {
   const restoreEnv = setSupabasePublicEnv();
   const fetchImpl = (async () =>

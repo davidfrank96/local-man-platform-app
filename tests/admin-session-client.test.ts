@@ -195,6 +195,28 @@ test("fetchAdminSessionIdentity uses the current stored session token for /api/a
   }
 });
 
+test("fetchAdminSessionIdentity does not call /api/admin/session when no token exists", async () => {
+  let called = false;
+
+  await assert.rejects(
+    () =>
+      fetchAdminSessionIdentity(
+        "",
+        (async () => {
+          called = true;
+          return Response.json({});
+        }) as typeof fetch,
+      ),
+    (error) =>
+      error instanceof AdminSessionError &&
+      error.code === "UNAUTHORIZED" &&
+      error.status === 401 &&
+      error.message === "Admin session is missing. Sign in again.",
+  );
+
+  assert.equal(called, false);
+});
+
 test("fetchAdminSessionIdentity returns the validated agent identity", async () => {
   const identity = await fetchAdminSessionIdentity(
     "access-token",
