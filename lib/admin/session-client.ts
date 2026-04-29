@@ -354,9 +354,10 @@ export async function fetchAdminSessionIdentity(
   accessToken: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<AdminSessionIdentity> {
+  const resolvedAccessToken = await getCurrentAdminAccessToken().catch(() => null) ?? accessToken;
   const response = await fetchImpl("/api/admin/session", {
     headers: {
-      authorization: `Bearer ${accessToken}`,
+      authorization: `Bearer ${resolvedAccessToken}`,
       "x-request-id": crypto.randomUUID(),
     },
   });

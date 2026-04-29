@@ -117,6 +117,84 @@ test("fetchAdminSessionIdentity returns the validated admin identity", async () 
   assert.equal(identity.adminUser.role, "admin");
 });
 
+test("fetchAdminSessionIdentity uses the current stored session token for /api/admin/session", async () => {
+  const storage = new Map<string, string>();
+  const originalWindow = globalThis.window;
+  const originalCrypto = globalThis.crypto;
+
+  Object.defineProperty(globalThis, "window", {
+    value: {
+      localStorage: {
+        getItem(key: string) {
+          return storage.get(key) ?? null;
+        },
+        setItem(key: string, value: string) {
+          storage.set(key, value);
+        },
+        removeItem(key: string) {
+          storage.delete(key);
+        },
+      },
+    },
+    configurable: true,
+  });
+
+  Object.defineProperty(globalThis, "crypto", {
+    value: {
+      randomUUID: () => "request-id",
+    },
+    configurable: true,
+  });
+
+  persistAdminSession({
+    accessToken: "live-token",
+    refreshToken: "refresh-token",
+    expiresAt: Date.now() + 60_000,
+    user: {
+      id: "admin-id",
+      email: "admin@example.com",
+    },
+  });
+
+  try {
+    const identity = await fetchAdminSessionIdentity(
+      "stale-token",
+      (async (_input: URL | RequestInfo, init?: RequestInit) => {
+        assert.equal(new Headers(init?.headers).get("authorization"), "Bearer live-token");
+
+        return Response.json({
+          success: true,
+          data: {
+            user: {
+              id: "admin-id",
+              email: "admin@example.com",
+            },
+            adminUser: {
+              id: "admin-id",
+              email: "admin@example.com",
+              full_name: "Admin User",
+              role: "admin",
+            },
+          },
+          error: null,
+        });
+      }) as typeof fetch,
+    );
+
+    assert.equal(identity.user.id, "admin-id");
+  } finally {
+    clearStoredAdminSession();
+    Object.defineProperty(globalThis, "window", {
+      value: originalWindow,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "crypto", {
+      value: originalCrypto,
+      configurable: true,
+    });
+  }
+});
+
 test("fetchAdminSessionIdentity returns the validated agent identity", async () => {
   const identity = await fetchAdminSessionIdentity(
     "access-token",
