@@ -128,7 +128,7 @@ test("admin can list audit logs with filters", async () => {
     assert.equal(body.data.auditLogs.length, 1);
     assert.equal(body.data.pagination.has_more, false);
     assert.equal(auditUrl?.searchParams.get("user_role"), "eq.agent");
-    assert.equal(auditUrl?.searchParams.get("action"), "eq.CREATE_VENDOR");
+    assert.equal(auditUrl?.searchParams.get("action"), "in.(CREATE_VENDOR,vendor.created)");
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -253,6 +253,71 @@ test("invalid audit log filters return 400 before Supabase audit log read", asyn
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("legacy audit log action rows are normalized into canonical actions", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "00000000-0000-4000-8000-000000000111",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000111",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+          created_at: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/audit_logs") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000302",
+          admin_user_id: "00000000-0000-4000-8000-000000000111",
+          user_role: "admin",
+          entity_type: "vendor",
+          entity_id: "00000000-0000-4000-8000-000000000401",
+          action: "vendor.hours_replaced",
+          metadata: {
+            actor_label: "Admin User",
+            target_slug: "test-vendor",
+          },
+          created_at: "2026-04-28T12:00:00.000Z",
+        },
+      ]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await listAuditLogsRoute(
+      createNextRequest("http://localhost/api/admin/audit-logs"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.auditLogs[0].action, "UPDATE_VENDOR_HOURS");
+    assert.deepEqual(body.data.auditLogs[0].metadata, {
+      actor_label: "Admin User",
+      target_slug: "test-vendor",
+    });
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

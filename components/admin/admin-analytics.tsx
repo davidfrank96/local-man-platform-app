@@ -107,6 +107,16 @@ function getAnalyticsAccessErrorMessage(error: { code: string; message: string }
   return error.message;
 }
 
+function getAnalyticsEmptyStateMessage(range: AdminAnalyticsRange): string {
+  return range === "all" ? "No usage data yet." : "No activity in selected time range.";
+}
+
+function getAnalyticsEmptyStateDescription(range: AdminAnalyticsRange): string {
+  return range === "all"
+    ? "Analytics will populate here after public activity is tracked."
+    : "Try a wider time range to view older activity.";
+}
+
 function isAuditLog(value: unknown): value is AuditLog {
   if (!value || typeof value !== "object") {
     return false;
@@ -307,7 +317,7 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
       </section>
 
       <section
-        className={`admin-panel admin-status-panel ${status.toLowerCase().includes("unable") ? "admin-status-panel-error" : status === "Analytics loaded." || status === "No usage data yet." ? "admin-status-panel-success" : "admin-status-panel-neutral"}`}
+        className={`admin-panel admin-status-panel ${status.toLowerCase().includes("unable") ? "admin-status-panel-error" : status === "Analytics loaded." || status === "No usage data yet." || status === "No activity in selected time range." ? "admin-status-panel-success" : "admin-status-panel-neutral"}`}
         aria-live="polite"
       >
         <div className="admin-status-heading">
@@ -381,8 +391,8 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
 
               {(recentEvents?.length ?? 0) === 0 ? (
                 <div className="analytics-empty-state">
-                  <strong>No usage data yet</strong>
-                  <p>Recent events will appear here after real public activity is tracked.</p>
+                  <strong>{getAnalyticsEmptyStateMessage(range).replace(/\.$/, "")}</strong>
+                  <p>{getAnalyticsEmptyStateDescription(range)}</p>
                 </div>
               ) : (
                 <>
@@ -588,8 +598,8 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
         !isLoading && (
           <section className="admin-panel analytics-panel" aria-labelledby="analytics-empty">
             <div className="analytics-empty-state">
-              <strong id="analytics-empty">No usage data yet</strong>
-              <p>Analytics will populate here after public activity is tracked.</p>
+              <strong id="analytics-empty">{getAnalyticsEmptyStateMessage(range).replace(/\.$/, "")}</strong>
+              <p>{getAnalyticsEmptyStateDescription(range)}</p>
             </div>
           </section>
         )
@@ -687,7 +697,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       setStatus(
         cachedAnalytics.summary.total_events > 0
           ? "Analytics loaded."
-          : "No usage data yet.",
+          : getAnalyticsEmptyStateMessage(nextRange),
       );
       setIsLoading(false);
       return;
@@ -756,7 +766,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       setStatus(
         analytics.summary.total_events > 0
           ? "Analytics loaded."
-          : "No usage data yet.",
+          : getAnalyticsEmptyStateMessage(nextRange),
       );
     } catch (error) {
       if (

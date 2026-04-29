@@ -368,6 +368,76 @@ test("admin analytics route returns safe empty analytics payload", async () => {
   }
 });
 
+test("admin analytics route normalizes legacy analytics event variants", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = createAnalyticsFetchMock({
+    events: [
+      {
+        id: "10000000-0000-4000-8000-000000000021",
+        event_type: "session_start",
+        vendor_id: null,
+        vendor_slug: null,
+        page_path: "/",
+        device_type: "mobile",
+        location_source: "precise",
+        timestamp: "2026-04-26T10:00:00.000Z",
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000022",
+        event_type: "call_click",
+        vendor_id: null,
+        vendor_slug: "test-vendor",
+        page_path: "/vendors/test-vendor",
+        device_type: "mobile",
+        location_source: "precise",
+        timestamp: "2026-04-26T10:01:00.000Z",
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000023",
+        event_type: "directions_click",
+        vendor_id: null,
+        vendor_slug: "test-vendor",
+        page_path: "/vendors/test-vendor",
+        device_type: "mobile",
+        location_source: "precise",
+        timestamp: "2026-04-26T10:02:00.000Z",
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000024",
+        event_type: "filters_applied",
+        vendor_id: null,
+        vendor_slug: null,
+        page_path: "/",
+        device_type: "desktop",
+        location_source: null,
+        timestamp: "2026-04-26T10:03:00.000Z",
+      },
+    ],
+    vendors: [],
+  });
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=7d"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.summary.total_sessions, 1);
+    assert.equal(body.data.summary.call_clicks, 1);
+    assert.equal(body.data.summary.directions_clicks, 1);
+    assert.equal(body.data.summary.filters_applied, 1);
+    assert.equal(body.data.vendor_performance.most_call_clicks[0].vendor_slug, "test-vendor");
+    assert.equal(body.data.vendor_performance.most_call_clicks[0].vendor_name, "Test Vendor");
+    assert.equal(body.data.recent_events[0].event_type, "filter_applied");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin analytics route uses service role credentials for analytics reads when configured", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;

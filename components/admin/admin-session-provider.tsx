@@ -35,6 +35,16 @@ export type AdminSessionState = {
 
 const AdminSessionContext = createContext<AdminSessionState | null>(null);
 
+function getForbiddenSessionMessage(error: AdminSessionError): string {
+  const details = error.details as { table?: string } | undefined;
+
+  if (details?.table === "admin_users") {
+    return "Your account does not have access.";
+  }
+
+  return error.message || "Your account does not have access.";
+}
+
 async function validateStoredSession(
   storedSession: StoredAdminSession,
 ): Promise<(StoredAdminSession & AdminSessionIdentity) | null> {
@@ -100,7 +110,7 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
         clearStoredAdminSession();
         setSession(null);
         setStatus("forbidden");
-        setError("This account signed in successfully, but it is not listed in admin_users.");
+        setError(getForbiddenSessionMessage(error));
         return;
       }
 
@@ -145,7 +155,7 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
       ) {
         clearStoredAdminSession();
         setStatus("forbidden");
-        setError("This account signed in successfully, but it is not listed in admin_users.");
+        setError(getForbiddenSessionMessage(error));
         return;
       }
 

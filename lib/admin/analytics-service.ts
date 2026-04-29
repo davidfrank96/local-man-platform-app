@@ -2,6 +2,10 @@ import {
   adminAnalyticsResponseDataSchema,
 } from "../validation/schemas.ts";
 import {
+  normalizeAnalyticsEventType,
+  vendorSlugToNameFallback,
+} from "./activity-normalization.ts";
+import {
   getAdminAuthConfig,
   type AdminAuthConfig,
   type AdminSession,
@@ -43,7 +47,6 @@ type VendorLookupRow = {
   slug: string;
 };
 
-const LEGACY_FILTER_EVENT = "filters_applied";
 const MAX_ANALYTICS_EVENTS = 1500;
 const RECENT_EVENTS_LIMIT = 25;
 const analyticsCacheTtlMs = 30_000;
@@ -56,7 +59,6 @@ const meaningfulInteractionEvents = new Set([
   "directions_clicked",
   "search_used",
   "filter_applied",
-  LEGACY_FILTER_EVENT,
 ]);
 
 type CachedAnalyticsResult = {
@@ -365,10 +367,23 @@ async function fetchVendorLookup(
 }
 
 function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
-  return rows.filter((row) => row.event_type === eventType).length;
+  const expected = normalizeAnalyticsEventType(eventType);
+  return rows.filter((row) => normalizeAnalyticsEventType(row.event_type) === expected).length;
 }
 
-function getTopVendorIds(
+function getVendorAggregateKey(row: AnalyticsEventRow): string | null {
+  if (typeof row.vendor_id === "string" && row.vendor_id.length > 0) {
+    return `id:${row.vendor_id}`;
+  }
+
+  if (typeof row.vendor_slug === "string" && row.vendor_slug.length > 0) {
+    return `slug:${row.vendor_slug}`;
+  }
+
+  return null;
+}
+
+function getTopVendorKeys(
   rows: AnalyticsEventRow[],
   eventTypes: string[],
   limit = 5,
@@ -376,17 +391,19 @@ function getTopVendorIds(
   const counts = new Map<string, number>();
 
   for (const row of rows) {
-    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+    const key = getVendorAggregateKey(row);
+
+    if (!key || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
       continue;
     }
 
-    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
   return [...counts.entries()]
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, limit)
-    .map(([vendorId]) => vendorId);
+    .map(([vendorKey]) => vendorKey);
 }
 
 function rankVendorEvents(
@@ -394,42 +411,36 @@ function rankVendorEvents(
   eventTypes: string[],
   vendorLookup: Map<string, VendorLookupRow>,
 ) {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { count: number; vendorId: string | null; vendorSlug: string | null }>();
 
   for (const row of rows) {
-    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+    const key = getVendorAggregateKey(row);
+
+    if (!key || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
       continue;
     }
 
-    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+    const current = counts.get(key);
+    counts.set(key, {
+      count: (current?.count ?? 0) + 1,
+      vendorId: row.vendor_id ?? current?.vendorId ?? null,
+      vendorSlug: row.vendor_slug ?? current?.vendorSlug ?? null,
+    });
   }
 
   return [...counts.entries()]
-    .map(([vendorId, count]) => {
-      const vendor = vendorLookup.get(vendorId);
+    .map(([, value]) => {
+      const vendor = value.vendorId ? vendorLookup.get(value.vendorId) : null;
 
       return {
-        vendor_id: vendorId,
-        vendor_name: vendor?.name ?? rowSlugToNameFallback(vendorId, rows),
-        vendor_slug: vendor?.slug ?? rows.find((row) => row.vendor_id === vendorId)?.vendor_slug ?? null,
-        count,
+        vendor_id: value.vendorId,
+        vendor_name: vendor?.name ?? vendorSlugToNameFallback(value.vendorSlug),
+        vendor_slug: vendor?.slug ?? value.vendorSlug,
+        count: value.count,
       };
     })
     .sort((left, right) => right.count - left.count || (left.vendor_name ?? "").localeCompare(right.vendor_name ?? ""))
     .slice(0, 5);
-}
-
-function rowSlugToNameFallback(vendorId: string, rows: AnalyticsEventRow[]): string | null {
-  const slug = rows.find((row) => row.vendor_id === vendorId)?.vendor_slug;
-
-  if (!slug) {
-    return null;
-  }
-
-  return slug
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function buildDropoffSummary(
@@ -461,7 +472,7 @@ function buildDropoffSummary(
   let detailWithoutAction = 0;
 
   for (const sessionEvents of sessions.values()) {
-    const eventTypes = new Set(sessionEvents.map((row) => row.event_type));
+    const eventTypes = new Set(sessionEvents.map((row) => normalizeAnalyticsEventType(row.event_type)));
     const hasMeaningfulInteraction = [...eventTypes].some((eventType) =>
       meaningfulInteractionEvents.has(eventType),
     );
@@ -528,13 +539,18 @@ export async function getAdminAnalytics(
   const recentVendorIds = rows
     .slice(0, RECENT_EVENTS_LIMIT)
     .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
-  const rankedVendorIds = [
-    ...getTopVendorIds(rows, ["vendor_selected"]),
-    ...getTopVendorIds(rows, ["vendor_detail_opened"]),
-    ...getTopVendorIds(rows, ["call_clicked"]),
-    ...getTopVendorIds(rows, ["directions_clicked"]),
+  const rankedVendorKeys = [
+    ...getTopVendorKeys(rows, ["vendor_selected"]),
+    ...getTopVendorKeys(rows, ["vendor_detail_opened"]),
+    ...getTopVendorKeys(rows, ["call_clicked"]),
+    ...getTopVendorKeys(rows, ["directions_clicked"]),
   ];
-  const vendorIds = [...new Set([...recentVendorIds, ...rankedVendorIds])];
+  const vendorIds = [...new Set([
+    ...recentVendorIds,
+    ...rankedVendorKeys
+      .filter((key) => key.startsWith("id:"))
+      .map((key) => key.slice(3)),
+  ])];
   const vendorLookup = await fetchVendorLookup(
     {
       session,
@@ -550,12 +566,13 @@ export async function getAdminAnalytics(
   );
   const recentEvents = rows.slice(0, RECENT_EVENTS_LIMIT).map((row) => {
     const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
+    const normalizedEventType = normalizeAnalyticsEventType(row.event_type);
 
     return {
       id: row.id,
-      event_type: row.event_type,
+      event_type: normalizedEventType,
       vendor_id: row.vendor_id ?? null,
-      vendor_name: vendor?.name ?? rowSlugToNameFallback(row.vendor_id ?? "", rows),
+      vendor_name: vendor?.name ?? vendorSlugToNameFallback(row.vendor_slug),
       vendor_slug: vendor?.slug ?? row.vendor_slug ?? null,
       device_type: row.device_type === "mobile" || row.device_type === "tablet" || row.device_type === "desktop"
         ? row.device_type
@@ -580,8 +597,7 @@ export async function getAdminAnalytics(
       call_clicks: countEventType(rows, "call_clicked"),
       directions_clicks: countEventType(rows, "directions_clicked"),
       searches_used: countEventType(rows, "search_used"),
-      filters_applied:
-        countEventType(rows, "filter_applied") + countEventType(rows, LEGACY_FILTER_EVENT),
+      filters_applied: countEventType(rows, "filter_applied"),
     },
     vendor_performance: {
       most_selected_vendors: rankVendorEvents(rows, ["vendor_selected"], vendorLookup),
