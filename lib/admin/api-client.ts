@@ -409,8 +409,13 @@ function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {
   }
 }
 
+function normalizeAnalyticsEventType(value: string | null | undefined): string {
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
 function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
-  return rows.filter((row) => row.event_type === eventType).length;
+  const expected = normalizeAnalyticsEventType(eventType);
+  return rows.filter((row) => normalizeAnalyticsEventType(row.event_type) === expected).length;
 }
 
 function rowSlugToNameFallback(vendorId: string, rows: AnalyticsEventRow[]): string | null {
@@ -434,7 +439,7 @@ function getTopVendorIds(
   const counts = new Map<string, number>();
 
   for (const row of rows) {
-    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+    if (!row.vendor_id || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
       continue;
     }
 
@@ -455,7 +460,7 @@ function rankVendorEvents(
   const counts = new Map<string, number>();
 
   for (const row of rows) {
-    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+    if (!row.vendor_id || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
       continue;
     }
 
@@ -515,7 +520,9 @@ function buildDropoffSummary(
   let detailWithoutAction = 0;
 
   for (const sessionEvents of sessions.values()) {
-    const eventTypes = new Set(sessionEvents.map((row) => row.event_type));
+    const eventTypes = new Set(
+      sessionEvents.map((row) => normalizeAnalyticsEventType(row.event_type)),
+    );
     const hasMeaningfulInteraction = [...eventTypes].some((eventType) =>
       meaningfulInteractionEvents.has(eventType)
     );
@@ -787,10 +794,11 @@ export async function fetchAdminAnalytics(
     );
     const recentEvents = rows.slice(0, recentAnalyticsEventsLimit).map((row) => {
       const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
+      const normalizedEventType = normalizeAnalyticsEventType(row.event_type);
 
       return {
         id: row.id,
-        event_type: row.event_type,
+        event_type: normalizedEventType,
         vendor_id: row.vendor_id ?? null,
         vendor_name: vendor?.name ?? rowSlugToNameFallback(row.vendor_id ?? "", rows),
         vendor_slug: vendor?.slug ?? row.vendor_slug ?? null,
