@@ -714,7 +714,7 @@ test("admin API client can fetch analytics", async () => {
       return Response.json([
         {
           id: "00000000-0000-4000-8000-000000000101",
-          event_type: "vendor_selected",
+          event_type: "VENDOR_SELECTED",
           vendor_id: vendorId,
           vendor_slug: "test-vendor",
           page_path: "/vendors/test-vendor",
@@ -726,7 +726,7 @@ test("admin API client can fetch analytics", async () => {
         },
         {
           id: "00000000-0000-4000-8000-000000000102",
-          event_type: "search_used",
+          event_type: "Search_Used",
           vendor_id: null,
           vendor_slug: null,
           page_path: "/search",
