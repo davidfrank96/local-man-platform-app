@@ -158,13 +158,13 @@ export function writeAnalyticsCache(
 export function createAuditLogCacheKey(filters: {
   userRole: "all" | AdminRole;
   action: "all" | AuditActionType;
-  offset?: number;
+  cursor?: string | null;
   limit?: number;
 }): string {
   return [
     filters.userRole,
     filters.action,
-    String(filters.offset ?? 0),
+    filters.cursor ?? "initial",
     String(filters.limit ?? 10),
   ].join(":");
 }

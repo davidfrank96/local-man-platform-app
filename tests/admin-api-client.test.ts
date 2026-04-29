@@ -39,6 +39,34 @@ function setSupabasePublicEnv(): () => void {
   };
 }
 
+function setNodeEnv(value: string): () => void {
+  const previous = process.env.NODE_ENV;
+  Object.defineProperty(process.env, "NODE_ENV", {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value,
+  });
+
+  return () => {
+    if (previous === undefined) {
+      Object.defineProperty(process.env, "NODE_ENV", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: undefined,
+      });
+    } else {
+      Object.defineProperty(process.env, "NODE_ENV", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: previous,
+      });
+    }
+  };
+}
+
 test("admin API client sends bearer token and query params", async () => {
   const requestedUrls: string[] = [];
   const requestedHeaders: Headers[] = [];
@@ -289,38 +317,31 @@ test("admin API client preserves safe debug detail for admin forms", async () =>
   );
 });
 
-test("admin API client rejects invalid audit log filters before request", async () => {
+test("admin API client skips invalid audit log filters before request", async () => {
+  const restoreEnv = setSupabasePublicEnv();
   let called = false;
   const fetchImpl = (async () => {
     called = true;
-    return Response.json({
-      success: true,
-      data: {
-        auditLogs: [],
-        pagination: {
-          limit: 10,
-          offset: 0,
-          has_more: false,
-        },
-      },
-      error: null,
-    });
+    return Response.json([]);
   }) as typeof fetch;
 
-  const result = await fetchAdminAuditLogs(
-    {
-      user_role: "owner" as never,
-    },
-    {
-      accessToken: "admin-token",
-      fetchImpl,
-    },
-  );
+  try {
+    const result = await fetchAdminAuditLogs(
+      {
+        user_role: "owner" as never,
+      },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
 
-  assert.equal(result.data, null);
-  assert.equal(result.error?.code, "VALIDATION_ERROR");
-  assert.equal(result.error?.detail, "user_role must be either admin or agent.");
-  assert.equal(called, false);
+    assert.equal(called, true);
+    assert.equal(result.error, null);
+    assert.equal(result.data?.auditLogs.length, 0);
+  } finally {
+    restoreEnv();
+  }
 });
 
 test("admin API client fetches audit logs directly from Supabase", async () => {
@@ -334,15 +355,9 @@ test("admin API client fetches audit logs directly from Supabase", async () => {
     return Response.json([
       {
         id: "30000000-0000-4000-8000-000000000001",
-        admin_user_id: "40000000-0000-4000-8000-000000000001",
         user_role: "admin",
         entity_type: "vendor",
-        entity_id: vendorId,
         action: "CREATE_VENDOR",
-        metadata: {
-          actor_label: "Admin User",
-          target_name: "Test Vendor",
-        },
         created_at: "2026-04-28T12:00:00.000Z",
       },
     ]);
@@ -352,7 +367,6 @@ test("admin API client fetches audit logs directly from Supabase", async () => {
     const result = await fetchAdminAuditLogs(
       {
         limit: 10,
-        offset: 0,
         user_role: "admin",
         action: "CREATE_VENDOR",
       },
@@ -367,9 +381,53 @@ test("admin API client fetches audit logs directly from Supabase", async () => {
     assert.equal(result.data?.auditLogs.length, 1);
     assert.equal(requestedHeaders[0].get("apikey"), "anon-key");
     assert.equal(url.pathname, "/rest/v1/audit_logs");
+    assert.equal(url.searchParams.get("select"), "id,user_role,entity_type,action,created_at");
     assert.equal(url.searchParams.get("order"), "created_at.desc");
+    assert.equal(url.searchParams.get("limit"), "10");
     assert.equal(url.searchParams.get("user_role"), "eq.admin");
     assert.equal(url.searchParams.get("action"), "eq.CREATE_VENDOR");
+    assert.deepEqual(result.data?.auditLogs[0]?.metadata, {});
+    assert.equal(result.data?.pagination.next_cursor, null);
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client applies audit log cursor pagination directly in Supabase", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+
+    return Response.json([
+      {
+        id: "30000000-0000-4000-8000-000000000010",
+        user_role: "agent",
+        entity_type: "vendor",
+        action: "UPDATE_VENDOR",
+        created_at: "2026-04-28T11:00:00.000Z",
+      },
+    ]);
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchAdminAuditLogs(
+      {
+        limit: 10,
+        cursor: "2026-04-28T12:00:00.000Z",
+      },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    const url = new URL(requestedUrls[0]);
+    assert.equal(result.error, null);
+    assert.equal(url.searchParams.get("created_at"), "lt.2026-04-28T12:00:00.000Z");
+    assert.equal(url.searchParams.get("limit"), "10");
+    assert.equal(result.data?.pagination.has_more, false);
+    assert.equal(result.data?.pagination.next_cursor, null);
   } finally {
     restoreEnv();
   }
@@ -390,7 +448,6 @@ test("admin API client returns safe error result for direct Supabase audit log f
     const result = await fetchAdminAuditLogs(
       {
         limit: 10,
-        offset: 0,
       },
       {
         accessToken: "agent-token",
@@ -402,6 +459,79 @@ test("admin API client returns safe error result for direct Supabase audit log f
     assert.equal(result.error?.code, "FORBIDDEN");
     assert.equal(result.error?.message, "You do not have access to analytics");
   } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client falls back to backend audit log route in development", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const restoreNodeEnv = setNodeEnv("development");
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+    const url = new URL(String(input), "http://localhost");
+
+    if (url.pathname === "/rest/v1/audit_logs") {
+      return Response.json(
+        {
+          code: "42501",
+          message: "permission denied for table audit_logs",
+        },
+        { status: 403 },
+      );
+    }
+
+    if (url.pathname === "/api/admin/audit-logs") {
+      return Response.json({
+        success: true,
+        data: {
+          auditLogs: [
+            {
+              id: "30000000-0000-4000-8000-000000000020",
+              admin_user_id: null,
+              user_role: "admin",
+              entity_type: "vendor",
+              entity_id: null,
+              action: "UPDATE_VENDOR",
+              metadata: {},
+              created_at: "2026-04-28T10:00:00.000Z",
+            },
+          ],
+          pagination: {
+            limit: 10,
+            offset: 10,
+            has_more: true,
+          },
+        },
+        error: null,
+      });
+    }
+
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchAdminAuditLogs(
+      {
+        limit: 10,
+        cursor: "2026-04-28T12:00:00.000Z",
+        offset: 10,
+      },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(result.error, null);
+    assert.equal(result.data?.auditLogs.length, 1);
+    assert.equal(result.data?.pagination.has_more, true);
+    assert.equal(result.data?.pagination.next_cursor, "2026-04-28T10:00:00.000Z");
+    assert.equal(new URL(requestedUrls[0], "http://localhost").pathname, "/rest/v1/audit_logs");
+    assert.equal(new URL(requestedUrls[1], "http://localhost").pathname, "/api/admin/audit-logs");
+    assert.equal(new URL(requestedUrls[1], "http://localhost").searchParams.get("offset"), "10");
+  } finally {
+    restoreNodeEnv();
     restoreEnv();
   }
 });
@@ -573,87 +703,174 @@ test("admin API client can list vendor hours", async () => {
 
 test("admin API client can fetch analytics", async () => {
   const requestedUrls: string[] = [];
+  const restoreEnv = setSupabasePublicEnv();
+  const originalNow = Date.now;
+  Date.now = () => new Date("2026-04-29T10:00:00.000Z").valueOf();
   const fetchImpl = (async (input: URL | RequestInfo) => {
     requestedUrls.push(String(input));
+    const url = new URL(String(input));
 
-    return Response.json({
-      success: true,
-      data: {
-        range: "30d",
-        summary: {
-          total_sessions: 2,
-          total_events: 12,
-          vendor_selections: 3,
-          vendor_detail_opens: 4,
-          call_clicks: 1,
-          directions_clicks: 1,
-          searches_used: 2,
-          filters_applied: 2,
+    if (url.pathname === "/rest/v1/user_events") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000101",
+          event_type: "vendor_selected",
+          vendor_id: vendorId,
+          vendor_slug: "test-vendor",
+          device_type: "mobile",
+          location_source: "precise",
+          timestamp: "2026-04-29T10:00:00.000Z",
+          session_id: "00000000-0000-4000-8000-000000000201",
         },
-        vendor_performance: {
-          most_selected_vendors: [],
-          most_viewed_vendor_details: [],
-          most_call_clicks: [],
-          most_directions_clicks: [],
+        {
+          id: "00000000-0000-4000-8000-000000000102",
+          event_type: "search_used",
+          vendor_id: null,
+          vendor_slug: null,
+          device_type: "desktop",
+          location_source: "approximate",
+          timestamp: "2026-04-29T09:00:00.000Z",
+          session_id: "00000000-0000-4000-8000-000000000202",
         },
-        dropoff: {
-          session_metrics_available: false,
-          sessions_without_meaningful_interaction: null,
-          sessions_with_search_without_vendor_click: null,
-          sessions_with_detail_without_action: null,
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        {
+          id: vendorId,
+          name: "Test Vendor",
+          slug: "test-vendor",
         },
-        recent_events: [],
-      },
-      error: null,
-    });
+      ]);
+    }
+
+    return new Response("not found", { status: 404 });
   }) as typeof fetch;
 
-  const analytics = await fetchAdminAnalytics(
-    { range: "30d" },
-    {
-      accessToken: "admin-token",
-      fetchImpl,
-    },
-  );
+  try {
+    const analytics = await fetchAdminAnalytics(
+      { range: "30d" },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
 
-  assert.equal(analytics.error, null);
-  assert.equal(analytics.data?.summary.total_events, 12);
-  assert.equal(
-    new URL(requestedUrls[0], "http://localhost").pathname,
-    "/api/admin/analytics",
-  );
-  assert.equal(
-    new URL(requestedUrls[0], "http://localhost").searchParams.get("range"),
-    "30d",
-  );
+    assert.equal(analytics.error, null);
+    assert.equal(analytics.data?.summary.total_events, 2);
+    assert.equal(analytics.data?.summary.vendor_selections, 1);
+    assert.equal(analytics.data?.summary.searches_used, 1);
+    assert.equal(new URL(requestedUrls[0]).pathname, "/rest/v1/user_events");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("order"), "timestamp.desc");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "1500");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("timestamp"), "gte.2026-03-30T10:00:00.000Z");
+    assert.equal(new URL(requestedUrls[1]).pathname, "/rest/v1/vendors");
+  } finally {
+    Date.now = originalNow;
+    restoreEnv();
+  }
 });
 
 test("admin API client returns safe error result for analytics failures", async () => {
+  const restoreEnv = setSupabasePublicEnv();
   const fetchImpl = (async () =>
     Response.json(
       {
-        success: false,
-        data: null,
-        error: {
-          code: "UPSTREAM_ERROR",
-          message: "Supabase audit log read failed with HTTP 400.",
-          detail: "Bad analytics query.",
-        },
+        code: "42501",
+        message: "permission denied for table user_events",
       },
-      { status: 502 },
+      { status: 403 },
     )) as typeof fetch;
 
-  const result = await fetchAdminAnalytics(
-    { range: "7d" },
-    {
-      accessToken: "admin-token",
-      fetchImpl,
-    },
-  );
+  try {
+    const result = await fetchAdminAnalytics(
+      { range: "7d" },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
 
-  assert.equal(result.data, null);
-  assert.equal(result.error?.code, "UPSTREAM_ERROR");
-  assert.equal(result.error?.message, "Supabase audit log read failed with HTTP 400.");
+    assert.equal(result.data, null);
+    assert.equal(result.error?.code, "FORBIDDEN");
+    assert.equal(result.error?.message, "You do not have access to analytics");
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client falls back to backend analytics route in development", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const restoreNodeEnv = setNodeEnv("development");
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+    const url = new URL(String(input), "http://localhost");
+
+    if (url.pathname === "/rest/v1/user_events") {
+      return Response.json(
+        {
+          code: "42501",
+          message: "permission denied for table user_events",
+        },
+        { status: 403 },
+      );
+    }
+
+    if (url.pathname === "/api/admin/analytics") {
+      return Response.json({
+        success: true,
+        data: {
+          range: "7d",
+          summary: {
+            total_sessions: 1,
+            total_events: 3,
+            vendor_selections: 1,
+            vendor_detail_opens: 1,
+            call_clicks: 0,
+            directions_clicks: 0,
+            searches_used: 1,
+            filters_applied: 0,
+          },
+          vendor_performance: {
+            most_selected_vendors: [],
+            most_viewed_vendor_details: [],
+            most_call_clicks: [],
+            most_directions_clicks: [],
+          },
+          dropoff: {
+            session_metrics_available: false,
+            sessions_without_meaningful_interaction: null,
+            sessions_with_search_without_vendor_click: null,
+            sessions_with_detail_without_action: null,
+          },
+          recent_events: [],
+        },
+        error: null,
+      });
+    }
+
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchAdminAnalytics(
+      { range: "7d" },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(result.error, null);
+    assert.equal(result.data?.summary.total_events, 3);
+    assert.equal(new URL(requestedUrls[0], "http://localhost").pathname, "/rest/v1/user_events");
+    assert.equal(new URL(requestedUrls[1], "http://localhost").pathname, "/api/admin/analytics");
+  } finally {
+    restoreNodeEnv();
+    restoreEnv();
+  }
 });
 
 test("admin API client can submit vendor intake preview requests", async () => {
