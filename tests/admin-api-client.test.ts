@@ -8,12 +8,17 @@ import {
   createAdminVendorImages,
   fetchAdminAnalytics,
   fetchAdminAuditLogs,
+  listAdminUsers,
   listAdminVendorDishes,
   listAdminVendorHours,
   listAdminVendors,
   listAdminVendorImages,
   submitAdminVendorIntake,
 } from "../lib/admin/api-client.ts";
+import {
+  clearStoredAdminSession,
+  persistAdminSession,
+} from "../lib/admin/session-client.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 
@@ -125,6 +130,153 @@ test("admin API client sends bearer token and query params", async () => {
   assert.equal(url.searchParams.get("area"), "Wuse");
   assert.equal(url.searchParams.get("is_active"), "true");
   assert.equal(url.searchParams.get("price_band"), "budget");
+});
+
+test("admin API client reads admin users directly from Supabase", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const requestedUrls: string[] = [];
+  const requestedHeaders: Headers[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    requestedUrls.push(String(input));
+    requestedHeaders.push(new Headers(init?.headers));
+
+    return Response.json([
+      {
+        id: "40000000-0000-4000-8000-000000000001",
+        email: "admin@example.com",
+        full_name: "Admin User",
+        role: "admin",
+        created_at: "2026-04-28T12:00:00.000Z",
+      },
+    ]);
+  }) as typeof fetch;
+
+  try {
+    const result = await listAdminUsers({
+      accessToken: "admin-token",
+      fetchImpl,
+    });
+
+    const url = new URL(requestedUrls[0]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.email, "admin@example.com");
+    assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
+    assert.equal(requestedHeaders[0].get("apikey"), "anon-key");
+    assert.equal(url.pathname, "/rest/v1/admin_users");
+    assert.equal(url.searchParams.get("select"), "id,email,full_name,role,created_at");
+    assert.equal(url.searchParams.get("order"), "created_at.desc");
+    assert.equal(url.searchParams.get("limit"), "10");
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client uses the current stored session token for admin API routes", async () => {
+  const storage = new Map<string, string>();
+  const originalWindow = globalThis.window;
+  const originalCrypto = globalThis.crypto;
+
+  Object.defineProperty(globalThis, "window", {
+    value: {
+      localStorage: {
+        getItem(key: string) {
+          return storage.get(key) ?? null;
+        },
+        setItem(key: string, value: string) {
+          storage.set(key, value);
+        },
+        removeItem(key: string) {
+          storage.delete(key);
+        },
+      },
+    },
+    configurable: true,
+  });
+
+  Object.defineProperty(globalThis, "crypto", {
+    value: {
+      randomUUID: () => "request-id",
+    },
+    configurable: true,
+  });
+
+  const requestedHeaders: Headers[] = [];
+  const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    requestedHeaders.push(new Headers(init?.headers));
+
+    return Response.json({
+      success: true,
+      data: {
+        vendors: [],
+        pagination: {
+          limit: 50,
+          offset: 0,
+          count: 0,
+        },
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  try {
+    persistAdminSession({
+      accessToken: "live-token",
+      refreshToken: "refresh-token",
+      expiresAt: Date.now() + 60_000,
+      user: {
+        id: "admin-id",
+        email: "admin@example.com",
+      },
+    });
+
+    await listAdminVendors(
+      {},
+      {
+        accessToken: "stale-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(requestedHeaders[0].get("authorization"), "Bearer live-token");
+  } finally {
+    clearStoredAdminSession();
+    Object.defineProperty(globalThis, "window", {
+      value: originalWindow,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "crypto", {
+      value: originalCrypto,
+      configurable: true,
+    });
+  }
+});
+
+test("admin API client surfaces direct Supabase admin user read failures clearly", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const fetchImpl = (async () =>
+    Response.json(
+      {
+        code: "42501",
+        message: "permission denied for table admin_users",
+      },
+      { status: 403 },
+    )) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () =>
+        listAdminUsers({
+          accessToken: "agent-token",
+          fetchImpl,
+        }),
+      (error) =>
+        error instanceof AdminApiError &&
+        error.code === "FORBIDDEN" &&
+        error.message === "You do not have access to this resource.",
+    );
+  } finally {
+    restoreEnv();
+  }
 });
 
 test("admin API client throws standard API errors", async () => {

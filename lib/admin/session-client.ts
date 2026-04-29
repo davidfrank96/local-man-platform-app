@@ -1,3 +1,4 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AdminRole } from "../../types/index.ts";
 import { AppError, mapExternalError } from "../errors/app-error.ts";
 import { logStructuredEvent } from "../observability.ts";
@@ -46,6 +47,7 @@ type SessionClientConfig = {
 };
 
 export class AdminSessionError extends AppError {}
+let browserAdminSupabaseClient: SupabaseClient | null = null;
 
 function logAdminSessionEvent(
   level: "info" | "warn" | "error",
@@ -80,6 +82,27 @@ function getClientConfig(): SessionClientConfig {
   };
 }
 
+function getBrowserAdminSupabaseClient(): SupabaseClient | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  if (browserAdminSupabaseClient) {
+    return browserAdminSupabaseClient;
+  }
+
+  const { supabaseUrl, supabaseAnonKey } = getClientConfig();
+  browserAdminSupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+
+  return browserAdminSupabaseClient;
+}
+
 function toExpiresAt(payload: SupabaseAuthPayload): number | null {
   if (typeof payload.expires_at === "number") {
     return payload.expires_at * 1000;
@@ -112,6 +135,61 @@ function createSessionFromPayload(payload: SupabaseAuthPayload): StoredAdminSess
       email: payload.user.email,
     },
   };
+}
+
+export async function syncAdminBrowserSession(session: StoredAdminSession): Promise<void> {
+  if (!session.refreshToken) {
+    return;
+  }
+
+  const client = getBrowserAdminSupabaseClient();
+
+  if (!client) {
+    return;
+  }
+
+  await client.auth.setSession({
+    access_token: session.accessToken,
+    refresh_token: session.refreshToken,
+  }).catch(() => undefined);
+}
+
+export async function clearAdminBrowserSession(): Promise<void> {
+  let client: SupabaseClient | null = null;
+
+  try {
+    client = getBrowserAdminSupabaseClient();
+  } catch {
+    client = null;
+  }
+
+  if (!client) {
+    return;
+  }
+
+  await client.auth.signOut().catch(() => undefined);
+}
+
+export async function getCurrentAdminAccessToken(): Promise<string | null> {
+  const storedToken = readStoredAdminSession()?.accessToken ?? null;
+  let client: SupabaseClient | null = null;
+
+  try {
+    client = getBrowserAdminSupabaseClient();
+  } catch {
+    client = null;
+  }
+
+  if (client) {
+    const { data } = await client.auth.getSession().catch(() => ({ data: { session: null } }));
+    const liveToken = data.session?.access_token ?? null;
+
+    if (liveToken) {
+      return liveToken;
+    }
+  }
+
+  return storedToken;
 }
 
 async function requestSupabaseAuth(
@@ -173,6 +251,7 @@ export async function signInAdminSession(
     );
 
     const session = createSessionFromPayload(payload);
+    await syncAdminBrowserSession(session);
 
     logAdminSessionEvent("info", "password sign-in succeeded", {
       email,
@@ -215,7 +294,9 @@ export async function refreshAdminSession(
     fetchImpl,
   );
 
-  return createSessionFromPayload(payload);
+  const session = createSessionFromPayload(payload);
+  await syncAdminBrowserSession(session);
+  return session;
 }
 
 export async function signOutAdminSession(
@@ -231,6 +312,7 @@ export async function signOutAdminSession(
       authorization: `Bearer ${accessToken}`,
     },
   }).catch(() => undefined);
+  await clearAdminBrowserSession();
 }
 
 export function persistAdminSession(session: StoredAdminSession): void {
@@ -265,6 +347,7 @@ export function clearStoredAdminSession(): void {
   if (typeof window === "undefined") return;
 
   window.localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+  void clearAdminBrowserSession();
 }
 
 export async function fetchAdminSessionIdentity(
