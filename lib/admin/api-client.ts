@@ -700,6 +700,17 @@ async function requestAdminApi<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const resolvedAccessToken = await resolveAdminAccessToken(accessToken);
+
+  if (!resolvedAccessToken) {
+    throw new AdminApiError(
+      "UNAUTHORIZED",
+      "Admin session is missing. Sign in again.",
+      401,
+      undefined,
+      "No Supabase access token is available for this admin request.",
+    );
+  }
+
   const response = await fetchImpl(path, {
     ...init,
     headers: {
