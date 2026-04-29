@@ -2,7 +2,10 @@ import { createClient } from "@supabase/supabase-js";
 import type { ApiResponse } from "../api/responses.ts";
 import { AppError } from "../errors/app-error.ts";
 import type { AppErrorCode } from "../api/contracts.ts";
-import { auditLogSchema } from "../validation/schemas.ts";
+import {
+  adminAnalyticsResponseDataSchema,
+  auditLogSchema,
+} from "../validation/schemas.ts";
 import type {
   AdminRole,
   AdminUser,
@@ -66,6 +69,7 @@ export type AdminAnalyticsFilters = {
 
 export type AdminAuditLogFilters = {
   limit?: number;
+  cursor?: string;
   offset?: number;
   user_role?: AdminRole;
   action?: AuditActionType;
@@ -76,8 +80,8 @@ export type AdminAuditLogListResult = {
   auditLogs: AuditLog[];
   pagination: {
     limit: number;
-    offset: number;
     has_more: boolean;
+    next_cursor: string | null;
   };
 };
 
@@ -170,6 +174,7 @@ export type AdminApiSafeResult<T> =
     };
 
 const adminAuditRoles = new Set<AdminRole>(["admin", "agent"]);
+const adminAnalyticsRanges = new Set<AdminAnalyticsRange>(["24h", "7d", "30d", "all"]);
 const adminAuditActions = new Set<AuditActionType>([
   "CREATE_VENDOR",
   "UPDATE_VENDOR",
@@ -186,6 +191,26 @@ const adminAuditActions = new Set<AuditActionType>([
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
 ]);
+const legacyFilterEvent = "filters_applied";
+const maxAnalyticsEvents = 1500;
+const recentAnalyticsEventsLimit = 25;
+
+type AnalyticsEventRow = {
+  id: string;
+  event_type: string;
+  vendor_id: string | null;
+  vendor_slug: string | null;
+  device_type: string;
+  location_source: string | null;
+  timestamp: string;
+  session_id?: string | null;
+};
+
+type VendorLookupRow = {
+  id: string;
+  name: string;
+  slug: string;
+};
 
 type AdminApiClientOptions = {
   accessToken: string;
@@ -269,30 +294,252 @@ function normalizeAuditLogFilters(filters: AdminAuditLogFilters): AdminAuditLogF
     );
   }
 
-  if (filters.user_role && !adminAuditRoles.has(filters.user_role)) {
+  return {
+    limit: normalizedLimit,
+    cursor: typeof filters.cursor === "string" && filters.cursor.trim().length > 0
+      ? filters.cursor
+      : undefined,
+    offset: normalizedOffset,
+    user_role: filters.user_role && adminAuditRoles.has(filters.user_role)
+      ? filters.user_role
+      : undefined,
+    action: filters.action && adminAuditActions.has(filters.action)
+      ? filters.action
+      : undefined,
+    since: typeof filters.since === "string" && filters.since.trim().length > 0
+      ? filters.since
+      : undefined,
+  };
+}
+
+function normalizeAnalyticsRange(range?: AdminAnalyticsRange): AdminAnalyticsRange {
+  const normalizedRange = range ?? "7d";
+
+  if (!adminAnalyticsRanges.has(normalizedRange)) {
     throw new AdminApiError(
       "VALIDATION_ERROR",
-      "Invalid audit log filters.",
+      "Invalid analytics range.",
       400,
-      { field: "user_role", value: filters.user_role },
-      "user_role must be either admin or agent.",
+      { field: "range", value: range ?? null },
+      "range must be one of 24h, 7d, 30d, or all.",
     );
   }
 
-  if (filters.action && !adminAuditActions.has(filters.action)) {
-    throw new AdminApiError(
-      "VALIDATION_ERROR",
-      "Invalid audit log filters.",
-      400,
-      { field: "action", value: filters.action },
-      "action must be a supported audit action.",
+  return normalizedRange;
+}
+
+function shouldUseDevelopmentAnalyticsFallback(): boolean {
+  return process.env.NODE_ENV === "development";
+}
+
+function buildAnalyticsFallbackPath(range: AdminAnalyticsRange): string {
+  const params = new URLSearchParams();
+  appendDefinedParam(params, "range", range);
+  return `/api/admin/analytics?${params.toString()}`;
+}
+
+function buildAuditLogsFallbackPath(filters: AdminAuditLogFilters): string {
+  const params = new URLSearchParams();
+  appendDefinedParam(params, "limit", filters.limit ?? 10);
+  appendDefinedParam(params, "offset", filters.offset ?? 0);
+  appendDefinedParam(params, "user_role", filters.user_role);
+  appendDefinedParam(params, "action", filters.action);
+  appendDefinedParam(params, "since", filters.since);
+  return `/api/admin/audit-logs?${params.toString()}`;
+}
+
+async function fetchAnalyticsViaDevelopmentFallback(
+  range: AdminAnalyticsRange,
+  options: AdminApiClientOptions,
+): Promise<AdminApiSafeResult<AdminAnalyticsResponseData>> {
+  return requestAdminApiResult<AdminAnalyticsResponseData>(
+    buildAnalyticsFallbackPath(range),
+    options,
+  );
+}
+
+async function fetchAuditLogsViaDevelopmentFallback(
+  filters: AdminAuditLogFilters,
+  options: AdminApiClientOptions,
+): Promise<AdminApiSafeResult<AdminAuditLogListResult>> {
+  const result = await requestAdminApiResult<{
+    auditLogs: AuditLog[];
+    pagination: { limit: number; offset: number; has_more: boolean };
+  }>(
+    buildAuditLogsFallbackPath(filters),
+    options,
+  );
+
+  if (result.error) {
+    return result;
+  }
+
+  const rows = Array.isArray(result.data.auditLogs) ? result.data.auditLogs : [];
+  const nextCursor = rows.length > 0 && result.data.pagination.has_more
+    ? rows[rows.length - 1]?.created_at ?? null
+    : null;
+
+  return {
+    data: {
+      auditLogs: rows,
+      pagination: {
+        limit: result.data.pagination.limit,
+        has_more: result.data.pagination.has_more,
+        next_cursor: nextCursor,
+      },
+    },
+    error: null,
+  };
+}
+
+function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {
+  const now = Date.now();
+
+  switch (range) {
+    case "24h":
+      return new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    case "7d":
+      return new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    case "30d":
+      return new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+    case "all":
+      return null;
+  }
+}
+
+function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
+  return rows.filter((row) => row.event_type === eventType).length;
+}
+
+function rowSlugToNameFallback(vendorId: string, rows: AnalyticsEventRow[]): string | null {
+  const slug = rows.find((row) => row.vendor_id === vendorId)?.vendor_slug;
+
+  if (!slug) {
+    return null;
+  }
+
+  return slug
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getTopVendorIds(
+  rows: AnalyticsEventRow[],
+  eventTypes: string[],
+  limit = 5,
+): string[] {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+      continue;
+    }
+
+    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([vendorId]) => vendorId);
+}
+
+function rankVendorEvents(
+  rows: AnalyticsEventRow[],
+  eventTypes: string[],
+  vendorLookup: Map<string, VendorLookupRow>,
+) {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!row.vendor_id || !eventTypes.includes(row.event_type)) {
+      continue;
+    }
+
+    counts.set(row.vendor_id, (counts.get(row.vendor_id) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([vendorId, count]) => {
+      const vendor = vendorLookup.get(vendorId);
+
+      return {
+        vendor_id: vendorId,
+        vendor_name: vendor?.name ?? rowSlugToNameFallback(vendorId, rows),
+        vendor_slug: vendor?.slug ?? rows.find((row) => row.vendor_id === vendorId)?.vendor_slug ?? null,
+        count,
+      };
+    })
+    .sort((left, right) => right.count - left.count || (left.vendor_name ?? "").localeCompare(right.vendor_name ?? ""))
+    .slice(0, 5);
+}
+
+function buildDropoffSummary(
+  rows: AnalyticsEventRow[],
+  sessionIdAvailable: boolean,
+) {
+  const meaningfulInteractionEvents = new Set([
+    "vendor_selected",
+    "vendor_detail_opened",
+    "call_clicked",
+    "directions_clicked",
+    "search_used",
+    "filter_applied",
+    legacyFilterEvent,
+  ]);
+  const sessionRows = rows.filter((row) => typeof row.session_id === "string" && row.session_id.length > 0);
+
+  if (!sessionIdAvailable || sessionRows.length === 0) {
+    return {
+      session_metrics_available: false,
+      sessions_without_meaningful_interaction: null,
+      sessions_with_search_without_vendor_click: null,
+      sessions_with_detail_without_action: null,
+    };
+  }
+
+  const sessions = new Map<string, AnalyticsEventRow[]>();
+
+  for (const row of sessionRows) {
+    const sessionId = row.session_id as string;
+    const bucket = sessions.get(sessionId) ?? [];
+    bucket.push(row);
+    sessions.set(sessionId, bucket);
+  }
+
+  let noMeaningfulInteraction = 0;
+  let searchWithoutVendorClick = 0;
+  let detailWithoutAction = 0;
+
+  for (const sessionEvents of sessions.values()) {
+    const eventTypes = new Set(sessionEvents.map((row) => row.event_type));
+    const hasMeaningfulInteraction = [...eventTypes].some((eventType) =>
+      meaningfulInteractionEvents.has(eventType)
     );
+
+    if (!hasMeaningfulInteraction) {
+      noMeaningfulInteraction += 1;
+    }
+
+    if (eventTypes.has("search_used") && !eventTypes.has("vendor_selected")) {
+      searchWithoutVendorClick += 1;
+    }
+
+    if (
+      eventTypes.has("vendor_detail_opened") &&
+      !eventTypes.has("call_clicked") &&
+      !eventTypes.has("directions_clicked")
+    ) {
+      detailWithoutAction += 1;
+    }
   }
 
   return {
-    ...filters,
-    limit: normalizedLimit,
-    offset: normalizedOffset,
+    session_metrics_available: true,
+    sessions_without_meaningful_interaction: noMeaningfulInteraction,
+    sessions_with_search_without_vendor_click: searchWithoutVendorClick,
+    sessions_with_detail_without_action: detailWithoutAction,
   };
 }
 
@@ -414,13 +661,216 @@ export async function fetchAdminAnalytics(
   filters: AdminAnalyticsFilters,
   options: AdminApiClientOptions,
 ): Promise<AdminApiSafeResult<AdminAnalyticsResponseData>> {
-  const params = new URLSearchParams();
-  appendDefinedParam(params, "range", filters.range ?? "7d");
+  let normalizedRange: AdminAnalyticsRange;
 
-  return requestAdminApiResult<AdminAnalyticsResponseData>(
-    `/api/admin/analytics?${params.toString()}`,
-    options,
-  );
+  try {
+    normalizedRange = normalizeAnalyticsRange(filters.range);
+  } catch (error) {
+    if (error instanceof AdminApiError) {
+      return {
+        data: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          detail: error.detail ?? undefined,
+        },
+      };
+    }
+
+    return {
+      data: null,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Invalid analytics range.",
+        detail: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+
+  try {
+    const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        fetch: options.fetchImpl,
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      accessToken: async () => options.accessToken,
+    });
+    const rangeStart = getAnalyticsRangeStart(normalizedRange);
+    let eventQuery = supabase
+      .from("user_events")
+      .select("id,event_type,vendor_id,vendor_slug,device_type,location_source,timestamp,session_id")
+      .order("timestamp", { ascending: false })
+      .limit(maxAnalyticsEvents);
+
+    if (rangeStart) {
+      eventQuery = eventQuery.gte("timestamp", rangeStart);
+    }
+
+    const eventResult = await eventQuery;
+
+    if (eventResult.error) {
+      const normalizedMessage = eventResult.error.message.toLowerCase();
+      const errorCode = eventResult.error.code === "42501" || normalizedMessage.includes("permission denied")
+        ? "FORBIDDEN"
+        : normalizedMessage.includes("jwt") || normalizedMessage.includes("auth")
+          ? "UNAUTHORIZED"
+          : "UPSTREAM_ERROR";
+
+      if (shouldUseDevelopmentAnalyticsFallback()) {
+        return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
+      }
+
+      return {
+        data: null,
+        error: {
+          code: errorCode,
+          message: errorCode === "FORBIDDEN"
+            ? "You do not have access to analytics"
+            : errorCode === "UNAUTHORIZED"
+              ? "Admin session expired. Sign in again."
+              : "Activity temporarily unavailable.",
+          detail: eventResult.error.message,
+        },
+      };
+    }
+
+    const rows = Array.isArray(eventResult.data) ? eventResult.data as AnalyticsEventRow[] : [];
+    const recentVendorIds = rows
+      .slice(0, recentAnalyticsEventsLimit)
+      .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
+    const rankedVendorIds = [
+      ...getTopVendorIds(rows, ["vendor_selected"]),
+      ...getTopVendorIds(rows, ["vendor_detail_opened"]),
+      ...getTopVendorIds(rows, ["call_clicked"]),
+      ...getTopVendorIds(rows, ["directions_clicked"]),
+    ];
+    const vendorIds = [...new Set([...recentVendorIds, ...rankedVendorIds])];
+    let vendorLookup = new Map<string, VendorLookupRow>();
+
+    if (vendorIds.length > 0) {
+      const vendorResult = await supabase
+        .from("vendors")
+        .select("id,name,slug")
+        .in("id", vendorIds);
+
+      if (vendorResult.error) {
+        if (shouldUseDevelopmentAnalyticsFallback()) {
+          return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
+        }
+
+        return {
+          data: null,
+          error: {
+            code: "UPSTREAM_ERROR",
+            message: "Activity temporarily unavailable.",
+            detail: vendorResult.error.message,
+          },
+        };
+      }
+
+      vendorLookup = new Map(
+        (vendorResult.data ?? []).map((vendor) => [vendor.id, vendor as VendorLookupRow]),
+      );
+    }
+
+    const sessionIds = new Set(
+      rows.flatMap((row) =>
+        typeof row.session_id === "string" && row.session_id.length > 0 ? [row.session_id] : []
+      ),
+    );
+    const recentEvents = rows.slice(0, recentAnalyticsEventsLimit).map((row) => {
+      const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
+
+      return {
+        id: row.id,
+        event_type: row.event_type,
+        vendor_id: row.vendor_id ?? null,
+        vendor_name: vendor?.name ?? rowSlugToNameFallback(row.vendor_id ?? "", rows),
+        vendor_slug: vendor?.slug ?? row.vendor_slug ?? null,
+        device_type: row.device_type === "mobile" || row.device_type === "tablet" || row.device_type === "desktop"
+          ? row.device_type
+          : "unknown",
+        location_source:
+          row.location_source === "precise" ||
+          row.location_source === "approximate" ||
+          row.location_source === "default_city"
+            ? row.location_source
+            : null,
+        timestamp: row.timestamp,
+      };
+    });
+
+    const payload = adminAnalyticsResponseDataSchema.safeParse({
+      range: normalizedRange,
+      summary: {
+        total_sessions: sessionIds.size > 0 ? sessionIds.size : countEventType(rows, "session_started"),
+        total_events: rows.length,
+        vendor_selections: countEventType(rows, "vendor_selected"),
+        vendor_detail_opens: countEventType(rows, "vendor_detail_opened"),
+        call_clicks: countEventType(rows, "call_clicked"),
+        directions_clicks: countEventType(rows, "directions_clicked"),
+        searches_used: countEventType(rows, "search_used"),
+        filters_applied: countEventType(rows, "filter_applied") + countEventType(rows, legacyFilterEvent),
+      },
+      vendor_performance: {
+        most_selected_vendors: rankVendorEvents(rows, ["vendor_selected"], vendorLookup),
+        most_viewed_vendor_details: rankVendorEvents(rows, ["vendor_detail_opened"], vendorLookup),
+        most_call_clicks: rankVendorEvents(rows, ["call_clicked"], vendorLookup),
+        most_directions_clicks: rankVendorEvents(rows, ["directions_clicked"], vendorLookup),
+      },
+      dropoff: buildDropoffSummary(rows, true),
+      recent_events: recentEvents,
+    });
+
+    if (!payload.success) {
+      return {
+        data: null,
+        error: {
+          code: "INVALID_RESPONSE",
+          message: "Activity temporarily unavailable.",
+          detail: "Supabase returned an unexpected analytics payload.",
+        },
+      };
+    }
+
+    return {
+      data: payload.data,
+      error: null,
+    };
+  } catch (error) {
+    if (error instanceof AdminApiError) {
+      if (shouldUseDevelopmentAnalyticsFallback()) {
+        return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
+      }
+
+      return {
+        data: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          detail: error.detail ?? undefined,
+        },
+      };
+    }
+
+    if (shouldUseDevelopmentAnalyticsFallback()) {
+      return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
+    }
+
+    return {
+      data: null,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Activity temporarily unavailable.",
+        detail: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
 }
 
 export async function fetchAdminAuditLogs(
@@ -456,7 +906,6 @@ export async function fetchAdminAuditLogs(
   try {
     const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
     const pageSize = Math.min(normalizedFilters.limit ?? 10, 10);
-    const offset = normalizedFilters.offset ?? 0;
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         fetch: options.fetchImpl,
@@ -471,9 +920,13 @@ export async function fetchAdminAuditLogs(
 
     let query = supabase
       .from("audit_logs")
-      .select("id,user_role,entity_type,entity_id,action,metadata,created_at")
+      .select("id,user_role,entity_type,action,created_at")
       .order("created_at", { ascending: false })
-      .range(offset, offset + pageSize);
+      .limit(pageSize);
+
+    if (normalizedFilters.cursor) {
+      query = query.lt("created_at", normalizedFilters.cursor);
+    }
 
     if (normalizedFilters.user_role) {
       query = query.eq("user_role", normalizedFilters.user_role);
@@ -497,6 +950,10 @@ export async function fetchAdminAuditLogs(
           ? "UNAUTHORIZED"
           : "UPSTREAM_ERROR";
 
+      if (shouldUseDevelopmentAnalyticsFallback()) {
+        return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
+      }
+
       return {
         data: null,
         error: {
@@ -511,9 +968,29 @@ export async function fetchAdminAuditLogs(
       };
     }
 
-    const parsed = auditLogSchema.array().safeParse(data ?? []);
+    const normalizedRows = Array.isArray(data)
+      ? data.map((row) => {
+        const candidate = row as Partial<AuditLog> | null;
+
+        return {
+          id: typeof candidate?.id === "string" ? candidate.id : "",
+          admin_user_id: null,
+          user_role: candidate?.user_role,
+          entity_type: candidate?.entity_type,
+          entity_id: null,
+          action: candidate?.action,
+          metadata: {},
+          created_at: typeof candidate?.created_at === "string" ? candidate.created_at : "",
+        };
+      })
+      : [];
+    const parsed = auditLogSchema.array().safeParse(normalizedRows);
 
     if (!parsed.success) {
+      if (shouldUseDevelopmentAnalyticsFallback()) {
+        return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
+      }
+
       return {
         data: null,
         error: {
@@ -524,19 +1001,28 @@ export async function fetchAdminAuditLogs(
       };
     }
 
+    const pageRows = parsed.data.slice(0, pageSize);
+    const nextCursor = pageRows.length > 0
+      ? pageRows[pageRows.length - 1]?.created_at ?? null
+      : null;
+
     return {
       data: {
-        auditLogs: parsed.data.slice(0, pageSize),
+        auditLogs: pageRows,
         pagination: {
           limit: pageSize,
-          offset,
-          has_more: parsed.data.length > pageSize,
+          has_more: pageRows.length === pageSize,
+          next_cursor: pageRows.length === pageSize ? nextCursor : null,
         },
       },
       error: null,
     };
   } catch (error) {
     if (error instanceof AdminApiError) {
+      if (shouldUseDevelopmentAnalyticsFallback()) {
+        return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
+      }
+
       return {
         data: null,
         error: {
@@ -545,6 +1031,10 @@ export async function fetchAdminAuditLogs(
           detail: error.detail ?? undefined,
         },
       };
+    }
+
+    if (shouldUseDevelopmentAnalyticsFallback()) {
+      return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
     }
 
     return {

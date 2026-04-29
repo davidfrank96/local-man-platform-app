@@ -122,20 +122,20 @@ function isAuditLog(value: unknown): value is AuditLog {
 
 function isAuditLogListResult(
   value: unknown,
-): value is { auditLogs: AuditLog[]; pagination: { has_more: boolean; offset: number } } {
+): value is { auditLogs: AuditLog[]; pagination: { has_more: boolean; next_cursor: string | null } } {
   if (!value || typeof value !== "object") {
     return false;
   }
 
   const candidate = value as {
     auditLogs?: unknown;
-    pagination?: { has_more?: unknown; offset?: unknown };
+    pagination?: { has_more?: unknown; next_cursor?: unknown };
   };
 
   return Array.isArray(candidate.auditLogs) &&
     candidate.auditLogs.every(isAuditLog) &&
     typeof candidate.pagination?.has_more === "boolean" &&
-    typeof candidate.pagination?.offset === "number";
+    (typeof candidate.pagination?.next_cursor === "string" || candidate.pagination?.next_cursor === null);
 }
 
 function formatTimestamp(value: string): string {
@@ -176,7 +176,10 @@ function getAuditActorLabel(log: AuditLog): string {
     ? log.metadata.actor_label
     : null;
 
-  return actor?.full_name?.trim() || actor?.email || metadataActor || "Unknown workspace user";
+  return actor?.full_name?.trim() ||
+    actor?.email ||
+    metadataActor ||
+    (log.user_role === "admin" ? "Admin user" : "Agent user");
 }
 
 function getAuditTargetLabel(log: AuditLog): string {
@@ -194,7 +197,8 @@ function getAuditTargetLabel(log: AuditLog): string {
     return metadata.target_slug;
   }
 
-  return log.entity_id ?? "Unknown target";
+  return log.entity_id ??
+    (log.entity_type === "admin_user" ? "Admin user" : "Vendor");
 }
 
 function AnalyticsRankingTable({
@@ -603,7 +607,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     createAuditLogCacheKey({
       userRole: "all",
       action: "all",
-      offset: 0,
+      cursor: null,
       limit: auditLogsPageSize,
     }),
   );
@@ -627,6 +631,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
   const [auditErrorMessage, setAuditErrorMessage] = useState<string | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditHasMore, setAuditHasMore] = useState(initialAuditCache?.pagination.has_more ?? false);
+  const [auditCursor, setAuditCursor] = useState<string | null>(initialAuditCache?.pagination.next_cursor ?? null);
 
   const logAnalyticsFetch = useCallback((payload: {
     scope: "analytics" | "audit_logs";
@@ -657,6 +662,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     setAuditErrorMessage(message);
     setAuditStatus(message);
     setAuditHasMore(false);
+    setAuditCursor(null);
     setIsAuditLoading(false);
   }, []);
 
@@ -787,7 +793,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
 
   const loadAuditLogs = useCallback(async (
     filters: AuditLogFilterState,
-    options?: { append?: boolean; offset?: number },
+    options?: { append?: boolean; cursor?: string | null; offset?: number },
   ) => {
     if (!accessToken) {
       setAuditStatus("Admin session is missing. Sign in again.");
@@ -795,11 +801,12 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     }
 
     const append = options?.append ?? false;
+    const nextCursor = options?.cursor ?? null;
     const nextOffset = options?.offset ?? 0;
     const auditLogCacheKey = createAuditLogCacheKey({
       userRole: filters.userRole,
       action: filters.action,
-      offset: nextOffset,
+      cursor: nextCursor,
       limit: auditLogsPageSize,
     });
 
@@ -816,6 +823,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
         setAuditLogs(cachedAuditLogs.auditLogs);
         setAuditErrorMessage(null);
         setAuditHasMore(cachedAuditLogs.pagination.has_more);
+        setAuditCursor(cachedAuditLogs.pagination.next_cursor);
         setAuditStatus(
           cachedAuditLogs.auditLogs.length > 0
             ? "Admin activity loaded."
@@ -835,6 +843,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
       const response = await fetchAdminAuditLogs(
         {
           limit: auditLogsPageSize,
+          cursor: nextCursor ?? undefined,
           offset: nextOffset,
           user_role: filters.userRole === "all" ? undefined : filters.userRole,
           action: filters.action === "all" ? undefined : filters.action,
@@ -890,10 +899,18 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
         status: "success",
       });
       writeAuditLogCache(auditLogCacheKey, result);
+      setAuditLogs((current) => {
+        if (!append) {
+          return result.auditLogs;
+        }
 
-      setAuditLogs((current) => append ? [...current, ...result.auditLogs] : result.auditLogs);
+        const seen = new Set(current.map((log) => log.id));
+        const appended = result.auditLogs.filter((log) => !seen.has(log.id));
+        return [...current, ...appended];
+      });
       setAuditErrorMessage(null);
       setAuditHasMore(result.pagination.has_more);
+      setAuditCursor(result.pagination.next_cursor);
       setAuditStatus(
         result.auditLogs.length > 0 || append
           ? "Admin activity loaded."
@@ -947,7 +964,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
 
   const runAuditLoadSafely = useCallback(async (
     filters: AuditLogFilterState,
-    options?: { append?: boolean; offset?: number },
+    options?: { append?: boolean; cursor?: string | null; offset?: number },
   ) => {
     try {
       await loadAuditLogs(filters, options);
@@ -1008,7 +1025,11 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
         setAuditFilters(nextFilters);
       }}
       onLoadMoreAuditLogs={() => {
-        void runAuditLoadSafely(auditFilters, { append: true, offset: auditLogs.length });
+        void runAuditLoadSafely(auditFilters, {
+          append: true,
+          cursor: auditCursor,
+          offset: auditLogs.length,
+        });
       }}
     />
   );
