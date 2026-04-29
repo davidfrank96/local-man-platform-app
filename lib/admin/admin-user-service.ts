@@ -17,6 +17,8 @@ type AdminUserServiceContext = {
   fetchImpl?: typeof fetch;
 };
 
+const defaultAuthCreateTimeoutMs = 4_000;
+
 function requireServiceConfig(
   config: AdminAuthConfig | null | undefined,
 ): AdminAuthConfig {
@@ -63,6 +65,38 @@ function createAdminSupabaseClient(
       },
     },
   });
+}
+
+function getAuthCreateTimeoutMs(): number {
+  const rawValue = process.env.ADMIN_AUTH_CREATE_TIMEOUT_MS?.trim() ?? "";
+  const parsed = Number.parseInt(rawValue, 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultAuthCreateTimeoutMs;
+  }
+
+  return parsed;
+}
+
+function createTimeoutFetch(
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): typeof fetch {
+  return (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      return await fetchImpl(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }) as typeof fetch;
 }
 
 function createRestUrl(
@@ -192,13 +226,20 @@ async function createAuthUser(
     );
   }
 
-  const supabase = createAdminSupabaseClient(config, fetchImpl);
+  const timeoutMs = getAuthCreateTimeoutMs();
+  const supabase = createAdminSupabaseClient(
+    config,
+    createTimeoutFetch(fetchImpl, timeoutMs),
+  );
   const { data, error } = await supabase.auth.admin.createUser({
     email: input.email,
     password: input.password,
     email_confirm: true,
     user_metadata: input.fullName ? { full_name: input.fullName } : {},
-  });
+  }).catch((caughtError) => ({
+    data: { user: null },
+    error: caughtError instanceof Error ? caughtError : new Error("Unknown auth create failure"),
+  }));
 
   if (error || !data.user?.id || !data.user.email) {
     const details = error
@@ -215,12 +256,14 @@ async function createAuthUser(
         };
 
     if (error) {
-      console.error(error);
+      console.error("AUTH CREATE ERROR:", error);
     }
 
     logStructuredEvent("error", {
       type: "ERROR",
-      code: error && isDuplicateEmailError(error.message)
+      code: error && isTimeoutError(error)
+        ? "NETWORK_ERROR"
+        : error && isDuplicateEmailError(error.message)
         ? "USER_ALREADY_EXISTS"
         : error && isWeakPasswordError(error.message)
         ? "INVALID_PASSWORD"
@@ -255,6 +298,15 @@ function isDuplicateEmailError(message: string): boolean {
     normalized.includes("user already registered") ||
     normalized.includes("already been registered") ||
     normalized.includes("email_exists")
+  );
+}
+
+function isTimeoutError(error: Error): boolean {
+  const normalized = error.message.toLowerCase();
+  return (
+    error.name === "AbortError" ||
+    normalized.includes("aborted") ||
+    normalized.includes("timeout")
   );
 }
 
@@ -306,9 +358,22 @@ function normalizeCreateAuthUserFailure(
     };
   }
 
+  if (error && isTimeoutError(error)) {
+    return {
+      code: "NETWORK_ERROR",
+      message: "User creation failed. Try again.",
+      status: 504,
+      detail: "Supabase auth timed out while creating the user.",
+      details: {
+        provider: "supabase_auth",
+        reason: "create_user_timeout",
+      },
+    };
+  }
+
   return {
     code: "AUTH_PROVIDER_ERROR",
-    message: "Unable to create the auth user.",
+    message: "User creation failed. Try again.",
     status: 502,
     detail: "Supabase auth could not create the user.",
     details: {
