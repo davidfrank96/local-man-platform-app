@@ -45,7 +45,6 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - admin dashboard overview cards and quick actions
 - admin analytics dashboard for lightweight usage signals and team activity
 - vendor registry with completeness badges
-- fast agent intake with Quick Add Vendor
 - CSV vendor intake with preview, row validation, partial valid-row upload, and downloadable template
 - vendor create workflow with:
   - basic details
@@ -204,7 +203,6 @@ Current admin workspace behavior:
 - `agent`
   - redirected to `/admin/agent`
   - vendor list
-  - quick add vendor
   - vendor edit workspace
   - CSV vendor intake
   - no analytics, no team management, no audit-log access

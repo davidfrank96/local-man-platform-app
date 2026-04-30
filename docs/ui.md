@@ -79,7 +79,6 @@ The admin workspace now has two user-facing shells:
   - vendor registry and edit/create workflows
 - agent dashboard:
   - vendor list
-  - quick add vendor
   - vendor edit workspace
   - CSV vendor intake
 

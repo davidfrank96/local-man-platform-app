@@ -99,7 +99,6 @@ Use this checklist before pushing or releasing UI work.
 
 ## CSV intake
 
-- [ ] quick add vendor works for agent role
 - [ ] CSV template downloads
 - [ ] CSV preview shows valid and invalid rows
 - [ ] invalid cells show inline issues

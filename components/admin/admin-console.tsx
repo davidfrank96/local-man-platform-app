@@ -31,7 +31,6 @@ import { handleAppError } from "../../lib/errors/ui-error.ts";
 import { extractValidationFeedback } from "../../lib/admin/form-errors.ts";
 import { useAdminSession } from "./admin-session-provider.tsx";
 import {
-  AgentQuickAddPanel,
   VendorCsvUploadPanel,
 } from "./admin-vendor-intake.tsx";
 import {
@@ -1059,12 +1058,6 @@ export function AdminConsole({
 
       {mode === "agent" ? (
         <section className="admin-grid admin-grid-dashboard">
-          <AgentQuickAddPanel
-            accessToken={session?.accessToken}
-            disabled={isLoading}
-            onVendorsUploaded={handleIntakeVendorsUploaded}
-          />
-
           <section className="admin-panel" aria-labelledby="agent-dashboard-actions">
             <div className="admin-section-header">
               <div>

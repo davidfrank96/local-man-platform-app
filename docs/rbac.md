@@ -21,7 +21,6 @@ Restricted workspace access:
 
 - `/admin/agent`
 - vendor list
-- quick add vendor
 - vendor edit workspace
 - vendor CSV intake
 - vendor images, dishes, and hours needed by vendor onboarding
