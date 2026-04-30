@@ -45,9 +45,11 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - admin dashboard overview cards and quick actions
 - admin analytics dashboard for lightweight usage signals and team activity
 - vendor registry with completeness badges
-- CSV vendor intake with preview, row validation, partial valid-row upload, and downloadable template
+- full Create Vendor page for both admins and agents
+- CSV vendor intake with the same schema and persistence contract as the full Create Vendor page
 - vendor create workflow with:
   - basic details
+  - category
   - opening hours
   - featured dishes
   - vendor image selection
@@ -129,10 +131,9 @@ SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 `SUPABASE_SERVICE_ROLE_KEY` is required for:
 
 - admin user creation
-- admin analytics reads
-- admin audit-log reads
 - public analytics event writes at `/api/events`
-- vendor image uploads
+- backend analytics and audit-log fallback routes
+- server-side vendor image storage operations
 
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 
@@ -188,7 +189,7 @@ Phase 6 currently covers:
 - admin-only analytics route at `/admin/analytics`
 - summary cards, vendor performance, drop-off signals, and recent activity
 - non-blocking tracking writes that must never interfere with public discovery
-- service-role-backed analytics reads to avoid environment-specific RLS drift
+- direct Supabase analytics reads in production, with backend fallback routes retained for development and operational debugging
 
 ## Admin and Agent Summary
 
@@ -202,6 +203,7 @@ Current admin workspace behavior:
   - vendor create/edit/delete
 - `agent`
   - redirected to `/admin/agent`
+  - full Create Vendor page
   - vendor list
   - vendor edit workspace
   - CSV vendor intake

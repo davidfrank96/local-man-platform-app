@@ -116,7 +116,7 @@ export const apiEndpoints = {
     method: "POST",
     path: "/api/admin/vendors",
     requestShape:
-      "JSON body with vendor profile fields, address, coordinates, price band, and active state.",
+      "JSON body with vendor profile fields, category_slug, address, coordinates, price band, and active state.",
     responseShape: "Created vendor id, slug, and summary fields.",
     validationBoundary: [
       "admin authentication required",

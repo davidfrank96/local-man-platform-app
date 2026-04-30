@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminRole } from "../../types/index.ts";
 import { supabase } from "../supabase-client.ts";
+import { safeGetSession } from "../auth-guard.ts";
 import { AppError, mapExternalError } from "../errors/app-error.ts";
 import { logStructuredEvent } from "../observability.ts";
 
@@ -163,12 +164,6 @@ export async function clearAdminBrowserSession(): Promise<void> {
 }
 
 export async function getCurrentAdminAccessToken(): Promise<string | null> {
-  const storedToken = readStoredAdminSession()?.accessToken ?? null;
-
-  if (storedToken) {
-    return storedToken;
-  }
-
   let client: SupabaseClient | null = null;
 
   try {
@@ -178,15 +173,15 @@ export async function getCurrentAdminAccessToken(): Promise<string | null> {
   }
 
   if (client) {
-    const { data } = await client.auth.getSession().catch(() => ({ data: { session: null } }));
-    const liveToken = data.session?.access_token ?? null;
+    const liveSession = await safeGetSession().catch(() => null);
+    const liveToken = liveSession?.access_token ?? null;
 
     if (liveToken) {
       return liveToken;
     }
   }
 
-  return null;
+  return readStoredAdminSession()?.accessToken ?? null;
 }
 
 async function requestSupabaseAuth(
@@ -249,6 +244,19 @@ export async function signInAdminSession(
 
     const session = createSessionFromPayload(payload);
     await syncAdminBrowserSession(session);
+    if (getBrowserAdminSupabaseClient()) {
+      const syncedSession = await safeGetSession().catch(() => null);
+
+      if (!syncedSession) {
+        throw new AdminSessionError(
+          "UNAUTHORIZED",
+          "Admin session is missing. Sign in again.",
+          401,
+          undefined,
+          "Browser session storage did not persist the Supabase login session.",
+        );
+      }
+    }
 
     logAdminSessionEvent("info", "password sign-in succeeded", {
       email,
@@ -293,6 +301,20 @@ export async function refreshAdminSession(
 
   const session = createSessionFromPayload(payload);
   await syncAdminBrowserSession(session);
+  if (getBrowserAdminSupabaseClient()) {
+    const syncedSession = await safeGetSession().catch(() => null);
+
+    if (!syncedSession) {
+      throw new AdminSessionError(
+        "UNAUTHORIZED",
+        "Admin session is missing. Sign in again.",
+        401,
+        undefined,
+        "Browser session storage did not persist the refreshed Supabase session.",
+      );
+    }
+  }
+
   return session;
 }
 

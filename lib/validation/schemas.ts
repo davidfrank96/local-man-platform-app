@@ -298,6 +298,10 @@ export const createVendorRequestSchema = z.object({
   is_open_override: z.boolean().nullable().optional(),
 });
 
+export const createManagedVendorRequestSchema = createVendorRequestSchema.extend({
+  category_slug: slugSchema,
+});
+
 export const updateVendorRequestSchema = createVendorRequestSchema.partial();
 
 const vendorIntakeRawTextSchema = z.union([z.string(), z.number(), z.null()]).optional();

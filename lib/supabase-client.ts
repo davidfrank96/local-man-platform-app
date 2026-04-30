@@ -30,8 +30,9 @@ function getBrowserSupabaseClient(): SupabaseClient {
   browserSupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage,
     },
   });
 

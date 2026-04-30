@@ -20,6 +20,7 @@ Full workspace access:
 Restricted workspace access:
 
 - `/admin/agent`
+- full Create Vendor page
 - vendor list
 - vendor edit workspace
 - vendor CSV intake

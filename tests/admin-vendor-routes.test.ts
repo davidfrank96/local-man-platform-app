@@ -37,9 +37,11 @@ const vendorRecord = {
 function setAdminEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
   return () => {
     if (previousUrl === undefined) {
@@ -52,6 +54,12 @@ function setAdminEnv(): () => void {
       delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     } else {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previousAnonKey;
+    }
+
+    if (previousServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
     }
   };
 }
@@ -98,6 +106,21 @@ function createAdminFetchMock(
           ...(method === "PATCH" ? JSON.parse(String(init?.body ?? "{}")) : {}),
         },
       ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendor_categories") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000401",
+          name: "Rice",
+          slug: "rice",
+          created_at: timestamp,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendor_category_map") {
+      return new Response(null, { status: 201 });
     }
 
     if (url.pathname === "/rest/v1/vendor_hours") {
@@ -331,18 +354,19 @@ test("admin create vendor route writes vendor and audit log", async () => {
           "x-request-id": "req-audit-123",
         },
         body: JSON.stringify({
-        name: "Test Vendor",
-        slug: "test-vendor",
-        short_description: "Test vendor",
-        phone_number: "+2340000000000",
-        address_text: "Test address",
-        city: "Abuja",
-        area: "Wuse",
-        state: "FCT",
-        country: "Nigeria",
-        latitude: 9.0813,
-        longitude: 7.4694,
-        price_band: "budget",
+          name: "Test Vendor",
+          slug: "test-vendor",
+          category_slug: "rice",
+          short_description: "Test vendor",
+          phone_number: "+2340000000000",
+          address_text: "Test address",
+          city: "Abuja",
+          area: "Wuse",
+          state: "FCT",
+          country: "Nigeria",
+          latitude: 9.0813,
+          longitude: 7.4694,
+          price_band: "budget",
         }),
       }),
     );
@@ -360,8 +384,10 @@ test("admin create vendor route writes vendor and audit log", async () => {
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendor_categories",
       "POST /rest/v1/vendors",
       "POST /rest/v1/audit_logs",
+      "POST /rest/v1/vendor_category_map",
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -429,8 +455,23 @@ test("admin create vendor route still succeeds when audit logging fails", async 
       ]);
     }
 
+    if (url.pathname === "/rest/v1/vendor_categories") {
+      return Response.json([
+        {
+          id: "00000000-0000-4000-8000-000000000401",
+          name: "Rice",
+          slug: "rice",
+          created_at: timestamp,
+        },
+      ]);
+    }
+
     if (url.pathname === "/rest/v1/vendors") {
       return Response.json([vendorRecord]);
+    }
+
+    if (url.pathname === "/rest/v1/vendor_category_map") {
+      return new Response(null, { status: 201 });
     }
 
     if (url.pathname === "/rest/v1/audit_logs") {
@@ -445,6 +486,7 @@ test("admin create vendor route still succeeds when audit logging fails", async 
       createAdminRequest("POST", {
         name: "Test Vendor",
         slug: "test-vendor",
+        category_slug: "rice",
         short_description: "Test vendor",
         phone_number: "+2340000000000",
         address_text: "Test address",
@@ -465,8 +507,10 @@ test("admin create vendor route still succeeds when audit logging fails", async 
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendor_categories",
       "POST /rest/v1/vendors",
       "POST /rest/v1/audit_logs",
+      "POST /rest/v1/vendor_category_map",
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -521,6 +565,7 @@ test("agent create vendor route remains allowed", async () => {
         body: JSON.stringify({
           name: "Test Vendor",
           slug: "test-vendor",
+          category_slug: "rice",
           short_description: "Test vendor",
           phone_number: "+2340000000000",
           address_text: "Test address",
@@ -541,8 +586,10 @@ test("agent create vendor route remains allowed", async () => {
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendor_categories",
       "POST /rest/v1/vendors",
       "POST /rest/v1/audit_logs",
+      "POST /rest/v1/vendor_category_map",
     ]);
   } finally {
     globalThis.fetch = originalFetch;

@@ -422,7 +422,7 @@ test("upload parses featured dishes and image URLs from full CSV rows", async ()
   }
 });
 
-test("preview rejects the old quick-add CSV row format with helpful missing-field errors", async () => {
+test("preview rejects the old legacy CSV row format with helpful missing-field errors", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
@@ -435,7 +435,7 @@ test("preview rejects the old quick-add CSV row format with helpful missing-fiel
         rows: [
           {
             row_number: 2,
-            vendor_name: "Legacy Quick Add",
+            vendor_name: "Legacy CSV Vendor",
             category: "rice",
             address: "Wuse 2, Abuja",
             latitude: "9.0765",

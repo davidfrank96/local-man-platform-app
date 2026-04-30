@@ -21,8 +21,8 @@ import type {
   AuditLog,
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
+  CreateManagedVendorRequest,
   CreateVendorDishesRequest,
-  CreateVendorRequest,
   PriceBand,
   ReplaceVendorHoursRequest,
   UpdateVendorRequest,
@@ -1312,7 +1312,7 @@ export async function deleteManagedAdminUser(
 }
 
 export async function createAdminVendor(
-  data: CreateVendorRequest,
+  data: CreateManagedVendorRequest,
   options: AdminApiClientOptions,
 ): Promise<AdminVendorSummary> {
   const result = await requestAdminApi<{ vendor: AdminVendorSummary }>(

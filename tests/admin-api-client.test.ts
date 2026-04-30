@@ -325,6 +325,7 @@ test("admin API client throws standard API errors", async () => {
         {
           name: "Test Vendor",
           slug: "test-vendor",
+          category_slug: "rice",
           short_description: null,
           phone_number: null,
           address_text: null,
@@ -417,6 +418,7 @@ test("admin API client preserves validation details", async () => {
         {
           name: "Test Vendor",
           slug: "invalid slug",
+          category_slug: "rice",
           short_description: null,
           phone_number: null,
           address_text: null,
@@ -469,6 +471,7 @@ test("admin API client preserves safe debug detail for admin forms", async () =>
         {
           name: "Test Vendor",
           slug: "test-vendor",
+          category_slug: "rice",
           short_description: null,
           phone_number: null,
           address_text: null,
