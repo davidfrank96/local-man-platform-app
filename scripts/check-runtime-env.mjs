@@ -24,7 +24,7 @@ for (const envFile of envFiles) {
     const rawValue = trimmed.slice(separatorIndex + 1).trim();
     const value = rawValue.replace(/^['"]|['"]$/g, "");
 
-    if (key && process.env[key] === undefined) {
+    if (key) {
       process.env[key] = value;
     }
   }
@@ -33,6 +33,7 @@ for (const envFile of envFiles) {
 const required = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
 ];
 
 if (requireDatabaseUrl) {

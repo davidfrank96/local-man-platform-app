@@ -22,7 +22,7 @@ for (const envFile of envFiles) {
     const rawValue = trimmed.slice(separatorIndex + 1).trim();
     const value = rawValue.replace(/^['"]|['"]$/g, "");
 
-    if (key && process.env[key] === undefined) {
+    if (key) {
       process.env[key] = value;
     }
   }

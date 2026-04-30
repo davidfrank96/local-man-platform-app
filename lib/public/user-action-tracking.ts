@@ -49,6 +49,10 @@ const LAST_INTERACTION_KEY = "public-tracking-last-interaction";
 const LAST_CONTEXT_KEY = "public-tracking-last-context";
 
 let sessionLifecycleBound = false;
+const navigationSensitiveEventTypes = new Set<UserActionEventName>([
+  "call_clicked",
+  "directions_clicked",
+]);
 
 function getTrackingStorage(storageImpl?: StorageLike): StorageLike {
   if (storageImpl !== undefined) {
@@ -97,6 +101,10 @@ function isLifecycleEvent(eventType: UserActionEventName): boolean {
   );
 }
 
+function isNavigationSensitiveEvent(eventType: UserActionEventName): boolean {
+  return navigationSensitiveEventTypes.has(eventType);
+}
+
 function getDeviceType(): DeviceType {
   if (typeof window === "undefined") {
     return "unknown";
@@ -121,6 +129,14 @@ function getCurrentPagePath(): string {
   }
 
   return `${window.location.pathname}${window.location.search}`;
+}
+
+function getTrackingEndpoint(): string {
+  if (typeof window === "undefined") {
+    return "/api/events";
+  }
+
+  return `${window.location.origin}/api/events`;
 }
 
 function persistLastInteraction(
@@ -187,12 +203,13 @@ async function dispatchTrackingEvent(
   const storage = getTrackingStorage(storageImpl);
   const payload = normalizeUserActionEvent(event, storage);
   const body = JSON.stringify(payload);
+  const endpoint = getTrackingEndpoint();
 
   if (navigatorImpl?.sendBeacon) {
     try {
       const accepted = navigatorImpl.sendBeacon(
-        "/api/events",
-        new Blob([body], { type: "application/json" }),
+        endpoint,
+        new Blob([body], { type: "text/plain" }),
       );
 
       if (accepted) {
@@ -204,7 +221,7 @@ async function dispatchTrackingEvent(
   }
 
   try {
-    await fetchImpl("/api/events", {
+    await fetchImpl(endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -307,37 +324,62 @@ export async function dispatchPublicUserAction(
   transport: TrackingTransport = {},
 ): Promise<void> {
   const storage = getTrackingStorage(transport.storageImpl);
-
-  await ensurePublicTrackingSession(
-    {
-      page_path: event.page_path,
-      location_source: event.location_source ?? null,
-    },
-    transport,
-  );
-
-  if (!isLifecycleEvent(event.event_type) && storage?.getItem(FIRST_INTERACTION_KEY) !== "1") {
-    storage?.setItem(FIRST_INTERACTION_KEY, "1");
-
-    await dispatchTrackingEvent(
-      {
-        ...event,
-        event_type: "first_interaction",
-        metadata: {
-          ...(event.metadata ?? {}),
-          first_event_type: event.event_type,
-        },
-      },
-      transport,
-    );
-  }
+  const hasStarted = storage?.getItem(SESSION_STARTED_KEY) === "1";
+  const shouldDispatchSessionStarted = !hasStarted;
+  const shouldDispatchFirstInteraction =
+    !isLifecycleEvent(event.event_type) && storage?.getItem(FIRST_INTERACTION_KEY) !== "1";
 
   persistLastContext(storage, event);
+  bindSessionLifecycleListeners();
+
+  if (shouldDispatchSessionStarted) {
+    storage?.setItem(SESSION_STARTED_KEY, "1");
+  }
+
+  if (shouldDispatchFirstInteraction) {
+    storage?.setItem(FIRST_INTERACTION_KEY, "1");
+  }
 
   if (!isLifecycleEvent(event.event_type)) {
     persistLastInteraction(storage, event);
   }
 
+  const dispatchLifecycleFollowUps = async () => {
+    if (shouldDispatchSessionStarted) {
+      await dispatchTrackingEvent(
+        {
+          event_type: "session_started",
+          page_path: event.page_path,
+          location_source: event.location_source ?? null,
+          filters: {},
+          metadata: {},
+        },
+        transport,
+      );
+    }
+
+    if (shouldDispatchFirstInteraction) {
+      await dispatchTrackingEvent(
+        {
+          ...event,
+          event_type: "first_interaction",
+          metadata: {
+            ...(event.metadata ?? {}),
+            first_event_type: event.event_type,
+          },
+        },
+        transport,
+      );
+    }
+  };
+
+  if (isNavigationSensitiveEvent(event.event_type)) {
+    await dispatchTrackingEvent(event, transport);
+    void dispatchLifecycleFollowUps();
+    return;
+  }
+
+  await dispatchLifecycleFollowUps();
   await dispatchTrackingEvent(event, transport);
 }
 

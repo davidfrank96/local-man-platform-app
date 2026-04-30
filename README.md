@@ -132,6 +132,7 @@ SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 - admin user creation
 - admin analytics reads
 - admin audit-log reads
+- public analytics event writes at `/api/events`
 - vendor image uploads
 
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
