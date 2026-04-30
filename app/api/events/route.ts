@@ -49,18 +49,26 @@ export async function POST(request: Request) {
   }
 
   let payload: unknown;
+  let rawBody = "";
 
   try {
-    payload = await request.json();
+    rawBody = await request.text();
+    console.log("RAW BODY:", rawBody);
+    payload = JSON.parse(rawBody);
+    console.log("PARSED EVENT:", payload);
   } catch {
+    console.error("INVALID JSON");
     logStructuredEvent("warn", {
       type: "PUBLIC_EVENT_TRACKING_SKIPPED",
       requestId,
       reason: "invalid_payload",
       message: "Tracking skipped because request JSON was invalid.",
+      rawBody,
     });
-    return apiSuccess({ accepted: false, reason: "invalid_payload" }, 202);
+    return new Response("Bad Request", { status: 400 });
   }
+
+  console.log("EVENT RECEIVED", payload);
 
   const parsedEvent = userActionEventSchema.safeParse(payload);
 

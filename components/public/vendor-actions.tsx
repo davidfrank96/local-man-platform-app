@@ -30,6 +30,20 @@ export function VendorActions({
   const metadata: Record<string, string | number | boolean | null> = source
     ? { source }
     : {};
+  const trackVendorAction = (eventType: "call_clicked" | "directions_clicked") => {
+    void trackPublicUserAction({
+      event_type: eventType,
+      vendor_id: vendorId,
+      location_source: locationSource ?? null,
+      vendor_slug: vendorSlug,
+      page_path:
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/",
+      metadata,
+      filters: {},
+    });
+  };
 
   return (
     <div className="vendor-actions">
@@ -37,20 +51,7 @@ export function VendorActions({
         <a
           className="button-primary compact-button"
           href={phoneHref}
-          onClick={() =>
-            trackPublicUserAction({
-              event_type: "call_clicked",
-              vendor_id: vendorId,
-              location_source: locationSource ?? null,
-              vendor_slug: vendorSlug,
-              page_path:
-                typeof window !== "undefined"
-                  ? `${window.location.pathname}${window.location.search}`
-                  : "/",
-              metadata,
-              filters: {},
-            })
-          }
+          onClickCapture={() => trackVendorAction("call_clicked")}
         >
           Call
         </a>
@@ -62,20 +63,7 @@ export function VendorActions({
         href={getDirectionsUrl(latitude, longitude)}
         rel="noreferrer"
         target="_blank"
-        onClick={() =>
-          trackPublicUserAction({
-            event_type: "directions_clicked",
-            vendor_id: vendorId,
-            location_source: locationSource ?? null,
-            vendor_slug: vendorSlug,
-            page_path:
-              typeof window !== "undefined"
-                ? `${window.location.pathname}${window.location.search}`
-                : "/",
-            metadata,
-            filters: {},
-          })
-        }
+        onClickCapture={() => trackVendorAction("directions_clicked")}
       >
         Directions
       </a>
