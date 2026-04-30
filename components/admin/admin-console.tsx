@@ -31,9 +31,12 @@ import { handleAppError } from "../../lib/errors/ui-error.ts";
 import { extractValidationFeedback } from "../../lib/admin/form-errors.ts";
 import { useAdminSession } from "./admin-session-provider.tsx";
 import {
-  AgentQuickAddPanel,
   VendorCsvUploadPanel,
 } from "./admin-vendor-intake.tsx";
+import {
+  fetchPublicCategories,
+  type PublicCategory,
+} from "../../lib/vendors/public-api-client.ts";
 import {
   getVendorWorkspaceSnapshot,
   readVendorArtifactCache,
@@ -41,8 +44,8 @@ import {
   updateVendorWorkspaceSnapshot,
 } from "../../lib/admin/workspace-cache.ts";
 import type {
+  CreateManagedVendorRequest,
   CreateVendorDishesRequest,
-  CreateVendorRequest,
   PriceBand,
   ReplaceVendorHoursRequest,
   UpdateVendorRequest,
@@ -148,10 +151,11 @@ function createOnboardingDishesPayload(
   return dishes.length > 0 ? { dishes } : null;
 }
 
-function createVendorPayload(formData: FormData): CreateVendorRequest {
+function createVendorPayload(formData: FormData): CreateManagedVendorRequest {
   return {
     name: String(formData.get("name") ?? ""),
     slug: String(formData.get("slug") ?? ""),
+    category_slug: String(formData.get("category_slug") ?? ""),
     short_description: readNullableText(formData, "short_description"),
     phone_number: readNullableText(formData, "phone_number"),
     address_text: readNullableText(formData, "address_text"),
@@ -223,6 +227,7 @@ function dishesPayload(formData: FormData): CreateVendorDishesRequest {
 type AdminVendorFieldErrors = Partial<Record<
   | "name"
   | "slug"
+  | "category_slug"
   | "phone_number"
   | "area"
   | "latitude"
@@ -243,7 +248,7 @@ type AdminFormProps = {
   vendorDishes: VendorFeaturedDish[];
   disabled: boolean;
   onCreateVendor: (
-    data: CreateVendorRequest,
+    data: CreateManagedVendorRequest,
     options?: {
       hoursData: ReplaceVendorHoursRequest | null;
       dishesData: CreateVendorDishesRequest | null;
@@ -355,6 +360,7 @@ export function AdminConsole({
       : [],
   );
   const [showAllFollowUpVendors, setShowAllFollowUpVendors] = useState(false);
+  const [vendorCategories, setVendorCategories] = useState<PublicCategory[]>([]);
   const vendorImagesRequestId = useRef(0);
   const vendorHoursRequestId = useRef(0);
   const vendorDishesRequestId = useRef(0);
@@ -429,6 +435,26 @@ export function AdminConsole({
       selectedVendorId,
     });
   }, [filters, selectedVendorId, vendors, workspaceCacheScope]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void fetchPublicCategories()
+      .then((categories) => {
+        if (!isCancelled) {
+          setVendorCategories(categories);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setVendorCategories([]);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const loadVendorImages = useCallback(async function loadVendorImages(
     vendorId: string | null,
@@ -667,7 +693,7 @@ export function AdminConsole({
   }
 
   async function handleCreateVendor(
-    data: CreateVendorRequest,
+    data: CreateManagedVendorRequest,
     options?: {
       hoursData: ReplaceVendorHoursRequest | null;
       dishesData: CreateVendorDishesRequest | null;
@@ -1059,12 +1085,6 @@ export function AdminConsole({
 
       {mode === "agent" ? (
         <section className="admin-grid admin-grid-dashboard">
-          <AgentQuickAddPanel
-            accessToken={session?.accessToken}
-            disabled={isLoading}
-            onVendorsUploaded={handleIntakeVendorsUploaded}
-          />
-
           <section className="admin-panel" aria-labelledby="agent-dashboard-actions">
             <div className="admin-section-header">
               <div>
@@ -1204,6 +1224,7 @@ export function AdminConsole({
           <AdminCreateVendorSection
             disabled={isLoading}
             onCreateVendor={handleCreateVendor}
+            vendorCategories={vendorCategories}
           />
           <VendorCsvUploadPanel
             accessToken={session?.accessToken}
@@ -1380,16 +1401,18 @@ const VendorRegistryList = memo(function VendorRegistryList({
 function AdminCreateVendorSection({
   disabled,
   onCreateVendor,
+  vendorCategories,
 }: {
   disabled: boolean;
   onCreateVendor: (
-    data: CreateVendorRequest,
+    data: CreateManagedVendorRequest,
     options?: {
       hoursData: ReplaceVendorHoursRequest | null;
       dishesData: CreateVendorDishesRequest | null;
       imageUpload: FormData | null;
     },
   ) => Promise<void>;
+  vendorCategories: PublicCategory[];
 }) {
   const [createFieldErrors, setCreateFieldErrors] = useState<AdminVendorFieldErrors>({});
   const [createIntentErrors, setCreateIntentErrors] = useState<Partial<Record<
@@ -1512,6 +1535,7 @@ function AdminCreateVendorSection({
             </div>
           </div>
           <CreateVendorIdentityFields
+            vendorCategories={vendorCategories}
             fieldErrors={createFieldErrors}
             onAreaChange={(value) =>
               setCreateSummary((current) => ({
@@ -2345,10 +2369,12 @@ function VendorHoursSection({
 }
 
 function CreateVendorIdentityFields({
+  vendorCategories,
   fieldErrors,
   onNameChange,
   onAreaChange,
 }: {
+  vendorCategories: PublicCategory[];
   fieldErrors: AdminVendorFieldErrors;
   onNameChange?: (value: string) => void;
   onAreaChange?: (value: string) => void;
@@ -2410,6 +2436,22 @@ function CreateVendorIdentityFields({
             {slugError ?? "Slug controls the public page URL. Change it only when needed."}
           </span>
           {fieldErrors.slug ? <span className="field-error">{fieldErrors.slug}</span> : null}
+        </label>
+        <label className="field">
+          <span>
+            Category <span className="field-required" aria-hidden="true">*</span>
+          </span>
+          <select defaultValue="" name="category_slug" required>
+            <option value="">Select</option>
+            {vendorCategories.map((category) => (
+              <option key={category.id} value={category.slug}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.category_slug ? (
+            <span className="field-error">{fieldErrors.category_slug}</span>
+          ) : null}
         </label>
         <label className="field">
           <span>Phone</span>

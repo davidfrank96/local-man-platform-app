@@ -21,8 +21,8 @@ import type {
   AuditLog,
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
+  CreateManagedVendorRequest,
   CreateVendorDishesRequest,
-  CreateVendorRequest,
   PriceBand,
   ReplaceVendorHoursRequest,
   UpdateVendorRequest,
@@ -111,14 +111,43 @@ const vendorImageMimeTypes = new Map([
 export type VendorIntakeRowInput = {
   row_number?: number | null;
   vendor_name?: string | number | null;
+  slug?: string | number | null;
   category?: string | number | null;
+  price_band?: string | number | null;
+  is_active?: string | number | null;
+  area?: string | number | null;
+  city?: string | number | null;
+  state?: string | number | null;
+  country?: string | number | null;
   address?: string | number | null;
   latitude?: string | number | null;
   longitude?: string | number | null;
   phone?: string | number | null;
-  opening_time?: string | number | null;
-  closing_time?: string | number | null;
   description?: string | number | null;
+  monday_open?: string | number | null;
+  monday_close?: string | number | null;
+  tuesday_open?: string | number | null;
+  tuesday_close?: string | number | null;
+  wednesday_open?: string | number | null;
+  wednesday_close?: string | number | null;
+  thursday_open?: string | number | null;
+  thursday_close?: string | number | null;
+  friday_open?: string | number | null;
+  friday_close?: string | number | null;
+  saturday_open?: string | number | null;
+  saturday_close?: string | number | null;
+  sunday_open?: string | number | null;
+  sunday_close?: string | number | null;
+  dish_1_name?: string | number | null;
+  dish_1_description?: string | number | null;
+  dish_1_image_url?: string | number | null;
+  dish_2_name?: string | number | null;
+  dish_2_description?: string | number | null;
+  dish_2_image_url?: string | number | null;
+  image_url_1?: string | number | null;
+  image_sort_order_1?: string | number | null;
+  image_url_2?: string | number | null;
+  image_sort_order_2?: string | number | null;
 };
 
 export type VendorIntakePreviewRow = {
@@ -126,13 +155,20 @@ export type VendorIntakePreviewRow = {
   vendor_name: string | null;
   slug: string | null;
   category: string | null;
+  price_band: string | null;
   address: string | null;
+  area: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
   latitude: number | null;
   longitude: number | null;
   phone: string | null;
-  opening_time: string | null;
-  closing_time: string | null;
   description: string | null;
+  is_active: boolean;
+  open_days: number;
+  featured_dishes: string[];
+  image_urls: string[];
   issues: VendorIntakeIssue[];
   errors: string[];
 };
@@ -1276,7 +1312,7 @@ export async function deleteManagedAdminUser(
 }
 
 export async function createAdminVendor(
-  data: CreateVendorRequest,
+  data: CreateManagedVendorRequest,
   options: AdminApiClientOptions,
 ): Promise<AdminVendorSummary> {
   const result = await requestAdminApi<{ vendor: AdminVendorSummary }>(

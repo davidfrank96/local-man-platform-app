@@ -35,20 +35,24 @@ The current admin analytics page shows:
 
 ## Environment requirements
 
-Admin analytics reads require:
+The production admin analytics dashboard reads directly from Supabase with:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- the signed-in workspace user's access token
 
-The read path now requires the service role key explicitly. This is important for production consistency. Without it, the route returns a clear `CONFIGURATION_ERROR` instead of silently falling back to token/RLS-dependent behavior.
+`SUPABASE_SERVICE_ROLE_KEY` is still required for:
+
+- `/api/events` writes
+- backend analytics fallback route reads in development and tests
+- backend audit-log fallback route reads in development and tests
 
 ## Production-read notes
 
 When debugging production mismatches, verify:
 
 1. local and production point to the same Supabase project
-2. production has `SUPABASE_SERVICE_ROLE_KEY`
+2. production has valid `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 3. the logged-in workspace user is `admin`
 4. `user_events` actually contains data in the production project
 
@@ -57,13 +61,6 @@ Current structured logs:
 - `ANALYTICS_FETCH`
 - `AUDIT_LOGS_FETCH`
 - public tracking skip/failure events
-
-The admin analytics UI also emits temporary browser console logs for:
-
-- `analytics data:`
-- `analytics response:`
-
-These logs are intended for debugging production mismatches and should be reviewed if analytics appears empty.
 
 ## Known constraint
 

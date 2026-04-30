@@ -7,12 +7,15 @@ import {
 import { requireAdmin } from "../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../lib/admin/errors.ts";
 import {
+  attachVendorCategory,
   createVendor,
+  hardDeleteVendor,
   listVendors,
+  listVendorCategories,
 } from "../../../../lib/admin/vendor-service.ts";
 import {
   adminVendorsQuerySchema,
-  createVendorRequestSchema,
+  createManagedVendorRequestSchema,
 } from "../../../../lib/validation/index.ts";
 
 export async function GET(request: NextRequest) {
@@ -47,14 +50,47 @@ export async function POST(request: Request) {
     return admin.response;
   }
 
-  const body = await validateJsonBody(request, createVendorRequestSchema);
+  const body = await validateJsonBody(request, createManagedVendorRequestSchema);
 
   if (!body.success) {
     return body.response;
   }
 
   try {
-    const vendor = await createVendor(body.data, { session: admin.session });
+    const { category_slug, ...vendorData } = body.data;
+    const categories = await listVendorCategories({ session: admin.session });
+    const category = categories.find((entry) => entry.slug === category_slug);
+
+    if (!category) {
+      return Response.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request.",
+            details: {
+              issues: [
+                {
+                  path: ["category_slug"],
+                  message: "Select a valid vendor category.",
+                },
+              ],
+            },
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const vendor = await createVendor(vendorData, { session: admin.session });
+
+    try {
+      await attachVendorCategory({ id: vendor.id }, category.id, { session: admin.session });
+    } catch (error) {
+      await hardDeleteVendor({ id: vendor.id }, { session: admin.session }).catch(() => undefined);
+      throw error;
+    }
 
     return apiSuccess({ vendor }, 201);
   } catch (error) {

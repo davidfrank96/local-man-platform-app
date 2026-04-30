@@ -1,7 +1,17 @@
 import type { AdminRole } from "../../types/index.ts";
 
+const agentRestrictedPaths = new Set([
+  "/admin/dashboard",
+  "/admin/analytics",
+  "/admin/team",
+]);
+
 export function getAdminHomePath(role: AdminRole): string {
   return role === "admin" ? "/admin/dashboard" : "/admin/agent";
+}
+
+export function isAgentRestrictedAdminPath(pathname: string): boolean {
+  return agentRestrictedPaths.has(pathname);
 }
 
 export function sanitizeAdminNextPath(value: string | null): string {
@@ -20,7 +30,7 @@ export function resolveAdminNextPath(role: AdminRole, value: string | null): str
     return homePath;
   }
 
-  if (role === "agent" && sanitized === "/admin/dashboard") {
+  if (role === "agent" && isAgentRestrictedAdminPath(sanitized)) {
     return homePath;
   }
 

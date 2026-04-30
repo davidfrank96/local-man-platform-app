@@ -1,16 +1,9 @@
 "use client";
 
 import {
-  useEffect,
   useMemo,
-  useRef,
   useState,
-  type KeyboardEvent,
 } from "react";
-import {
-  fetchPublicCategories,
-  type PublicCategory,
-} from "../../lib/vendors/public-api-client.ts";
 import {
   submitAdminVendorIntake,
   type VendorIntakeIssue,
@@ -18,6 +11,10 @@ import {
   type VendorIntakePreviewRow,
   type VendorIntakeRowInput,
 } from "../../lib/admin/api-client.ts";
+import {
+  vendorCsvTemplateHeaders,
+  vendorCsvTemplateRows,
+} from "../../lib/admin/vendor-intake-contract.ts";
 import { createCsvText, parseCsvText } from "../../lib/csv.ts";
 import { handleAppError, showToast } from "../../lib/errors/ui-error.ts";
 
@@ -33,41 +30,15 @@ type SharedProps = {
   onVendorsUploaded?: (vendors: CreatedVendorSummary[]) => Promise<void> | void;
 };
 
-const csvTemplateHeaders = [
-  "vendor_name",
-  "category",
-  "address",
-  "latitude",
-  "longitude",
-  "phone",
-  "opening_time",
-  "closing_time",
-  "description",
-];
-
-const csvTemplateRows = [
-  [
-    "Mama Put Rice",
-    "rice",
-    "Wuse 2, Abuja",
-    "9.0765",
-    "7.3986",
-    "+2348000000000",
-    "9 AM",
-    "8 PM",
-    "Budget rice and stew spot",
-  ],
-];
-
 const previewFields = [
   "vendor_name",
   "category",
-  "address",
+  "price_band",
+  "area",
   "latitude",
   "longitude",
-  "phone",
-  "opening_time",
-  "closing_time",
+  "open_days",
+  "is_active",
 ] as const;
 
 function getRowIssue(row: VendorIntakePreviewRow, field: string): VendorIntakeIssue | undefined {
@@ -82,293 +53,34 @@ function formatCellValue(value: string | number | null): string {
   return String(value);
 }
 
-function createRowInputFromPreview(row: VendorIntakePreviewRow): VendorIntakeRowInput {
-  return {
-    row_number: row.rowNumber,
-    vendor_name: row.vendor_name,
-    category: row.category,
-    address: row.address,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    phone: row.phone,
-    opening_time: row.opening_time,
-    closing_time: row.closing_time,
-    description: row.description,
-  };
-}
+function formatPreviewFieldValue(
+  row: VendorIntakePreviewRow,
+  field: (typeof previewFields)[number],
+): string | number | null {
+  const value = row[field];
 
-function usePublicCategories() {
-  const [categories, setCategories] = useState<PublicCategory[]>([]);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void fetchPublicCategories()
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-
-        setCategories(result);
-        setStatus("ready");
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-
-        handleAppError(error, {
-          fallbackMessage: "Unable to load vendor categories.",
-          role: "agent",
-          context: "admin_vendor_categories",
-        });
-        setStatus("error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return { categories, status };
-}
-
-function focusNextField(
-  event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
-  nextField: HTMLInputElement | HTMLSelectElement | null,
-) {
-  if (event.key !== "Enter" || !nextField) {
-    return;
+  if (field === "open_days") {
+    return `${row.open_days} open days`;
   }
 
-  event.preventDefault();
-  nextField.focus();
-}
-
-async function getCurrentCoordinates(): Promise<{ latitude: number; longitude: number }> {
-  if (typeof window === "undefined" || !("geolocation" in navigator)) {
-    throw new Error("Location access is required for Quick Add Vendor.");
+  if (field === "is_active") {
+    return row.is_active ? "Active" : "Inactive";
   }
 
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) =>
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        }),
-      () => reject(new Error("Enable location access to use Quick Add Vendor.")),
-      {
-        enableHighAccuracy: true,
-        timeout: 8_000,
-        maximumAge: 60_000,
-      },
-    );
-  });
+  return typeof value === "boolean" ? (value ? "Yes" : "No") : value;
 }
 
-export function AgentQuickAddPanel({
-  accessToken,
-  disabled = false,
-  onVendorsUploaded,
-}: SharedProps) {
-  const { categories, status: categoriesStatus } = usePublicCategories();
-  const [status, setStatus] = useState("Use current location and save the vendor in one pass.");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [saveAndAddAnother, setSaveAndAddAnother] = useState(true);
-  const nameRef = useRef<HTMLInputElement>(null);
-  const categoryRef = useRef<HTMLSelectElement>(null);
-  const locationRef = useRef<HTMLInputElement>(null);
-  const phoneRef = useRef<HTMLInputElement>(null);
-  const openingRef = useRef<HTMLInputElement>(null);
-  const closingRef = useRef<HTMLInputElement>(null);
-  const descriptionRef = useRef<HTMLInputElement>(null);
-
-  async function submitQuickAdd(form: HTMLFormElement) {
-    if (!accessToken) {
-      setStatus("Admin session is missing. Sign in again.");
-      return;
-    }
-
-    const formData = new FormData(form);
-    setIsSubmitting(true);
-    setStatus("Capturing current location…");
-
-    try {
-      const coordinates = await getCurrentCoordinates();
-      const result = await submitAdminVendorIntake(
-        {
-          action: "upload",
-          rows: [
-            {
-              row_number: 1,
-              vendor_name: String(formData.get("vendor_name") ?? ""),
-              category: String(formData.get("category") ?? ""),
-              address: String(formData.get("address") ?? ""),
-              latitude: coordinates.latitude,
-              longitude: coordinates.longitude,
-              phone: String(formData.get("phone") ?? ""),
-              opening_time: String(formData.get("opening_time") ?? ""),
-              closing_time: String(formData.get("closing_time") ?? ""),
-              description: String(formData.get("description") ?? ""),
-            },
-          ],
-        },
-        { accessToken },
-      );
-
-      if ("uploadedRows" in result && result.uploadedRows.length > 0) {
-        setStatus(`${result.uploadedRows[0]?.vendor.name ?? "Vendor"} saved successfully.`);
-        showToast({
-          type: "success",
-          message: "Vendor saved.",
-        });
-        await onVendorsUploaded?.(result.uploadedRows.map((row) => row.vendor));
-
-        if (saveAndAddAnother) {
-          form.reset();
-          nameRef.current?.focus();
-        }
-
-        return;
-      }
-
-      const failedMessage = "uploadedRows" in result
-        ? result.failedRows[0]?.error
-        : null;
-      const invalidMessage = result.invalidRows[0]?.errors[0]
-        ?? failedMessage
-        ?? "Vendor upload failed.";
-      setStatus(invalidMessage);
-      showToast({
-        type: "error",
-        message: invalidMessage,
-      });
-    } catch (error) {
-      setStatus(
-        handleAppError(error, {
-          fallbackMessage: "Quick vendor creation failed.",
-          role: "agent",
-          context: "agent_quick_add",
-        }).message,
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <section className="admin-panel" aria-labelledby="agent-quick-add">
-      <div className="admin-section-header">
-        <div>
-          <p className="eyebrow">Primary action</p>
-          <h2 id="agent-quick-add">Quick Add Vendor</h2>
-        </div>
-      </div>
-      <p className="form-note">
-        Current device coordinates are captured on save. Category and location text stay editable.
-      </p>
-      <form
-        className="admin-form agent-quick-add-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submitQuickAdd(event.currentTarget);
-        }}
-      >
-        <label className="field field-wide">
-          <span>Vendor name</span>
-          <input
-            ref={nameRef}
-            autoFocus
-            name="vendor_name"
-            placeholder="Mama Put Rice"
-            required
-            onKeyDown={(event) => focusNextField(event, categoryRef.current)}
-          />
-        </label>
-        <label className="field">
-          <span>Category</span>
-          <select
-            ref={categoryRef}
-            defaultValue=""
-            name="category"
-            required
-            disabled={categoriesStatus !== "ready"}
-            onKeyDown={(event) => focusNextField(event, locationRef.current)}
-          >
-            <option value="" disabled>
-              {categoriesStatus === "ready" ? "Select category" : "Loading categories"}
-            </option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.slug}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field field-wide">
-          <span>Location</span>
-          <input
-            ref={locationRef}
-            name="address"
-            placeholder="Wuse 2, Abuja"
-            required
-            onKeyDown={(event) => focusNextField(event, phoneRef.current)}
-          />
-        </label>
-        <label className="field">
-          <span>Phone</span>
-          <input
-            ref={phoneRef}
-            name="phone"
-            placeholder="+2348000000000"
-            onKeyDown={(event) => focusNextField(event, openingRef.current)}
-          />
-        </label>
-        <label className="field">
-          <span>Opens</span>
-          <input
-            ref={openingRef}
-            name="opening_time"
-            placeholder="9 AM"
-            onKeyDown={(event) => focusNextField(event, closingRef.current)}
-          />
-        </label>
-        <label className="field">
-          <span>Closes</span>
-          <input
-            ref={closingRef}
-            name="closing_time"
-            placeholder="8 PM"
-            onKeyDown={(event) => focusNextField(event, descriptionRef.current)}
-          />
-        </label>
-        <label className="field field-wide">
-          <span>Description</span>
-          <input
-            ref={descriptionRef}
-            name="description"
-            placeholder="Short vendor summary"
-          />
-        </label>
-        <label className="checkbox-field">
-          <input
-            checked={saveAndAddAnother}
-            type="checkbox"
-            onChange={(event) => setSaveAndAddAnother(event.target.checked)}
-          />
-          <span>Save and add another</span>
-        </label>
-        <div className="action-row">
-          <button className="button-primary" disabled={disabled || isSubmitting} type="submit">
-            {isSubmitting ? "Saving…" : "Save vendor"}
-          </button>
-        </div>
-        <p className="form-note">{status}</p>
-      </form>
-    </section>
+function selectRowsByNumber(
+  sourceRows: VendorIntakeRowInput[],
+  previewRows: VendorIntakePreviewRow[],
+): VendorIntakeRowInput[] {
+  const rowsByNumber = new Map(
+    sourceRows.map((row, index) => [row.row_number ?? index + 2, row] as const),
   );
+
+  return previewRows
+    .map((row) => rowsByNumber.get(row.rowNumber))
+    .filter((row): row is VendorIntakeRowInput => row !== undefined);
 }
 
 export function VendorCsvUploadPanel({
@@ -390,7 +102,7 @@ export function VendorCsvUploadPanel({
   );
 
   function downloadTemplate() {
-    const csv = createCsvText(csvTemplateHeaders, csvTemplateRows);
+    const csv = createCsvText([...vendorCsvTemplateHeaders], vendorCsvTemplateRows.map((row) => [...row]));
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -446,15 +158,16 @@ export function VendorCsvUploadPanel({
     }
 
     setIsUploading(true);
-    const uploadedVendors: CreatedVendorSummary[] = [];
-    const failedRows: Array<{ rowNumber: number; error: string }> = [];
-    const chunkSize = 10;
+      const uploadRows = selectRowsByNumber(rows, validPreviewRows);
+      const uploadedVendors: CreatedVendorSummary[] = [];
+      const failedRows: Array<{ rowNumber: number; error: string }> = [];
+      const chunkSize = 10;
 
     try {
-      for (let offset = 0; offset < validPreviewRows.length; offset += chunkSize) {
-        const chunk = validPreviewRows.slice(offset, offset + chunkSize).map(createRowInputFromPreview);
+      for (let offset = 0; offset < uploadRows.length; offset += chunkSize) {
+        const chunk = uploadRows.slice(offset, offset + chunkSize);
         setStatus(
-          `Uploading ${Math.min(offset + chunk.length, validPreviewRows.length)} / ${validPreviewRows.length} vendors…`,
+          `Uploading ${Math.min(offset + chunk.length, uploadRows.length)} / ${uploadRows.length} vendors…`,
         );
         const result = await submitAdminVendorIntake(
           {
@@ -512,7 +225,7 @@ export function VendorCsvUploadPanel({
         </div>
       </div>
       <p className="form-note">
-        Validate all rows first, then upload only the valid rows. Required columns: vendor_name, category, address, latitude, longitude. Phone, hours, and description are optional.
+        Validate all rows first, then upload only the valid rows. This template creates full vendor records, including weekly hours, featured dishes, and remote image URLs.
       </p>
       <div className="action-row">
         <button className="button-secondary" type="button" onClick={downloadTemplate}>
@@ -542,17 +255,56 @@ export function VendorCsvUploadPanel({
                 throw new Error("CSV has no vendor rows.");
               }
 
+              const missingHeaders = vendorCsvTemplateHeaders.filter(
+                (header) => !(header in parsedCsvRows[0]),
+              );
+
+              if (missingHeaders.length > 0) {
+                throw new Error(
+                  `CSV is missing required columns: ${missingHeaders.join(", ")}.`,
+                );
+              }
+
               const parsedRows = parsedCsvRows.map((row, index) => ({
                 row_number: index + 2,
                 vendor_name: row.vendor_name,
+                slug: row.slug,
                 category: row.category,
+                price_band: row.price_band,
+                is_active: row.is_active,
+                area: row.area,
+                city: row.city,
+                state: row.state,
+                country: row.country,
                 address: row.address,
                 latitude: row.latitude,
                 longitude: row.longitude,
                 phone: row.phone,
-                opening_time: row.opening_time,
-                closing_time: row.closing_time,
                 description: row.description,
+                monday_open: row.monday_open,
+                monday_close: row.monday_close,
+                tuesday_open: row.tuesday_open,
+                tuesday_close: row.tuesday_close,
+                wednesday_open: row.wednesday_open,
+                wednesday_close: row.wednesday_close,
+                thursday_open: row.thursday_open,
+                thursday_close: row.thursday_close,
+                friday_open: row.friday_open,
+                friday_close: row.friday_close,
+                saturday_open: row.saturday_open,
+                saturday_close: row.saturday_close,
+                sunday_open: row.sunday_open,
+                sunday_close: row.sunday_close,
+                dish_1_name: row.dish_1_name,
+                dish_1_description: row.dish_1_description,
+                dish_1_image_url: row.dish_1_image_url,
+                dish_2_name: row.dish_2_name,
+                dish_2_description: row.dish_2_description,
+                dish_2_image_url: row.dish_2_image_url,
+                image_url_1: row.image_url_1,
+                image_sort_order_1: row.image_sort_order_1,
+                image_url_2: row.image_url_2,
+                image_sort_order_2: row.image_sort_order_2,
               }));
 
               setFileName(file.name);
@@ -613,12 +365,14 @@ export function VendorCsvUploadPanel({
                     <th>Row</th>
                     <th>Vendor</th>
                     <th>Category</th>
-                    <th>Address</th>
+                    <th>Price band</th>
+                    <th>Area</th>
                     <th>Lat</th>
                     <th>Lng</th>
-                    <th>Phone</th>
-                    <th>Opens</th>
-                    <th>Closes</th>
+                    <th>Hours</th>
+                    <th>Status</th>
+                    <th>Dishes</th>
+                    <th>Images</th>
                     <th>Issues</th>
                   </tr>
                 </thead>
@@ -638,7 +392,7 @@ export function VendorCsvUploadPanel({
                       <td>{row.rowNumber}</td>
                       {previewFields.map((field) => {
                         const issue = getRowIssue(row, field);
-                        const value = row[field];
+                        const value = formatPreviewFieldValue(row, field);
 
                         return (
                           <td
@@ -650,6 +404,8 @@ export function VendorCsvUploadPanel({
                           </td>
                         );
                       })}
+                      <td>{row.featured_dishes.length > 0 ? row.featured_dishes.join(", ") : "—"}</td>
+                      <td>{row.image_urls.length > 0 ? `${row.image_urls.length} image URL(s)` : "—"}</td>
                       <td>
                         {row.issues.length > 0 ? (
                           <ul className="preview-issue-list">

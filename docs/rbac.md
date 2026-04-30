@@ -20,8 +20,8 @@ Full workspace access:
 Restricted workspace access:
 
 - `/admin/agent`
+- full Create Vendor page
 - vendor list
-- quick add vendor
 - vendor edit workspace
 - vendor CSV intake
 - vendor images, dishes, and hours needed by vendor onboarding

@@ -116,7 +116,7 @@ export const apiEndpoints = {
     method: "POST",
     path: "/api/admin/vendors",
     requestShape:
-      "JSON body with vendor profile fields, address, coordinates, price band, and active state.",
+      "JSON body with vendor profile fields, category_slug, address, coordinates, price band, and active state.",
     responseShape: "Created vendor id, slug, and summary fields.",
     validationBoundary: [
       "admin authentication required",
@@ -131,7 +131,7 @@ export const apiEndpoints = {
     method: "POST",
     path: "/api/admin/vendors/intake",
     requestShape:
-      "JSON body with action = preview | upload and rows containing vendor_name, category, address, latitude, longitude, optional phone, optional opening_time, optional closing_time, and optional description.",
+      "JSON body with action = preview | upload and rows containing the full vendor intake contract: vendor_name, optional slug, category, price_band, description, phone, address, area, city, state, country, latitude, longitude, optional is_active, daily open/close columns for all seven days, featured dish columns, and remote image URL columns.",
     responseShape:
       "Preview or upload result with row-by-row validation issues, valid rows, invalid rows, and uploaded vendor summaries when action = upload.",
     validationBoundary: [

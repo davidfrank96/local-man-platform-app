@@ -93,20 +93,22 @@ Use this checklist before pushing or releasing UI work.
 - [ ] admin analytics page loads summary data
 - [ ] recent user events render correctly
 - [ ] recent team activity renders correctly
-- [ ] analytics reads use a configured `SUPABASE_SERVICE_ROLE_KEY`
-- [ ] audit-log reads use a configured `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] production analytics reads use Supabase direct with anon key + session token
+- [ ] production audit-log reads use Supabase direct with anon key + session token
+- [ ] backend analytics and audit-log fallback routes still work when `SUPABASE_SERVICE_ROLE_KEY` is configured
 - [ ] analytics empty state is real data absence, not auth/config failure
 
 ## CSV intake
 
-- [ ] quick add vendor works for agent role
 - [ ] CSV template downloads
+- [ ] CSV template matches the full Create Vendor schema
 - [ ] CSV preview shows valid and invalid rows
 - [ ] invalid cells show inline issues
 - [ ] duplicate rows in file are flagged
 - [ ] duplicate existing vendors are flagged
 - [ ] valid rows still upload when invalid rows are present
 - [ ] CSV rows without coordinates are rejected clearly
+- [ ] legacy minimal CSV format is rejected clearly
 
 ## Error handling
 

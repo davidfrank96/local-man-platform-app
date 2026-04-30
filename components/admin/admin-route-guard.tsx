@@ -30,11 +30,14 @@ export function AdminRouteGuard({
   const hasAllowedRole = !allowedRoles || (role ? allowedRoles.includes(role) : false);
   const hasRequiredPermission =
     !requiredPermission || (role ? hasAdminPermission(role, requiredPermission) : false);
+  const isAgentUnauthorizedForRoute =
+    status === "authenticated" &&
+    role === "agent" &&
+    (!hasRequiredPermission || !hasAllowedRole);
   const shouldRedirectToRoleHome =
     status === "authenticated" &&
     role !== null &&
-    redirectUnauthorizedRoleToHome &&
-    !hasAllowedRole;
+    (isAgentUnauthorizedForRoute || (redirectUnauthorizedRoleToHome && !hasAllowedRole));
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -66,10 +69,7 @@ export function AdminRouteGuard({
     );
   }
 
-  if (
-    status === "forbidden" ||
-    (status === "authenticated" && (!hasRequiredPermission || !hasAllowedRole))
-  ) {
+  if (status === "forbidden" || (status === "authenticated" && (!hasRequiredPermission || !hasAllowedRole))) {
     return (
       <main className="page-shell">
         <p className="eyebrow">Admin access</p>

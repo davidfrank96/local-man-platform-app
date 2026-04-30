@@ -298,6 +298,10 @@ export const createVendorRequestSchema = z.object({
   is_open_override: z.boolean().nullable().optional(),
 });
 
+export const createManagedVendorRequestSchema = createVendorRequestSchema.extend({
+  category_slug: slugSchema,
+});
+
 export const updateVendorRequestSchema = createVendorRequestSchema.partial();
 
 const vendorIntakeRawTextSchema = z.union([z.string(), z.number(), z.null()]).optional();
@@ -305,14 +309,43 @@ const vendorIntakeRawTextSchema = z.union([z.string(), z.number(), z.null()]).op
 export const vendorIntakeRowInputSchema = z.object({
   row_number: z.coerce.number().int().positive().optional(),
   vendor_name: vendorIntakeRawTextSchema,
+  slug: vendorIntakeRawTextSchema,
   category: vendorIntakeRawTextSchema,
+  price_band: vendorIntakeRawTextSchema,
+  is_active: vendorIntakeRawTextSchema,
+  area: vendorIntakeRawTextSchema,
+  city: vendorIntakeRawTextSchema,
+  state: vendorIntakeRawTextSchema,
+  country: vendorIntakeRawTextSchema,
   address: vendorIntakeRawTextSchema,
   latitude: vendorIntakeRawTextSchema,
   longitude: vendorIntakeRawTextSchema,
   phone: vendorIntakeRawTextSchema,
-  opening_time: vendorIntakeRawTextSchema,
-  closing_time: vendorIntakeRawTextSchema,
   description: vendorIntakeRawTextSchema,
+  monday_open: vendorIntakeRawTextSchema,
+  monday_close: vendorIntakeRawTextSchema,
+  tuesday_open: vendorIntakeRawTextSchema,
+  tuesday_close: vendorIntakeRawTextSchema,
+  wednesday_open: vendorIntakeRawTextSchema,
+  wednesday_close: vendorIntakeRawTextSchema,
+  thursday_open: vendorIntakeRawTextSchema,
+  thursday_close: vendorIntakeRawTextSchema,
+  friday_open: vendorIntakeRawTextSchema,
+  friday_close: vendorIntakeRawTextSchema,
+  saturday_open: vendorIntakeRawTextSchema,
+  saturday_close: vendorIntakeRawTextSchema,
+  sunday_open: vendorIntakeRawTextSchema,
+  sunday_close: vendorIntakeRawTextSchema,
+  dish_1_name: vendorIntakeRawTextSchema,
+  dish_1_description: vendorIntakeRawTextSchema,
+  dish_1_image_url: vendorIntakeRawTextSchema,
+  dish_2_name: vendorIntakeRawTextSchema,
+  dish_2_description: vendorIntakeRawTextSchema,
+  dish_2_image_url: vendorIntakeRawTextSchema,
+  image_url_1: vendorIntakeRawTextSchema,
+  image_sort_order_1: vendorIntakeRawTextSchema,
+  image_url_2: vendorIntakeRawTextSchema,
+  image_sort_order_2: vendorIntakeRawTextSchema,
 });
 
 export const vendorIntakeRequestSchema = z.object({

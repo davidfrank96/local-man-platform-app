@@ -55,12 +55,14 @@ Audit writes are best-effort and non-blocking:
 
 Audit-log reads are admin-only.
 
-They require:
+The production admin dashboard reads audit logs directly from Supabase using:
 
 - authenticated admin role
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- the current session access token
 
-The service role requirement is intentional. It prevents environment-specific differences caused by token/RLS fallbacks.
+`SUPABASE_SERVICE_ROLE_KEY` is still required for the backend fallback route used in development and in route-level tests.
 
 ## UI surface
 

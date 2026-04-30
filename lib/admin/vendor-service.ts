@@ -653,6 +653,49 @@ export async function softDeleteVendor(
   };
 }
 
+export async function hardDeleteVendor(
+  params: VendorIdParams,
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<void> {
+  const resolvedConfig = requireServiceConfig(config);
+  const useServiceRole = Boolean(resolvedConfig.supabaseServiceRoleKey);
+  const headers: HeadersInit = {
+    apikey: useServiceRole
+      ? resolvedConfig.supabaseServiceRoleKey ?? resolvedConfig.supabaseAnonKey
+      : resolvedConfig.supabaseAnonKey,
+    authorization: `Bearer ${
+      useServiceRole
+        ? resolvedConfig.supabaseServiceRoleKey ?? session.accessToken
+        : session.accessToken
+    }`,
+    prefer: "return=minimal",
+  };
+
+  const response = await fetchImpl(
+    createRestUrl(resolvedConfig, "vendors", {
+      id: `eq.${params.id}`,
+    }),
+    {
+      method: "DELETE",
+      headers,
+    },
+  );
+
+  if (!response.ok) {
+    const payload = await readJson(response);
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      "Unable to rollback the vendor after upload failure.",
+      502,
+      payload,
+    );
+  }
+}
+
 export async function replaceVendorHours(
   params: VendorIdParams,
   data: ReplaceVendorHoursRequest,

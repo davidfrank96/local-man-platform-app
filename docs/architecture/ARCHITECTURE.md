@@ -71,7 +71,7 @@ Handle:
 - non-blocking public event writes
 - reverse geocoding
 - authenticated admin writes
-- authenticated admin analytics reads
+- direct Supabase analytics/audit reads in production plus backend fallback routes
 - admin subresource loading
 
 ### Database
@@ -208,7 +208,7 @@ Rules:
 ### Usage Signal State
 - public tracking is fire-and-forget and must never block UI
 - public event writes go through `/api/events`
-- analytics reads stay admin-only through `/api/admin/analytics`
+- analytics reads stay admin-only and use direct Supabase reads in production, with `/api/admin/analytics` retained as a backend fallback path
 - `user_events` is append-only for lightweight interaction capture
 - session-level drop-off analysis depends on `session_id` coverage; the admin analytics page must tolerate historical rows without that field
 - discovery ranking can read aggregated `user_events` signals server-side, but public browsing must still work when no usage signal data exists
@@ -222,7 +222,7 @@ Public usage signals use this path:
 3. server validates the payload
 4. server writes to `public.user_events`
 5. nearby discovery can derive a simple vendor `ranking_score` from those rows
-6. admin analytics reads and aggregates those rows server-side
+6. the admin analytics surface reads those rows directly from Supabase in production and can fall back to backend routes in development
 7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
 
 Tracked event types:

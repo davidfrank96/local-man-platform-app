@@ -13,6 +13,7 @@ import type {
   adminVendorsQuerySchema,
   auditLogSchema,
   createVendorDishesRequestSchema,
+  createManagedVendorRequestSchema,
   createVendorRatingRequestSchema,
   createVendorRequestSchema,
   deviceTypeSchema,
@@ -71,6 +72,7 @@ export type AdminVendorsQuery = z.infer<typeof adminVendorsQuerySchema>;
 export type VendorSlugParams = z.infer<typeof vendorSlugParamsSchema>;
 export type VendorIdParams = z.infer<typeof vendorIdParamsSchema>;
 export type CreateVendorRequest = z.infer<typeof createVendorRequestSchema>;
+export type CreateManagedVendorRequest = z.infer<typeof createManagedVendorRequestSchema>;
 export type CreateVendorRatingRequest = z.infer<typeof createVendorRatingRequestSchema>;
 export type UpdateVendorRequest = z.infer<typeof updateVendorRequestSchema>;
 export type ReplaceVendorHoursRequest = z.infer<
