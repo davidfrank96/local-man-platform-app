@@ -1,5 +1,6 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminRole } from "../../types/index.ts";
+import { supabase } from "../supabase-client.ts";
 import { AppError, mapExternalError } from "../errors/app-error.ts";
 import { logStructuredEvent } from "../observability.ts";
 
@@ -47,7 +48,6 @@ type SessionClientConfig = {
 };
 
 export class AdminSessionError extends AppError {}
-let browserAdminSupabaseClient: SupabaseClient | null = null;
 
 function logAdminSessionEvent(
   level: "info" | "warn" | "error",
@@ -82,25 +82,17 @@ function getClientConfig(): SessionClientConfig {
   };
 }
 
-function getBrowserAdminSupabaseClient(): SupabaseClient | null {
+function getBrowserAdminSupabaseClient() {
   if (typeof window === "undefined") {
     return null;
   }
 
-  if (browserAdminSupabaseClient) {
-    return browserAdminSupabaseClient;
+  try {
+    void supabase.auth;
+    return supabase;
+  } catch {
+    return null;
   }
-
-  const { supabaseUrl, supabaseAnonKey } = getClientConfig();
-  browserAdminSupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
-
-  return browserAdminSupabaseClient;
 }
 
 function toExpiresAt(payload: SupabaseAuthPayload): number | null {
@@ -172,6 +164,11 @@ export async function clearAdminBrowserSession(): Promise<void> {
 
 export async function getCurrentAdminAccessToken(): Promise<string | null> {
   const storedToken = readStoredAdminSession()?.accessToken ?? null;
+
+  if (storedToken) {
+    return storedToken;
+  }
+
   let client: SupabaseClient | null = null;
 
   try {
@@ -189,7 +186,7 @@ export async function getCurrentAdminAccessToken(): Promise<string | null> {
     }
   }
 
-  return storedToken;
+  return null;
 }
 
 async function requestSupabaseAuth(
