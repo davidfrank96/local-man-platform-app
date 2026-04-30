@@ -302,11 +302,20 @@ export async function requireAdmin(
       return await createDefaultAdminUserRecord(user, requestId, config, fetchImpl);
     })();
 
+    logAdminAuthEvent("info", "session debug", {
+      requestId,
+      email: user.email ?? null,
+      role: resolvedAdminUser?.role ?? null,
+      adminUserExists: !!resolvedAdminUser,
+    });
+
     if (!resolvedAdminUser) {
       logAdminAuthEvent("warn", "authenticated user is not present in admin_users", {
         requestId,
         userId: user.id,
         email: user.email ?? null,
+        role: null,
+        adminUserExists: false,
       });
       return {
         success: false,
