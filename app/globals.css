@@ -980,6 +980,10 @@ h2 {
   gap: 12px;
 }
 
+.form-grid-coordinates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .compact-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1016,6 +1020,15 @@ h2 {
   color: var(--color-muted);
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.field-hint,
+.field-error {
+  min-height: 1.1rem;
+}
+
+.field-hint-placeholder {
+  visibility: hidden;
 }
 
 .vendor-image-list {
@@ -3128,6 +3141,10 @@ h2 {
   .hours-list li,
   .dish-list li {
     grid-template-columns: 1fr;
+  }
+
+  .form-grid-coordinates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-sidebar {

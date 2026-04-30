@@ -74,6 +74,8 @@ import { slugPattern } from "../../lib/validation/common.ts";
 
 const priceBands: PriceBand[] = ["budget", "standard", "premium"];
 const dashboardFollowUpPreviewCount = 5;
+const agentVendorPreviewCount = 6;
+const vendorRegistryPreviewCount = 6;
 const dayLabels = [
   "Sunday",
   "Monday",
@@ -360,6 +362,7 @@ export function AdminConsole({
       : [],
   );
   const [showAllFollowUpVendors, setShowAllFollowUpVendors] = useState(false);
+  const [showAllAgentVendors, setShowAllAgentVendors] = useState(false);
   const [vendorCategories, setVendorCategories] = useState<PublicCategory[]>([]);
   const vendorImagesRequestId = useRef(0);
   const vendorHoursRequestId = useRef(0);
@@ -425,6 +428,10 @@ export function AdminConsole({
         ? incompleteVendors
         : incompleteVendors.slice(0, dashboardFollowUpPreviewCount),
     [incompleteVendors, showAllFollowUpVendors],
+  );
+  const visibleAgentVendors = useMemo(
+    () => (showAllAgentVendors ? vendors : vendors.slice(0, agentVendorPreviewCount)),
+    [showAllAgentVendors, vendors],
   );
   const statusTone = getAdminStatusTone(status, isLoading);
 
@@ -1108,23 +1115,6 @@ export function AdminConsole({
             </div>
           </section>
 
-          <section className="admin-panel" aria-labelledby="agent-dashboard-vendors">
-            <div className="admin-section-header">
-              <div>
-                <p className="eyebrow">Vendor registry</p>
-                <h2 id="agent-dashboard-vendors">Loaded vendors</h2>
-              </div>
-              <span>{vendors.length} vendors</span>
-            </div>
-            <VendorRegistryList
-              vendors={vendors}
-              selectedVendorId={selectedVendorId}
-              onSelectVendor={setSelectedVendorId}
-              emptyMessage="No vendors are loaded yet. Refresh or create a vendor to begin."
-              compact
-            />
-          </section>
-
           <section className="admin-panel" aria-labelledby="agent-dashboard-selection">
             <div className="admin-section-header">
               <div>
@@ -1160,6 +1150,34 @@ export function AdminConsole({
             disabled={isLoading}
             onVendorsUploaded={handleIntakeVendorsUploaded}
           />
+
+          <section className="admin-panel" aria-labelledby="agent-dashboard-vendors">
+            <div className="admin-section-header">
+              <div>
+                <p className="eyebrow">Vendor registry</p>
+                <h2 id="agent-dashboard-vendors">Loaded vendors</h2>
+              </div>
+              <span>{vendors.length} vendors</span>
+            </div>
+            <VendorRegistryList
+              vendors={visibleAgentVendors}
+              selectedVendorId={selectedVendorId}
+              onSelectVendor={setSelectedVendorId}
+              emptyMessage="No vendors are loaded yet. Refresh or create a vendor to begin."
+              compact
+            />
+            {vendors.length > agentVendorPreviewCount ? (
+              <div className="action-row">
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => setShowAllAgentVendors((current) => !current)}
+                >
+                  {showAllAgentVendors ? "Read less" : "Read more"}
+                </button>
+              </div>
+            ) : null}
+          </section>
         </section>
       ) : null}
 
@@ -1226,21 +1244,23 @@ export function AdminConsole({
             onCreateVendor={handleCreateVendor}
             vendorCategories={vendorCategories}
           />
-          <VendorCsvUploadPanel
-            accessToken={session?.accessToken}
-            disabled={isLoading}
-            onVendorsUploaded={handleIntakeVendorsUploaded}
-          />
-          <section className="admin-panel" aria-labelledby="create-vendor-guidance">
-            <p className="eyebrow">Workflow</p>
-            <h2 id="create-vendor-guidance">Create flow</h2>
-            <ul className="admin-guidance-list">
-              <li>Basic vendor identity is created first.</li>
-              <li>Hours, images, and featured dishes can be added immediately after creation.</li>
-              <li>Missing-data acknowledgements prevent accidental incomplete records.</li>
-              <li>Uploaded vendor images appear on the public vendor profile, not on dish cards.</li>
-            </ul>
-          </section>
+          <div className="admin-stack">
+            <VendorCsvUploadPanel
+              accessToken={session?.accessToken}
+              disabled={isLoading}
+              onVendorsUploaded={handleIntakeVendorsUploaded}
+            />
+            <section className="admin-panel" aria-labelledby="create-vendor-guidance">
+              <p className="eyebrow">Workflow</p>
+              <h2 id="create-vendor-guidance">Create flow</h2>
+              <ul className="admin-guidance-list">
+                <li>Basic vendor identity is created first.</li>
+                <li>Hours, images, and featured dishes can be added immediately after creation.</li>
+                <li>Missing-data acknowledgements prevent accidental incomplete records.</li>
+                <li>Uploaded vendor images appear on the public vendor profile, not on dish cards.</li>
+              </ul>
+            </section>
+          </div>
         </section>
       ) : null}
 
@@ -1290,6 +1310,13 @@ const VendorRegistryPanel = memo(function VendorRegistryPanel({
   onSelectVendor: (vendorId: string) => void;
   onSubmitFilters: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [showAllRegistryVendors, setShowAllRegistryVendors] = useState(false);
+  const visibleRegistryVendors = useMemo(
+    () =>
+      showAllRegistryVendors ? vendors : vendors.slice(0, vendorRegistryPreviewCount),
+    [showAllRegistryVendors, vendors],
+  );
+
   return (
     <section className="admin-panel admin-registry-panel" aria-labelledby="vendor-registry">
       <div className="admin-section-header">
@@ -1338,11 +1365,26 @@ const VendorRegistryPanel = memo(function VendorRegistryPanel({
       </form>
 
       <VendorRegistryList
-        vendors={vendors}
+        vendors={visibleRegistryVendors}
         selectedVendorId={selectedVendorId}
         onSelectVendor={onSelectVendor}
         emptyMessage="No vendors matched the current filters."
       />
+      {vendors.length > vendorRegistryPreviewCount ? (
+        <div className="admin-list-toggle-row">
+          <button
+            className="button-secondary"
+            type="button"
+            aria-expanded={showAllRegistryVendors}
+            onClick={() => setShowAllRegistryVendors((current) => !current)}
+          >
+            {showAllRegistryVendors ? "Read less" : "Read more"}
+          </button>
+          <span>
+            Showing {visibleRegistryVendors.length} of {vendors.length}
+          </span>
+        </div>
+      ) : null}
     </section>
   );
 });
@@ -2413,7 +2455,13 @@ function CreateVendorIdentityFields({
             value={name}
             onChange={(event) => handleNameChange(event.target.value)}
           />
-          {fieldErrors.name ? <span className="field-error">{fieldErrors.name}</span> : null}
+          {fieldErrors.name ? (
+            <span className="field-error">{fieldErrors.name}</span>
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
         </label>
         <label className="field">
           <span>
@@ -2437,6 +2485,8 @@ function CreateVendorIdentityFields({
           </span>
           {fieldErrors.slug ? <span className="field-error">{fieldErrors.slug}</span> : null}
         </label>
+      </div>
+      <div className="form-grid">
         <label className="field">
           <span>
             Category <span className="field-required" aria-hidden="true">*</span>
@@ -2451,7 +2501,11 @@ function CreateVendorIdentityFields({
           </select>
           {fieldErrors.category_slug ? (
             <span className="field-error">{fieldErrors.category_slug}</span>
-          ) : null}
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
         </label>
         <label className="field">
           <span>Phone</span>
@@ -2461,6 +2515,8 @@ function CreateVendorIdentityFields({
             <span className="field-error">{fieldErrors.phone_number}</span>
           ) : null}
         </label>
+      </div>
+      <div className="form-grid">
         <label className="field">
           <span>Area</span>
           <input
@@ -2468,8 +2524,36 @@ function CreateVendorIdentityFields({
             placeholder="Wuse"
             onChange={(event) => onAreaChange?.(event.target.value)}
           />
-          {fieldErrors.area ? <span className="field-error">{fieldErrors.area}</span> : null}
+          {fieldErrors.area ? (
+            <span className="field-error">{fieldErrors.area}</span>
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
         </label>
+        <label className="field">
+          <span>
+            Price band <span className="field-required" aria-hidden="true">*</span>
+          </span>
+          <select name="price_band" required>
+            <option value="">Select</option>
+            {priceBands.map((band) => (
+              <option key={band} value={band}>
+                {band}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.price_band ? (
+            <span className="field-error">{fieldErrors.price_band}</span>
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
+        </label>
+      </div>
+      <div className="form-grid form-grid-coordinates">
         <label className="field">
           <span>
             Latitude <span className="field-required" aria-hidden="true">*</span>
@@ -2508,22 +2592,6 @@ function CreateVendorIdentityFields({
           <span className="field-hint">Use decimal degrees, for example 7.4694.</span>
           {fieldErrors.longitude ? (
             <span className="field-error">{fieldErrors.longitude}</span>
-          ) : null}
-        </label>
-        <label className="field">
-          <span>
-            Price band <span className="field-required" aria-hidden="true">*</span>
-          </span>
-          <select name="price_band" required>
-            <option value="">Select</option>
-            {priceBands.map((band) => (
-              <option key={band} value={band}>
-                {band}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.price_band ? (
-            <span className="field-error">{fieldErrors.price_band}</span>
           ) : null}
         </label>
       </div>
@@ -2595,7 +2663,13 @@ function UpdateVendorIdentityFields({
             placeholder="Leave blank to keep current"
             onChange={(event) => handleNameChange(event.target.value)}
           />
-          {fieldErrors.name ? <span className="field-error">{fieldErrors.name}</span> : null}
+          {fieldErrors.name ? (
+            <span className="field-error">{fieldErrors.name}</span>
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
         </label>
         <label className="field">
           <span>Slug</span>
@@ -2616,25 +2690,39 @@ function UpdateVendorIdentityFields({
           </span>
           {fieldErrors.slug ? <span className="field-error">{fieldErrors.slug}</span> : null}
         </label>
-        <label className="field">
-          <span>Phone</span>
-          <input
-            defaultValue={selectedVendor?.phone_number ?? ""}
-            autoComplete="tel"
-            inputMode="tel"
-            name="phone_number"
-            placeholder="+234..."
-          />
-          <span className="field-hint">Use international format if available.</span>
-          {fieldErrors.phone_number ? (
-            <span className="field-error">{fieldErrors.phone_number}</span>
-          ) : null}
-        </label>
+      </div>
+      <div className="form-grid">
         <label className="field">
           <span>Area</span>
           <input defaultValue={selectedVendor?.area ?? ""} name="area" placeholder="Wuse" />
-          {fieldErrors.area ? <span className="field-error">{fieldErrors.area}</span> : null}
+          {fieldErrors.area ? (
+            <span className="field-error">{fieldErrors.area}</span>
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
         </label>
+        <label className="field">
+          <span>Price band</span>
+          <select defaultValue={selectedVendor?.price_band ?? ""} name="price_band">
+            <option value="">No change</option>
+            {priceBands.map((band) => (
+              <option key={band} value={band}>
+                {band}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.price_band ? (
+            <span className="field-error">{fieldErrors.price_band}</span>
+          ) : (
+            <span aria-hidden="true" className="field-hint field-hint-placeholder">
+              Placeholder
+            </span>
+          )}
+        </label>
+      </div>
+      <div className="form-grid form-grid-coordinates">
         <label className="field">
           <span>Latitude</span>
           <input
@@ -2671,20 +2759,23 @@ function UpdateVendorIdentityFields({
             <span className="field-error">{fieldErrors.longitude}</span>
           ) : null}
         </label>
+      </div>
+      <div className="form-grid">
         <label className="field">
-          <span>Price band</span>
-          <select defaultValue={selectedVendor?.price_band ?? ""} name="price_band">
-            <option value="">No change</option>
-            {priceBands.map((band) => (
-              <option key={band} value={band}>
-                {band}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.price_band ? (
-            <span className="field-error">{fieldErrors.price_band}</span>
+          <span>Phone</span>
+          <input
+            defaultValue={selectedVendor?.phone_number ?? ""}
+            autoComplete="tel"
+            inputMode="tel"
+            name="phone_number"
+            placeholder="+234..."
+          />
+          <span className="field-hint">Use international format if available.</span>
+          {fieldErrors.phone_number ? (
+            <span className="field-error">{fieldErrors.phone_number}</span>
           ) : null}
         </label>
+        <div aria-hidden="true" className="field field-spacer" />
       </div>
       <label className="field field-wide">
         <span>Short description</span>
