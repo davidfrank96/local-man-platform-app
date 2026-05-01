@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 
@@ -45,6 +45,52 @@ async function openDiscoveryFilters(page: Page) {
   }
 
   throw new Error("Discovery filters are not reachable in the current viewport state.");
+}
+
+async function clickVendorOnMap(page: Page, vendorId: string) {
+  await page.locator(`.discovery-map [data-vendor-id="${vendorId}"]`).click();
+}
+
+async function expectUniqueMapVendorMarkers(page: Page) {
+  const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
+  if (mapMode !== "maplibre") {
+    return;
+  }
+
+  const vendorIds = await page
+    .locator('.discovery-map[data-map-mode="maplibre"] .maplibre-vendor-marker[data-vendor-id]')
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("data-vendor-id") ?? ""),
+    );
+
+  const filteredIds = vendorIds.filter(Boolean);
+  expect(filteredIds.length).toBeGreaterThan(0);
+  expect(new Set(filteredIds).size).toBe(filteredIds.length);
+}
+
+async function readMapInteractionState(page: Page) {
+  const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
+  if (mapMode !== "maplibre") {
+    return null;
+  }
+
+  return page.evaluate(() => window.__LOCAL_MAN_MAP_DEBUG__?.getInteractionState() ?? null);
+}
+
+async function readMapCameraState(page: Page) {
+  const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
+  if (mapMode !== "maplibre") {
+    return null;
+  }
+
+  return page.evaluate(() => window.__LOCAL_MAN_MAP_DEBUG__?.getCameraState() ?? null);
+}
+
+async function topPosition(locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+
+  return box!.y;
 }
 
 function parseRgbChannels(value: string) {
@@ -289,6 +335,8 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(firstCard.getByRole("link", { name: "View details →" })).toBeVisible();
 
     const vendorName = await firstCard.getByRole("heading", { level: 3 }).textContent();
+    const vendorId = await firstCard.getAttribute("data-vendor-id");
+    expect(vendorId).toBeTruthy();
     await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(firstCard).toHaveClass(/selected/);
     await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours:");
@@ -327,6 +375,34 @@ test.describe("Phase 3 browser smoke", () => {
     expect(selectedCardStyles.borderColor).not.toBe("rgba(0, 0, 0, 0)");
     expect(selectedCardStyles.boxShadow).not.toBe("none");
 
+    await expectUniqueMapVendorMarkers(page);
+
+    await clickVendorOnMap(page, vendorId!);
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
+    await expect(page.locator(`.discovery-map [data-vendor-id="${vendorId}"].selected`)).toBeVisible();
+
+    const mapLibreSurface = page.locator('.discovery-map[data-map-mode="maplibre"]');
+    if (await mapLibreSurface.count()) {
+      await expect(mapLibreSurface.locator(".maplibregl-ctrl-zoom-in")).toBeVisible();
+      await expect(mapLibreSurface.locator(".maplibregl-ctrl-zoom-out")).toBeVisible();
+      await expect(mapLibreSurface.locator(".maplibregl-ctrl-geolocate")).toBeVisible();
+      await expect(mapLibreSurface.locator(".maplibre-vendor-marker")).toHaveCount(
+        await page.locator(".vendor-card").count(),
+      );
+      await expect(mapLibreSurface.locator(".vendor-marker")).toHaveCount(0);
+      const interactionState = await readMapInteractionState(page);
+      expect(interactionState).not.toBeNull();
+      expect(interactionState).toMatchObject({
+        boxZoom: true,
+        doubleClickZoom: true,
+        dragPan: true,
+        dragRotate: false,
+        keyboard: true,
+        scrollZoom: true,
+        touchZoomRotate: true,
+      });
+    }
+
     await firstCard.getByRole("link", { name: "View details →" }).click();
 
     await expect(page).toHaveURL(/\/vendors\/[a-z0-9-]+(\?.*)?$/);
@@ -334,6 +410,128 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("link", { name: "Call" })).toBeVisible();
 
     await expectNoClientErrors(errors);
+  });
+
+  test("call and directions actions emit tracking events with vendor context across card, selected preview, and detail views", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const trackedBodies: Array<Record<string, unknown>> = [];
+
+    await page.addInitScript(() => {
+      (window as typeof window & {
+        __LOCALMAN_SUPPRESS_ACTION_NAVIGATION__?: boolean;
+      }).__LOCALMAN_SUPPRESS_ACTION_NAVIGATION__ = true;
+    });
+
+    await page.route("**/api/events", async (route) => {
+      const rawBody = route.request().postData() ?? "";
+      trackedBodies.push(JSON.parse(rawBody) as Record<string, unknown>);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            accepted: true,
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+    await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
+
+    const firstCard = page.locator(".vendor-card").first();
+    const vendorId = await firstCard.getAttribute("data-vendor-id");
+    const detailHref = await firstCard.getByRole("link", { name: "View details →" }).getAttribute("href");
+    expect(vendorId).toBeTruthy();
+    expect(detailHref).toBeTruthy();
+    const vendorSlug = detailHref?.split("/vendors/")[1]?.split("?")[0];
+    expect(vendorSlug).toBeTruthy();
+
+    await firstCard.getByRole("link", { name: "Call" }).click({ noWaitAfter: true });
+    await firstCard.getByRole("link", { name: "Directions" }).click({ noWaitAfter: true });
+
+    await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    const selectedPanel = page.locator(".selected-vendor-panel");
+    await expect(selectedPanel).toBeVisible();
+    await selectedPanel.getByRole("link", { name: "Call" }).click({ noWaitAfter: true });
+    await selectedPanel.getByRole("link", { name: "Directions" }).click({ noWaitAfter: true });
+
+    await page.goto(detailHref!);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.getByRole("link", { name: "Call" }).click({ noWaitAfter: true });
+    await page.getByRole("link", { name: "Directions" }).click({ noWaitAfter: true });
+
+    await expect.poll(
+      () => trackedBodies.filter((body) =>
+        body.event_type === "call_clicked" || body.event_type === "directions_clicked"
+      ).length,
+    ).toBeGreaterThanOrEqual(6);
+
+    const actionEvents = trackedBodies.filter((body) =>
+      body.event_type === "call_clicked" || body.event_type === "directions_clicked"
+    );
+
+    expect(actionEvents.length).toBeGreaterThanOrEqual(6);
+    expect(actionEvents.some((body) => body.event_type === "call_clicked")).toBe(true);
+    expect(actionEvents.some((body) => body.event_type === "directions_clicked")).toBe(true);
+    expect(actionEvents.some((body) => (body.metadata as { source?: string } | undefined)?.source === "card")).toBe(true);
+    expect(actionEvents.some((body) => (body.metadata as { source?: string } | undefined)?.source === "selected_preview")).toBe(true);
+    expect(actionEvents.some((body) => (body.metadata as { source?: string } | undefined)?.source === "detail")).toBe(true);
+
+    for (const body of actionEvents) {
+      expect(body.vendor_id).toBe(vendorId);
+      expect(body.vendor_slug).toBe(vendorSlug);
+      expect(body.device_type === "mobile" || body.device_type === "tablet" || body.device_type === "desktop").toBe(true);
+      expect(body.location_source).toBe("precise");
+      expect(typeof body.timestamp).toBe("string");
+      expect(typeof body.page_path).toBe("string");
+    }
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("fallback map remains usable when the MapLibre style request fails", async ({ page }) => {
+    let blockedStyleRequest = false;
+
+    await primePublicLocation(page);
+    await page.route("**/*", async (route) => {
+      const requestUrl = route.request().url();
+      if (
+        requestUrl.includes("style.json") ||
+        requestUrl.includes("tile.openstreetmap.org") ||
+        requestUrl.includes("maptiler")
+      ) {
+        blockedStyleRequest = true;
+        await route.abort();
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await page.goto("/");
+    try {
+      await expect.poll(async () => blockedStyleRequest).toBe(true);
+      await expect(page.locator('.discovery-map[data-map-mode="fallback"]')).toBeVisible({
+        timeout: 10_000,
+      });
+    } catch {
+      await expect(page.locator('.discovery-map[data-map-mode="fallback"]')).toBeVisible();
+    }
+    await expect(page.getByText("Map view limited, vendors still available below.")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    const fallbackMarker = page.locator('.discovery-map[data-map-mode="fallback"] button[aria-label^="Select "]').first();
+    await expect(fallbackMarker).toBeVisible();
+    await fallbackMarker.click();
+    await expect(page.locator(".selected-vendor-panel h2")).not.toHaveText("No vendor selected");
+
+    await page.locator(".vendor-card").first().getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(page.locator(".vendor-card").first()).toHaveClass(/selected/);
   });
 
   test("vendor detail page loads successfully", async ({ page }) => {
@@ -571,6 +769,7 @@ test.describe("Phase 3 browser smoke", () => {
     await openDiscoveryFilters(page);
     await expect(page.locator('select[name="radiusKm"]:visible')).toHaveValue("30");
     await expect(page.locator(".selected-vendor-panel h2")).toBeVisible();
+    await expectUniqueMapVendorMarkers(page);
 
     const restoredApplyButton = page.locator('button:has-text("Apply"):visible');
     await expect(restoredApplyButton).toBeEnabled();
@@ -618,6 +817,7 @@ test.describe("Phase 3 browser smoke", () => {
     await openDiscoveryFilters(page);
     await expect(page.locator('select[name="radiusKm"]:visible')).toHaveValue("30");
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(selectedVendorName ?? "");
+    await expectUniqueMapVendorMarkers(page);
 
     const restoredApplyButton = page.locator('button:has-text("Apply"):visible');
     await expect(restoredApplyButton).toBeEnabled();
@@ -698,6 +898,98 @@ test.describe("Phase 3 browser smoke", () => {
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
     expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("mobile discovery keeps header, filters, map, selected preview, and list in the correct order", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const firstCard = page.locator(".vendor-card").first();
+    const firstVendorId = await firstCard.getAttribute("data-vendor-id");
+    expect(firstVendorId).toBeTruthy();
+
+    await clickVendorOnMap(page, firstVendorId!);
+
+    const headerTop = await topPosition(page.locator(".discovery-heading"));
+    const filtersTop = await topPosition(page.locator(".mobile-discovery-filters"));
+    const mapTop = await topPosition(page.locator(".discovery-map"));
+    const selectedTop = await topPosition(page.locator(".selected-vendor-panel"));
+    const firstCardTop = await topPosition(firstCard);
+
+    expect(headerTop).toBeLessThan(filtersTop);
+    expect(filtersTop).toBeLessThan(mapTop);
+    expect(mapTop).toBeLessThan(selectedTop);
+    expect(selectedTop).toBeLessThan(firstCardTop);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("mobile map marker selection surfaces the selected vendor preview and card selection keeps map focus", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const firstCard = page.locator(".vendor-card").first();
+    const firstVendorName = await firstCard.locator("h3").textContent();
+    const firstVendorId = await firstCard.getAttribute("data-vendor-id");
+    expect(firstVendorId).toBeTruthy();
+    const scrollBeforeMarkerTap = await page.evaluate(() => window.scrollY);
+    const cameraStateBeforeMarkerTap = await readMapCameraState(page);
+
+    await clickVendorOnMap(page, firstVendorId!);
+    const scrollAfterMarkerTap = await page.evaluate(() => window.scrollY);
+    expect(Math.abs(scrollAfterMarkerTap - scrollBeforeMarkerTap)).toBeLessThan(12);
+
+    const selectedPanel = page.locator(".selected-vendor-panel");
+    await expect(selectedPanel).toBeInViewport();
+    await expect(selectedPanel.locator("h2")).toContainText(firstVendorName ?? "");
+    await expect(selectedPanel).toContainText("Today:");
+    await expect(selectedPanel).toContainText(/Open|Closed|Hours unavailable/);
+    await expect(selectedPanel.getByRole("link", { name: "View details" })).toBeVisible();
+    await expect(selectedPanel.getByRole("link", { name: "Call" })).toBeVisible();
+    await expect(selectedPanel.getByRole("link", { name: "Directions" })).toBeVisible();
+    const cameraStateAfterMarkerTap = await readMapCameraState(page);
+    if (cameraStateBeforeMarkerTap && cameraStateAfterMarkerTap) {
+      expect(cameraStateAfterMarkerTap.count).toBe(cameraStateBeforeMarkerTap.count);
+    }
+
+    await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(selectedPanel.locator("h2")).toContainText(firstVendorName ?? "");
+    await expect(page.locator(`.discovery-map [data-vendor-id="${firstVendorId}"].selected`)).toBeVisible();
+    await expectUniqueMapVendorMarkers(page);
+
+    await openDiscoveryFilters(page);
+    await page.locator('select[name="radiusKm"]:visible').selectOption("30");
+    const applyButton = page.locator('button:has-text("Apply"):visible');
+    await expect(applyButton).toBeEnabled();
+    await applyButton.click();
+    await expect(page).toHaveURL(/radius_km=30/);
+    await expect(selectedPanel).toBeVisible();
+    await expectUniqueMapVendorMarkers(page);
+    if ((await page.locator('.discovery-map[data-map-mode="maplibre"]').count()) > 0) {
+      const overviewZoom = await page.evaluate(() => window.__LOCAL_MAN_MAP_DEBUG__?.getZoom() ?? null);
+      expect(overviewZoom).not.toBeNull();
+      expect(overviewZoom!).toBeLessThan(15);
+      const cameraStateAfterApply = await readMapCameraState(page);
+      expect(cameraStateAfterApply).not.toBeNull();
+      expect(cameraStateAfterApply?.lastAction?.source).toBe("filter");
+      const interactionState = await readMapInteractionState(page);
+      expect(interactionState).not.toBeNull();
+      expect(interactionState).toMatchObject({
+        dragPan: true,
+        dragRotate: false,
+        touchZoomRotate: true,
+      });
+    }
 
     await expectNoClientErrors(errors);
   });

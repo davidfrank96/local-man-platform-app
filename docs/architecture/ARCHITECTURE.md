@@ -18,6 +18,9 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - Supabase Storage for vendor profile images
 
 ### Maps and Location
+- MapLibre GL JS for the optional interactive discovery map
+- browser-configured MapTiler style URL passed through `NEXT_PUBLIC_MAP_STYLE_URL`
+- coordinate fallback map when MapLibre is unavailable or unconfigured
 - browser geolocation for precise location
 - optional approximate location provider interface
 - internal reverse geocoding route for human-readable labels
@@ -43,7 +46,8 @@ Handles:
 - nearby vendor loading
 - search and filters
 - open-now and usage-signal-aware discovery ordering
-- selected vendor state
+- selected vendor state through `selectedVendorId`
+- single vendor-marker system and selected preview synchronization
 - local retention surfaces for recent and last-selected vendors
 - navigation restoration
 - vendor detail rendering
@@ -100,14 +104,31 @@ Stores:
 3. The app resolves precise, approximate, or default-city browse mode
 4. `/api/vendors/nearby` returns nearby vendors
 5. Discovery ordering prioritizes open-now state, then stronger search matches, then usage ranking, then distance
-6. Vendors render in the list, map, selected preview, and lightweight retention panels
+6. Vendors render in the list, optional MapLibre map or fallback map, selected preview, and lightweight retention panels
 7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
 
 Public rendering rules:
 - discovery/list surfaces use compact no-image vendor cards
 - vendor images remain detail-page only
 - selected vendor preview stays compact so the map retains usable space
+- the public map must degrade quietly to the coordinate fallback when style loading, WebGL, or network conditions prevent MapLibre from loading
+- the current real map uses one marker system only:
+  - deep red vendor markers
+  - blue user-location marker
+  - no clustering
 - vendor detail uses a shorter hero and compact summary blocks to reduce scrolling
+
+## Map Interaction Model
+
+- `selectedVendorId` is the single source of truth for:
+  - marker highlight
+  - selected vendor preview
+  - selected vendor list state
+- marker click selects only and must not move the camera
+- vendor-card selection may gently focus the map
+- filter and radius apply fit the map to the current visible vendor set
+- locate-me recenters the map on the resolved user location
+- theme changes update overlays and control contrast without recreating the map instance
 
 ## User Location Handling
 
@@ -190,14 +211,14 @@ Rules:
 ## State Model
 
 ### Vendor Selection
-- the public list stores selected vendor by slug
+- the public discovery surface stores selected vendor by id
 - selection is visual only and must not mutate vendor data
 
 ### Navigation Restoration
 - discovery state is restored through a combination of:
   - URL query state
   - `sessionStorage` snapshot state
-  - selected vendor slug
+  - selected vendor id
   - preserved scroll position
 
 ### Admin Session State

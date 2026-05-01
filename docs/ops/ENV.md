@@ -3,7 +3,8 @@ The Local Man — Environment Variables
 
 ## Frontend / App
 - `NEXT_PUBLIC_APP_URL`: public application origin used by smoke scripts and client-side API helpers.
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: browser Google Maps key for a future real map provider integration.
+- `NEXT_PUBLIC_MAP_STYLE_URL`: optional MapLibre-compatible browser style URL for the public discovery map. The current production target uses a browser-safe MapTiler `style.json` URL. If omitted, the app uses the built-in coordinate fallback map instead of a real tile map.
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: not used by the current public map. Google Maps remains a deep-link target for directions only.
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL. Required by public read routes and admin route verification.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and admin-user authenticated writes.
 
@@ -11,8 +12,8 @@ The Local Man — Environment Variables
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload and delete operations against the `vendor-images` Storage bucket.
 - `DATABASE_URL`: direct database connection string for migrations or server-only maintenance tasks.
 - `GOOGLE_MAPS_SERVER_API_KEY`: server-only Google API key for future geocoding or admin address workflows.
-- `ADMIN_SEED_EMAIL`: initial admin account email for seed/setup workflows.
-- `ADMIN_SEED_PASSWORD`: initial admin account password for seed/setup workflows.
+- `ADMIN_SEED_EMAIL`: optional initial admin account email for seed/setup workflows.
+- `ADMIN_SEED_PASSWORD`: optional initial admin account password for seed/setup workflows.
 
 ## Runtime Requirements
 - Local static checks and unit tests do not require environment variables.
@@ -21,7 +22,7 @@ The Local Man — Environment Variables
 - Admin routes still require an `Authorization: Bearer <supabase-access-token>` request header for an authenticated `admin_users` member.
 - Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.
 - Admin API auth still uses the admin bearer session for route authorization and audit scoping, but Storage writes themselves should not depend on the public anon key.
-- Current public map rendering uses the local MVP coordinate grid; Google Maps keys are documented but not required for current tests.
+- Current public map rendering uses MapLibre only when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. Otherwise it falls back to the local coordinate map. Google Maps keys are still not required for the current public map.
 
 ## Runtime Smoke Test
 - `SMOKE_NEARBY_LAT`: optional latitude override for `npm run smoke:nearby`.
@@ -39,5 +40,6 @@ Exact migration, seed, and nearby smoke test steps are documented in `docs/ops/R
 
 ## Rules
 - Never expose server secrets to client code.
+- Treat `NEXT_PUBLIC_MAP_STYLE_URL` as public browser configuration only. Do not embed server-only keys in that URL.
 - Document where each variable is used.
 - Keep separate values for local, staging, and production.

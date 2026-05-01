@@ -5,7 +5,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
 ## Product Surface
 
 ### Public
-- discovery homepage with map-first nearby vendors, floating mobile search, desktop search/filter bar, and map preview
+- discovery homepage with map-first nearby vendors, floating mobile search, desktop search/filter bar, and an optional MapLibre map plus coordinate fallback
 - discovery ordering that prioritizes:
   - open vendors first
   - stronger search matches
@@ -24,6 +24,12 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - no vendor card photos or thumbnails
 - popular-vendor highlighting when ranking signals exist
 - selected vendor preview below the map on mobile and beside the map on web
+- MapLibre rendered with a single vendor-marker system:
+  - deep red vendor markers
+  - blue user-location marker
+  - marker tap selects a vendor without moving the map
+  - vendor-card selection may gently focus the map
+  - no clustering in the current release
 - vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
 - lightweight vendor rating input with 1-5 stars and no comments
 - local retention helpers:
@@ -74,6 +80,8 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - Supabase Postgres
 - Supabase Auth
 - Supabase Storage
+- MapLibre GL JS
+- MapTiler browser style URL for the real map
 - Google Maps deep links for directions
 
 ## Project Structure
@@ -103,30 +111,49 @@ The Local Man is a location-based food discovery product for finding nearby loca
 1. Install dependencies:
    - `npm install`
 2. Create `.env.local`
-3. Set required environment variables:
+3. Set core environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-4. Apply database migrations before local development:
+4. Set `NEXT_PUBLIC_MAP_STYLE_URL` if you want the real MapLibre map locally:
+   - example: `https://api.maptiler.com/maps/openstreetmap/style.json?key=...`
+   - if omitted, the app uses the built-in coordinate fallback map
+5. Optional bootstrap values:
+   - `ADMIN_SEED_EMAIL`
+   - `ADMIN_SEED_PASSWORD`
+6. Apply database migrations before local development:
    - `npm run db:migrate`
-5. Verify local schema, functions, and policies:
+7. Verify local schema, functions, and policies:
    - `npm run db:check`
-6. Start the app:
+8. Start the app:
    - `npm run dev`
-7. Run the standard verification set:
+9. Run the standard verification set:
    - `npm run lint`
    - `npm run typecheck`
    - `npm test`
    - `npm run test:e2e`
    - `npm run build`
 
-## Required Environment Variables
+## Environment Variables
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+NEXT_PUBLIC_MAP_STYLE_URL=<browser-safe-maptiler-style-json-url>
 ```
+
+Optional bootstrap and ops variables:
+
+```text
+ADMIN_SEED_EMAIL=<initial-admin-email>
+ADMIN_SEED_PASSWORD=<initial-admin-password>
+DATABASE_URL=<postgres-connection-string-for-migrations-and-seeds>
+```
+
+`NEXT_PUBLIC_MAP_STYLE_URL` is optional for overall app startup, but required if you want the real tiled MapLibre map instead of the fallback coordinate map.
+
+Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `style.json` endpoint. Do not place server secrets in this value. If your provider requires authentication, use a public token or a style URL that is safe to expose in the browser.
 
 `SUPABASE_SERVICE_ROLE_KEY` is required for:
 
@@ -140,8 +167,12 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 ## Deployment Notes
 - production deployment target: DigitalOcean App Platform
 - backend services: Supabase Postgres, Auth, and Storage
+- real map provider: MapLibre using a MapTiler style URL exposed through `NEXT_PUBLIC_MAP_STYLE_URL`
 - vendor image bucket: `vendor-images`
 - local development and smoke testing use `http://localhost:3000`
+- `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only in DigitalOcean runtime secrets
+- the MapTiler key embedded in `NEXT_PUBLIC_MAP_STYLE_URL` must be browser-safe because the value is public
+- after changing Supabase or map env vars in DigitalOcean, trigger a redeploy so Next.js rebuilds with the updated public env
 
 ## Runtime Validation
 Before deployment or major continuation work, keep the runtime gate green:
@@ -226,6 +257,9 @@ Phase 5 delivered:
 - browser-back and `Back to map` restoration
 - Apply button restoration after navigation
 - morning, afternoon, and night discovery theming
+- stable MapLibre marker/card synchronization without marker-tap camera drift
+- single deep-red vendor markers plus blue user-location marker
+- no clustering in the current shipped map interaction model
 - trust-first location display and retry behavior
 - admin dashboard restructuring
 - fuller vendor onboarding flow

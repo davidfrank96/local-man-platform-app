@@ -47,7 +47,8 @@ type VendorLookupRow = {
   slug: string;
 };
 
-const MAX_ANALYTICS_EVENTS = 1500;
+const ANALYTICS_PAGE_SIZE = 1000;
+const MAX_ANALYTICS_EVENTS = 5000;
 const RECENT_EVENTS_LIMIT = 25;
 const analyticsCacheTtlMs = 30_000;
 const analyticsQueryWarnThresholdMs = 3_000;
@@ -195,86 +196,103 @@ async function fetchEventRows(
     "timestamp",
     ...(includeSessionId ? ["session_id"] : []),
   ];
-  const filters: Record<string, string> = {
-    select: selectFields.join(","),
-    order: "timestamp.desc",
-    limit: String(MAX_ANALYTICS_EVENTS),
-  };
   const rangeStart = getRangeStart(range);
+  const rows: AnalyticsEventRow[] = [];
+  let offset = 0;
 
-  if (rangeStart) {
-    filters.timestamp = `gte.${rangeStart}`;
-  }
+  while (rows.length < MAX_ANALYTICS_EVENTS) {
+    const limit = Math.min(ANALYTICS_PAGE_SIZE, MAX_ANALYTICS_EVENTS - rows.length);
+    const filters: Record<string, string> = {
+      select: selectFields.join(","),
+      order: "timestamp.desc",
+      limit: String(limit),
+      offset: String(offset),
+    };
 
-  const url = createRestUrl(config, "user_events", filters);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort("ANALYTICS_EVENTS_TIMEOUT");
-  }, analyticsFetchTimeoutMs);
-  const startedAt = Date.now();
-  let response: Response;
+    if (rangeStart) {
+      filters.timestamp = `gte.${rangeStart}`;
+    }
 
-  try {
-    response = await fetchImpl(url, {
-      method: "GET",
-      headers: createHeaders(session, config),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.name === "AbortError" || controller.signal.aborted)
-    ) {
+    const url = createRestUrl(config, "user_events", filters);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort("ANALYTICS_EVENTS_TIMEOUT");
+    }, analyticsFetchTimeoutMs);
+    const startedAt = Date.now();
+    let response: Response;
+
+    try {
+      response = await fetchImpl(url, {
+        method: "GET",
+        headers: createHeaders(session, config),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.name === "AbortError" || controller.signal.aborted)
+      ) {
+        throw new AdminServiceError(
+          "NETWORK_ERROR",
+          "Analytics event query timed out.",
+          504,
+          { timeoutMs: analyticsFetchTimeoutMs },
+          "Activity temporarily unavailable.",
+        );
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const durationMs = Date.now() - startedAt;
+    if (durationMs > analyticsQueryWarnThresholdMs) {
+      logStructuredEvent("warn", {
+        type: "ANALYTICS_EVENTS_SLOW_QUERY",
+        requestId: session.requestId,
+        range,
+        durationMs,
+        url: url.toString(),
+      });
+    }
+
+    const payload = await readJson(response);
+
+    if (!response.ok) {
+      if (includeSessionId && isMissingSessionIdColumn(payload)) {
+        return fetchEventRows({ session, config, fetchImpl }, range, false);
+      }
+
       throw new AdminServiceError(
-        "NETWORK_ERROR",
-        "Analytics event query timed out.",
-        504,
-        { timeoutMs: analyticsFetchTimeoutMs },
-        "Activity temporarily unavailable.",
+        "UPSTREAM_ERROR",
+        "Unable to load analytics events.",
+        502,
+        payload,
       );
     }
 
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  const durationMs = Date.now() - startedAt;
-  if (durationMs > analyticsQueryWarnThresholdMs) {
-    logStructuredEvent("warn", {
-      type: "ANALYTICS_EVENTS_SLOW_QUERY",
-      requestId: session.requestId,
-      range,
-      durationMs,
-      url: url.toString(),
-    });
-  }
-  const payload = await readJson(response);
-
-  if (!response.ok) {
-    if (includeSessionId && isMissingSessionIdColumn(payload)) {
-      return fetchEventRows({ session, config, fetchImpl }, range, false);
+    if (!Array.isArray(payload)) {
+      throw new AdminServiceError(
+        "UPSTREAM_ERROR",
+        "Analytics event payload was malformed.",
+        502,
+        payload,
+      );
     }
 
-    throw new AdminServiceError(
-      "UPSTREAM_ERROR",
-      "Unable to load analytics events.",
-      502,
-      payload,
-    );
-  }
+    const pageRows = payload as AnalyticsEventRow[];
+    rows.push(...pageRows);
 
-  if (!Array.isArray(payload)) {
-    throw new AdminServiceError(
-      "UPSTREAM_ERROR",
-      "Analytics event payload was malformed.",
-      502,
-      payload,
-    );
+    if (pageRows.length < limit) {
+      break;
+    }
+
+    offset += pageRows.length;
   }
 
   return {
-    rows: payload as AnalyticsEventRow[],
+    rows,
     sessionIdAvailable: includeSessionId,
   };
 }

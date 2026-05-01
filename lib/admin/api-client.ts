@@ -243,7 +243,8 @@ const adminAuditActions = new Set<AuditActionType>([
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
 ]);
-const maxAnalyticsEvents = 1500;
+const analyticsPageSize = 1000;
+const maxAnalyticsEvents = 5000;
 const recentAnalyticsEventsLimit = 25;
 
 type AnalyticsEventRow = {
@@ -526,43 +527,59 @@ async function fetchAnalyticsEventRows(
   const baseSelect =
     "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source";
 
-  const runQuery = async (includeSessionId: boolean) => {
-    let query = supabase
-      .from("user_events")
-      .select(includeSessionId ? `${baseSelect},session_id` : baseSelect)
-      .order("timestamp", { ascending: false })
-      .limit(maxAnalyticsEvents);
+  const loadPages = async (includeSessionId: boolean) => {
+    const rows: AnalyticsEventRow[] = [];
+    let offset = 0;
 
-    if (rangeStart) {
-      query = query.gte("timestamp", rangeStart);
+    while (rows.length < maxAnalyticsEvents) {
+      const limit = Math.min(analyticsPageSize, maxAnalyticsEvents - rows.length);
+      let query = supabase
+        .from("user_events")
+        .select(includeSessionId ? `${baseSelect},session_id` : baseSelect)
+        .order("timestamp", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (rangeStart) {
+        query = query.gte("timestamp", rangeStart);
+      }
+
+      const result = await query;
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      const pageRows = Array.isArray(result.data)
+        ? result.data as unknown as AnalyticsEventRow[]
+        : [];
+      rows.push(...pageRows);
+
+      if (pageRows.length < limit) {
+        break;
+      }
+
+      offset += pageRows.length;
     }
 
-    return query;
+    return rows;
   };
 
-  const initialResult = await runQuery(true);
-
-  if (initialResult.error && isMissingSessionIdColumn(initialResult.error.message)) {
-    const fallbackResult = await runQuery(false);
-
-    if (fallbackResult.error) {
-      throw fallbackResult.error;
-    }
-
+  try {
     return {
-      rows: Array.isArray(fallbackResult.data) ? fallbackResult.data as unknown as AnalyticsEventRow[] : [],
-      sessionIdAvailable: false,
+      rows: await loadPages(true),
+      sessionIdAvailable: true,
     };
-  }
+  } catch (error) {
+    const supabaseError = error as { message?: string };
+    if (isMissingSessionIdColumn(supabaseError?.message)) {
+      return {
+        rows: await loadPages(false),
+        sessionIdAvailable: false,
+      };
+    }
 
-  if (initialResult.error) {
-    throw initialResult.error;
+    throw error;
   }
-
-  return {
-    rows: Array.isArray(initialResult.data) ? initialResult.data as unknown as AnalyticsEventRow[] : [],
-    sessionIdAvailable: true,
-  };
 }
 
 function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {

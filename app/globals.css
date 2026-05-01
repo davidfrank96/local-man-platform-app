@@ -2616,6 +2616,121 @@ h2 {
   background-size: 56px 56px, 56px 56px, 100% 100%;
 }
 
+.maplibre-map-surface {
+  min-height: min(64vh, 680px);
+  height: min(64vh, 680px);
+  width: 100%;
+  overscroll-behavior: contain;
+  background:
+    linear-gradient(90deg, rgba(37, 41, 36, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(37, 41, 36, 0.08) 1px, transparent 1px),
+    var(--discovery-map-overlay);
+  background-size: 56px 56px, 56px 56px, 100% 100%;
+}
+
+.maplibre-map-surface .maplibregl-map,
+.maplibre-map-surface .maplibregl-canvas,
+.maplibre-map-surface .maplibregl-canvas-container {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.maplibre-map-surface .maplibregl-control-container {
+  font: inherit;
+}
+
+.maplibre-map-surface .maplibregl-ctrl-group {
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(37, 41, 36, 0.12);
+}
+
+.maplibre-map-surface .maplibregl-ctrl-top-right {
+  top: 12px;
+  right: 12px;
+}
+
+.maplibre-map-surface .maplibregl-ctrl-group button {
+  width: 34px;
+  height: 34px;
+}
+
+.maplibre-user-marker,
+.maplibre-vendor-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transform: translate(-50%, -50%);
+}
+
+.maplibre-user-marker {
+  width: 44px;
+  height: 44px;
+  pointer-events: none;
+}
+
+.maplibre-vendor-marker {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  touch-action: manipulation;
+}
+
+.maplibre-user-marker__pin {
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--color-surface);
+  border-radius: 999px;
+  background: #1e88e5;
+  box-shadow:
+    0 0 0 6px rgba(30, 136, 229, 0.22),
+    0 10px 24px rgba(37, 41, 36, 0.18);
+}
+
+.maplibre-vendor-marker__pin {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-surface);
+  border-radius: 999px;
+  background: #9f1f1f;
+  color: var(--color-surface);
+  box-shadow: 0 10px 22px rgba(37, 41, 36, 0.2);
+  transition:
+    transform 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.maplibre-vendor-marker__label {
+  font-size: 0.79rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.maplibre-vendor-marker.selected .maplibre-vendor-marker__pin {
+  width: 36px;
+  height: 36px;
+  background: #6e1212;
+  box-shadow:
+    0 0 0 4px rgba(159, 31, 31, 0.24),
+    0 14px 30px rgba(37, 41, 36, 0.28);
+}
+
+.maplibre-vendor-marker:hover .maplibre-vendor-marker__pin,
+.maplibre-vendor-marker:focus-visible .maplibre-vendor-marker__pin {
+  transform: scale(1.06);
+}
+
 .user-marker,
 .vendor-marker {
   position: absolute;
@@ -2627,7 +2742,7 @@ h2 {
   height: 22px;
   border: 5px solid var(--color-surface);
   border-radius: 999px;
-  background: var(--color-green);
+  background: #1e88e5;
   box-shadow: 0 10px 24px rgba(37, 41, 36, 0.22);
 }
 
@@ -2639,7 +2754,7 @@ h2 {
   justify-content: center;
   border: 3px solid var(--color-surface);
   border-radius: 999px;
-  background: var(--color-accent);
+  background: #9f1f1f;
   color: white;
   font: inherit;
   font-size: 0.86rem;
@@ -2650,8 +2765,10 @@ h2 {
 .vendor-marker.selected {
   width: 42px;
   height: 42px;
-  background: var(--color-text);
-  box-shadow: 0 14px 30px rgba(37, 41, 36, 0.34);
+  background: #6e1212;
+  box-shadow:
+    0 0 0 4px rgba(159, 31, 31, 0.24),
+    0 14px 30px rgba(37, 41, 36, 0.34);
 }
 
 .map-legend {
@@ -2670,6 +2787,25 @@ h2 {
   padding: 10px 12px;
   font-size: 0.9rem;
   font-weight: 800;
+}
+
+.map-fallback-notice {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  max-width: min(300px, calc(100% - 112px));
+  margin: 0;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 8px 12px;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .waiting-map {
@@ -3294,6 +3430,10 @@ h2 {
     display: contents;
   }
 
+  .vendor-map-theme-shell {
+    display: contents;
+  }
+
   .discovery-heading {
     order: 1;
   }
@@ -3323,6 +3463,11 @@ h2 {
 
   .discovery-map-grid {
     min-height: 420px;
+  }
+
+  .maplibre-map-surface {
+    min-height: 420px;
+    height: 420px;
   }
 
   .selected-vendor-panel {
@@ -3595,6 +3740,11 @@ h2 {
   .discovery-map {
     min-height: 480px;
     padding-top: 0;
+  }
+
+  .maplibre-map-surface {
+    min-height: 480px;
+    height: 480px;
   }
 }
 

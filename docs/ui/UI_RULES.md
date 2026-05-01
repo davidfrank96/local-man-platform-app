@@ -11,16 +11,20 @@ The Local Man — UI Rules
 
 ## Public UI Rules
 - Homepage must open into a map-first layout.
-- Mobile discovery currently uses this order:
+- The public discovery map may render as MapLibre or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
+- When MapLibre is active, the map must use one marker system only:
+  - deep red vendor markers
+  - blue user-location marker
+  - no clustering
+- Marker click selects a vendor and updates the selected preview, but must not move the camera.
+- Vendor-card selection may gently focus the map marker when that improves orientation.
+- Core mobile discovery order must remain:
   - Local Man header
-  - floating search/navbar
-  - location reminder toast when visible
+  - floating search/filter bar
   - map
   - selected vendor card
-  - location status / retry panel
-  - vendor section navbar
-  - active section content
-  - last selected vendor at the bottom
+  - vendor list
+- Reminder toasts and location status panels must not move the map above the header or filters.
 - Web discovery currently uses:
   - left column for header, search/filter, reminder toast, location panel, vendor section navbar, and vendor content
   - right column for map and selected vendor preview
@@ -33,6 +37,7 @@ The Local Man — UI Rules
 - Discovery ordering should be understandable without exposing raw ranking math.
 - Open vendors should be easier to find than closed vendors.
 - The UI may highlight a small set of popular nearby vendors when real usage signals support it.
+- If the interactive map is unavailable, show calm fallback copy and keep the vendor list fully usable.
 - Do not overload the home screen with too many actions.
 - Runtime errors must be visible when Supabase data is unavailable.
 - Public UI must not render fake vendor data.
@@ -95,6 +100,7 @@ The Local Man — UI Rules
 
 ## Discovery Clarity Rules
 - Search relevance should feel predictable: stronger name matches should rise above weaker descriptive matches.
+- Nearby results may prioritize open-now state and ranking signals before pure distance, but distances must still remain visible and truthful.
 - When filters are active, the current filter state should be obvious and easy to clear.
 - Discovery ordering helper copy may explain the current emphasis, such as open now, search relevance, popularity, or distance.
 - Retention helpers such as recently viewed vendors or last selected vendor memory should remain compact and supportive rather than taking over the page.
@@ -165,6 +171,8 @@ The Local Man — UI Rules
 - Selected vendor preview panels should stay compact and action-oriented, with `View details`, `Call`, and `Directions` visible on mobile.
 - Selected vendor preview panels on desktop should keep `Call`, `Directions`, and `View details` on one row when space allows.
 - Selected vendor preview panels currently remain below the map on mobile and in the map column on desktop.
+- On mobile, the selected vendor preview must already sit directly under the map so marker selection does not require a page jump.
+- The full vendor marker button, including its visible number label, must be tappable.
 - Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
 - Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.
 - Night background tones should feel like evening discovery with deeper blue/slate washes and readable light cards, not harsh black surfaces.

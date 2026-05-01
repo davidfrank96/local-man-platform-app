@@ -32,7 +32,7 @@ Test:
 - incorrect coordinates
 - distance calculation accuracy
 - nearby radius filtering
-- nearest-first vendor ordering
+- nearby results stay within radius and expose stable `distance_km` and `ranking_score` fields even when discovery ranking reorders vendors
 - browser geolocation success
 - IP approximation fallback
 - Abuja default city fallback
@@ -49,7 +49,7 @@ Current automated coverage:
 Runtime smoke coverage:
 - `npm run smoke:nearby`
 - Requires real Supabase env vars and seeded Abuja data.
-- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, nearest-first ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
+- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
 
 ### Public Discovery Logic
 Test:
@@ -70,6 +70,10 @@ Test:
 - selected vendor highlight remains readable
 - selected vendor preview exposes `View details`, `Call`, and `Directions`
 - vendor card metadata row keeps distance and open/closed state visible together
+- the real map uses one vendor-marker system only with no clustering
+- marker taps update the selected vendor preview without moving the camera
+- visible marker numbers remain tappable and update the selected vendor preview
+- card selection may gently focus the map without causing page scroll drift
 - browser back restores discovery state
 - `Back to map` restores discovery state
 - restored discovery state keeps search and filter controls usable without manual reload
@@ -85,6 +89,7 @@ Current automated coverage:
 - `tests/public-api-client.test.ts`
 - `tests/public-routes.test.ts`
 - `tests/discovery-ranking.test.ts`
+- `tests/public-user-action-tracking.test.ts`
 - `tests/vendor-retention.test.ts`
 - `tests/e2e/app-smoke.spec.ts`
 - `tests/e2e/layout-stress.spec.ts`
@@ -219,6 +224,11 @@ Manual UI checks:
 - selected vendor preview keeps `Call`, `Directions`, and `View details` accessible
 - vendor detail hero remains compact and readable
 - map controls stay visible
+- MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
+- the real map should show deep red vendor markers, a blue user-location marker, and no cluster bubbles
+- mobile discovery should keep the order: header, filters, map, selected vendor preview, vendor list
+- mobile marker taps should update the selected preview without drifting the map or scrolling the page down
+- mobile pinch zoom and drag-pan should be checked on a real device before final release confidence
 - no horizontal overflow on mobile
 - morning, afternoon, and night themes stay readable
 

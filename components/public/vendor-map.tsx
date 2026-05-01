@@ -1,87 +1,90 @@
-import type { Coordinates } from "../../lib/location/distance.ts";
-import type { NearbyVendorsResponseData } from "../../types/index.ts";
+"use client";
 
-type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
+import { useEffect, useState, type ComponentType } from "react";
+import {
+  browserSupportsVendorMapRendering,
+  getPublicMapStyleUrl,
+  MAP_FALLBACK_NOTICE,
+} from "./vendor-map-config.ts";
+import { VendorMapFallback } from "./vendor-map-fallback.tsx";
+import type { VendorMapProps } from "./vendor-map-types.ts";
 
-type VendorMapProps = {
-  vendors: NearbyVendor[];
-  userLocation: Coordinates;
-  selectedVendorId: string | null;
-  onSelectVendor: (vendorId: string, source: "map") => void;
-};
+type MapLibreVendorMapComponent = ComponentType<
+  VendorMapProps & { onMapError: () => void; styleUrl: string }
+>;
 
-function getMarkerStyle(
-  point: Coordinates,
-  bounds: {
-    minLat: number;
-    maxLat: number;
-    minLng: number;
-    maxLng: number;
-  },
-): {
-  left: string;
-  top: string;
-} {
-  const lngRange = bounds.maxLng - bounds.minLng || 0.01;
-  const latRange = bounds.maxLat - bounds.minLat || 0.01;
-  const left = ((point.lng - bounds.minLng) / lngRange) * 78 + 11;
-  const top = (1 - (point.lat - bounds.minLat) / latRange) * 72 + 14;
+export function VendorMap(props: VendorMapProps) {
+  const mapTheme = props.timeTheme ?? "morning";
+  const [MapLibreComponent, setMapLibreComponent] = useState<MapLibreVendorMapComponent | null>(
+    null,
+  );
+  const [fallbackReason, setFallbackReason] = useState<
+    "missing_style_url" | "unsupported_browser" | "map_error" | null
+  >(() => {
+    const styleUrl = getPublicMapStyleUrl();
+    return styleUrl.length === 0 ? "missing_style_url" : null;
+  });
+  const mapStyleUrl = getPublicMapStyleUrl();
 
-  return {
-    left: `${Math.min(92, Math.max(8, left))}%`,
-    top: `${Math.min(90, Math.max(8, top))}%`,
-  };
-}
+  useEffect(() => {
+    let cancelled = false;
+    let unsupportedBrowserFrame: number | null = null;
 
-export function VendorMap({
-  vendors,
-  userLocation,
-  selectedVendorId,
-  onSelectVendor,
-}: VendorMapProps) {
-  const lats = [userLocation.lat, ...vendors.map((vendor) => vendor.latitude)];
-  const lngs = [userLocation.lng, ...vendors.map((vendor) => vendor.longitude)];
-  const bounds = {
-    minLat: Math.min(...lats),
-    maxLat: Math.max(...lats),
-    minLng: Math.min(...lngs),
-    maxLng: Math.max(...lngs),
-  };
+    if (fallbackReason || mapStyleUrl.length === 0) {
+      return;
+    }
+
+    if (!browserSupportsVendorMapRendering()) {
+      unsupportedBrowserFrame = window.requestAnimationFrame(() => {
+        setFallbackReason("unsupported_browser");
+      });
+      return () => {
+        if (unsupportedBrowserFrame !== null) {
+          window.cancelAnimationFrame(unsupportedBrowserFrame);
+        }
+      };
+    }
+
+    void import("./vendor-map-maplibre.tsx")
+      .then((module) => {
+        if (cancelled) {
+          return;
+        }
+
+        setMapLibreComponent(() => module.MapLibreVendorMap);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFallbackReason("map_error");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (unsupportedBrowserFrame !== null) {
+        window.cancelAnimationFrame(unsupportedBrowserFrame);
+      }
+    };
+  }, [fallbackReason, mapStyleUrl]);
+
+  if (fallbackReason || mapStyleUrl.length === 0 || !MapLibreComponent) {
+    return (
+      <div className="vendor-map-theme-shell" data-time-theme={mapTheme}>
+        <VendorMapFallback
+          {...props}
+          notice={fallbackReason ? MAP_FALLBACK_NOTICE : null}
+        />
+      </div>
+    );
+  }
 
   return (
-    <section className="discovery-map" aria-label="Nearby vendor map">
-      <div className="discovery-map-grid">
-        <span
-          aria-label="Search location"
-          className="user-marker"
-          role="img"
-          style={getMarkerStyle(userLocation, bounds)}
-          title="Search location"
-        />
-        {vendors.map((vendor, index) => (
-          <button
-            aria-label={`Select ${vendor.name}`}
-            className={
-              vendor.vendor_id === selectedVendorId
-                ? "vendor-marker selected"
-                : "vendor-marker"
-            }
-            key={vendor.vendor_id}
-            style={getMarkerStyle(
-              { lat: vendor.latitude, lng: vendor.longitude },
-              bounds,
-            )}
-            type="button"
-            onClick={() => onSelectVendor(vendor.vendor_id, "map")}
-          >
-            {index + 1}
-          </button>
-        ))}
-      </div>
-      <div className="map-legend">
-        <span>Search location</span>
-        <span>{vendors.length} vendors</span>
-      </div>
-    </section>
+    <div className="vendor-map-theme-shell" data-time-theme={mapTheme}>
+      <MapLibreComponent
+        {...props}
+        onMapError={() => setFallbackReason("map_error")}
+        styleUrl={mapStyleUrl}
+      />
+    </div>
   );
 }
