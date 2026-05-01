@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type MutableRefObject,
 } from "react";
 import type { Coordinates } from "../../lib/location/distance.ts";
@@ -359,6 +360,7 @@ export function MapLibreVendorMap({
   styleUrl,
 }: MapLibreVendorMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<MapInstance | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const userMarkerRef = useRef<MarkerInstance | null>(null);
@@ -420,9 +422,6 @@ export function MapLibreVendorMap({
           zoom: DEFAULT_VENDOR_MAP_ZOOM,
           cooperativeGestures: false,
           fadeDuration: 0,
-          canvasContextAttributes: {
-            failIfMajorPerformanceCaveat: true,
-          },
         });
 
         mapRef.current = map;
@@ -507,6 +506,7 @@ export function MapLibreVendorMap({
           );
           lastViewportKeyRef.current = viewportKey;
           installMapDebug(map, cameraStateRef, latestVendorsRef, markersRef);
+          setMapReady(true);
         });
       } catch {
         if (!cancelled) {
@@ -529,6 +529,7 @@ export function MapLibreVendorMap({
       mapRef.current?.remove();
       mapRef.current = null;
       maplibreRef.current = null;
+      setMapReady(false);
       loadedRef.current = false;
       fallbackTriggeredRef.current = false;
       lastViewportKeyRef.current = null;
@@ -632,7 +633,7 @@ export function MapLibreVendorMap({
     <section
       className="discovery-map"
       aria-label="Nearby vendor map"
-      data-map-mode="maplibre"
+      data-map-mode={mapReady ? "maplibre" : "loading"}
       data-time-theme={timeTheme ?? "morning"}
     >
       <div className="maplibre-map-surface" ref={containerRef} />
