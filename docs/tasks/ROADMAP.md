@@ -55,6 +55,7 @@ The Local Man — Roadmap
 - browser-back and `Back to map` restoration
 - Apply button restoration after navigation
 - time-based morning, afternoon, and night discovery theming
+- MapLibre interactive map with fallback coordinate map, selected-preview sync, single deep-red vendor markers, and no clustering
 - trust-first precise, approximate, and default-city location messaging
 - reverse location display with human-readable area labels
 - structured admin workspace routes for dashboard, registry, create, and edit flows
@@ -89,9 +90,12 @@ Status: completed
 
 Status: completed
 
-## After Phase 6
+## Phase 7 — Trust, Ranking, and Retention
 Potential future work only after real usage signals justify it:
-- real Google Maps JavaScript integration
-- live IP approximation provider selection
-- stronger deployment monitoring and analytics
-- broader city rollout
+- trust-first location hardening with a real approximate-location provider
+- ranking-tuning from live usage signals without making ordering opaque
+- retention refinement for recently viewed and last-selected vendor return paths
+- stronger deployment monitoring and analytics operations
+- broader city rollout only after Abuja pilot quality is stable
+
+Status: planned

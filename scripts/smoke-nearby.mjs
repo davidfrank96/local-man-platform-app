@@ -95,13 +95,10 @@ function assertSuccessResult(label, result, { requireVendors }) {
     if (typeof vendor.distance_km !== "number" || vendor.distance_km < 0) {
       throw new Error(`${label} vendor has invalid distance_km: ${JSON.stringify(vendor)}`);
     }
-  }
 
-  const distances = result.body.data.vendors.map((vendor) => vendor.distance_km);
-  const sortedDistances = [...distances].sort((left, right) => left - right);
-
-  if (JSON.stringify(distances) !== JSON.stringify(sortedDistances)) {
-    throw new Error(`${label} vendors are not sorted nearest first.`);
+    if (typeof vendor.ranking_score !== "number" || vendor.ranking_score < 0) {
+      throw new Error(`${label} vendor has invalid ranking_score: ${JSON.stringify(vendor)}`);
+    }
   }
 }
 
@@ -182,6 +179,12 @@ console.log(
           checkedUrl: preciseResult.url.toString(),
           vendorCount: preciseResult.body.data.vendors.length,
           nearestVendor: preciseResult.body.data.vendors[0],
+          rankingPreview: preciseResult.body.data.vendors.slice(0, 3).map((vendor) => ({
+            vendor_id: vendor.vendor_id,
+            ranking_score: vendor.ranking_score,
+            distance_km: vendor.distance_km,
+            is_open_now: vendor.is_open_now,
+          })),
         },
         {
           label: "tight radius nearby query",

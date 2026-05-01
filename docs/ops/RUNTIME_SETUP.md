@@ -26,7 +26,7 @@ If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that a
 
 The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
 
-The smoke test verifies precise coordinates, `distance_km`, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
+The smoke test verifies precise coordinates, `distance_km`, ranking-aware nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
 
 ## Required Tools
 - Node.js and npm
@@ -42,6 +42,7 @@ Create `.env.local` from `.env.example` and fill:
 
 ```text
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_MAP_STYLE_URL=<optional-browser-safe-maptiler-style-json-url>
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
@@ -51,6 +52,14 @@ DATABASE_URL=<postgres-connection-string>
 `DATABASE_URL` is only required for the `npm run db:migrate` and `npm run db:seed:abuja` scripts. Those scripts load `.env.local` before invoking `psql`. If using the Supabase Dashboard SQL Editor, `DATABASE_URL` is not required locally.
 
 `SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations.
+
+`NEXT_PUBLIC_MAP_STYLE_URL` is optional. Set it only if you want the public discovery page to render a real MapLibre map. If it is left empty, the discovery page will continue to use the built-in coordinate fallback map and the rest of the app will behave normally.
+
+Current real-map example:
+
+```text
+https://api.maptiler.com/maps/openstreetmap/style.json?key=YOUR_PUBLIC_MAPTILER_KEY
+```
 
 Supabase requirements:
 - Auth must be enabled for admin login
@@ -200,7 +209,7 @@ SMOKE_NEARBY_TIGHT_RADIUS_KM=2 npm run smoke:nearby
 The smoke test validates:
 - `lat` and `lng` precise coordinate input
 - computed `distance_km` output
-- nearest-first sorting
+- ranking-aware discovery ordering
 - wide radius filtering
 - tight radius filtering
 - invalid coordinate rejection
@@ -259,7 +268,7 @@ Expected response shape:
 }
 ```
 
-With the Abuja seed data loaded, `vendors` should contain nearby vendor records sorted by `distance_km`.
+With the Abuja seed data loaded, `vendors` should contain nearby vendor records with valid `distance_km` values and ranking-aware ordering.
 
 ## Release Gate
 Deployment, pilot validation, or further UX iteration should proceed only after:
@@ -273,6 +282,12 @@ Deployment, pilot validation, or further UX iteration should proceed only after:
 - Local development and smoke testing assume `http://localhost:3000` unless `NEXT_PUBLIC_APP_URL` is overridden.
 - Production should use the real deployed app URL for `NEXT_PUBLIC_APP_URL`.
 - The same Supabase public env vars used locally must be present in the DigitalOcean app configuration.
+- Production runtime secrets must include `SUPABASE_SERVICE_ROLE_KEY` for:
+  - admin image upload and delete
+  - analytics writes and admin analytics reads
+- Set `NEXT_PUBLIC_MAP_STYLE_URL` in DigitalOcean only if the production app should use the real MapLibre map. If omitted, production stays on the fallback coordinate map without breaking public discovery.
+- The `vendor-images` Storage bucket must exist and stay public for the current frontend image URL strategy.
+- After changing DigitalOcean env vars, redeploy the app so new public values are compiled into the Next.js build.
 
 For launch-day operator work and ongoing Abuja pilot checks, use [docs/ops/PILOT_CHECKLIST.md](./PILOT_CHECKLIST.md).
 
@@ -281,16 +296,18 @@ Use this checklist when completing runtime activation manually:
 
 1. Create `.env.local` from `.env.example`.
 2. Fill `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-3. Fill `DATABASE_URL` if using local `psql` commands.
-4. Run `npm run runtime:check-env`.
-5. If using local `psql`, run `npm run runtime:check-db-env`.
-6. Apply `supabase/migrations/20260422180000_initial_schema.sql` using either `npm run db:migrate` or Supabase SQL Editor.
-7. Apply `supabase/seed/20260422_abuja_pilot_seed.sql` using either `npm run db:seed:abuja` or Supabase SQL Editor.
-8. Run the seed validation queries in this document.
-9. Run `npm run dev`.
-10. In a second terminal, run `npm run smoke:nearby`.
-11. Confirm the smoke command prints `"ok": true`.
-12. Do not proceed to deployment or further feature expansion until all checks above pass.
+3. Fill `SUPABASE_SERVICE_ROLE_KEY` if validating admin image upload, analytics, or server-side event writes.
+4. Fill `NEXT_PUBLIC_MAP_STYLE_URL` if validating the real MapLibre map instead of the fallback coordinate map.
+5. Fill `DATABASE_URL` if using local `psql` commands.
+6. Run `npm run runtime:check-env`.
+7. If using local `psql`, run `npm run runtime:check-db-env`.
+8. Apply `supabase/migrations/20260422180000_initial_schema.sql` using either `npm run db:migrate` or Supabase SQL Editor.
+9. Apply `supabase/seed/20260422_abuja_pilot_seed.sql` using either `npm run db:seed:abuja` or Supabase SQL Editor.
+10. Run the seed validation queries in this document.
+11. Run `npm run dev`.
+12. In a second terminal, run `npm run smoke:nearby`.
+13. Confirm the smoke command prints `"ok": true`.
+14. Do not proceed to deployment or further feature expansion until all checks above pass.
 
 ## Runtime/Admin Boundary
 Runtime activation must stay validated before additional admin or public UX changes are shipped.

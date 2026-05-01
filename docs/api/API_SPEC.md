@@ -12,7 +12,7 @@ Initial route foundation:
 - `lib/api/contracts.ts`
 - `lib/api/responses.ts`
 
-The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, nearest-first sorting, featured dish summary selection, and compact `today_hours` output. Authenticated admin routes cover vendor create, update, deactivate, sub-resources, and audit-log behavior.
+The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, ranking-aware discovery ordering, featured dish summary selection, and compact `today_hours` output. Authenticated admin routes cover vendor create, update, deactivate, sub-resources, and audit-log behavior.
 
 Media model:
 - vendor profile images live in `vendor_images`
@@ -82,6 +82,8 @@ Behavior:
   2. stronger client-side search relevance
   3. higher `ranking_score`
   4. shorter distance
+- The public map currently renders those vendor results as individual markers when MapLibre is enabled.
+- Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.
 - Distance is not stored in the database.
 - If the Supabase schema has not been migrated, the API returns `UPSTREAM_ERROR` from the failed Supabase query.
 
@@ -136,7 +138,7 @@ Returns:
 - hours
 - categories
 - featured dishes
-- images
+- images with browser-ready public `image_url` values
 - rating summary
 
 Behavior:

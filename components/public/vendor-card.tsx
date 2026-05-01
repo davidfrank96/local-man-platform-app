@@ -59,7 +59,10 @@ export function VendorCard({
         : "vendor-card-status-badge vendor-card-status-unavailable";
 
   return (
-    <article className={selected ? "vendor-card selected" : "vendor-card"}>
+    <article
+      className={selected ? "vendor-card selected" : "vendor-card"}
+      data-vendor-id={vendor.vendor_id}
+    >
       <button
         aria-label={`Preview ${vendor.name} on map`}
         aria-pressed={selected}

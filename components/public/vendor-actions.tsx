@@ -27,9 +27,35 @@ export function VendorActions({
   locationSource,
 }: VendorActionsProps) {
   const phoneHref = getPhoneHref(phoneNumber);
+  const directionsHref = getDirectionsUrl(latitude, longitude);
   const metadata: Record<string, string | number | boolean | null> = source
     ? { source }
     : {};
+  const navigateAfterTracking = (
+    href: string,
+    target: "self" | "blank",
+  ) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const trackingWindow = window as typeof window & {
+      __LOCALMAN_SUPPRESS_ACTION_NAVIGATION__?: boolean;
+    };
+
+    if (trackingWindow.__LOCALMAN_SUPPRESS_ACTION_NAVIGATION__ === true) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      if (target === "blank") {
+        window.open(href, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      window.location.assign(href);
+    }, 80);
+  };
   const trackVendorAction = (eventType: "call_clicked" | "directions_clicked") => {
     void trackPublicUserAction({
       event_type: eventType,
@@ -51,7 +77,11 @@ export function VendorActions({
         <a
           className="button-primary compact-button"
           href={phoneHref}
-          onClickCapture={() => trackVendorAction("call_clicked")}
+          onClick={(event) => {
+            event.preventDefault();
+            trackVendorAction("call_clicked");
+            navigateAfterTracking(phoneHref, "self");
+          }}
         >
           Call
         </a>
@@ -60,10 +90,14 @@ export function VendorActions({
       )}
       <a
         className="button-secondary compact-button"
-        href={getDirectionsUrl(latitude, longitude)}
+        href={directionsHref}
         rel="noreferrer"
         target="_blank"
-        onClickCapture={() => trackVendorAction("directions_clicked")}
+        onClick={(event) => {
+          event.preventDefault();
+          trackVendorAction("directions_clicked");
+          navigateAfterTracking(directionsHref, "blank");
+        }}
       >
         Directions
       </a>

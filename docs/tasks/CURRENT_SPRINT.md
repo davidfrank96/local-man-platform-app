@@ -70,14 +70,15 @@ Phase 6 signal visibility is ready when:
 ## Current Warnings
 - IP approximation is still an interface only; there is no live provider yet.
 - Reverse geocoding is best-effort and depends on external availability.
-- The public map is still the lightweight MVP map surface rather than a full SDK integration.
+- The public discovery map now uses optional client-side MapLibre when configured and degrades to the existing coordinate fallback when it is not.
+- The current real map intentionally ships without clustering; it uses one vendor-marker system, stable marker selection, and mobile-safe selected-preview placement.
 - Admin auth still uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
 - Pilot quality still depends on complete and accurate vendor data entry.
 - Historical `user_events` rows may not include `session_id`, so exact session drop-off reporting can be incomplete until newer traffic accumulates.
 - Discovery retention is browser-local only and does not sync across devices.
 
 ## Readiness
-Phase 6 is ready to close as long as the regression gate, runtime gate, and documentation gate remain green together.
+Phase 6 is functionally complete. Deployment readiness depends on keeping the regression gate, runtime gate, and production environment configuration green together.
 
 ## Phase 5 Boundaries
 Allowed:

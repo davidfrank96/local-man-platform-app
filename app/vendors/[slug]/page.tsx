@@ -5,6 +5,7 @@ import {
   fetchVendorDetailBySlugFromSupabase,
   getSupabaseRestConfig,
 } from "../../../lib/vendors/supabase.ts";
+import type { LocationSource } from "../../../types/index.ts";
 
 type VendorDetailPageProps = {
   params: Promise<{
@@ -12,15 +13,22 @@ type VendorDetailPageProps = {
   }>;
   searchParams: Promise<{
     returnTo?: string;
+    location_source?: string;
   }>;
 };
+
+function parseLocationSource(value: string | undefined): LocationSource | null {
+  return value === "precise" || value === "approximate" || value === "default_city"
+    ? value
+    : null;
+}
 
 export default async function VendorDetailPage({
   params,
   searchParams,
 }: VendorDetailPageProps) {
   const { slug } = await params;
-  const { returnTo } = await searchParams;
+  const { returnTo, location_source } = await searchParams;
   const config = getSupabaseRestConfig();
 
   if (!config) {
@@ -55,5 +63,11 @@ export default async function VendorDetailPage({
     notFound();
   }
 
-  return <VendorDetail returnTo={sanitizePublicReturnPath(returnTo ?? null)} vendor={vendor} />;
+  return (
+    <VendorDetail
+      locationSource={parseLocationSource(location_source)}
+      returnTo={sanitizePublicReturnPath(returnTo ?? null)}
+      vendor={vendor}
+    />
+  );
 }

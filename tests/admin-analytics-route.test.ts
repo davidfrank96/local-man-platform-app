@@ -499,7 +499,107 @@ test("admin analytics route uses service role credentials for analytics reads wh
   }
 });
 
-test("admin analytics route uses a bounded user_events query", async () => {
+test("admin analytics route paginates event reads so lower-volume call and directions clicks are still counted", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const requestedUserEventsUrls: string[] = [];
+
+  const firstPage = Array.from({ length: 1000 }, (_, index) => ({
+    id: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    event_type: "vendor_selected",
+    vendor_id: vendorId,
+    vendor_slug: "test-vendor",
+    page_path: "/",
+    device_type: "mobile",
+    location_source: "precise",
+    timestamp: `2026-04-26T10:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    session_id: `90000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+  }));
+  const secondPage = [
+    {
+      id: "20000000-0000-4000-8000-000000000001",
+      event_type: "call_clicked",
+      vendor_id: vendorId,
+      vendor_slug: "test-vendor",
+      page_path: "/vendors/test-vendor",
+      device_type: "desktop",
+      location_source: "precise",
+      timestamp: "2026-04-26T11:00:00.000Z",
+      session_id: "90000000-0000-4000-8000-000000000999",
+    },
+    {
+      id: "20000000-0000-4000-8000-000000000002",
+      event_type: "directions_clicked",
+      vendor_id: vendorId,
+      vendor_slug: "test-vendor",
+      page_path: "/vendors/test-vendor",
+      device_type: "desktop",
+      location_source: "precise",
+      timestamp: "2026-04-26T11:01:00.000Z",
+      session_id: "90000000-0000-4000-8000-000000000999",
+    },
+  ];
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/user_events") {
+      requestedUserEventsUrls.push(url.toString());
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      return Response.json(offset >= 1000 ? secondPage : firstPage);
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        {
+          id: vendorId,
+          name: "Test Vendor",
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=24h"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.summary.call_clicks, 1);
+    assert.equal(body.data.summary.directions_clicks, 1);
+    assert.equal(body.data.vendor_performance.most_call_clicks[0].vendor_slug, "test-vendor");
+    assert.equal(body.data.vendor_performance.most_directions_clicks[0].vendor_slug, "test-vendor");
+    assert.ok(requestedUserEventsUrls.some((url) => new URL(url).searchParams.get("offset") === "1000"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin analytics route uses bounded paginated user_events queries", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const requestedUrls: URL[] = [];
@@ -545,7 +645,8 @@ test("admin analytics route uses a bounded user_events query", async () => {
     assert.equal(response.status, 200);
     const analyticsReadRequest = requestedUrls.find((url) => url.pathname === "/rest/v1/user_events");
     assert.ok(analyticsReadRequest);
-    assert.equal(analyticsReadRequest?.searchParams.get("limit"), "1500");
+    assert.equal(analyticsReadRequest?.searchParams.get("limit"), "1000");
+    assert.equal(analyticsReadRequest?.searchParams.get("offset"), "0");
     assert.equal(analyticsReadRequest?.searchParams.get("order"), "timestamp.desc");
     assert.equal(
       analyticsReadRequest?.searchParams.get("select"),

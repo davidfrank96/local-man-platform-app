@@ -48,6 +48,7 @@ import {
 import { VendorActions } from "./vendor-actions.tsx";
 import { VendorCard } from "./vendor-card.tsx";
 import { VendorMap } from "./vendor-map.tsx";
+import type { VendorSelectionSource } from "./vendor-map-types.ts";
 
 type PublicDiscoveryProps = {
   title?: string;
@@ -66,7 +67,8 @@ const defaultFilters: DiscoveryFilters = {
 
 type DiscoverySnapshot = {
   nearbyData: NearbyVendorsResponseData | null;
-  selectedVendorSlug: string | null;
+  selectedVendorId: string | null;
+  selectedVendorSlug?: string | null;
   scrollY: number;
 };
 
@@ -146,9 +148,16 @@ function getDiscoverySnapshotKey(pathname: string, queryString: string): string 
   return `public-discovery:${pathname}${queryString ? `?${queryString}` : ""}`;
 }
 
-function buildVendorDetailHref(slug: string, returnTo: string): string {
+function buildVendorDetailHref(
+  slug: string,
+  returnTo: string,
+  locationSource: LocationSource | null,
+): string {
   const params = new URLSearchParams();
   params.set("returnTo", returnTo);
+  if (locationSource) {
+    params.set("location_source", locationSource);
+  }
 
   return `/vendors/${slug}?${params.toString()}`;
 }
@@ -184,6 +193,21 @@ function writeDiscoverySnapshot(key: string, snapshot: DiscoverySnapshot): void 
   } catch {
     // Ignore session storage failures.
   }
+}
+
+function resolveSnapshotSelectedVendorId(snapshot: DiscoverySnapshot): string | null {
+  if (snapshot.selectedVendorId) {
+    return snapshot.selectedVendorId;
+  }
+
+  if (!snapshot.selectedVendorSlug || !snapshot.nearbyData) {
+    return null;
+  }
+
+  return (
+    snapshot.nearbyData.vendors.find((vendor) => vendor.slug === snapshot.selectedVendorSlug)
+      ?.vendor_id ?? null
+  );
 }
 
 function shouldRestoreDiscoveryScroll(): boolean {
@@ -242,7 +266,9 @@ export function PublicDiscovery({
     key: string;
     label: string;
   } | null>(null);
-  const [selectedVendorSlug, setSelectedVendorSlug] = useState<string | null>(null);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const [selectionActionToken, setSelectionActionToken] = useState(0);
+  const [selectionSource, setSelectionSource] = useState<VendorSelectionSource>(null);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeVendorSection, setActiveVendorSection] =
@@ -254,8 +280,10 @@ export function PublicDiscovery({
     useState<RetainedVendorPreview | null>(null);
   const nearbyDataRef = useRef<NearbyVendorsResponseData | null>(null);
   const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
-  const preferredSelectedVendorSlugRef = useRef<string | null>(null);
-  const selectedVendorSlugRef = useRef<string | null>(null);
+  const preferredSelectedVendorIdRef = useRef<string | null>(null);
+  const selectedVendorIdRef = useRef<string | null>(null);
+  const selectionActionTokenRef = useRef(0);
+  const selectionSourceRef = useRef<VendorSelectionSource>(null);
   const nearbyRequestIdRef = useRef(0);
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -311,8 +339,15 @@ export function PublicDiscovery({
   }, [nearbyData]);
 
   useEffect(() => {
-    selectedVendorSlugRef.current = selectedVendorSlug;
-  }, [selectedVendorSlug]);
+    selectedVendorIdRef.current = selectedVendorId;
+  }, [selectedVendorId]);
+
+  function recordSelectionIntent(source: VendorSelectionSource) {
+    selectionSourceRef.current = source;
+    setSelectionSource(source);
+    selectionActionTokenRef.current += 1;
+    setSelectionActionToken(selectionActionTokenRef.current);
+  }
 
   useEffect(() => {
     return () => {
@@ -456,8 +491,12 @@ export function PublicDiscovery({
 
     const timeout = window.setTimeout(() => {
       setNearbyData(snapshot.nearbyData);
-      preferredSelectedVendorSlugRef.current = snapshot.selectedVendorSlug;
-      setSelectedVendorSlug(snapshot.selectedVendorSlug);
+      const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
+      preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
+      nearbyDataRef.current = snapshot.nearbyData;
+      selectedVendorIdRef.current = snapshotSelectedVendorId;
+      recordSelectionIntent("restore");
+      setSelectedVendorId(snapshotSelectedVendorId);
       setSnapshotHydrated(true);
 
       if (!hasRestoredScrollRef.current && shouldRestoreDiscoveryScroll()) {
@@ -478,10 +517,10 @@ export function PublicDiscovery({
 
     writeDiscoverySnapshot(discoverySnapshotKey, {
       nearbyData,
-      selectedVendorSlug,
+      selectedVendorId,
       scrollY: window.scrollY,
     });
-  }, [discoverySnapshotKey, nearbyData, selectedVendorSlug, snapshotHydrated]);
+  }, [discoverySnapshotKey, nearbyData, selectedVendorId, snapshotHydrated]);
 
   useEffect(() => {
     if (!snapshotHydrated) return;
@@ -489,14 +528,14 @@ export function PublicDiscovery({
     function persistScrollPosition() {
       const snapshot = readDiscoverySnapshot(discoverySnapshotKey) ?? {
         nearbyData: nearbyDataRef.current,
-        selectedVendorSlug: selectedVendorSlugRef.current,
+        selectedVendorId: selectedVendorIdRef.current,
         scrollY: 0,
       };
 
       writeDiscoverySnapshot(discoverySnapshotKey, {
         ...snapshot,
         nearbyData: nearbyDataRef.current,
-        selectedVendorSlug: selectedVendorSlugRef.current,
+        selectedVendorId: selectedVendorIdRef.current,
         scrollY: window.scrollY,
       });
     }
@@ -508,7 +547,7 @@ export function PublicDiscovery({
       window.removeEventListener("scroll", persistScrollPosition);
       window.removeEventListener("pagehide", persistScrollPosition);
     };
-  }, [discoverySnapshotKey, nearbyData, selectedVendorSlug, snapshotHydrated]);
+  }, [discoverySnapshotKey, nearbyData, selectedVendorId, snapshotHydrated]);
 
   useEffect(() => {
     function restorePreviewSelectionFromSnapshot() {
@@ -518,8 +557,12 @@ export function PublicDiscovery({
         return;
       }
 
-      preferredSelectedVendorSlugRef.current = snapshot.selectedVendorSlug;
-      setSelectedVendorSlug(snapshot.selectedVendorSlug);
+      const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
+      preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
+      nearbyDataRef.current = snapshot.nearbyData;
+      selectedVendorIdRef.current = snapshotSelectedVendorId;
+      recordSelectionIntent("restore");
+      setSelectedVendorId(snapshotSelectedVendorId);
       setNearbyData((current) => current ?? snapshot.nearbyData);
     }
 
@@ -569,17 +612,22 @@ export function PublicDiscovery({
         }
 
         setNearbyData(result);
-        setSelectedVendorSlug((current) => {
-          const preferredSelectedVendorSlug = preferredSelectedVendorSlugRef.current;
+        const nextSelectionSource =
+          selectionSourceRef.current === "filter" ? "filter" : "restore";
+        recordSelectionIntent(nextSelectionSource);
+        setSelectedVendorId((current) => {
+          const preferredSelectedVendorId = preferredSelectedVendorIdRef.current;
 
           if (
-            preferredSelectedVendorSlug &&
-            result.vendors.some((vendor) => vendor.slug === preferredSelectedVendorSlug)
+            preferredSelectedVendorId &&
+            result.vendors.some((vendor) => vendor.vendor_id === preferredSelectedVendorId)
           ) {
-            return preferredSelectedVendorSlug;
+            selectedVendorIdRef.current = preferredSelectedVendorId;
+            return preferredSelectedVendorId;
           }
 
-          if (current && result.vendors.some((vendor) => vendor.slug === current)) {
+          if (current && result.vendors.some((vendor) => vendor.vendor_id === current)) {
+            selectedVendorIdRef.current = current;
             return current;
           }
 
@@ -587,12 +635,16 @@ export function PublicDiscovery({
 
           if (
             rememberedVendor &&
-            result.vendors.some((vendor) => vendor.slug === rememberedVendor.slug)
+            result.vendors.some((vendor) => vendor.vendor_id === rememberedVendor.vendor_id)
           ) {
-            return rememberedVendor.slug;
+            selectedVendorIdRef.current = rememberedVendor.vendor_id;
+            return rememberedVendor.vendor_id;
           }
 
-          return result.vendors[0]?.slug ?? null;
+          const fallbackVendorId = result.vendors[0]?.vendor_id ?? null;
+          selectedVendorIdRef.current = fallbackVendorId;
+          preferredSelectedVendorIdRef.current = fallbackVendorId;
+          return fallbackVendorId;
         });
       } catch (error) {
         if (!isMountedRef.current || nearbyRequestIdRef.current !== requestId) {
@@ -612,6 +664,10 @@ export function PublicDiscovery({
   );
 
   useEffect(() => {
+    if (!snapshotHydrated) {
+      return;
+    }
+
     if (
       locationStatus === "idle" ||
       locationStatus === "resolving" ||
@@ -628,7 +684,7 @@ export function PublicDiscovery({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [filters, loadNearbyVendors, location, locationStatus]);
+  }, [filters, loadNearbyVendors, location, locationStatus, snapshotHydrated]);
 
   const vendors = useMemo(
     () => sortDiscoveryVendors(nearbyData?.vendors ?? [], filters),
@@ -641,18 +697,17 @@ export function PublicDiscovery({
   );
   const resolvedLocation = location ?? nearbyData?.location ?? null;
   const selectedVendor = useMemo(
-    () => vendors.find((vendor) => vendor.slug === selectedVendorSlug) ?? null,
-    [selectedVendorSlug, vendors],
+    () => vendors.find((vendor) => vendor.vendor_id === selectedVendorId) ?? null,
+    [selectedVendorId, vendors],
   );
   const selectedVendorOpenState = useMemo(
     () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
     [selectedVendor?.is_open_now],
   );
-  const selectedVendorId = selectedVendor?.vendor_id ?? null;
   const rememberedSelectedVendor = useMemo(
     () =>
       lastSelectedVendorMemory
-        ? vendors.find((vendor) => vendor.slug === lastSelectedVendorMemory.slug) ?? null
+        ? vendors.find((vendor) => vendor.vendor_id === lastSelectedVendorMemory.vendor_id) ?? null
         : null,
     [lastSelectedVendorMemory, vendors],
   );
@@ -674,6 +729,7 @@ export function PublicDiscovery({
   );
 
   function applyFilters(nextFilters: DiscoveryFilters) {
+    recordSelectionIntent("filter");
     setFilters(nextFilters);
     setActiveVendorSection("nearby");
     setDesktopFiltersOpen(false);
@@ -682,8 +738,9 @@ export function PublicDiscovery({
 
   function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
     const vendor = vendors.find((entry) => entry.vendor_id === vendorId);
+    recordSelectionIntent(source);
 
-    if (vendor?.slug === selectedVendorSlug) {
+    if (vendor?.vendor_id === selectedVendorId) {
       return;
     }
 
@@ -711,14 +768,14 @@ export function PublicDiscovery({
     if (typeof window !== "undefined") {
       writeDiscoverySnapshot(discoverySnapshotKey, {
         nearbyData: nearbyDataRef.current,
-        selectedVendorSlug: vendor?.slug ?? null,
+        selectedVendorId: vendor?.vendor_id ?? null,
         scrollY: window.scrollY,
       });
     }
 
-    preferredSelectedVendorSlugRef.current = vendor?.slug ?? null;
-    selectedVendorSlugRef.current = vendor?.slug ?? null;
-    setSelectedVendorSlug(vendor?.slug ?? null);
+    preferredSelectedVendorIdRef.current = vendor?.vendor_id ?? null;
+    selectedVendorIdRef.current = vendor?.vendor_id ?? null;
+    setSelectedVendorId(vendor?.vendor_id ?? null);
   }
 
   async function retryLocation() {
@@ -924,11 +981,12 @@ export function PublicDiscovery({
                 detailHref={buildVendorDetailHref(
                   vendor.slug,
                   buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
+                  activeLocationSource ?? null,
                 )}
                 key={vendor.vendor_id}
                 isPopular={popularVendorIds.has(vendor.vendor_id)}
                 locationSource={activeLocationSource ?? null}
-                selected={vendor.slug === selectedVendorSlug}
+                selected={vendor.vendor_id === selectedVendorId}
                 vendor={vendor}
                 onSelect={selectVendorById}
               />
@@ -960,7 +1018,11 @@ export function PublicDiscovery({
                     </div>
                     <Link
                       className="button-secondary compact-button"
-                      href={buildVendorDetailHref(vendor.slug, discoveryReturnTo)}
+                      href={buildVendorDetailHref(
+                        vendor.slug,
+                        discoveryReturnTo,
+                        activeLocationSource ?? null,
+                      )}
                     >
                       Open
                     </Link>
@@ -1038,7 +1100,11 @@ export function PublicDiscovery({
                   ) : (
                     <Link
                       className="button-secondary compact-button"
-                      href={buildVendorDetailHref(lastSelectedVendorMemory.slug, discoveryReturnTo)}
+                      href={buildVendorDetailHref(
+                        lastSelectedVendorMemory.slug,
+                        discoveryReturnTo,
+                        activeLocationSource ?? null,
+                      )}
                     >
                       View details
                     </Link>
@@ -1067,7 +1133,10 @@ export function PublicDiscovery({
             </div>
             {resolvedLocation ? (
               <VendorMap
+                selectionActionToken={selectionActionToken}
+                selectionSource={selectionSource}
                 selectedVendorId={selectedVendorId}
+                timeTheme={timeTheme}
                 userLocation={resolvedLocation.coordinates}
                 vendors={vendors}
                 onSelectVendor={selectVendorById}
@@ -1150,7 +1219,11 @@ export function PublicDiscovery({
                   />
                   <Link
                     className="button-secondary compact-button selected-vendor-detail-link"
-                    href={buildVendorDetailHref(selectedVendor.slug, discoveryReturnTo)}
+                    href={buildVendorDetailHref(
+                      selectedVendor.slug,
+                      discoveryReturnTo,
+                      activeLocationSource ?? null,
+                    )}
                   >
                     View details
                   </Link>

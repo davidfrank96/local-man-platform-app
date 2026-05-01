@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { VendorDetailResponseData } from "../../types/index.ts";
+import type { LocationSource, VendorDetailResponseData } from "../../types/index.ts";
 import { selectPrimaryVendorImage } from "../../lib/vendors/images.ts";
 import { getTodayHoursSummary, isVendorOpenNow } from "../../lib/vendors/nearby.ts";
 import { formatVendorHoursRange } from "../../lib/vendors/time-display.ts";
@@ -12,9 +12,10 @@ import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
 type VendorDetailProps = {
   vendor: VendorDetailResponseData;
   returnTo?: string;
+  locationSource?: LocationSource | null;
 };
 
-function readLocationSourceFromReturnTo(returnTo: string): "precise" | "approximate" | "default_city" | null {
+function readLocationSourceFromReturnTo(returnTo: string): LocationSource | null {
   try {
     const url = new URL(returnTo, "http://localhost");
     const locationSource = url.searchParams.get("location_source");
@@ -43,9 +44,13 @@ function formatCount(count: number, singularLabel: string): string {
   return count === 1 ? `1 ${singularLabel}` : `${count} ${singularLabel}s`;
 }
 
-export function VendorDetail({ vendor, returnTo = "/" }: VendorDetailProps) {
+export function VendorDetail({
+  vendor,
+  returnTo = "/",
+  locationSource: explicitLocationSource = null,
+}: VendorDetailProps) {
   const heroImage = selectPrimaryVendorImage(vendor.images);
-  const locationSource = readLocationSourceFromReturnTo(returnTo);
+  const locationSource = explicitLocationSource ?? readLocationSourceFromReturnTo(returnTo);
   const hasHours = vendor.hours.length > 0;
   const openNow = isVendorOpenNow(vendor.hours, vendor.is_open_override);
   const statusLabel =

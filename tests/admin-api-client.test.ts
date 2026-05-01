@@ -1027,7 +1027,8 @@ test("admin API client can fetch analytics", async () => {
       "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source,session_id",
     );
     assert.equal(new URL(requestedUrls[0]).searchParams.get("order"), "timestamp.desc");
-    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "1500");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("limit"), "1000");
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("offset"), "0");
     assert.equal(new URL(requestedUrls[0]).searchParams.get("timestamp"), "gte.2026-03-30T10:00:00.000Z");
     assert.equal(new URL(requestedUrls[1]).pathname, "/rest/v1/vendors");
   } finally {
@@ -1166,6 +1167,97 @@ test("admin API client falls back when session_id column is unavailable", async 
     assert.match(requestedUrls[0] ?? "", /session_id/);
     assert.doesNotMatch(requestedUrls[1] ?? "", /session_id/);
     assert.equal(analytics.data?.dropoff.session_metrics_available, false);
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("admin API client paginates analytics event reads so call and directions clicks are not truncated", async () => {
+  const restoreEnv = setSupabasePublicEnv();
+  const requestedUserEventsUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    const url = new URL(String(input), "http://localhost");
+
+    if (url.pathname === "/rest/v1/user_events") {
+      requestedUserEventsUrls.push(url.toString());
+      const from = Number(url.searchParams.get("offset") ?? "0");
+
+      if (from >= 1000) {
+        return Response.json([
+          {
+            id: "20000000-0000-4000-8000-000000000001",
+            event_type: "call_clicked",
+            vendor_id: vendorId,
+            vendor_slug: "test-vendor",
+            page_path: "/vendors/test-vendor",
+            search_query: null,
+            metadata: {},
+            device_type: "desktop",
+            location_source: "precise",
+            timestamp: "2026-04-29T10:00:00.000Z",
+            session_id: "90000000-0000-4000-8000-000000000999",
+          },
+          {
+            id: "20000000-0000-4000-8000-000000000002",
+            event_type: "directions_clicked",
+            vendor_id: vendorId,
+            vendor_slug: "test-vendor",
+            page_path: "/vendors/test-vendor",
+            search_query: null,
+            metadata: {},
+            device_type: "desktop",
+            location_source: "precise",
+            timestamp: "2026-04-29T10:01:00.000Z",
+            session_id: "90000000-0000-4000-8000-000000000999",
+          },
+        ]);
+      }
+
+      return Response.json(
+        Array.from({ length: 1000 }, (_, index) => ({
+          id: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+          event_type: "vendor_selected",
+          vendor_id: vendorId,
+          vendor_slug: "test-vendor",
+          page_path: "/",
+          search_query: null,
+          metadata: {},
+          device_type: "mobile",
+          location_source: "precise",
+          timestamp: `2026-04-29T09:${String(index % 60).padStart(2, "0")}:00.000Z`,
+          session_id: `90000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        })),
+      );
+    }
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        {
+          id: vendorId,
+          name: "Test Vendor",
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const analytics = await fetchAdminAnalytics(
+      { range: "24h" },
+      {
+        accessToken: "admin-token",
+        fetchImpl,
+      },
+    );
+
+    assert.equal(analytics.error, null);
+    assert.equal(analytics.data?.summary.call_clicks, 1);
+    assert.equal(analytics.data?.summary.directions_clicks, 1);
+    assert.equal(analytics.data?.vendor_performance.most_call_clicks[0]?.vendor_slug, "test-vendor");
+    assert.equal(analytics.data?.vendor_performance.most_directions_clicks[0]?.vendor_slug, "test-vendor");
+    assert.ok(requestedUserEventsUrls.some((url) => new URL(url, "http://localhost").searchParams.get("offset") === "1000"));
   } finally {
     restoreEnv();
   }
