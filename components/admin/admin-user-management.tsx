@@ -44,6 +44,10 @@ function formatAdminErrorStatus(error: unknown, fallbackMessage: string): AdminF
   return createAdminFeedback("error", visibleError.message, visibleError.code, visibleError.detail);
 }
 
+function logAdminUsersSyncError(error: unknown) {
+  console.warn("ADMIN USERS SYNC ERROR:", error);
+}
+
 export function AdminUserManagement() {
   const { session } = useAdminSession();
   const accessToken = session?.accessToken ?? null;
@@ -60,6 +64,17 @@ export function AdminUserManagement() {
   );
   const [isLoading, setIsLoading] = useState(!hasCachedAdminUsers);
 
+  const syncAdminUsers = useCallback(async () => {
+    if (!accessToken) {
+      throw new Error("Admin session is missing.");
+    }
+
+    const rows = await listAdminUsers({ accessToken });
+    setAdminUsers(rows);
+    writeAdminUsersCache(rows);
+    return rows;
+  }, [accessToken]);
+
   const loadAdminUsers = useCallback(async () => {
     if (!accessToken) {
       setFeedback(createAdminFeedback("error", "Admin session is missing. Sign in again."));
@@ -70,9 +85,7 @@ export function AdminUserManagement() {
     setIsLoading(true);
 
     try {
-      const rows = await listAdminUsers({ accessToken });
-      setAdminUsers(rows);
-      writeAdminUsersCache(rows);
+      const rows = await syncAdminUsers();
       setFeedback(
         createAdminFeedback(
           rows.length > 0 ? "success" : "neutral",
@@ -85,7 +98,7 @@ export function AdminUserManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, syncAdminUsers]);
 
   useEffect(() => {
     if (hasCachedAdminUsers) {
@@ -117,9 +130,10 @@ export function AdminUserManagement() {
     const role = String(formData.get("role") ?? "agent") as AdminRole;
 
     setIsLoading(true);
+    setFeedback(createAdminFeedback("neutral", "Creating account…"));
 
     try {
-      const createdUser = await createManagedAdminUser(
+      const result = await createManagedAdminUser(
         {
           email,
           password,
@@ -128,17 +142,29 @@ export function AdminUserManagement() {
         },
         { accessToken },
       );
+      const createdUser = result.adminUser;
       setAdminUsers((current) => {
-        const next = [createdUser, ...current];
+        const next = current.some((user) => user.id === createdUser.id || user.email === createdUser.email)
+          ? current.map((user) =>
+              user.id === createdUser.id || user.email === createdUser.email ? createdUser : user
+            )
+          : [createdUser, ...current];
         writeAdminUsersCache(next);
         return next;
       });
       setFeedback(
         createAdminFeedback(
           "success",
-          `${createdUser.email} created as ${getAdminRoleLabel(createdUser.role)}.`,
+          result.outcome === "created"
+            ? `${createdUser.email} created successfully as ${getAdminRoleLabel(createdUser.role)}.`
+            : "User already exists. Role assigned.",
         ),
       );
+      try {
+        await syncAdminUsers();
+      } catch (syncError) {
+        logAdminUsersSyncError(syncError);
+      }
       form.reset();
     } catch (error) {
       setFeedback(formatAdminErrorStatus(error, "Unable to create the admin account."));
@@ -160,6 +186,7 @@ export function AdminUserManagement() {
     }
 
     setIsLoading(true);
+    setFeedback(createAdminFeedback("neutral", "Updating team access…"));
 
     try {
       const updatedUser = await updateManagedAdminUserRole(adminUserId, data, {
@@ -176,6 +203,11 @@ export function AdminUserManagement() {
           `${updatedUser.email} is now ${getAdminRoleLabel(updatedUser.role)}.`,
         ),
       );
+      try {
+        await syncAdminUsers();
+      } catch (syncError) {
+        logAdminUsersSyncError(syncError);
+      }
     } catch (error) {
       setFeedback(formatAdminErrorStatus(error, "Unable to update the admin account."));
     } finally {
@@ -190,6 +222,7 @@ export function AdminUserManagement() {
     }
 
     setIsLoading(true);
+    setFeedback(createAdminFeedback("neutral", "Removing account…"));
 
     try {
       await deleteManagedAdminUser(adminUserId, { accessToken });
@@ -199,6 +232,11 @@ export function AdminUserManagement() {
         return next;
       });
       setFeedback(createAdminFeedback("success", `${email} removed from team access.`));
+      try {
+        await syncAdminUsers();
+      } catch (syncError) {
+        logAdminUsersSyncError(syncError);
+      }
     } catch (error) {
       setFeedback(formatAdminErrorStatus(error, "Unable to delete the admin account."));
     } finally {
@@ -288,62 +326,67 @@ export function AdminUserManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {adminUsers.map((adminUser) => (
-                    <tr key={adminUser.id}>
-                      <td>
-                        <input
-                          aria-label={`Name for ${adminUser.email}`}
-                          className="admin-user-inline-input"
-                          defaultValue={adminUser.full_name ?? ""}
-                          disabled={isLoading}
-                          placeholder="No name"
-                          type="text"
-                          onBlur={(event) => {
-                            const nextName = event.target.value.trim();
+                  {adminUsers.map((adminUser) => {
+                    const fallbackName = adminUser.email.split("@")[0] ?? adminUser.email;
+                    const displayName = adminUser.full_name?.trim() || fallbackName;
 
-                            if (nextName === (adminUser.full_name ?? "")) {
-                              return;
-                            }
+                    return (
+                      <tr key={adminUser.id}>
+                        <td>
+                          <input
+                            aria-label={`Name for ${adminUser.email}`}
+                            className="admin-user-inline-input"
+                            defaultValue={displayName}
+                            disabled={isLoading}
+                            placeholder={fallbackName}
+                            type="text"
+                            onBlur={(event) => {
+                              const nextName = event.target.value.trim();
 
-                            void handleAdminUserUpdate(adminUser.id, {
-                              full_name: nextName.length > 0 ? nextName : null,
-                            });
-                          }}
-                        />
-                      </td>
-                      <td>{adminUser.email}</td>
-                      <td>
-                        <select
-                          aria-label={`Role for ${adminUser.email}`}
-                          className="admin-user-inline-input"
-                          defaultValue={adminUser.role}
-                          disabled={isLoading}
-                          onChange={(event) =>
-                            void handleAdminUserUpdate(adminUser.id, {
-                              role: event.target.value as AdminRole,
-                            })
-                          }
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="agent">Agent</option>
-                        </select>
-                      </td>
-                      <td>
-                        <button
-                          className="button-secondary compact-button"
-                          disabled={isLoading || currentAdminUserId === adminUser.id}
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`Remove ${adminUser.email} from team access?`)) {
-                              void handleDeleteAdminUser(adminUser.id, adminUser.email);
+                              if (nextName === displayName) {
+                                return;
+                              }
+
+                              void handleAdminUserUpdate(adminUser.id, {
+                                full_name: nextName.length > 0 ? nextName : null,
+                              });
+                            }}
+                          />
+                        </td>
+                        <td>{adminUser.email}</td>
+                        <td>
+                          <select
+                            aria-label={`Role for ${adminUser.email}`}
+                            className="admin-user-inline-input"
+                            defaultValue={adminUser.role}
+                            disabled={isLoading}
+                            onChange={(event) =>
+                              void handleAdminUserUpdate(adminUser.id, {
+                                role: event.target.value as AdminRole,
+                              })
                             }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="agent">Agent</option>
+                          </select>
+                        </td>
+                        <td>
+                          <button
+                            className="button-secondary compact-button"
+                            disabled={isLoading || currentAdminUserId === adminUser.id}
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Remove ${adminUser.email} from team access?`)) {
+                                void handleDeleteAdminUser(adminUser.id, adminUser.email);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

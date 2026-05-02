@@ -1281,7 +1281,7 @@ export async function listAdminUsers(
       .from("admin_users")
       .select("id,email,full_name,role,created_at")
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(1000);
 
     if (response.error) {
       throw mapDirectSupabaseReadError(response.error, "Unable to load admin users.");
@@ -1296,17 +1296,15 @@ export async function listAdminUsers(
 export async function createManagedAdminUser(
   data: CreateAdminUserRequest,
   options: AdminApiClientOptions,
-): Promise<AdminUser> {
-  const result = await requestAdminApi<{ adminUser: AdminUser }>(
-    "/api/admin/admin-users",
+): Promise<{ adminUser: AdminUser; outcome: "created" | "existing" }> {
+  return await requestAdminApi<{ adminUser: AdminUser; outcome: "created" | "existing" }>(
+    "/api/admin/create-user",
     options,
     {
       method: "POST",
       body: JSON.stringify(data),
     },
   );
-
-  return result.adminUser;
 }
 
 export async function updateManagedAdminUserRole(

@@ -290,6 +290,69 @@ Vendor summary fields used by the admin workspace include:
 
 Those counts drive dashboard overview cards, incomplete-vendor status, and registry badges in the admin UI.
 
+### GET /api/admin/admin-users
+List team access accounts
+
+Route file:
+- `app/api/admin/admin-users/route.ts`
+
+Behavior:
+- requires admin auth
+- reads from `admin_users` as the source of truth
+- returns `id`, `email`, `full_name`, `role`, and `created_at`
+- orders by `created_at desc`
+- uses a bounded list read sized for the current admin workspace
+
+### POST /api/admin/admin-users
+Legacy team-access create route
+
+Route file:
+- `app/api/admin/admin-users/route.ts`
+
+Behavior:
+- requires admin auth
+- creates a Supabase Auth user through a server-side service-role path
+- upserts the matching `admin_users` row
+- returns `outcome = created` for a new auth user
+- returns `outcome = existing` when the auth user already exists and only the role assignment/update was needed
+
+### POST /api/admin/create-user
+Preferred team-access create route
+
+Route file:
+- `app/api/admin/create-user/route.ts`
+
+Behavior:
+- requires admin auth
+- validates `email`, `password`, `role`, and optional `full_name`
+- uses server-side service-role auth user creation only
+- sets `email_confirm = true`
+- recovers existing auth users by email lookup when Supabase returns a duplicate-user create error
+- upserts `admin_users` so team access stays aligned with the database
+- returns the same `adminUser` payload shape as the legacy route plus `outcome = created | existing`
+
+### PUT /api/admin/admin-users/:id
+Update team access metadata
+
+Route file:
+- `app/api/admin/admin-users/[id]/route.ts`
+
+Behavior:
+- requires admin auth
+- updates `role` and/or `full_name`
+- persists the update to `admin_users`
+
+### DELETE /api/admin/admin-users/:id
+Remove team access
+
+Route file:
+- `app/api/admin/admin-users/[id]/route.ts`
+
+Behavior:
+- requires admin auth
+- removes the selected `admin_users` row
+- removes the matching auth user when allowed by the current admin flow
+
 ### POST /api/admin/vendors
 Create vendor
 

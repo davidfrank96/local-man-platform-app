@@ -152,6 +152,8 @@ The Local Man — UI Rules
 - successful admin write actions should show concise confirmation such as vendor updated, hours updated, or image uploaded.
 - failed admin write actions should show a readable message with the API error code when available and must not fail silently.
 - when create flow succeeds only partially, the status copy must identify the failed step, such as hours, dishes, or image upload.
+- the team access list should refresh from `admin_users` after create, update, or delete so the UI reflects the database without a manual reload.
+- when `full_name` is missing in team access, show a practical fallback such as the email prefix rather than `No name`.
 - analytics must never expose raw tracking failures in the public app
 - analytics filters should stay lightweight: last 24 hours, 7 days, 30 days, and all time
 
@@ -167,7 +169,7 @@ The Local Man — UI Rules
 - Time-based theming must not reduce readability or make vendor cards visually heavy.
 - Time-based themes must never compromise vendor card readability, including selected cards.
 - Vendor cards should stay light and high-contrast in morning, afternoon, and night themes, even when the page background gets darker.
-- Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Today:`, distance, open/closed state, featured dish, price, area, rating, and actions easy to read.
+- Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Active hours:`, distance, open/closed state, featured dish, price, area, rating, slug, and actions easy to read.
 - Selected vendor preview panels should stay compact and action-oriented, with `View details`, `Call`, and `Directions` visible on mobile.
 - Selected vendor preview panels on desktop should keep `Call`, `Directions`, and `View details` on one row when space allows.
 - Selected vendor preview panels currently remain below the map on mobile and in the map column on desktop.

@@ -60,6 +60,7 @@ Handles:
 - admin login and session validation
 - dashboard overview
 - analytics dashboard
+- team access management
 - vendor registry management
 - vendor creation
 - vendor editing
@@ -75,7 +76,7 @@ Handle:
 - non-blocking public event writes
 - reverse geocoding
 - authenticated admin writes
-- direct Supabase analytics/audit reads in production plus backend fallback routes
+- backend analytics and team-access routes
 - admin subresource loading
 
 ### Database
@@ -180,7 +181,8 @@ Admin workspace routes:
 4. Missing hours, dishes, or images require explicit acknowledgement during creation
 5. Admin edits the selected vendor without changing the slug unless a manual URL change is intended
 6. Admin updates hours, dishes, and images against the selected vendor id
-7. System logs write actions in the audit log
+7. Admin manages team access through `admin_users` and server-side auth user creation
+8. System logs write actions in the audit log
 
 Admin workflow rules:
 - the vendor slug is created from the vendor name on first creation
@@ -188,6 +190,8 @@ Admin workflow rules:
 - selected-vendor editing must load current hours, images, and featured dishes from the linked vendor id before new writes happen
 - admin hour entry accepts simple 12-hour text such as `9 AM` or `8:30 PM` and converts it to 24-hour database time before save
 - featured dish image URLs are dish-scoped metadata and must not be treated as vendor profile images
+- team-access reads use `admin_users` as the source of truth
+- existing auth users may be recovered and role-assigned without surfacing a false failure
 
 ## Vendor Image Pipeline
 
@@ -229,7 +233,7 @@ Rules:
 ### Usage Signal State
 - public tracking is fire-and-forget and must never block UI
 - public event writes go through `/api/events`
-- analytics reads stay admin-only and use direct Supabase reads in production, with `/api/admin/analytics` retained as a backend fallback path
+- analytics reads stay admin-only and go through `/api/admin/analytics`, which prefers the aggregated SQL snapshot and falls back safely when needed
 - `user_events` is append-only for lightweight interaction capture
 - session-level drop-off analysis depends on `session_id` coverage; the admin analytics page must tolerate historical rows without that field
 - discovery ranking can read aggregated `user_events` signals server-side, but public browsing must still work when no usage signal data exists

@@ -51,6 +51,18 @@ async function clickVendorOnMap(page: Page, vendorId: string) {
   await page.locator(`.discovery-map [data-vendor-id="${vendorId}"]`).click();
 }
 
+async function dispatchVendorMapClick(page: Page, vendorId: string) {
+  await page
+    .locator(`.discovery-map [data-vendor-id="${vendorId}"]`)
+    .evaluate((element) => {
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("Vendor marker element is not clickable.");
+      }
+
+      element.click();
+    });
+}
+
 async function expectUniqueMapVendorMarkers(page: Page) {
   const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
   if (mapMode !== "maplibre") {
@@ -980,7 +992,7 @@ test.describe("Phase 3 browser smoke", () => {
     const scrollBeforeMarkerTap = await page.evaluate(() => window.scrollY);
     const cameraStateBeforeMarkerTap = await readMapCameraState(page);
 
-    await clickVendorOnMap(page, firstVendorId!);
+    await dispatchVendorMapClick(page, firstVendorId!);
     const scrollAfterMarkerTap = await page.evaluate(() => window.scrollY);
     expect(Math.abs(scrollAfterMarkerTap - scrollBeforeMarkerTap)).toBeLessThan(12);
 

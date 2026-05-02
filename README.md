@@ -24,6 +24,13 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - no vendor card photos or thumbnails
 - popular-vendor highlighting when ranking signals exist
 - selected vendor preview below the map on mobile and beside the map on web
+  - selected vendor name
+  - `Slug:`
+  - distance
+  - open/closed state
+  - `Active hours:`
+  - area
+  - call, directions, and detail actions
 - MapLibre rendered with a single vendor-marker system:
   - deep red vendor markers
   - blue user-location marker
@@ -50,6 +57,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - `/admin/agent` for agents
 - admin dashboard overview cards and quick actions
 - admin analytics dashboard for lightweight usage signals and team activity
+- admin team access page at `/admin/team`
 - vendor registry with completeness badges
 - full Create Vendor page for both admins and agents
 - CSV vendor intake with the same schema and persistence contract as the full Create Vendor page
@@ -70,6 +78,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - create admin/agent
   - update admin/agent role and name
   - delete admin/agent
+  - recover existing auth users cleanly and refresh the list from `admin_users`
 - centralized UI error boundary and toast notifications
 
 ## Tech Stack

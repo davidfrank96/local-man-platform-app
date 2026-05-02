@@ -5,6 +5,7 @@ import {
   deleteAdminVendorImage,
   deleteAdminVendorDish,
   createAdminVendor,
+  createManagedAdminUser,
   createAdminVendorImages,
   fetchAdminAnalytics,
   fetchAdminAuditLogs,
@@ -165,10 +166,53 @@ test("admin API client reads admin users directly from Supabase", async () => {
     assert.equal(url.pathname, "/rest/v1/admin_users");
     assert.equal(url.searchParams.get("select"), "id,email,full_name,role,created_at");
     assert.equal(url.searchParams.get("order"), "created_at.desc");
-    assert.equal(url.searchParams.get("limit"), "10");
+    assert.equal(url.searchParams.get("limit"), "1000");
   } finally {
     restoreEnv();
   }
+});
+
+test("admin API client creates managed users through the server route", async () => {
+  const requestedUrls: string[] = [];
+  const requestedHeaders: Headers[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    requestedUrls.push(String(input));
+    requestedHeaders.push(new Headers(init?.headers));
+
+    return Response.json({
+      success: true,
+      data: {
+        adminUser: {
+          id: "40000000-0000-4000-8000-000000000002",
+          email: "agent@example.com",
+          full_name: "Agent User",
+          role: "agent",
+          created_at: "2026-05-02T12:00:00.000Z",
+        },
+        outcome: "created",
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const result = await createManagedAdminUser(
+    {
+      email: "Agent@Example.com",
+      password: "temp-pass-123",
+      full_name: "Agent User",
+      role: "agent",
+    },
+    {
+      accessToken: "admin-token",
+      fetchImpl,
+    },
+  );
+
+  const url = new URL(requestedUrls[0], "http://localhost");
+  assert.equal(result.adminUser.email, "agent@example.com");
+  assert.equal(result.outcome, "created");
+  assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
+  assert.equal(url.pathname, "/api/admin/create-user");
 });
 
 test("admin API client uses the current stored session token for admin API routes", async () => {
