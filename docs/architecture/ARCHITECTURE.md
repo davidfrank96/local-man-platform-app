@@ -18,13 +18,12 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - Supabase Storage for vendor profile images
 
 ### Maps and Location
-- MapLibre GL JS for the optional interactive discovery map
-- browser-configured MapTiler style URL passed through `NEXT_PUBLIC_MAP_STYLE_URL`
-- coordinate fallback map when MapLibre is unavailable or unconfigured
+- MapLibre GL JS with a browser-configured MapTiler style URL passed through `NEXT_PUBLIC_MAP_STYLE_URL` for the optional interactive discovery map
+- coordinate fallback map when MapLibre or the configured MapTiler style is unavailable or unconfigured
 - browser geolocation for precise location
 - optional approximate location provider interface
 - internal reverse geocoding route for human-readable labels
-- Google Maps deep links for directions
+- Google Maps deep links for directions only
 
 ### Deployment
 - DigitalOcean App Platform
@@ -105,7 +104,7 @@ Stores:
 3. The app resolves precise, approximate, or default-city browse mode
 4. `/api/vendors/nearby` returns nearby vendors
 5. Discovery ordering prioritizes open-now state, then stronger search matches, then usage ranking, then distance
-6. Vendors render in the list, optional MapLibre map or fallback map, selected preview, and lightweight retention panels
+6. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
 7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
 
 Public rendering rules:
@@ -324,7 +323,7 @@ Current implementation:
 - Missing user coordinates resolve to the Abuja default city view before the nearby query runs.
 
 ### Directions
-Use Google Maps deep links using vendor coordinates.
+Use Google Maps deep links using vendor coordinates. Google Maps is not the embedded discovery renderer.
 
 ### Call
 Use clickable phone links.

@@ -11,7 +11,7 @@ The Local Man — UI Rules
 
 ## Public UI Rules
 - Homepage must open into a map-first layout.
-- The public discovery map may render as MapLibre or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
+- The public discovery map may render as MapLibre using the browser-safe MapTiler style URL or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
 - When MapLibre is active, the map must use one marker system only:
   - deep red vendor markers
   - blue user-location marker
@@ -33,6 +33,7 @@ The Local Man — UI Rules
 - Show open/closed state clearly.
 - Show distance clearly.
 - Call and directions buttons must be obvious.
+- Directions actions should use Google Maps deep links and must not imply that Google Maps renders the embedded discovery map.
 - Search and filters must not overwhelm the screen.
 - Discovery ordering should be understandable without exposing raw ranking math.
 - Open vendors should be easier to find than closed vendors.
