@@ -2,36 +2,8 @@ import { apiSuccess } from "../../../../lib/api/responses.ts";
 import { validateJsonBody } from "../../../../lib/api/validation.ts";
 import { requireAdminPermission } from "../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../lib/admin/errors.ts";
-import {
-  createAdminUser,
-  listAdminUsers,
-} from "../../../../lib/admin/admin-user-service.ts";
+import { createAdminUser } from "../../../../lib/admin/admin-user-service.ts";
 import { createAdminUserRequestSchema } from "../../../../lib/validation/index.ts";
-
-export async function GET(request: Request) {
-  const admin = await requireAdminPermission(request, "admin_users:manage");
-
-  if (!admin.success) {
-    return admin.response;
-  }
-
-  try {
-    const adminUsers = await listAdminUsers({ session: admin.session });
-    return apiSuccess({ adminUsers });
-  } catch (error) {
-    const isTimeoutLike =
-      error instanceof Error &&
-      (error.name === "AbortError" ||
-        error.message.toLowerCase().includes("timed out") ||
-        error.message.toLowerCase().includes("timeout"));
-
-    if (isTimeoutLike) {
-      return apiSuccess({ adminUsers: [] });
-    }
-
-    return handleAdminServiceError(error, "Unable to load admin users.");
-  }
-}
 
 export async function POST(request: Request) {
   const admin = await requireAdminPermission(request, "admin_users:manage");

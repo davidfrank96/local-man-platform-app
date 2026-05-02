@@ -1192,7 +1192,18 @@ export function PublicDiscovery({
                         <path d="M8 4.8v3.6l2.4 1.4" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </span>
-                    <span className="selected-vendor-label">Today:</span> {selectedVendor.today_hours}
+                    <span className="selected-vendor-label">Active hours:</span> {selectedVendor.today_hours}
+                  </p>
+                  <p className="selected-vendor-slug-line">
+                    <span className="selected-vendor-summary-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <path d="M4 5.25h8" strokeLinecap="round" />
+                        <path d="M4 8h8" strokeLinecap="round" />
+                        <path d="M4 10.75h5.5" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <span className="selected-vendor-label">Slug:</span>{" "}
+                    <span className="selected-vendor-slug-value">{selectedVendor.slug}</span>
                   </p>
                   {selectedVendor.area ? (
                     <p className="selected-vendor-area-line">

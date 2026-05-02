@@ -46,7 +46,7 @@ Phase 6 signal visibility is ready when:
 
 ## Current Platform Status
 - Vendor cards use a compact food-discovery layout with required actions and status fields.
-- Vendor cards show compact `Today:` hours and preserve those fields after selection.
+- Vendor cards show compact `Active hours:` and preserve those fields after selection.
 - Selected vendor cards and selected vendor preview panels use a stronger, readable highlight treatment.
 - `Back to map` and browser-back restore discovery vendors, filters, selection, and scroll state.
 - Public discovery uses client-local morning, afternoon, and night theming while keeping vendor cards light and readable.
@@ -60,6 +60,7 @@ Phase 6 signal visibility is ready when:
 - Admin media editing now distinguishes vendor profile images from optional featured dish image URLs, with remove actions for current featured dishes.
 - Admin workspace is split cleanly across dashboard, vendor registry, create vendor, and focused vendor edit routes.
 - Create vendor now supports a fuller onboarding flow with basic details, hours, featured dishes, image selection, acknowledgements, and review before create.
+- Admin team access now refreshes from `admin_users` after mutation and treats existing auth users as a recoverable success path.
 - Public event tracking records session, selection, detail, call, directions, search, and filter signals in `user_events`.
 - Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent activity.
 - Nearby discovery now uses a simple weighted `ranking_score` from usage signals and keeps distance as a tie-breaker rather than the only sort rule.

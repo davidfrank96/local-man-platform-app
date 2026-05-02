@@ -65,7 +65,7 @@ Test:
 - vendor detail route transforms Supabase nested rows into the documented detail shape
 - public UI shows runtime errors when Supabase data is unavailable
 - vendor cards always render required fields
-- `Today:` hours stay visible before and after card selection
+- `Active hours:` stays visible before and after card selection
 - distance and open/closed state stay visible before and after card selection
 - selected vendor highlight remains readable
 - selected vendor preview exposes `View details`, `Call`, and `Directions`
@@ -145,6 +145,7 @@ Current automated coverage:
 - `tests/admin-vendor-subresources.test.ts`
 - `tests/admin-api-client.test.ts`
 - `tests/vendor-usage-ranking.test.ts`
+- `tests/admin-user-routes.test.ts`
 
 Manual admin UI smoke coverage:
 - open `/admin` and confirm redirect to `/admin/login`
@@ -181,6 +182,11 @@ Manual admin UI smoke coverage:
 - confirm the featured dish list updates for the same selected vendor without a manual reload
 - remove the featured dish and confirm the list updates without a manual reload
 - deactivate the selected vendor with confirmation
+- open `/admin/team`
+- create a new admin or agent account
+- create the same account again and confirm role assignment succeeds without a stale error banner
+- confirm the list refreshes from `admin_users` without a full reload
+- confirm missing `full_name` falls back to the email prefix instead of `No name`
 - log out and confirm return to `/admin/login`
 - verify each action returns a visible status message
 

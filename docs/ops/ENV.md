@@ -9,7 +9,7 @@ The Local Man — Environment Variables
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and admin-user authenticated writes.
 
 ## Server / Secure
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload and delete operations against the `vendor-images` Storage bucket.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload/delete, public analytics event writes, admin analytics reads, and server-side admin user creation/recovery.
 - `DATABASE_URL`: direct database connection string for migrations or server-only maintenance tasks.
 - `GOOGLE_MAPS_SERVER_API_KEY`: server-only Google API key for future geocoding or admin address workflows.
 - `ADMIN_SEED_EMAIL`: optional initial admin account email for seed/setup workflows.
@@ -21,6 +21,7 @@ The Local Man — Environment Variables
 - Admin login uses the public Supabase env vars for browser email/password sign-in.
 - Admin routes still require an `Authorization: Bearer <supabase-access-token>` request header for an authenticated `admin_users` member.
 - Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.
+- Team access creation and existing-user recovery use the server-only service role key and must not be called directly from the browser.
 - Admin API auth still uses the admin bearer session for route authorization and audit scoping, but Storage writes themselves should not depend on the public anon key.
 - Current public map rendering uses MapLibre only when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. Otherwise it falls back to the local coordinate map. Google Maps keys are still not required for the current public map.
 

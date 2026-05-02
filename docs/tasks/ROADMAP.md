@@ -50,7 +50,7 @@ The Local Man — Roadmap
 
 ## Phase 5 — UX Polish & Real-User Iteration
 - compact discovery-oriented vendor cards
-- `Today:` hours on cards
+- `Active hours:` on cards
 - selected vendor highlight and selected preview actions
 - browser-back and `Back to map` restoration
 - Apply button restoration after navigation

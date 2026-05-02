@@ -17,8 +17,16 @@ type AdminUserServiceContext = {
   fetchImpl?: typeof fetch;
 };
 
+type CreateAdminUserResult = {
+  adminUser: AdminUser;
+  outcome: "created" | "existing";
+};
+
 const defaultAuthCreateTimeoutMs = 4_000;
 const defaultAdminUsersListTimeoutMs = 4_000;
+const authLookupPerPage = 1000;
+const maxAuthLookupPages = 10;
+const adminUsersListLimit = 1000;
 
 function requireServiceConfig(
   config: AdminAuthConfig | null | undefined,
@@ -217,8 +225,10 @@ async function createAuthUser(
     password: string;
     fullName?: string | null;
   },
-): Promise<{ id: string; email: string }> {
-  if (!input.email.trim()) {
+): Promise<{ id: string; email: string; outcome: "created" | "existing" }> {
+  const normalizedEmail = input.email.trim().toLowerCase();
+
+  if (!normalizedEmail) {
     throw new AdminServiceError(
       "VALIDATION_ERROR",
       "Email is required.",
@@ -239,52 +249,177 @@ async function createAuthUser(
   }
 
   const timeoutMs = getAuthCreateTimeoutMs();
-  const supabase = createAdminSupabaseClient(
-    config,
-    createTimeoutFetch(fetchImpl, timeoutMs),
-  );
-  const { data, error } = await supabase.auth.admin.createUser({
-    email: input.email,
+  const timedFetch = createTimeoutFetch(fetchImpl, timeoutMs);
+  const url = new URL("/auth/v1/admin/users", config.supabaseUrl);
+  const requestBody = {
+    email: normalizedEmail,
     password: input.password,
     email_confirm: true,
     user_metadata: input.fullName ? { full_name: input.fullName } : {},
-  }).catch((caughtError) => ({
-    data: { user: null },
-    error: caughtError instanceof Error ? caughtError : new Error("Unknown auth create failure"),
-  }));
+  };
 
-  if (error || !data.user?.id || !data.user.email) {
-    const details = error
-      ? {
-          name: error.name,
-          message: error.message,
-          status: "status" in error ? error.status : null,
-          code: "code" in error ? error.code : null,
-          cause: "cause" in error ? error.cause : null,
-          stack: error.stack,
-        }
-      : {
-          user: data.user ?? null,
+  let response: Response;
+  let payload: unknown = null;
+
+  async function recoverExistingAuthUserFromEmail(): Promise<{
+    id: string;
+    email: string;
+    outcome: "existing";
+  } | null> {
+    const supabase = createAdminSupabaseClient(config, timedFetch);
+
+    for (let page = 1; page <= maxAuthLookupPages; page += 1) {
+      const { data, error } = await supabase.auth.admin.listUsers({
+        page,
+        perPage: authLookupPerPage,
+      }).catch((caughtError) => ({
+        data: { users: [] as Array<{ id?: string; email?: string | null }>, aud: "" },
+        error: caughtError instanceof Error ? caughtError : new Error("Unknown auth user lookup failure"),
+      }));
+
+      if (error) {
+        console.error("AUTH LOOKUP ERROR:", error);
+        return null;
+      }
+
+      const matchedUser = data.users.find((candidate) =>
+        typeof candidate.email === "string" &&
+        candidate.email.trim().toLowerCase() === normalizedEmail
+      );
+
+      if (matchedUser?.id && matchedUser.email) {
+        logStructuredEvent("warn", {
+          type: "ADMIN_USER_CREATE_RECOVERED",
+          email: normalizedEmail,
+          userId: matchedUser.id,
+          context: "admin_user_create",
+          details: {
+            provider: "supabase_auth",
+            reason: "user_found_after_create_error",
+          },
+        });
+
+        return {
+          id: matchedUser.id,
+          email: matchedUser.email,
+          outcome: "existing",
         };
+      }
 
-    if (error) {
-      console.error("AUTH CREATE ERROR:", error);
+      const lastPage = typeof data.lastPage === "number" && data.lastPage > 0
+        ? data.lastPage
+        : null;
+      if ((lastPage !== null && page >= lastPage) || data.users.length < authLookupPerPage) {
+        break;
+      }
     }
+
+    return null;
+  }
+
+  try {
+    response = await timedFetch(url, {
+      method: "POST",
+      headers: createServiceHeaders(config, ""),
+      body: JSON.stringify(requestBody),
+    });
+    payload = await readJson(response);
+  } catch (caughtError) {
+    const error = caughtError instanceof Error
+      ? caughtError
+      : new Error("Unknown auth create failure");
+    const details = {
+      request: {
+        email: normalizedEmail,
+        email_confirm: true,
+      },
+      provider: "supabase_auth",
+      name: error.name,
+      message: error.message,
+      cause: "cause" in error ? error.cause : null,
+      stack: error.stack,
+    };
+
+    console.error("AUTH CREATE ERROR:", error);
 
     logStructuredEvent("error", {
       type: "ERROR",
-      code: error && isTimeoutError(error)
-        ? "NETWORK_ERROR"
-        : error && isDuplicateEmailError(error.message)
-        ? "USER_ALREADY_EXISTS"
-        : error && isWeakPasswordError(error.message)
-        ? "INVALID_PASSWORD"
-        : "AUTH_PROVIDER_ERROR",
-      email: input.email,
-      message: error?.message ?? "Supabase auth createUser failed.",
+      code: isTimeoutError(error) ? "NETWORK_ERROR" : "AUTH_PROVIDER_ERROR",
+      email: normalizedEmail,
+      message: error.message || "Supabase auth createUser failed.",
       context: "admin_user_create",
       details,
     });
+
+    const recoveredUser = await recoverExistingAuthUserFromEmail();
+    if (recoveredUser) {
+      return recoveredUser;
+    }
+
+    const normalized = normalizeCreateAuthUserFailure(error, details);
+
+    throw new AdminServiceError(
+      normalized.code,
+      normalized.message,
+      normalized.status,
+      normalized.details,
+      normalized.detail,
+    );
+  }
+
+  const createdUser = (
+    payload &&
+    typeof payload === "object" &&
+    "user" in payload &&
+    payload.user &&
+    typeof payload.user === "object"
+  )
+    ? payload.user as { id?: unknown; email?: unknown }
+    : null;
+
+  if (!response.ok || !createdUser?.id || !createdUser?.email) {
+    const providerMessage = payload && typeof payload === "object"
+      ? typeof (payload as { msg?: unknown }).msg === "string"
+        ? (payload as { msg: string }).msg
+        : typeof (payload as { message?: unknown }).message === "string"
+        ? (payload as { message: string }).message
+        : `Supabase auth createUser failed with HTTP ${response.status}.`
+      : `Supabase auth createUser failed with HTTP ${response.status}.`;
+    const error = new Error(providerMessage);
+    error.name = "SupabaseAuthCreateError";
+    const details = {
+      request: {
+        email: normalizedEmail,
+        email_confirm: true,
+      },
+      provider: "supabase_auth",
+      response_status: response.status,
+      response_body: payload,
+      code: payload && typeof payload === "object" && "code" in payload
+        ? (payload as { code?: unknown }).code ?? null
+        : null,
+    };
+
+    console.error("AUTH CREATE ERROR:", error);
+
+    logStructuredEvent("error", {
+      type: "ERROR",
+      code: isDuplicateEmailError(providerMessage) ||
+          (details.code === "email_exists")
+        ? "USER_ALREADY_EXISTS"
+        : isWeakPasswordError(providerMessage)
+        ? "INVALID_PASSWORD"
+        : "AUTH_PROVIDER_ERROR",
+      email: normalizedEmail,
+      message: providerMessage,
+      context: "admin_user_create",
+      details,
+    });
+
+    const recoveredUser = await recoverExistingAuthUserFromEmail();
+    if (recoveredUser) {
+      return recoveredUser;
+    }
 
     const normalized = normalizeCreateAuthUserFailure(error, details);
 
@@ -298,8 +433,9 @@ async function createAuthUser(
   }
 
   return {
-    id: data.user.id,
-    email: data.user.email,
+    id: String(createdUser.id),
+    email: String(createdUser.email),
+    outcome: "created",
   };
 }
 
@@ -343,8 +479,16 @@ function normalizeCreateAuthUserFailure(
   details: unknown;
 } {
   const message = error?.message ?? "";
+  const detailsRecord = details && typeof details === "object"
+    ? details as Record<string, unknown>
+    : null;
+  const upstreamCode = typeof detailsRecord?.code === "string"
+    ? detailsRecord.code
+    : typeof detailsRecord?.upstream_code === "string"
+    ? detailsRecord.upstream_code
+    : null;
 
-  if (isDuplicateEmailError(message)) {
+  if (upstreamCode === "email_exists" || isDuplicateEmailError(message)) {
     return {
       code: "USER_ALREADY_EXISTS",
       message: "This user already exists.",
@@ -445,7 +589,7 @@ export async function listAdminUsers(
       createRestUrl(resolvedConfig, "admin_users", {
         select: "id,email,full_name,role,created_at",
         order: "created_at.desc",
-        limit: "10",
+        limit: String(adminUsersListLimit),
       }),
       {
         method: "GET",
@@ -476,20 +620,37 @@ export async function createAdminUser(
     config = getAdminAuthConfig(),
     fetchImpl = fetch,
   }: AdminUserServiceContext = {},
-): Promise<AdminUser> {
+): Promise<CreateAdminUserResult> {
   const resolvedConfig = requireServiceConfig(config);
+  const normalizedEmail = input.email.trim().toLowerCase();
+
+  if (input.role !== "admin" && input.role !== "agent") {
+    throw new AdminServiceError(
+      "VALIDATION_ERROR",
+      "Role is invalid.",
+      400,
+      { field: "role" },
+      "Use either admin or agent for the new account role.",
+    );
+  }
+
   const authUser = await createAuthUser(resolvedConfig, fetchImpl, {
-    email: input.email,
+    email: normalizedEmail,
     password: input.password,
     fullName: input.full_name ?? null,
   });
 
   try {
     const payload = await requestJson(
-      createRestUrl(resolvedConfig, "admin_users"),
+      createRestUrl(resolvedConfig, "admin_users", {
+        on_conflict: "id",
+      }),
       {
         method: "POST",
-        headers: createServiceHeaders(resolvedConfig),
+        headers: createServiceHeaders(
+          resolvedConfig,
+          "resolution=merge-duplicates,return=representation",
+        ),
         body: JSON.stringify({
           id: authUser.id,
           email: authUser.email,
@@ -516,9 +677,14 @@ export async function createAdminUser(
       );
     }
 
-    return adminUser;
+    return {
+      adminUser,
+      outcome: authUser.outcome,
+    };
   } catch (error) {
-    await deleteAuthUser(resolvedConfig, fetchImpl, authUser.id);
+    if (authUser.outcome === "created") {
+      await deleteAuthUser(resolvedConfig, fetchImpl, authUser.id);
+    }
     throw error;
   }
 }

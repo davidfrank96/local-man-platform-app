@@ -5,6 +5,9 @@ import {
   POST as createAdminUserRoute,
 } from "../app/api/admin/admin-users/route.ts";
 import {
+  POST as createManagedUserRoute,
+} from "../app/api/admin/create-user/route.ts";
+import {
   DELETE as deleteAdminUserRoute,
   PATCH as updateAdminUserRoute,
 } from "../app/api/admin/admin-users/[id]/route.ts";
@@ -210,7 +213,7 @@ test("admin user list uses a bounded lightweight query", async () => {
     const queryUrl = capturedUrl as URL;
     assert.equal(queryUrl.searchParams.get("select"), "id,email,full_name,role,created_at");
     assert.equal(queryUrl.searchParams.get("order"), "created_at.desc");
-    assert.equal(queryUrl.searchParams.get("limit"), "10");
+    assert.equal(queryUrl.searchParams.get("limit"), "1000");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -293,6 +296,41 @@ test("admin can create an agent account", async () => {
     assert.equal(response.status, 201);
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "agent");
+    assert.equal(body.data.outcome, "created");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "POST /auth/v1/admin/users",
+      "POST /rest/v1/admin_users",
+      "POST /rest/v1/audit_logs",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("dedicated create-user route creates an agent account through the server", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls);
+
+  try {
+    const response = await createManagedUserRoute(
+      createRequest("/api/admin/create-user", "POST", {
+        email: "new.agent@example.com",
+        password: "temp-pass-123",
+        full_name: "New Agent",
+        role: "agent",
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.equal(body.data.adminUser.role, "agent");
+    assert.equal(body.data.outcome, "created");
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -326,6 +364,7 @@ test("admin can create an admin account", async () => {
     assert.equal(response.status, 201);
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "admin");
+    assert.equal(body.data.outcome, "created");
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -339,7 +378,7 @@ test("admin can create an admin account", async () => {
   }
 });
 
-test("creating a duplicate admin/agent email returns a clear conflict", async () => {
+test("creating an existing auth user recovers and assigns the role without failing", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
@@ -377,6 +416,116 @@ test("creating a duplicate admin/agent email returns a clear conflict", async ()
       );
     }
 
+    if (url.pathname === "/auth/v1/admin/users" && method === "GET") {
+      return Response.json({
+        users: [
+          {
+            id: newUserId,
+            email: "existing.agent@example.com",
+          },
+        ],
+      }, {
+        headers: {
+          "x-total-count": "1",
+          link: '</auth/v1/admin/users?page=1>; rel="last"',
+        },
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users" && method === "POST") {
+      return Response.json([
+        {
+          id: newUserId,
+          email: "existing.agent@example.com",
+          full_name: "Existing Agent",
+          role: "agent",
+          created_at: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await createAdminUserRoute(
+      createRequest("/api/admin/admin-users", "POST", {
+        email: "existing.agent@example.com",
+        password: "temp-pass-123",
+        full_name: "Existing Agent",
+        role: "agent",
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.adminUser.email, "existing.agent@example.com");
+    assert.equal(body.data.adminUser.role, "agent");
+    assert.equal(body.data.outcome, "existing");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "POST /auth/v1/admin/users",
+      "GET /auth/v1/admin/users",
+      "POST /rest/v1/admin_users",
+      "POST /rest/v1/audit_logs",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("creating a duplicate admin/agent email still returns a clear conflict when auth lookup finds no user", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url.pathname}`);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: adminId,
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users" && method === "GET") {
+      return Response.json([
+        {
+          id: adminId,
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+          created_at: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/auth/v1/admin/users" && method === "POST") {
+      return Response.json(
+        {
+          code: "email_exists",
+          msg: "A user with this email address has already been registered",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (url.pathname === "/auth/v1/admin/users" && method === "GET") {
+      return Response.json({
+        users: [],
+      }, {
+        headers: {
+          "x-total-count": "0",
+          link: '</auth/v1/admin/users?page=1>; rel="last"',
+        },
+      });
+    }
+
     return Response.json({ message: "Unexpected request" }, { status: 500 });
   }) as typeof fetch;
 
@@ -400,6 +549,7 @@ test("creating a duplicate admin/agent email returns a clear conflict", async ()
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "POST /auth/v1/admin/users",
+      "GET /auth/v1/admin/users",
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -481,6 +631,7 @@ test("admin creation returns a retryable timeout when auth user creation stalls"
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "POST /auth/v1/admin/users",
+      "GET /auth/v1/admin/users",
     ]);
     assert.equal(
       loggedErrors.some((entry) => {
@@ -604,6 +755,7 @@ test("admin can still create an agent when audit logging fails", async () => {
     assert.equal(response.status, 201);
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "agent");
+    assert.equal(body.data.outcome, "created");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

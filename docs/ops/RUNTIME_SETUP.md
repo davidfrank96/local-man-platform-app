@@ -51,7 +51,7 @@ DATABASE_URL=<postgres-connection-string>
 
 `DATABASE_URL` is only required for the `npm run db:migrate` and `npm run db:seed:abuja` scripts. Those scripts load `.env.local` before invoking `psql`. If using the Supabase Dashboard SQL Editor, `DATABASE_URL` is not required locally.
 
-`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations.
+`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations, public analytics event writes, admin analytics reads, and server-side admin user creation.
 
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional. Set it only if you want the public discovery page to render a real MapLibre map. If it is left empty, the discovery page will continue to use the built-in coordinate fallback map and the rest of the app will behave normally.
 
@@ -85,6 +85,7 @@ Migration files:
 - `supabase/migrations/20260426190000_user_action_events.sql`
 - `supabase/migrations/20260426203000_user_events_alignment.sql`
 - `supabase/migrations/20260426213000_user_events_session_flow.sql`
+- `supabase/migrations/20260502120000_admin_analytics_snapshot.sql`
 
 Preferred command when `psql` is available:
 
@@ -284,8 +285,9 @@ Deployment, pilot validation, or further UX iteration should proceed only after:
 - The same Supabase public env vars used locally must be present in the DigitalOcean app configuration.
 - Production runtime secrets must include `SUPABASE_SERVICE_ROLE_KEY` for:
   - admin image upload and delete
+  - admin user creation and existing-user recovery
   - analytics writes and admin analytics reads
-- Set `NEXT_PUBLIC_MAP_STYLE_URL` in DigitalOcean only if the production app should use the real MapLibre map. If omitted, production stays on the fallback coordinate map without breaking public discovery.
+- Set `NEXT_PUBLIC_MAP_STYLE_URL` in DigitalOcean as a Build + Run variable when the production app should use the real MapLibre map. If omitted, production stays on the fallback coordinate map without breaking public discovery.
 - The `vendor-images` Storage bucket must exist and stay public for the current frontend image URL strategy.
 - After changing DigitalOcean env vars, redeploy the app so new public values are compiled into the Next.js build.
 
@@ -296,12 +298,12 @@ Use this checklist when completing runtime activation manually:
 
 1. Create `.env.local` from `.env.example`.
 2. Fill `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-3. Fill `SUPABASE_SERVICE_ROLE_KEY` if validating admin image upload, analytics, or server-side event writes.
+3. Fill `SUPABASE_SERVICE_ROLE_KEY` if validating admin image upload, analytics, server-side event writes, or team access creation.
 4. Fill `NEXT_PUBLIC_MAP_STYLE_URL` if validating the real MapLibre map instead of the fallback coordinate map.
 5. Fill `DATABASE_URL` if using local `psql` commands.
 6. Run `npm run runtime:check-env`.
 7. If using local `psql`, run `npm run runtime:check-db-env`.
-8. Apply `supabase/migrations/20260422180000_initial_schema.sql` using either `npm run db:migrate` or Supabase SQL Editor.
+8. Apply all files in `supabase/migrations` using either `npm run db:migrate` or Supabase SQL Editor in filename order.
 9. Apply `supabase/seed/20260422_abuja_pilot_seed.sql` using either `npm run db:seed:abuja` or Supabase SQL Editor.
 10. Run the seed validation queries in this document.
 11. Run `npm run dev`.

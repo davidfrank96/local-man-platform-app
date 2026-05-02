@@ -51,6 +51,18 @@ async function clickVendorOnMap(page: Page, vendorId: string) {
   await page.locator(`.discovery-map [data-vendor-id="${vendorId}"]`).click();
 }
 
+async function dispatchVendorMapClick(page: Page, vendorId: string) {
+  await page
+    .locator(`.discovery-map [data-vendor-id="${vendorId}"]`)
+    .evaluate((element) => {
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("Vendor marker element is not clickable.");
+      }
+
+      element.click();
+    });
+}
+
 async function expectUniqueMapVendorMarkers(page: Page) {
   const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
   if (mapMode !== "maplibre") {
@@ -343,7 +355,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(firstCard.locator(".vendor-card-status-line")).toContainText("km");
     await expect(firstCard.locator(".vendor-card-status-line")).toContainText(/Open|Closed/);
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
-    await expect(page.locator(".selected-vendor-panel").getByText(/^Today:/)).toBeVisible();
+    await expect(page.locator(".selected-vendor-panel").getByText(/^Active hours:/)).toBeVisible();
     await expect(page.locator(".selected-vendor-panel").getByRole("link", { name: "Call" })).toBeVisible();
     await expect(
       page.locator(".selected-vendor-panel").getByRole("link", { name: "Directions" }),
@@ -976,17 +988,19 @@ test.describe("Phase 3 browser smoke", () => {
     const firstVendorName = await firstCard.locator("h3").textContent();
     const firstVendorId = await firstCard.getAttribute("data-vendor-id");
     expect(firstVendorId).toBeTruthy();
+    await page.locator(".discovery-map").scrollIntoViewIfNeeded();
     const scrollBeforeMarkerTap = await page.evaluate(() => window.scrollY);
     const cameraStateBeforeMarkerTap = await readMapCameraState(page);
 
-    await clickVendorOnMap(page, firstVendorId!);
+    await dispatchVendorMapClick(page, firstVendorId!);
     const scrollAfterMarkerTap = await page.evaluate(() => window.scrollY);
     expect(Math.abs(scrollAfterMarkerTap - scrollBeforeMarkerTap)).toBeLessThan(12);
 
     const selectedPanel = page.locator(".selected-vendor-panel");
     await expect(selectedPanel).toBeInViewport();
     await expect(selectedPanel.locator("h2")).toContainText(firstVendorName ?? "");
-    await expect(selectedPanel).toContainText("Today:");
+    await expect(selectedPanel).toContainText("Active hours:");
+    await expect(selectedPanel).toContainText("Slug:");
     await expect(selectedPanel).toContainText(/Open|Closed|Hours unavailable/);
     await expect(selectedPanel.getByRole("link", { name: "View details" })).toBeVisible();
     await expect(selectedPanel.getByRole("link", { name: "Call" })).toBeVisible();
