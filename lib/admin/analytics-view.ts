@@ -6,16 +6,47 @@ export function formatAnalyticsEventLabel(value: string): string {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+export function formatAnalyticsMetricValue(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  const absoluteValue = Math.abs(value);
+
+  if (absoluteValue < 1_000) {
+    return String(Math.trunc(value));
+  }
+
+  const units = [
+    { threshold: 1_000_000, suffix: "M" },
+    { threshold: 1_000, suffix: "k" },
+  ] as const;
+
+  for (const unit of units) {
+    if (absoluteValue < unit.threshold) {
+      continue;
+    }
+
+    const scaled = value / unit.threshold;
+    const rounded = Math.round(scaled * 10) / 10;
+    const wholeNumber = Math.abs(rounded - Math.trunc(rounded)) < 0.05;
+
+    return `${wholeNumber ? Math.trunc(rounded) : rounded.toFixed(1)}${unit.suffix}`;
+  }
+
+  return String(Math.trunc(value));
+}
+
 export function buildAnalyticsMetricCards(summary: AdminAnalyticsResponseData["summary"]) {
   return [
-    { label: "Total sessions", value: summary.total_sessions, note: "Tracked session starts or session groups" },
-    { label: "Total events", value: summary.total_events, note: "Read-only internal usage stream" },
-    { label: "Vendor selections", value: summary.vendor_selections, note: "List or map selection intent" },
-    { label: "Detail opens", value: summary.vendor_detail_opens, note: "Vendor detail page opens" },
-    { label: "Call clicks", value: summary.call_clicks, note: "Direct phone intent" },
-    { label: "Directions clicks", value: summary.directions_clicks, note: "Navigation intent" },
-    { label: "Searches used", value: summary.searches_used, note: "Search submissions" },
-    { label: "Filters applied", value: summary.filters_applied, note: "Search and filter refinement" },
+    { label: "Total sessions", value: formatAnalyticsMetricValue(summary.total_sessions), note: "Tracked session starts or session groups" },
+    { label: "Total events", value: formatAnalyticsMetricValue(summary.total_events), note: "Read-only internal usage stream" },
+    { label: "Vendor selections", value: formatAnalyticsMetricValue(summary.vendor_selections), note: "List or map selection intent" },
+    { label: "Detail opens", value: formatAnalyticsMetricValue(summary.vendor_detail_opens), note: "Vendor detail page opens" },
+    { label: "Call clicks", value: formatAnalyticsMetricValue(summary.call_clicks), note: "Direct phone intent" },
+    { label: "Directions clicks", value: formatAnalyticsMetricValue(summary.directions_clicks), note: "Navigation intent" },
+    { label: "Searches used", value: formatAnalyticsMetricValue(summary.searches_used), note: "Search submissions" },
+    { label: "Filters applied", value: formatAnalyticsMetricValue(summary.filters_applied), note: "Search and filter refinement" },
   ];
 }
 

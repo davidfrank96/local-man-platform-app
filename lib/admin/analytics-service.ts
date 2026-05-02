@@ -53,6 +53,7 @@ const RECENT_EVENTS_LIMIT = 25;
 const analyticsCacheTtlMs = 30_000;
 const analyticsQueryWarnThresholdMs = 3_000;
 const analyticsFetchTimeoutMs = 4_000;
+const analyticsRecentEventsLimit = 25;
 const meaningfulInteractionEvents = new Set([
   "vendor_selected",
   "vendor_detail_opened",
@@ -174,6 +175,97 @@ function getRangeStart(range: AdminAnalyticsRange): string | null {
     case "all":
       return null;
   }
+}
+
+function isMissingAnalyticsSnapshotRpc(details: unknown): boolean {
+  const message = JSON.stringify(details ?? {}).toLowerCase();
+
+  return message.includes("get_admin_analytics_snapshot") &&
+    (message.includes("could not find") ||
+      message.includes("does not exist") ||
+      message.includes("not found"));
+}
+
+async function fetchAnalyticsSnapshotViaRpc(
+  {
+    session,
+    config,
+    fetchImpl,
+  }: AdminAnalyticsResolvedContext,
+  range: AdminAnalyticsRange,
+): Promise<AdminAnalyticsResponseData | null> {
+  const url = createRestUrl(config, "rpc/get_admin_analytics_snapshot");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort("ANALYTICS_RPC_TIMEOUT");
+  }, analyticsFetchTimeoutMs);
+  const startedAt = Date.now();
+  let response: Response;
+
+  try {
+    response = await fetchImpl(url, {
+      method: "POST",
+      headers: createHeaders(session, config),
+      body: JSON.stringify({
+        range_start: getRangeStart(range),
+        recent_limit: analyticsRecentEventsLimit,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted)
+    ) {
+      return null;
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > analyticsQueryWarnThresholdMs) {
+    logStructuredEvent("warn", {
+      type: "ANALYTICS_RPC_SLOW_QUERY",
+      requestId: session.requestId,
+      range,
+      durationMs,
+      url: url.toString(),
+    });
+  }
+
+  const payload = await readJson(response);
+
+  if (!response.ok) {
+    logStructuredEvent("warn", {
+      type: isMissingAnalyticsSnapshotRpc(payload)
+        ? "ANALYTICS_RPC_UNAVAILABLE"
+        : "ANALYTICS_RPC_FAILED",
+      requestId: session.requestId,
+      range,
+      details: payload,
+    });
+    return null;
+  }
+
+  const parsedPayload = adminAnalyticsResponseDataSchema.safeParse({
+    ...(payload && typeof payload === "object" ? payload : {}),
+    range,
+  });
+
+  if (!parsedPayload.success) {
+    logStructuredEvent("warn", {
+      type: "ANALYTICS_RPC_INVALID_PAYLOAD",
+      requestId: session.requestId,
+      range,
+      issues: parsedPayload.error.issues,
+    });
+    return null;
+  }
+
+  return parsedPayload.data;
 }
 
 async function fetchEventRows(
@@ -542,6 +634,39 @@ export async function getAdminAnalytics(
 
   const resolvedConfig = requireServiceConfig(config);
   const startedAt = Date.now();
+  const rpcPayload = await fetchAnalyticsSnapshotViaRpc(
+    {
+      session,
+      config: resolvedConfig,
+      fetchImpl,
+    },
+    range,
+  );
+
+  if (rpcPayload) {
+    writeCachedAnalytics(range, rpcPayload);
+
+    const durationMs = Date.now() - startedAt;
+    logStructuredEvent("info", {
+      type: "ANALYTICS_FETCH",
+      requestId: session.requestId,
+      range,
+      resultCount: rpcPayload.summary.total_events,
+      vendorCount:
+        rpcPayload.vendor_performance.most_selected_vendors.length +
+        rpcPayload.vendor_performance.most_viewed_vendor_details.length +
+        rpcPayload.vendor_performance.most_call_clicks.length +
+        rpcPayload.vendor_performance.most_directions_clicks.length,
+      recentEventCount: rpcPayload.recent_events.length,
+      durationMs,
+      supabaseHost: new URL(resolvedConfig.supabaseUrl).host,
+      usingServiceRole: true,
+      source: "rpc",
+    });
+
+    return rpcPayload;
+  }
+
   const eventResult = await fetchEventRows(
     {
       session,

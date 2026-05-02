@@ -903,6 +903,19 @@ export async function fetchAdminAnalytics(
     };
   }
 
+  const apiResult = await requestAdminApiResult<AdminAnalyticsResponseData>(
+    buildAnalyticsFallbackPath(normalizedRange),
+    options,
+  );
+
+  if (!apiResult.error) {
+    return apiResult;
+  }
+
+  if (!shouldUseDevelopmentAnalyticsFallback()) {
+    return apiResult;
+  }
+
   try {
     const supabase = buildAdminSupabaseClient(options);
     try {

@@ -251,6 +251,93 @@ test("admin analytics route aggregates summary and vendor metrics", async () => 
   }
 });
 
+test("admin analytics route uses the aggregated rpc snapshot when available", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    requestedUrls.push(url.toString());
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_admin_analytics_snapshot") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("apikey"), "service-role-key");
+      assert.equal(headers.get("authorization"), "Bearer service-role-key");
+
+      return Response.json({
+        summary: {
+          total_sessions: 3,
+          total_events: 9,
+          vendor_selections: 2,
+          vendor_detail_opens: 2,
+          call_clicks: 1,
+          directions_clicks: 1,
+          searches_used: 2,
+          filters_applied: 1,
+        },
+        vendor_performance: {
+          most_selected_vendors: [],
+          most_viewed_vendor_details: [],
+          most_call_clicks: [],
+          most_directions_clicks: [],
+        },
+        dropoff: {
+          session_metrics_available: true,
+          sessions_without_meaningful_interaction: 0,
+          sessions_with_search_without_vendor_click: 1,
+          sessions_with_detail_without_action: 1,
+        },
+        recent_events: [],
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=7d"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.summary.total_events, 9);
+    assert.equal(body.data.summary.call_clicks, 1);
+    assert.equal(
+      requestedUrls.some((value) =>
+        new URL(value).pathname === "/rest/v1/rpc/get_admin_analytics_snapshot"),
+      true,
+    );
+    assert.equal(
+      requestedUrls.some((value) => new URL(value).pathname === "/rest/v1/user_events"),
+      false,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin analytics route blocks non-admin access", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildAnalyticsMetricCards,
   formatAnalyticsEventLabel,
+  formatAnalyticsMetricValue,
   getNextRecentAnalyticsEventCount,
   getVisibleRecentAnalyticsEvents,
   hasAnalyticsVendorPerformance,
@@ -84,4 +85,11 @@ test("analytics view helpers paginate recent activity safely", () => {
   assert.equal(getVisibleRecentAnalyticsEvents(recentEvents, 5).length, 5);
   assert.equal(getNextRecentAnalyticsEventCount(5, 12, 5), 10);
   assert.equal(getNextRecentAnalyticsEventCount(10, 12, 5), 12);
+});
+
+test("analytics view helpers format large metric values compactly", () => {
+  assert.equal(formatAnalyticsMetricValue(999), "999");
+  assert.equal(formatAnalyticsMetricValue(1_200), "1.2k");
+  assert.equal(formatAnalyticsMetricValue(2_000_000), "2M");
+  assert.equal(formatAnalyticsMetricValue(2_550_000), "2.6M");
 });

@@ -10,6 +10,7 @@ import { handleAppError } from "../../lib/errors/ui-error.ts";
 import {
   buildAnalyticsMetricCards,
   formatAnalyticsEventLabel,
+  formatAnalyticsMetricValue,
   getNextRecentAnalyticsEventCount,
   getVisibleRecentAnalyticsEvents,
 } from "../../lib/admin/analytics-view.ts";
@@ -250,7 +251,7 @@ function AnalyticsRankingTable({
                   <td>
                     <span className="analytics-badge">{row.vendor_slug ?? "n/a"}</span>
                   </td>
-                  <td>{row.count}</td>
+                  <td>{formatAnalyticsMetricValue(row.count)}</td>
                 </tr>
               ))}
             </tbody>
@@ -366,15 +367,15 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
               ) : (
                 <div className="analytics-dropoff-grid">
                   <article className="analytics-signal-card">
-                    <strong>{dropoff.sessions_without_meaningful_interaction ?? 0}</strong>
+                    <strong>{formatAnalyticsMetricValue(dropoff.sessions_without_meaningful_interaction ?? 0)}</strong>
                     <span>Sessions with no meaningful interaction</span>
                   </article>
                   <article className="analytics-signal-card">
-                    <strong>{dropoff.sessions_with_search_without_vendor_click ?? 0}</strong>
+                    <strong>{formatAnalyticsMetricValue(dropoff.sessions_with_search_without_vendor_click ?? 0)}</strong>
                     <span>Sessions with search but no vendor click</span>
                   </article>
                   <article className="analytics-signal-card">
-                    <strong>{dropoff.sessions_with_detail_without_action ?? 0}</strong>
+                    <strong>{formatAnalyticsMetricValue(dropoff.sessions_with_detail_without_action ?? 0)}</strong>
                     <span>Sessions with detail opened but no call or directions</span>
                   </article>
                 </div>

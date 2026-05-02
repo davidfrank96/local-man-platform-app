@@ -2836,6 +2836,7 @@ h2 {
 
 .selected-vendor-status-line,
 .selected-vendor-hours-line,
+.selected-vendor-slug-line,
 .selected-vendor-area-line {
   display: flex;
   flex-wrap: wrap;
@@ -2892,6 +2893,7 @@ h2 {
 }
 
 .selected-vendor-hours-line,
+.selected-vendor-slug-line,
 .selected-vendor-area-line {
   color: var(--color-muted);
 }
@@ -2899,6 +2901,11 @@ h2 {
 .selected-vendor-label {
   color: var(--color-text);
   font-weight: 800;
+}
+
+.selected-vendor-slug-value {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.9em;
 }
 
 .selected-vendor-actions {
@@ -2989,6 +2996,7 @@ h2 {
 
   .selected-vendor-status-line,
   .selected-vendor-hours-line,
+  .selected-vendor-slug-line,
   .selected-vendor-area-line {
     font-size: 0.86rem;
   }
