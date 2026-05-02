@@ -580,6 +580,39 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
   });
 
+  test("MapLibre initializes on first load after delayed container layout readiness", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await primePublicLocation(page);
+    await page.addInitScript(() => {
+      const installDelayedMapSurfaceStyle = () => {
+        const root = document.head ?? document.documentElement ?? document.body;
+        if (!root) {
+          window.requestAnimationFrame(installDelayedMapSurfaceStyle);
+          return;
+        }
+
+        const style = document.createElement("style");
+        style.textContent = ".maplibre-map-surface{min-height:0 !important;height:0 !important;}";
+        root.appendChild(style);
+        window.setTimeout(() => style.remove(), 350);
+      };
+
+      installDelayedMapSurfaceStyle();
+    });
+
+    await page.goto("/");
+    await expect(page.locator('.discovery-map[data-map-mode="loading"]')).toBeVisible();
+    await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText("Map view limited, vendors still available below.")).toHaveCount(0);
+    await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
+    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("vendor detail page loads successfully", async ({ page }) => {
     const errors = trackClientErrors(page);
 

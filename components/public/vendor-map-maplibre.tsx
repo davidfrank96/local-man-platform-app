@@ -68,6 +68,8 @@ declare global {
 const MAPLIBRE_LOAD_TIMEOUT_MS = 4_000;
 const DEFAULT_VENDOR_MAP_ZOOM = 12.25;
 const MAP_FIT_BOUNDS_PADDING = 44;
+const MAPLIBRE_CONTAINER_READY_TIMEOUT_MS = 1_250;
+const MAPLIBRE_CONTAINER_RETRY_DELAY_MS = 120;
 
 const THEME_PALETTES: Record<NonNullable<VendorMapProps["timeTheme"]> | "default", ThemePalette> = {
   default: { background: "#edf3ee" },
@@ -190,6 +192,55 @@ function applyThemeBackground(map: MapInstance, timeTheme: VendorMapProps["timeT
   } catch {
     // Best-effort only.
   }
+}
+
+function hasRenderableContainer(container: HTMLDivElement | null) {
+  return Boolean(
+    container &&
+      container.isConnected &&
+      container.clientWidth > 0 &&
+      container.clientHeight > 0,
+  );
+}
+
+function waitForNextAnimationFrame() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+async function waitForRenderableContainer(
+  containerRef: MutableRefObject<HTMLDivElement | null>,
+  isCancelled: () => boolean,
+) {
+  const startedAt = window.performance.now();
+
+  while (window.performance.now() - startedAt < MAPLIBRE_CONTAINER_READY_TIMEOUT_MS) {
+    if (isCancelled()) {
+      return null;
+    }
+
+    const container = containerRef.current;
+    if (hasRenderableContainer(container)) {
+      return container;
+    }
+
+    await waitForNextAnimationFrame();
+    if (hasRenderableContainer(containerRef.current)) {
+      return containerRef.current;
+    }
+
+    await waitForNextAnimationFrame();
+    if (hasRenderableContainer(containerRef.current)) {
+      return containerRef.current;
+    }
+
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, MAPLIBRE_CONTAINER_RETRY_DELAY_MS);
+    });
+  }
+
+  return null;
 }
 
 function createVendorMarkerEntry(
@@ -403,17 +454,29 @@ export function MapLibreVendorMap({
   useEffect(() => {
     let cancelled = false;
     let loadTimeout: number | null = null;
+    let layoutSettleFrame: number | null = null;
 
     async function initializeMap() {
       try {
         const maplibre = await import("maplibre-gl");
-        if (cancelled || !containerRef.current || mapRef.current) {
+        if (cancelled || mapRef.current) {
+          return;
+        }
+
+        const container = await waitForRenderableContainer(
+          containerRef,
+          () => cancelled,
+        );
+        if (cancelled || !container || mapRef.current) {
+          if (!cancelled && !container) {
+            latestMapErrorRef.current();
+          }
           return;
         }
 
         maplibreRef.current = maplibre;
         const map = new maplibre.Map({
-          container: containerRef.current,
+          container,
           style: styleUrl,
           center: [
             latestResolvedUserLocationRef.current.lng,
@@ -488,27 +551,38 @@ export function MapLibreVendorMap({
             window.clearTimeout(loadTimeout);
           }
 
-          applyThemeBackground(map, timeTheme);
-          syncUserMarker(maplibre, map, userMarkerRef, activeUserLocationRef.current);
-          syncVendorMarkers(
-            maplibre,
-            map,
-            markersRef,
-            latestSelectVendorRef,
-            latestVendorsRef.current,
-            latestSelectedVendorIdRef.current,
-          );
-          fitMapToDiscoveryBounds(
-            maplibre,
-            map,
-            cameraStateRef,
-            activeUserLocationRef.current,
-            latestVendorsRef.current,
-            "initial",
-          );
-          lastViewportKeyRef.current = viewportKey;
-          installMapDebug(map, cameraStateRef, latestVendorsRef, markersRef);
-          setMapReady(true);
+          const settleMapLayout = () => {
+            if (cancelled) {
+              return;
+            }
+
+            map.resize();
+            applyThemeBackground(map, timeTheme);
+            syncUserMarker(maplibre, map, userMarkerRef, activeUserLocationRef.current);
+            syncVendorMarkers(
+              maplibre,
+              map,
+              markersRef,
+              latestSelectVendorRef,
+              latestVendorsRef.current,
+              latestSelectedVendorIdRef.current,
+            );
+            fitMapToDiscoveryBounds(
+              maplibre,
+              map,
+              cameraStateRef,
+              activeUserLocationRef.current,
+              latestVendorsRef.current,
+              "initial",
+            );
+            lastViewportKeyRef.current = viewportKey;
+            installMapDebug(map, cameraStateRef, latestVendorsRef, markersRef);
+            setMapReady(true);
+          };
+
+          layoutSettleFrame = window.requestAnimationFrame(() => {
+            layoutSettleFrame = window.requestAnimationFrame(settleMapLayout);
+          });
         });
       } catch {
         if (!cancelled) {
@@ -523,6 +597,9 @@ export function MapLibreVendorMap({
       cancelled = true;
       if (loadTimeout !== null) {
         window.clearTimeout(loadTimeout);
+      }
+      if (layoutSettleFrame !== null) {
+        window.cancelAnimationFrame(layoutSettleFrame);
       }
 
       removeVendorMarkers(markersRef);
