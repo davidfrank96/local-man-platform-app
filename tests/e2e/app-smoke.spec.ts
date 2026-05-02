@@ -534,6 +534,40 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".vendor-card").first()).toHaveClass(/selected/);
   });
 
+  test("MapLibre stays active when non-critical tile or glyph requests fail", async ({ page }) => {
+    let blockedNonCriticalRequest = false;
+
+    await primePublicLocation(page);
+    await page.route("**/*", async (route) => {
+      const requestUrl = route.request().url();
+      const isStyleRequest = requestUrl.includes("style.json");
+      const isNonCriticalMapAsset =
+        requestUrl.includes("/tiles/") ||
+        requestUrl.includes("/fonts/") ||
+        requestUrl.includes("/sprites/") ||
+        requestUrl.endsWith(".pbf") ||
+        requestUrl.endsWith(".png") ||
+        requestUrl.endsWith(".webp");
+
+      if (!isStyleRequest && isNonCriticalMapAsset) {
+        blockedNonCriticalRequest = true;
+        await route.abort();
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await expect.poll(async () => blockedNonCriticalRequest).toBe(true);
+    await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText("Map view limited, vendors still available below.")).toHaveCount(0);
+    await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
+    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+  });
+
   test("vendor detail page loads successfully", async ({ page }) => {
     const errors = trackClientErrors(page);
 

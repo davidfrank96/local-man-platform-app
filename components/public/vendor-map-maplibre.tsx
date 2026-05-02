@@ -474,7 +474,9 @@ export function MapLibreVendorMap({
         };
 
         loadTimeout = window.setTimeout(failToFallback, MAPLIBRE_LOAD_TIMEOUT_MS);
-        map.on("error", failToFallback);
+        map.on("error", (event) => {
+          console.warn("[vendor-map] non-fatal MapLibre error", event);
+        });
 
         map.once("load", () => {
           if (cancelled) {
