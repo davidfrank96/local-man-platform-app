@@ -28,7 +28,7 @@ Close Phase 6 `Usage Signals` with a stable analytics surface, discovery refinem
 - loyalty
 - vendor self-signup
 - complex role management
-- real Google Maps JavaScript integration
+- switching the public discovery renderer to Google Maps JavaScript
 - concrete live IP approximation provider selection
 - broad product expansion beyond discovery, vendor detail, and admin maintenance
 
@@ -71,7 +71,7 @@ Phase 6 signal visibility is ready when:
 ## Current Warnings
 - IP approximation is still an interface only; there is no live provider yet.
 - Reverse geocoding is best-effort and depends on external availability.
-- The public discovery map now uses optional client-side MapLibre when configured and degrades to the existing coordinate fallback when it is not.
+- The public discovery map now uses optional client-side MapLibre with a browser-safe MapTiler style URL when configured and degrades to the existing coordinate fallback when it is not.
 - The current real map intentionally ships without clustering; it uses one vendor-marker system, stable marker selection, and mobile-safe selected-preview placement.
 - Admin auth still uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
 - Pilot quality still depends on complete and accurate vendor data entry.

@@ -24,9 +24,9 @@ The Local Man — Architecture and Product Decisions
 **Impact:** Expansion comes after pilot learning.
 
 ### Decision 005
-**Decision:** Google Maps will be used for map rendering and external navigation.
-**Reason:** Familiar navigation flow and easier directions handoff.
-**Impact:** Requires Google Maps setup and API key management.
+**Decision:** MapLibre with a browser-safe MapTiler style URL will be used for interactive map rendering, while Google Maps will be used only for external directions deep links.
+**Reason:** MapLibre keeps the embedded discovery map aligned with the shipped implementation, while Google Maps still provides a familiar directions handoff.
+**Impact:** Requires `NEXT_PUBLIC_MAP_STYLE_URL` management for the real map, while Google Maps API keys are not required for the current embedded renderer.
 
 ### Decision 006
 **Decision:** Ratings will exist in MVP but stay lightweight.
