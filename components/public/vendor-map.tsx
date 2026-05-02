@@ -67,6 +67,21 @@ export function VendorMap(props: VendorMapProps) {
     };
   }, [fallbackReason, mapStyleUrl]);
 
+  if (!fallbackReason && mapStyleUrl.length > 0 && !MapLibreComponent) {
+    return (
+      <div className="vendor-map-theme-shell" data-time-theme={mapTheme}>
+        <section
+          className="discovery-map waiting-map"
+          aria-label="Nearby vendor map"
+          data-map-mode="loading"
+          data-time-theme={mapTheme}
+        >
+          <strong>Loading map…</strong>
+        </section>
+      </div>
+    );
+  }
+
   if (fallbackReason || mapStyleUrl.length === 0 || !MapLibreComponent) {
     return (
       <div className="vendor-map-theme-shell" data-time-theme={mapTheme}>
