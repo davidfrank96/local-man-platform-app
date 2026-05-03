@@ -353,6 +353,14 @@ export function PublicDiscovery({
     () => getDiscoverySnapshotKey(pathname, discoverySnapshotQueryString),
     [discoverySnapshotQueryString, pathname],
   );
+  const fallbackDiscoverySnapshotKey = useMemo(
+    () =>
+      getDiscoverySnapshotKey(
+        pathname,
+        buildDiscoverySearchParams(filters, null).toString(),
+      ),
+    [filters, pathname],
+  );
   const discoveryReturnTo = useMemo(
     () => buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
     [activeLocationSource, filters, pathname],
@@ -537,7 +545,9 @@ export function PublicDiscovery({
   }, [discoveryQueryString, pathname, router, searchParams]);
 
   useEffect(() => {
-    const snapshot = readDiscoverySnapshot(discoverySnapshotKey);
+    const snapshot =
+      readDiscoverySnapshot(discoverySnapshotKey) ??
+      readDiscoverySnapshot(fallbackDiscoverySnapshotKey);
 
     if (!snapshot) {
       const timeout = window.setTimeout(() => {
@@ -570,7 +580,7 @@ export function PublicDiscovery({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [discoverySnapshotKey, recordSelectionIntent]);
+  }, [discoverySnapshotKey, fallbackDiscoverySnapshotKey, recordSelectionIntent]);
 
   useEffect(() => {
     if (!snapshotHydrated) return;
@@ -580,7 +590,20 @@ export function PublicDiscovery({
       selectedVendorId,
       scrollY: window.scrollY,
     });
-  }, [discoverySnapshotKey, nearbyData, selectedVendorId, snapshotHydrated]);
+    if (fallbackDiscoverySnapshotKey !== discoverySnapshotKey) {
+      writeDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
+        nearbyData,
+        selectedVendorId,
+        scrollY: window.scrollY,
+      });
+    }
+  }, [
+    discoverySnapshotKey,
+    fallbackDiscoverySnapshotKey,
+    nearbyData,
+    selectedVendorId,
+    snapshotHydrated,
+  ]);
 
   useEffect(() => {
     if (!snapshotHydrated) return;
@@ -598,6 +621,14 @@ export function PublicDiscovery({
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: window.scrollY,
       });
+      if (fallbackDiscoverySnapshotKey !== discoverySnapshotKey) {
+        writeDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
+          ...snapshot,
+          nearbyData: nearbyDataRef.current,
+          selectedVendorId: selectedVendorIdRef.current,
+          scrollY: window.scrollY,
+        });
+      }
     }
 
     window.addEventListener("scroll", persistScrollPosition, { passive: true });
@@ -607,23 +638,31 @@ export function PublicDiscovery({
       window.removeEventListener("scroll", persistScrollPosition);
       window.removeEventListener("pagehide", persistScrollPosition);
     };
-  }, [discoverySnapshotKey, nearbyData, selectedVendorId, snapshotHydrated]);
+  }, [
+    discoverySnapshotKey,
+    fallbackDiscoverySnapshotKey,
+    nearbyData,
+    selectedVendorId,
+    snapshotHydrated,
+  ]);
 
   useEffect(() => {
     function restorePreviewSelectionFromSnapshot() {
       const snapshot = readDiscoverySnapshot(discoverySnapshotKey);
+      const fallbackSnapshot = readDiscoverySnapshot(fallbackDiscoverySnapshotKey);
+      const restoredSnapshot = snapshot ?? fallbackSnapshot;
 
-      if (!snapshot) {
+      if (!restoredSnapshot) {
         return;
       }
 
-      const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
+      const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(restoredSnapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
-      nearbyDataRef.current = snapshot.nearbyData;
+      nearbyDataRef.current = restoredSnapshot.nearbyData;
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
       setSelectedVendorId(snapshotSelectedVendorId);
-      setNearbyData((current) => current ?? snapshot.nearbyData);
+      setNearbyData((current) => current ?? restoredSnapshot.nearbyData);
     }
 
     window.addEventListener("pageshow", restorePreviewSelectionFromSnapshot);
@@ -631,7 +670,7 @@ export function PublicDiscovery({
     return () => {
       window.removeEventListener("pageshow", restorePreviewSelectionFromSnapshot);
     };
-  }, [discoverySnapshotKey, recordSelectionIntent]);
+  }, [discoverySnapshotKey, fallbackDiscoverySnapshotKey, recordSelectionIntent]);
 
   useEffect(() => {
     let isActive = true;

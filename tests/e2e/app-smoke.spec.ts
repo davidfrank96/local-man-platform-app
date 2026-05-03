@@ -69,11 +69,14 @@ async function expectUniqueMapVendorMarkers(page: Page) {
     return;
   }
 
-  const vendorIds = await page
-    .locator('.discovery-map[data-map-mode="maplibre"] .maplibre-vendor-marker[data-vendor-id]')
-    .evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute("data-vendor-id") ?? ""),
-    );
+  const markerLocator = page.locator(
+    '.discovery-map[data-map-mode="maplibre"] .maplibre-vendor-marker[data-vendor-id]',
+  );
+  await expect.poll(async () => markerLocator.count()).toBeGreaterThan(0);
+
+  const vendorIds = await markerLocator.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-vendor-id") ?? ""),
+  );
 
   const filteredIds = vendorIds.filter(Boolean);
   expect(filteredIds.length).toBeGreaterThan(0);
