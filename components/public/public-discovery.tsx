@@ -840,7 +840,7 @@ export function PublicDiscovery({
       return;
     }
 
-    if (!canUseNetwork || locationStatus === "error" || !activeFetchLocation) {
+    if (!canUseNetwork || !activeFetchLocation) {
       return;
     }
 
@@ -865,8 +865,6 @@ export function PublicDiscovery({
       return;
     }
 
-    nearbyRequestKeyRef.current = requestKey;
-
     const bootstrapDelayMs =
       !location &&
       !nearbyData &&
@@ -875,6 +873,7 @@ export function PublicDiscovery({
         : 0;
 
     const timeout = window.setTimeout(() => {
+      nearbyRequestKeyRef.current = requestKey;
       void loadNearbyVendors(activeFetchLocation, filters);
     }, bootstrapDelayMs);
 
