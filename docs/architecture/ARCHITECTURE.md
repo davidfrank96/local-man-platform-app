@@ -24,6 +24,7 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - optional approximate location provider interface
 - internal reverse geocoding route for human-readable labels
 - Google Maps deep links for directions only
+- the interactive discovery map should initialize immediately with the default-city center while location resolution and nearby vendor loading continue asynchronously
 
 ### Deployment
 - DigitalOcean App Platform
@@ -77,6 +78,7 @@ Handle:
 - authenticated admin writes
 - backend analytics and team-access routes
 - admin subresource loading
+- shared vendor availability computation for `is_open_now` and `today_hours`
 
 ### Database
 Stores:
@@ -245,7 +247,7 @@ Public usage signals use this path:
 2. client sends a small payload to `/api/events`
 3. server validates the payload
 4. server writes to `public.user_events`
-5. nearby discovery can derive a simple vendor `ranking_score` from those rows
+5. nearby discovery can derive a simple vendor `ranking_score` from those rows through a small SQL aggregation function keyed by candidate vendor ids
 6. the admin analytics surface reads those rows directly from Supabase in production and can fall back to backend routes in development
 7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
 
@@ -312,6 +314,9 @@ Distance is never stored in the database.
 Current implementation:
 - API validates user `lat` and `lng`.
 - Supabase candidate query uses a latitude/longitude bounding box to reduce scanned rows.
+- Supabase candidate query pushes `price_band`, `category`, and base `search` matching into the vendor read before app-side ranking.
+- Application ranking reads aggregated usage scores through a SQL RPC rather than fetching raw `user_events` rows into application memory.
+- Nearby discovery falls back to a service-role `user_events` read when that RPC is unavailable in a partially migrated environment so the endpoint stays live during rollout.
 - Application logic calculates exact Haversine distance for each candidate.
 - Application logic applies radius filtering and returns `distance_km` for each candidate.
 - Final discovery ordering is handled as:
@@ -319,6 +324,7 @@ Current implementation:
   2. stronger search relevance
   3. usage-signal `ranking_score`
   4. distance as the final tie-breaker
+- Nearby discovery returns at most `50` vendors per request after filtering and ordering so the map/list payload stays bounded.
 - Default nearby radius is 10 km when `radius_km` is not provided.
 - Missing user coordinates resolve to the Abuja default city view before the nearby query runs.
 

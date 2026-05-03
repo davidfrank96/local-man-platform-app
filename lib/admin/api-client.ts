@@ -252,9 +252,6 @@ type AnalyticsEventRow = {
   event_type: string;
   vendor_id: string | null;
   vendor_slug: string | null;
-  page_path?: string | null;
-  search_query?: string | null;
-  metadata?: Record<string, unknown> | null;
   device_type: string;
   location_source: string | null;
   timestamp: string;
@@ -525,7 +522,7 @@ async function fetchAnalyticsEventRows(
   rangeStart: string | null,
 ): Promise<{ rows: AnalyticsEventRow[]; sessionIdAvailable: boolean }> {
   const baseSelect =
-    "id,event_type,vendor_id,vendor_slug,page_path,search_query,metadata,timestamp,device_type,location_source";
+    "id,event_type,vendor_id,vendor_slug,timestamp,device_type,location_source";
 
   const loadPages = async (includeSessionId: boolean) => {
     const rows: AnalyticsEventRow[] = [];
@@ -600,6 +597,16 @@ function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {
 function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
   const expected = normalizeAnalyticsEventType(eventType);
   return rows.filter((row) => normalizeAnalyticsEventType(row.event_type) === expected).length;
+}
+
+function ensureRowsOrderedByNewestFirst(rows: AnalyticsEventRow[]): AnalyticsEventRow[] {
+  for (let index = 1; index < rows.length; index += 1) {
+    if (rows[index - 1]!.timestamp < rows[index]!.timestamp) {
+      return [...rows].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+    }
+  }
+
+  return rows;
 }
 
 function isMissingSessionIdColumn(detail: string | undefined): boolean {
@@ -951,7 +958,7 @@ export async function fetchAdminAnalytics(
         };
       }
 
-      const rows = eventResult.rows;
+      const rows = ensureRowsOrderedByNewestFirst(eventResult.rows);
       const recentVendorIds = rows
         .slice(0, recentAnalyticsEventsLimit)
         .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));

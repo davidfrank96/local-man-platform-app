@@ -71,17 +71,22 @@ Behavior:
 - `location_source = precise` means browser/device geolocation.
 - `location_source = approximate` means IP-based or other low-accuracy approximation.
 - `location_source = default_city` means no user coordinates were available and Abuja was used.
-- The frontend location hook should call `/api/vendors/nearby` with precise coordinates first, approximate coordinates second, or no coordinates when default city fallback is needed.
+- The frontend discovery flow may call `/api/vendors/nearby` without coordinates first so default-city vendors can render while precise browser geolocation is still resolving, then upgrade to precise or approximate coordinates when they become available.
 - Reverse geocoding is a separate best-effort UI concern and does not block or alter the nearby vendor response.
 - Candidate vendors are fetched with a latitude/longitude bounding box before precise distance calculation.
+- Base candidate filtering for `price_band` is pushed into the Supabase vendor query.
+- Base candidate filtering for `category` is pushed into the Supabase vendor query through the `vendor_category_map` join.
+- Base candidate filtering for `search` currently matches vendor name, short description, and area in the Supabase vendor query and is rechecked in application logic for safety.
+- Usage-signal ranking is aggregated server-side through the `get_vendor_usage_scores` SQL function instead of fetching raw `user_events` rows into Node.
+- If that SQL function is unavailable in a partially migrated environment, the API falls back to a service-role `user_events` read so nearby discovery still responds.
 - `distance_km` is calculated dynamically with the Haversine formula.
 - Results are filtered by `radius_km` after exact distance calculation.
-- Base candidate filtering for `search` currently matches vendor name, short description, and area.
 - Final discovery ordering prioritizes:
   1. vendors that are open now
   2. stronger client-side search relevance
   3. higher `ranking_score`
   4. shorter distance
+- Nearby results are capped to the top `50` vendors after filtering and ordering so the map/list payload remains bounded.
 - The public map currently renders those vendor results as individual markers when MapLibre is enabled.
 - Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.
 - Distance is not stored in the database.
@@ -135,6 +140,8 @@ Route file:
 
 Returns:
 - vendor info
+- server-computed `is_open_now`
+- server-computed `today_hours`
 - hours
 - categories
 - featured dishes
@@ -145,6 +152,7 @@ Behavior:
 - Returns `NOT_FOUND` when no active vendor matches the slug.
 - Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
 - Returns `UPSTREAM_ERROR` when the Supabase detail query fails.
+- `is_open_now` and `today_hours` are computed on the server from the shared availability helper that also powers `GET /api/vendors/nearby`, so discovery cards, selected vendor panels, and the detail page use the same source of truth.
 - When a `vendor_images` row has `storage_object_path` but no usable `image_url`, the server normalizes it into a public bucket URL before returning the vendor detail payload.
 - Missing hours, featured dishes, or images must not cause the detail route to fail.
 
@@ -249,6 +257,7 @@ Route file:
 
 Query params:
 - `range`: `24h`, `7d`, `30d`, or `all`
+  - defaults to `7d` when omitted
 
 Returns:
 - summary counts
@@ -260,7 +269,10 @@ Behavior:
 - requires admin auth
 - reads only from `user_events`
 - stays read-only
-- aggregates server-side
+- aggregates server-side through the `get_admin_analytics_snapshot` SQL function
+- caches each range in-process for 30 seconds
+- limits recent activity to the latest 25 events
+- falls back to bounded direct `user_events` reads only when the SQL snapshot path is unavailable
 - tolerates empty data
 - tolerates historical event rows without `session_id` by returning safe empty session-dropoff metrics
 

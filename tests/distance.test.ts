@@ -9,6 +9,7 @@ import {
   findNearbyVendors,
   getTodayHoursSummary,
   isVendorOpenNow,
+  MAX_NEARBY_VENDOR_RESULTS,
   type VendorLocationRecord,
 } from "../lib/vendors/nearby.ts";
 import {
@@ -138,6 +139,89 @@ test("sorts nearby vendors by usage ranking score before distance", () => {
   );
 });
 
+test("keeps open vendors ahead of closed vendors before ranking and distance", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "closed-high-score",
+      name: "Closed High Score",
+      latitude: 0,
+      longitude: 0.01,
+      is_open_override: false,
+    },
+    {
+      ...baseVendor,
+      id: "open-lower-score",
+      name: "Open Lower Score",
+      latitude: 0,
+      longitude: 0.03,
+      is_open_override: true,
+    },
+  ];
+
+  const results = findNearbyVendors(
+    vendors,
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-04-28T12:00:00Z"),
+    new Map([
+      ["closed-high-score", 8],
+      ["open-lower-score", 1],
+    ]),
+  );
+
+  assert.deepEqual(
+    results.map((vendor) => vendor.vendor_id),
+    ["open-lower-score", "closed-high-score"],
+  );
+});
+
+test("prioritizes stronger search matches before ranking when a search term is present", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "ranked-area-match",
+      name: "Kitchen Corner",
+      area: "Rice district",
+      latitude: 0,
+      longitude: 0.01,
+    },
+    {
+      ...baseVendor,
+      id: "prefix-name-match",
+      name: "Rice Corner",
+      area: "Wuse",
+      latitude: 0,
+      longitude: 0.03,
+    },
+  ];
+
+  const results = findNearbyVendors(
+    vendors,
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+      search: "rice",
+    },
+    new Date("2026-04-28T12:00:00Z"),
+    new Map([
+      ["ranked-area-match", 9],
+      ["prefix-name-match", 1],
+    ]),
+  );
+
+  assert.deepEqual(
+    results.map((vendor) => vendor.vendor_id),
+    ["prefix-name-match", "ranked-area-match"],
+  );
+});
+
 test("includes one featured dish summary when present", () => {
   const results = findNearbyVendors(
     [
@@ -226,6 +310,31 @@ test("returns an empty list when no vendors are nearby", () => {
   );
 
   assert.deepEqual(results, []);
+});
+
+test("caps nearby results to the public payload limit", () => {
+  const vendors: VendorLocationRecord[] = Array.from(
+    { length: MAX_NEARBY_VENDOR_RESULTS + 5 },
+    (_, index) => ({
+      ...baseVendor,
+      id: `vendor-${index + 1}`,
+      name: `Vendor ${String(index + 1).padStart(2, "0")}`,
+      latitude: 0,
+      longitude: 0.0005 * (index + 1),
+      is_open_override: true,
+    }),
+  );
+
+  const results = findNearbyVendors(vendors, {
+    lat: 0,
+    lng: 0,
+    location_source: "precise",
+    radius_km: 10,
+  });
+
+  assert.equal(results.length, MAX_NEARBY_VENDOR_RESULTS);
+  assert.equal(results[0]?.vendor_id, "vendor-1");
+  assert.equal(results.at(-1)?.vendor_id, `vendor-${MAX_NEARBY_VENDOR_RESULTS}`);
 });
 
 test("nearby response schema accepts the actual nearby result shape", () => {
@@ -406,4 +515,45 @@ test("supports overnight hours", () => {
   );
 
   assert.equal(open, true);
+});
+
+test("today hours summary uses the overnight window that keeps a vendor open after midnight", () => {
+  assert.equal(
+    getTodayHoursSummary(
+      [
+        {
+          day_of_week: 1,
+          open_time: "18:00",
+          close_time: "02:00",
+          is_closed: false,
+        },
+        {
+          day_of_week: 2,
+          open_time: null,
+          close_time: null,
+          is_closed: true,
+        },
+      ],
+      new Date("2026-04-21T00:30:00+01:00"),
+    ),
+    "6:00 PM - 2:00 AM",
+  );
+});
+
+test("today hours summary does not contradict a manual open override on a closed day", () => {
+  assert.equal(
+    getTodayHoursSummary(
+      [
+        {
+          day_of_week: 2,
+          open_time: null,
+          close_time: null,
+          is_closed: true,
+        },
+      ],
+      new Date("2026-04-28T12:00:00Z"),
+      true,
+    ),
+    "Open now",
+  );
 });

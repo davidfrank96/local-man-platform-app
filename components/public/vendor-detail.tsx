@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { LocationSource, VendorDetailResponseData } from "../../types/index.ts";
 import { selectPrimaryVendorImage } from "../../lib/vendors/images.ts";
-import { getTodayHoursSummary, isVendorOpenNow } from "../../lib/vendors/nearby.ts";
 import { formatVendorHoursRange } from "../../lib/vendors/time-display.ts";
 import { VendorActions } from "./vendor-actions.tsx";
 import { VendorDetailTracker } from "./vendor-detail-tracker.tsx";
@@ -52,33 +51,28 @@ export function VendorDetail({
   const heroImage = selectPrimaryVendorImage(vendor.images);
   const locationSource = explicitLocationSource ?? readLocationSourceFromReturnTo(returnTo);
   const hasHours = vendor.hours.length > 0;
-  const openNow = isVendorOpenNow(vendor.hours, vendor.is_open_override);
   const statusLabel =
-    vendor.is_open_override === true
-      ? "Open now"
-      : vendor.is_open_override === false
-        ? "Closed now"
-        : hasHours
-          ? openNow
-            ? "Open now"
-            : "Closed now"
-          : "Hours not set";
+    vendor.is_open_override === null && !hasHours
+      ? "Hours not set"
+      : vendor.is_open_now
+        ? "Open now"
+        : "Closed now";
   const statusTone =
     vendor.is_open_override === null && !hasHours
       ? "status-neutral"
-      : openNow
+      : vendor.is_open_now
         ? "status-open"
         : "status-closed";
   const featuredDishLabel =
     vendor.featured_dishes.length > 0
       ? formatCount(vendor.featured_dishes.length, "featured dish")
       : "No featured dishes yet";
-  const todayHours = getTodayHoursSummary(vendor.hours);
+  const todayHours = vendor.today_hours;
 
   return (
     <main className="vendor-detail-shell">
       <VendorDetailTracker
-        isOpenNow={openNow}
+        isOpenNow={vendor.is_open_now}
         locationSource={locationSource}
         todayHours={todayHours}
         vendorArea={vendor.area}
@@ -153,6 +147,7 @@ export function VendorDetail({
           <VendorHeroImage
             alt={`${vendor.name} food or storefront`}
             imageUrl={heroImage?.image_url ?? null}
+            storageObjectPath={heroImage?.storage_object_path ?? null}
           />
         </div>
       </section>

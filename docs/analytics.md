@@ -33,18 +33,36 @@ The current admin analytics page shows:
 - recent user events
 - recent team activity from audit logs
 
+Default range:
+
+- last 7 days
+
+Available ranges:
+
+- last 24 hours
+- last 7 days
+- last 30 days
+- all time
+
 ## Environment requirements
 
-The production admin analytics dashboard reads directly from Supabase with:
+The current admin analytics dashboard reads through the protected backend route:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- the signed-in workspace user's access token
+- `/api/admin/analytics`
+
+That route:
+
+- requires admin auth
+- uses the server-side `SUPABASE_SERVICE_ROLE_KEY`
+- prefers the aggregated SQL snapshot function `get_admin_analytics_snapshot`
+- keeps a short in-process cache per range for 30 seconds
+- limits recent activity rows to the latest 25 events
+- falls back to direct `user_events` reads only in development/tests or partially migrated environments
 
 `SUPABASE_SERVICE_ROLE_KEY` is still required for:
 
 - `/api/events` writes
-- backend analytics fallback route reads in development and tests
+- backend analytics reads
 - backend audit-log fallback route reads in development and tests
 
 ## Production-read notes

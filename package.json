@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "rm -rf .next && next build",
+    "dev": "node scripts/run-dev.mjs",
+    "build": "node scripts/run-build.mjs",
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",

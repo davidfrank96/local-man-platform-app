@@ -6,6 +6,8 @@ This document records the current lightweight UI constraints and stability decis
 
 - no images on vendor cards
 - no heavy remote media on discovery surfaces
+- vendor detail hero images should use responsive sizing and lazy browser loading
+- Supabase-hosted vendor detail images should prefer transformed widths instead of full-size originals
 - minimal animation
 - lightweight inline SVG for small identity or metadata icons
 - keep discovery usable on weak mobile networks
@@ -13,6 +15,7 @@ This document records the current lightweight UI constraints and stability decis
 ## Discovery-specific constraints
 
 - map remains visible without oversized decorative UI
+- discovery card and map props should stay stable enough to avoid unnecessary re-renders
 - selected vendor preview stays compact so the map keeps usable space
 - filter surfaces are collapsible on mobile and web
 - section navbars switch existing content instead of fetching new data per tab

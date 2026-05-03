@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectPrimaryVendorImage } from "../lib/vendors/images.ts";
+import {
+  buildVendorImageTransformUrl,
+  buildVendorResponsiveImageSources,
+  selectPrimaryVendorImage,
+} from "../lib/vendors/images.ts";
 import type { VendorImage } from "../types/index.ts";
 
 const timestamp = "2026-04-22T00:00:00+00:00";
@@ -41,4 +45,42 @@ test("falls back to the first image when no non-placeholder image exists", () =>
   const selectedImage = selectPrimaryVendorImage([createImage()]);
 
   assert.equal(selectedImage?.image_url, "/seed-images/vendors/test/cover.jpg");
+});
+
+test("builds transformed Supabase image URLs for vendor detail surfaces", () => {
+  const transformedUrl = buildVendorImageTransformUrl(
+    "https://example.supabase.co/storage/v1/object/public/vendor-images/test/hero.jpg",
+    "test/hero.jpg",
+    {
+      width: 720,
+      height: 540,
+      quality: 72,
+      resize: "cover",
+    },
+  );
+  const parsedUrl = new URL(transformedUrl);
+
+  assert.equal(
+    parsedUrl.pathname,
+    "/storage/v1/render/image/public/vendor-images/test/hero.jpg",
+  );
+  assert.equal(parsedUrl.searchParams.get("width"), "720");
+  assert.equal(parsedUrl.searchParams.get("height"), "540");
+  assert.equal(parsedUrl.searchParams.get("quality"), "72");
+  assert.equal(parsedUrl.searchParams.get("resize"), "cover");
+});
+
+test("keeps non-storage vendor image URLs unchanged when responsive transforms are unavailable", () => {
+  const sources = buildVendorResponsiveImageSources(
+    "https://cdn.example.com/vendors/test/hero.jpg",
+    null,
+    [480, 720, 960],
+    {
+      height: 720,
+      quality: 72,
+    },
+  );
+
+  assert.equal(sources.src, "https://cdn.example.com/vendors/test/hero.jpg");
+  assert.equal(sources.srcSet, null);
 });

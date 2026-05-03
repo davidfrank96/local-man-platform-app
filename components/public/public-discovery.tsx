@@ -8,7 +8,9 @@ import {
   useSearchParams,
 } from "next/navigation";
 import { useUserLocation } from "../../hooks/use-user-location.ts";
+import { useOnlineStatus } from "../../hooks/use-online-status.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
+import { DEFAULT_CITY_LOCATION } from "../../lib/location/user-location.ts";
 import {
   getPublicLocationDisplayModel,
 } from "../../lib/location/display.ts";
@@ -36,10 +38,15 @@ import {
   sortDiscoveryVendors,
 } from "../../lib/vendors/discovery-ranking.ts";
 import {
+  hasValidVendorCoordinates,
+  normalizeNearbyDiscoveryData,
+} from "../../lib/public/vendor-normalization.ts";
+import {
   getMillisecondsUntilNextPublicTimeTheme,
   getPublicTimeTheme,
   type PublicTimeTheme,
 } from "../../lib/public/time-theme.ts";
+import { endDevTimer, startDevTimer } from "../../lib/public/dev-performance.ts";
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 import {
   VendorFilters,
@@ -49,6 +56,11 @@ import { VendorActions } from "./vendor-actions.tsx";
 import { VendorCard } from "./vendor-card.tsx";
 import { VendorMap } from "./vendor-map.tsx";
 import type { VendorSelectionSource } from "./vendor-map-types.ts";
+
+if (typeof window !== "undefined") {
+  startDevTimer("first_render");
+  startDevTimer("first_vendor_render");
+}
 
 type PublicDiscoveryProps = {
   title?: string;
@@ -64,6 +76,7 @@ const defaultFilters: DiscoveryFilters = {
   priceBand: "",
   category: "",
 };
+const DEFAULT_CITY_BOOTSTRAP_DELAY_MS = 250;
 
 type DiscoverySnapshot = {
   nearbyData: NearbyVendorsResponseData | null;
@@ -244,6 +257,22 @@ function createNearbyFilters(
   };
 }
 
+function buildNearbyRequestKey(
+  location: Pick<AcquiredUserLocation, "source" | "coordinates">,
+  filters: DiscoveryFilters,
+): string {
+  return JSON.stringify({
+    source: location.source,
+    lat: location.coordinates.lat,
+    lng: location.coordinates.lng,
+    search: filters.search,
+    radiusKm: filters.radiusKm,
+    openNow: filters.openNow,
+    priceBand: filters.priceBand,
+    category: filters.category,
+  });
+}
+
 export function PublicDiscovery({
   title = "The Local Man",
   initialSearch = "",
@@ -275,6 +304,8 @@ export function PublicDiscovery({
     useState<VendorSection>("nearby");
   const [showLocationReminder, setShowLocationReminder] = useState(true);
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
+  const [browserReady, setBrowserReady] = useState(false);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
     useState<RetainedVendorPreview | null>(null);
@@ -285,14 +316,25 @@ export function PublicDiscovery({
   const selectionActionTokenRef = useRef(0);
   const selectionSourceRef = useRef<VendorSelectionSource>(null);
   const nearbyRequestIdRef = useRef(0);
+  const nearbyRequestKeyRef = useRef<string | null>(null);
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const hasRestoredScrollRef = useRef(false);
+  const firstRenderTimerStateRef = useRef({
+    firstRenderStarted: false,
+    firstRenderEnded: false,
+    nearbyStarted: false,
+    nearbyEnded: false,
+    vendorRenderStarted: false,
+    vendorRenderEnded: false,
+  });
+  const isOnline = useOnlineStatus();
+  const canUseNetwork = browserReady && isOnline;
   const {
     status: locationStatus,
     location,
     refresh: refreshLocation,
-  } = useUserLocation();
+  } = useUserLocation({ auto: canUseNetwork });
   const urlLocationSource = parsedUrlState.locationSource;
   const activeLocationSource = location?.source ?? nearbyData?.location.source ?? urlLocationSource;
   const discoveryQueryString = useMemo(
@@ -320,9 +362,27 @@ export function PublicDiscovery({
     () => getDiscoverySnapshotKey(pathname, discoverySnapshotQueryString),
     [discoverySnapshotQueryString, pathname],
   );
+  const fallbackDiscoverySnapshotKey = useMemo(
+    () =>
+      getDiscoverySnapshotKey(
+        pathname,
+        buildDiscoverySearchParams(filters, null).toString(),
+      ),
+    [filters, pathname],
+  );
   const discoveryReturnTo = useMemo(
     () => buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
     [activeLocationSource, filters, pathname],
+  );
+  const fallbackDiscoveryLocation = useMemo<AcquiredUserLocation>(
+    () => ({
+      source: "default_city",
+      label: DEFAULT_CITY_LOCATION.label,
+      coordinates: DEFAULT_CITY_LOCATION.coordinates,
+      isApproximate: true,
+      errors: [],
+    }),
+    [],
   );
 
   const hydrateRetentionState = useCallback(() => {
@@ -342,18 +402,45 @@ export function PublicDiscovery({
     selectedVendorIdRef.current = selectedVendorId;
   }, [selectedVendorId]);
 
-  function recordSelectionIntent(source: VendorSelectionSource) {
+  useEffect(() => {
+    firstRenderTimerStateRef.current.firstRenderStarted = true;
+    firstRenderTimerStateRef.current.vendorRenderStarted = true;
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setBrowserReady(true);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
+  const recordSelectionIntent = useCallback((source: VendorSelectionSource) => {
     selectionSourceRef.current = source;
     setSelectionSource(source);
     selectionActionTokenRef.current += 1;
     setSelectionActionToken(selectionActionTokenRef.current);
-  }
+  }, []);
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
       nearbyRequestIdRef.current += 1;
     };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !firstRenderTimerStateRef.current.firstRenderStarted ||
+      firstRenderTimerStateRef.current.firstRenderEnded
+    ) {
+      return;
+    }
+
+    endDevTimer("first_render");
+    firstRenderTimerStateRef.current.firstRenderEnded = true;
   }, []);
 
   useEffect(() => {
@@ -376,6 +463,10 @@ export function PublicDiscovery({
   }, [hydrateRetentionState]);
 
   useEffect(() => {
+    if (!canUseNetwork) {
+      return;
+    }
+
     void ensurePublicTrackingSession({
       page_path:
         typeof window !== "undefined"
@@ -383,7 +474,7 @@ export function PublicDiscovery({
           : pathname,
       location_source: activeLocationSource ?? null,
     });
-  }, [activeLocationSource, pathname]);
+  }, [activeLocationSource, canUseNetwork, pathname]);
 
   useEffect(() => {
     let timeoutId: number | null = null;
@@ -415,6 +506,11 @@ export function PublicDiscovery({
   }, []);
 
   useEffect(() => {
+    if (!canUseNetwork) {
+      reverseGeocodeRequestIdRef.current += 1;
+      return;
+    }
+
     if (!location || location.source === "default_city" || !resolvedLocationKey) {
       reverseGeocodeRequestIdRef.current += 1;
       return;
@@ -460,7 +556,7 @@ export function PublicDiscovery({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [location, resolvedLocationKey]);
+  }, [canUseNetwork, location, resolvedLocationKey]);
 
   useEffect(() => {
     const nextQueryString = discoveryQueryString;
@@ -477,7 +573,9 @@ export function PublicDiscovery({
   }, [discoveryQueryString, pathname, router, searchParams]);
 
   useEffect(() => {
-    const snapshot = readDiscoverySnapshot(discoverySnapshotKey);
+    const snapshot =
+      readDiscoverySnapshot(discoverySnapshotKey) ??
+      readDiscoverySnapshot(fallbackDiscoverySnapshotKey);
 
     if (!snapshot) {
       const timeout = window.setTimeout(() => {
@@ -510,7 +608,7 @@ export function PublicDiscovery({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [discoverySnapshotKey]);
+  }, [discoverySnapshotKey, fallbackDiscoverySnapshotKey, recordSelectionIntent]);
 
   useEffect(() => {
     if (!snapshotHydrated) return;
@@ -520,7 +618,20 @@ export function PublicDiscovery({
       selectedVendorId,
       scrollY: window.scrollY,
     });
-  }, [discoverySnapshotKey, nearbyData, selectedVendorId, snapshotHydrated]);
+    if (fallbackDiscoverySnapshotKey !== discoverySnapshotKey) {
+      writeDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
+        nearbyData,
+        selectedVendorId,
+        scrollY: window.scrollY,
+      });
+    }
+  }, [
+    discoverySnapshotKey,
+    fallbackDiscoverySnapshotKey,
+    nearbyData,
+    selectedVendorId,
+    snapshotHydrated,
+  ]);
 
   useEffect(() => {
     if (!snapshotHydrated) return;
@@ -538,6 +649,14 @@ export function PublicDiscovery({
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: window.scrollY,
       });
+      if (fallbackDiscoverySnapshotKey !== discoverySnapshotKey) {
+        writeDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
+          ...snapshot,
+          nearbyData: nearbyDataRef.current,
+          selectedVendorId: selectedVendorIdRef.current,
+          scrollY: window.scrollY,
+        });
+      }
     }
 
     window.addEventListener("scroll", persistScrollPosition, { passive: true });
@@ -547,23 +666,31 @@ export function PublicDiscovery({
       window.removeEventListener("scroll", persistScrollPosition);
       window.removeEventListener("pagehide", persistScrollPosition);
     };
-  }, [discoverySnapshotKey, nearbyData, selectedVendorId, snapshotHydrated]);
+  }, [
+    discoverySnapshotKey,
+    fallbackDiscoverySnapshotKey,
+    nearbyData,
+    selectedVendorId,
+    snapshotHydrated,
+  ]);
 
   useEffect(() => {
     function restorePreviewSelectionFromSnapshot() {
       const snapshot = readDiscoverySnapshot(discoverySnapshotKey);
+      const fallbackSnapshot = readDiscoverySnapshot(fallbackDiscoverySnapshotKey);
+      const restoredSnapshot = snapshot ?? fallbackSnapshot;
 
-      if (!snapshot) {
+      if (!restoredSnapshot) {
         return;
       }
 
-      const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
+      const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(restoredSnapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
-      nearbyDataRef.current = snapshot.nearbyData;
+      nearbyDataRef.current = restoredSnapshot.nearbyData;
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
       setSelectedVendorId(snapshotSelectedVendorId);
-      setNearbyData((current) => current ?? snapshot.nearbyData);
+      setNearbyData((current) => current ?? restoredSnapshot.nearbyData);
     }
 
     window.addEventListener("pageshow", restorePreviewSelectionFromSnapshot);
@@ -571,9 +698,13 @@ export function PublicDiscovery({
     return () => {
       window.removeEventListener("pageshow", restorePreviewSelectionFromSnapshot);
     };
-  }, [discoverySnapshotKey]);
+  }, [discoverySnapshotKey, fallbackDiscoverySnapshotKey, recordSelectionIntent]);
 
   useEffect(() => {
+    if (!canUseNetwork) {
+      return;
+    }
+
     let isActive = true;
 
     fetchPublicCategories()
@@ -593,7 +724,7 @@ export function PublicDiscovery({
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [canUseNetwork]);
 
   const loadNearbyVendors = useCallback(
     async (nextLocation: AcquiredUserLocation, nextFilters: DiscoveryFilters) => {
@@ -601,6 +732,11 @@ export function PublicDiscovery({
       nearbyRequestIdRef.current = requestId;
       setIsFetchingVendors(true);
       setNearbyError(null);
+
+      if (!firstRenderTimerStateRef.current.nearbyStarted) {
+        startDevTimer("nearby_api");
+        firstRenderTimerStateRef.current.nearbyStarted = true;
+      }
 
       try {
         const result = await fetchNearbyVendors(
@@ -651,54 +787,162 @@ export function PublicDiscovery({
           return;
         }
 
+        nearbyRequestKeyRef.current = null;
         setNearbyError(
           error instanceof Error ? error.message : "Unable to load nearby vendors.",
         );
       } finally {
+        if (
+          firstRenderTimerStateRef.current.nearbyStarted &&
+          !firstRenderTimerStateRef.current.nearbyEnded
+        ) {
+          endDevTimer("nearby_api");
+          firstRenderTimerStateRef.current.nearbyEnded = true;
+        }
+
         if (isMountedRef.current && nearbyRequestIdRef.current === requestId) {
           setIsFetchingVendors(false);
         }
       }
     },
-    [],
+    [recordSelectionIntent],
   );
 
+  const activeFetchLocation = useMemo<AcquiredUserLocation | null>(() => {
+    if (location) {
+      return location;
+    }
+
+    if (nearbyData) {
+      return {
+        source: nearbyData.location.source,
+        label: nearbyData.location.label,
+        coordinates: nearbyData.location.coordinates,
+        isApproximate: nearbyData.location.isApproximate,
+        errors: [],
+      };
+    }
+
+    if (locationStatus === "idle" || locationStatus === "resolving") {
+      return fallbackDiscoveryLocation;
+    }
+
+    return null;
+  }, [fallbackDiscoveryLocation, location, locationStatus, nearbyData]);
+
   useEffect(() => {
+    if (!isOnline) {
+      nearbyRequestKeyRef.current = null;
+      return;
+    }
+
     if (!snapshotHydrated) {
       return;
     }
 
-    if (
-      locationStatus === "idle" ||
-      locationStatus === "resolving" ||
-      locationStatus === "error" ||
-      !location
-    ) {
+    if (!canUseNetwork || locationStatus === "error" || !activeFetchLocation) {
       return;
     }
 
+    const requestKey = buildNearbyRequestKey(activeFetchLocation, filters);
+
+    if (nearbyRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    if (
+      !nearbyRequestKeyRef.current &&
+      nearbyData &&
+      buildNearbyRequestKey(
+        {
+          source: nearbyData.location.source,
+          coordinates: nearbyData.location.coordinates,
+        },
+        filters,
+      ) === requestKey
+    ) {
+      nearbyRequestKeyRef.current = requestKey;
+      return;
+    }
+
+    nearbyRequestKeyRef.current = requestKey;
+
+    const bootstrapDelayMs =
+      !location &&
+      !nearbyData &&
+      activeFetchLocation.source === "default_city"
+        ? DEFAULT_CITY_BOOTSTRAP_DELAY_MS
+        : 0;
+
     const timeout = window.setTimeout(() => {
-      void loadNearbyVendors(location, filters);
-    }, 0);
+      void loadNearbyVendors(activeFetchLocation, filters);
+    }, bootstrapDelayMs);
 
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [filters, loadNearbyVendors, location, locationStatus, snapshotHydrated]);
+  }, [
+    activeFetchLocation,
+    canUseNetwork,
+    filters,
+    isOnline,
+    loadNearbyVendors,
+    location,
+    locationStatus,
+    nearbyData,
+    snapshotHydrated,
+  ]);
 
   const vendors = useMemo(
-    () => sortDiscoveryVendors(nearbyData?.vendors ?? [], filters),
+    () => {
+      const normalized = normalizeNearbyDiscoveryData(
+        {
+          location: nearbyData?.location ?? null,
+          vendors: nearbyData?.vendors ?? [],
+        },
+        nearbyData?.location ?? null,
+      ).vendors;
+
+      return sortDiscoveryVendors(
+        normalized as NearbyVendorsResponseData["vendors"],
+        filters,
+      ) as typeof normalized;
+    },
     [filters, nearbyData],
   );
-  const popularVendorIds = useMemo(() => getPopularVendorIds(vendors), [vendors]);
+  const mappableVendors = useMemo(
+    () => vendors.filter(hasValidVendorCoordinates),
+    [vendors],
+  );
+
+  useEffect(() => {
+    if (
+      vendors.length === 0 ||
+      !firstRenderTimerStateRef.current.vendorRenderStarted ||
+      firstRenderTimerStateRef.current.vendorRenderEnded
+    ) {
+      return;
+    }
+
+    endDevTimer("first_vendor_render");
+    firstRenderTimerStateRef.current.vendorRenderEnded = true;
+  }, [vendors.length]);
+  const vendorById = useMemo(
+    () => new Map(vendors.map((vendor) => [vendor.vendor_id, vendor] as const)),
+    [vendors],
+  );
+  const popularVendorIds = useMemo(
+    () => getPopularVendorIds(vendors as NearbyVendorsResponseData["vendors"]),
+    [vendors],
+  );
   const popularVendors = useMemo(
     () => vendors.filter((vendor) => popularVendorIds.has(vendor.vendor_id)).slice(0, 3),
     [popularVendorIds, vendors],
   );
   const resolvedLocation = location ?? nearbyData?.location ?? null;
   const selectedVendor = useMemo(
-    () => vendors.find((vendor) => vendor.vendor_id === selectedVendorId) ?? null,
-    [selectedVendorId, vendors],
+    () => (selectedVendorId ? vendorById.get(selectedVendorId) ?? null : null),
+    [selectedVendorId, vendorById],
   );
   const selectedVendorOpenState = useMemo(
     () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
@@ -707,12 +951,12 @@ export function PublicDiscovery({
   const rememberedSelectedVendor = useMemo(
     () =>
       lastSelectedVendorMemory
-        ? vendors.find((vendor) => vendor.vendor_id === lastSelectedVendorMemory.vendor_id) ?? null
+        ? vendorById.get(lastSelectedVendorMemory.vendor_id) ?? null
         : null,
-    [lastSelectedVendorMemory, vendors],
+    [lastSelectedVendorMemory, vendorById],
   );
   const isResolvingLocation = locationStatus === "resolving";
-  const isLoading = isResolvingLocation || isFetchingVendors;
+  const isLoading = canUseNetwork && (isResolvingLocation || isFetchingVendors);
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
@@ -728,19 +972,19 @@ export function PublicDiscovery({
     [location, locationDisplayLabel, locationStatus],
   );
 
-  function applyFilters(nextFilters: DiscoveryFilters) {
+  const applyFilters = useCallback((nextFilters: DiscoveryFilters) => {
     recordSelectionIntent("filter");
     setFilters(nextFilters);
     setActiveVendorSection("nearby");
     setDesktopFiltersOpen(false);
     setMobileFiltersOpen(false);
-  }
+  }, [recordSelectionIntent]);
 
-  function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
-    const vendor = vendors.find((entry) => entry.vendor_id === vendorId);
+  const selectVendorById = useCallback((vendorId: string, source: "card" | "map" = "map") => {
+    const vendor = vendorById.get(vendorId);
     recordSelectionIntent(source);
 
-    if (vendor?.vendor_id === selectedVendorId) {
+    if (vendor?.vendor_id === selectedVendorIdRef.current) {
       return;
     }
 
@@ -760,7 +1004,14 @@ export function PublicDiscovery({
     }
 
     if (vendor) {
-      const retainedVendor = createRetainedVendorPreview(vendor);
+      const retainedVendor = createRetainedVendorPreview({
+        vendor_id: vendor.vendor_id,
+        slug: vendor.slug,
+        name: vendor.name,
+        area: vendor.area,
+        today_hours: vendor.today_hours,
+        is_open_now: vendor.is_open_now,
+      });
       rememberLastSelectedVendor(retainedVendor);
       setLastSelectedVendorMemory(retainedVendor);
     }
@@ -776,9 +1027,20 @@ export function PublicDiscovery({
     preferredSelectedVendorIdRef.current = vendor?.vendor_id ?? null;
     selectedVendorIdRef.current = vendor?.vendor_id ?? null;
     setSelectedVendorId(vendor?.vendor_id ?? null);
-  }
+  }, [activeLocationSource, discoverySnapshotKey, pathname, recordSelectionIntent, vendorById]);
 
-  async function retryLocation() {
+  const retryLocation = useCallback(async () => {
+    if (!isOnline) {
+      setRetryMessage("Still offline");
+      setNearbyError(null);
+      return;
+    }
+
+    if (locationStatus === "resolving") {
+      return;
+    }
+
+    setRetryMessage(null);
     setNearbyError(null);
 
     try {
@@ -788,7 +1050,7 @@ export function PublicDiscovery({
         error instanceof Error ? error.message : "Unable to refresh location.",
       );
     }
-  }
+  }, [isOnline, locationStatus, refreshLocation]);
 
   return (
     <main
@@ -854,13 +1116,25 @@ export function PublicDiscovery({
             </div>
             <button
               className="button-secondary compact-button"
-              disabled={locationStatus === "resolving"}
+              disabled={!isOnline || locationStatus === "resolving"}
+              title={!isOnline ? "Reconnect to retry" : undefined}
               type="button"
               onClick={() => void retryLocation()}
             >
               Retry location
             </button>
           </section>
+          {!isOnline ? (
+            <section
+              className="runtime-note"
+              data-testid="offline-fallback"
+              role="status"
+              aria-live="polite"
+            >
+              You&apos;re offline. Showing the last known vendor list.
+            </section>
+          ) : null}
+          {!isOnline && retryMessage ? <p className="runtime-note">{retryMessage}</p> : null}
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
           <section className="desktop-vendor-section-nav" aria-label="Vendor sections">
@@ -973,7 +1247,11 @@ export function PublicDiscovery({
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
             {!nearbyError && vendors.length === 0 && !isLoading ? (
-              <p className="empty-state">No vendors matched this search.</p>
+              <p className="empty-state">
+                {isOnline
+                  ? "No vendors matched this search."
+                  : "No cached vendors available while offline."}
+              </p>
             ) : null}
             {vendors.map((vendor) => (
               <VendorCard
@@ -1131,21 +1409,15 @@ export function PublicDiscovery({
                 onTogglePanel={() => setMobileFiltersOpen((current) => !current)}
               />
             </div>
-            {resolvedLocation ? (
-              <VendorMap
-                selectionActionToken={selectionActionToken}
-                selectionSource={selectionSource}
-                selectedVendorId={selectedVendorId}
-                timeTheme={timeTheme}
-                userLocation={resolvedLocation.coordinates}
-                vendors={vendors}
-                onSelectVendor={selectVendorById}
-              />
-            ) : (
-              <section className="discovery-map waiting-map">
-                <strong>Resolving map location</strong>
-              </section>
-            )}
+            <VendorMap
+              selectionActionToken={selectionActionToken}
+              selectionSource={selectionSource}
+              selectedVendorId={selectedVendorId}
+              timeTheme={timeTheme}
+              userLocation={resolvedLocation?.coordinates ?? null}
+              vendors={mappableVendors}
+              onSelectVendor={selectVendorById}
+            />
           </div>
 
           <section className="selected-vendor-panel">
@@ -1163,7 +1435,7 @@ export function PublicDiscovery({
                         </svg>
                       </span>
                       {formatVendorCardDistance(
-                        selectedVendor.distance_km,
+                        selectedVendor.distanceKm ?? selectedVendor.distance_km,
                         isApproximateDistance,
                       )}
                     </span>
@@ -1219,15 +1491,17 @@ export function PublicDiscovery({
                   ) : null}
                 </div>
                 <div className="selected-vendor-actions">
-                  <VendorActions
-                    latitude={selectedVendor.latitude}
-                    longitude={selectedVendor.longitude}
-                    phoneNumber={selectedVendor.phone_number}
-                    source="selected_preview"
-                    vendorId={selectedVendor.vendor_id}
-                    vendorSlug={selectedVendor.slug}
-                    locationSource={activeLocationSource ?? null}
-                  />
+                  {hasValidVendorCoordinates(selectedVendor) ? (
+                    <VendorActions
+                      latitude={selectedVendor.latitude}
+                      longitude={selectedVendor.longitude}
+                      phoneNumber={selectedVendor.phone_number}
+                      source="selected_preview"
+                      vendorId={selectedVendor.vendor_id}
+                      vendorSlug={selectedVendor.slug}
+                      locationSource={activeLocationSource ?? null}
+                    />
+                  ) : null}
                   <Link
                     className="button-secondary compact-button selected-vendor-detail-link"
                     href={buildVendorDetailHref(

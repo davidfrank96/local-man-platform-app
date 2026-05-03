@@ -51,6 +51,7 @@ Phase 6 signal visibility is ready when:
 - `Back to map` and browser-back restore discovery vendors, filters, selection, and scroll state.
 - Public discovery uses client-local morning, afternoon, and night theming while keeping vendor cards light and readable.
 - Public location handling distinguishes precise, approximate, and default-city modes with explicit trust messaging.
+- Public discovery can bootstrap default-city nearby vendors and the MapLibre surface while precise location is still resolving, then upgrade results when location becomes available.
 - Trust-first location display shows precise location only when browser geolocation succeeds, approximate location only when a usable approximate label exists, and neutral copy otherwise.
 - Reverse location lookup shows human-readable area labels when available and falls back to rounded coordinates when it is not.
 - Admin vendor creation, editing, deactivation, hours, dishes, and image management remain part of the active maintained surface.

@@ -7,9 +7,11 @@ import {
 } from "../location/distance.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import type { PriceBand } from "../../types";
+import { getVendorSearchRelevance } from "./discovery-ranking.ts";
 import { formatTodayHoursLabel } from "./time-display.ts";
 
 export const DEFAULT_NEARBY_RADIUS_KM = 10;
+export const MAX_NEARBY_VENDOR_RESULTS = 50;
 
 export type VendorHourWindow = {
   day_of_week: number;
@@ -70,9 +72,15 @@ export type NearbyVendorResult = {
 
 type NearbyVendorSortable = NearbyVendorResult & {
   rawDistanceKm: number;
+  searchScore: number;
 };
 
 export type VendorUsageScoreMap = Map<string, number>;
+
+export type VendorAvailabilitySnapshot = {
+  isOpenNow: boolean;
+  todayHours: string;
+};
 
 const ABUJA_TIME_ZONE = "Africa/Lagos";
 
@@ -113,8 +121,36 @@ function getDayAndMinuteInAbuja(date: Date): {
   };
 }
 
-function getDayOfWeekInAbuja(date: Date): number {
-  return getDayAndMinuteInAbuja(date).dayOfWeek;
+function getVendorHoursForCurrentTime(
+  hours: VendorHourWindow[] | null | undefined,
+  now = new Date(),
+): {
+  todayHours: VendorHourWindow | undefined;
+  previousHours: VendorHourWindow | undefined;
+  isOpenViaPreviousOvernight: boolean;
+} {
+  if (!hours?.length) {
+    return {
+      todayHours: undefined,
+      previousHours: undefined,
+      isOpenViaPreviousOvernight: false,
+    };
+  }
+
+  const { dayOfWeek, minuteOfDay } = getDayAndMinuteInAbuja(now);
+  const previousDay = (dayOfWeek + 6) % 7;
+  const todayHours = hours.find((entry) => entry.day_of_week === dayOfWeek);
+  const previousHours = hours.find((entry) => entry.day_of_week === previousDay);
+
+  return {
+    todayHours,
+    previousHours,
+    isOpenViaPreviousOvernight: isWindowOpenAtMinute(
+      previousHours,
+      minuteOfDay,
+      true,
+    ),
+  };
 }
 
 function isWindowOpenAtMinute(
@@ -144,10 +180,8 @@ export function isVendorOpenNow(
   if (override !== null) return override;
   if (!hours?.length) return false;
 
-  const { dayOfWeek, minuteOfDay } = getDayAndMinuteInAbuja(now);
-  const previousDay = (dayOfWeek + 6) % 7;
-  const todayHours = hours.find((entry) => entry.day_of_week === dayOfWeek);
-  const previousHours = hours.find((entry) => entry.day_of_week === previousDay);
+  const { minuteOfDay } = getDayAndMinuteInAbuja(now);
+  const { todayHours, previousHours } = getVendorHoursForCurrentTime(hours, now);
 
   return (
     isWindowOpenAtMinute(todayHours, minuteOfDay, false) ||
@@ -202,23 +236,52 @@ function getFeaturedDishSummary(
 export function getTodayHoursSummary(
   hours: VendorHourWindow[] | null | undefined,
   now = new Date(),
+  override: boolean | null = null,
 ): string {
   if (!hours?.length) {
     return "Hours not listed";
   }
 
-  const dayOfWeek = getDayOfWeekInAbuja(now);
-  const todayHours = hours.find((entry) => entry.day_of_week === dayOfWeek);
+  const {
+    todayHours,
+    previousHours,
+    isOpenViaPreviousOvernight,
+  } = getVendorHoursForCurrentTime(hours, now);
+
+  if (isOpenViaPreviousOvernight && previousHours) {
+    return formatTodayHoursLabel(
+      previousHours.open_time,
+      previousHours.close_time,
+      previousHours.is_closed,
+    );
+  }
 
   if (!todayHours) {
     return "Hours not listed";
   }
 
-  return formatTodayHoursLabel(
+  const todayLabel = formatTodayHoursLabel(
     todayHours.open_time,
     todayHours.close_time,
     todayHours.is_closed,
   );
+
+  if (override === true && todayLabel === "Closed") {
+    return "Open now";
+  }
+
+  return todayLabel;
+}
+
+export function getVendorAvailabilitySnapshot(
+  hours: VendorHourWindow[] | null | undefined,
+  override: boolean | null,
+  now = new Date(),
+): VendorAvailabilitySnapshot {
+  return {
+    isOpenNow: isVendorOpenNow(hours, override, now),
+    todayHours: getTodayHoursSummary(hours, now, override),
+  };
 }
 
 export function findNearbyVendors(
@@ -232,58 +295,87 @@ export function findNearbyVendors(
     lng: query.lng,
   };
   const radiusKm = getEffectiveNearbyRadiusKm(query.radius_km);
+  const results: NearbyVendorSortable[] = [];
 
-  return vendors
-    .flatMap<NearbyVendorSortable>((vendor) => {
-      if (vendor.latitude === null || vendor.longitude === null) return [];
-      if (query.price_band && vendor.price_band !== query.price_band) return [];
-      if (query.search && !matchesSearch(vendor, query.search)) return [];
-      if (query.category && !matchesCategory(vendor, query.category)) return [];
+  for (const vendor of vendors) {
+    if (vendor.latitude === null || vendor.longitude === null) {
+      continue;
+    }
+    if (query.price_band && vendor.price_band !== query.price_band) {
+      continue;
+    }
+    if (query.search && !matchesSearch(vendor, query.search)) {
+      continue;
+    }
+    if (query.category && !matchesCategory(vendor, query.category)) {
+      continue;
+    }
 
-      const rawDistanceKm = calculateDistanceKm(userLocation, {
-        lat: vendor.latitude,
-        lng: vendor.longitude,
-      });
+    const rawDistanceKm = calculateDistanceKm(userLocation, {
+      lat: vendor.latitude,
+      lng: vendor.longitude,
+    });
 
-      if (rawDistanceKm > radiusKm) return [];
+    if (rawDistanceKm > radiusKm) {
+      continue;
+    }
 
-      const isOpenNow = isVendorOpenNow(
-        vendor.vendor_hours,
-        vendor.is_open_override,
-        now,
-      );
+    const availability = getVendorAvailabilitySnapshot(
+      vendor.vendor_hours,
+      vendor.is_open_override,
+      now,
+    );
 
-      if (query.open_now === true && !isOpenNow) return [];
+    if (query.open_now === true && !availability.isOpenNow) {
+      continue;
+    }
 
-      return [
-        {
-          vendor_id: vendor.id,
-          name: vendor.name,
-          slug: vendor.slug,
-          short_description: vendor.short_description,
-          phone_number: vendor.phone_number,
-          area: vendor.area,
-          latitude: vendor.latitude,
-          longitude: vendor.longitude,
-          price_band: vendor.price_band,
-          average_rating: vendor.average_rating,
-          review_count: vendor.review_count,
-          ranking_score: usageScores.get(vendor.id) ?? 0,
-          distance_km: roundDistanceKm(rawDistanceKm),
-          is_open_now: isOpenNow,
-          featured_dish: getFeaturedDishSummary(vendor),
-          today_hours: getTodayHoursSummary(vendor.vendor_hours, now),
-          rawDistanceKm,
-        },
-      ];
-    })
-    .sort(
-      (left, right) =>
-        right.ranking_score - left.ranking_score ||
-        left.rawDistanceKm - right.rawDistanceKm,
-    )
-    .map(({ rawDistanceKm, ...vendor }) => {
+    const result: NearbyVendorSortable = {
+      vendor_id: vendor.id,
+      name: vendor.name,
+      slug: vendor.slug,
+      short_description: vendor.short_description,
+      phone_number: vendor.phone_number,
+      area: vendor.area,
+      latitude: vendor.latitude,
+      longitude: vendor.longitude,
+      price_band: vendor.price_band,
+      average_rating: vendor.average_rating,
+      review_count: vendor.review_count,
+      ranking_score: Math.max(0, Math.trunc(usageScores.get(vendor.id) ?? 0)),
+      distance_km: roundDistanceKm(rawDistanceKm),
+      is_open_now: availability.isOpenNow,
+      featured_dish: getFeaturedDishSummary(vendor),
+      today_hours: availability.todayHours,
+      rawDistanceKm,
+      searchScore: 0,
+    };
+
+    result.searchScore = getVendorSearchRelevance(result, query.search ?? "");
+    results.push(result);
+  }
+
+  results.sort((left, right) => {
+    if (left.is_open_now !== right.is_open_now) {
+      return left.is_open_now ? -1 : 1;
+    }
+    if (left.searchScore !== right.searchScore) {
+      return right.searchScore - left.searchScore;
+    }
+    if (left.ranking_score !== right.ranking_score) {
+      return right.ranking_score - left.ranking_score;
+    }
+    if (left.rawDistanceKm !== right.rawDistanceKm) {
+      return left.rawDistanceKm - right.rawDistanceKm;
+    }
+    return left.name.localeCompare(right.name);
+  });
+
+  return results
+    .slice(0, MAX_NEARBY_VENDOR_RESULTS)
+    .map(({ rawDistanceKm, searchScore, ...vendor }) => {
       void rawDistanceKm;
+      void searchScore;
       return vendor;
     });
 }

@@ -86,6 +86,7 @@ Migration files:
 - `supabase/migrations/20260426203000_user_events_alignment.sql`
 - `supabase/migrations/20260426213000_user_events_session_flow.sql`
 - `supabase/migrations/20260502120000_admin_analytics_snapshot.sql`
+- `supabase/migrations/20260503123000_admin_analytics_snapshot_perf.sql`
 
 Preferred command when `psql` is available:
 
@@ -182,6 +183,10 @@ Start the local app with real Supabase env vars:
 npm run runtime:check-env
 npm run dev
 ```
+
+Build safety rule:
+- `npm run build` must not run against the same live workspace while `npm run dev` is active.
+- The current npm wrapper enforces that rule and exits early with a clear error instead of deleting or corrupting the live `.next` Turbopack dev cache.
 
 In a second terminal, run:
 

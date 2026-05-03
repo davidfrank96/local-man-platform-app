@@ -11,6 +11,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - stronger search matches
   - usage-signal ranking
   - distance as the final tie-breaker
+  - capped nearby payloads so the map and list stay bounded
 - vendor cards with:
   - name
   - distance
@@ -143,6 +144,9 @@ The Local Man is a location-based food discovery product for finding nearby loca
    - `npm run test:e2e`
    - `npm run build`
 
+Runtime safety note:
+- `npm run build` now refuses to run while `npm run dev` is active in the same workspace, so the build step cannot wipe or corrupt the live Turbopack dev cache.
+
 ## Environment Variables
 
 ```text
@@ -206,6 +210,7 @@ Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/franken
 Phase 6 currently covers:
 - lightweight first-party public event tracking
 - usage-signal vendor ranking from tracked public behavior
+- nearby ranking aggregation executed in SQL for candidate vendor ids only
 - discovery refinement from real usage signals:
   - open-now priority
   - improved relevance ordering

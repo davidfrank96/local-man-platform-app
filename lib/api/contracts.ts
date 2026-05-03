@@ -60,8 +60,11 @@ export const apiEndpoints = {
     path: "/api/vendors/[slug]",
     requestShape: "Route param: slug.",
     responseShape:
-      "Vendor info with hours, categories, featured dishes, images, and rating summary.",
-    validationBoundary: ["slug must match the documented slug format"],
+      "Vendor info with hours, categories, featured dishes, images, rating summary, and server-computed is_open_now plus today_hours.",
+    validationBoundary: [
+      "slug must match the documented slug format",
+      "open/closed state must be computed server-side from the shared availability logic",
+    ],
   },
   createVendorRating: {
     access: "public",

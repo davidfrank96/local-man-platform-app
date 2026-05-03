@@ -16,6 +16,8 @@ import {
 
 type MapLibreVendorMapProps = VendorMapProps & {
   onMapError: () => void;
+  onMapReady: () => void;
+  onMarkersVisible: () => void;
   styleUrl: string;
 };
 
@@ -66,9 +68,10 @@ declare global {
 }
 
 const MAPLIBRE_LOAD_TIMEOUT_MS = 4_000;
-const DEFAULT_VENDOR_MAP_ZOOM = 12.25;
-const MAP_FIT_BOUNDS_PADDING = 44;
-const MAPLIBRE_CONTAINER_READY_TIMEOUT_MS = 1_250;
+const DEFAULT_VENDOR_MAP_ZOOM = 11.5;
+const INITIAL_MAP_FIT_BOUNDS_PADDING = 28;
+const INTERACTIVE_MAP_FIT_BOUNDS_PADDING = 44;
+const MAPLIBRE_CONTAINER_READY_TIMEOUT_MS = 2_500;
 const MAPLIBRE_CONTAINER_RETRY_DELAY_MS = 120;
 
 const THEME_PALETTES: Record<NonNullable<VendorMapProps["timeTheme"]> | "default", ThemePalette> = {
@@ -160,7 +163,7 @@ function fitMapToDiscoveryBounds(
     easeMapTo(map, cameraStateRef, source, {
       center: [userLocation.lng, userLocation.lat],
       zoom: DEFAULT_VENDOR_MAP_ZOOM,
-      duration: 400,
+      duration: source === "initial" ? 0 : 400,
     });
     return;
   }
@@ -175,9 +178,12 @@ function fitMapToDiscoveryBounds(
   );
 
   fitMapBounds(map, cameraStateRef, source, bounds, {
-    padding: MAP_FIT_BOUNDS_PADDING,
-    duration: 500,
-    maxZoom: 15,
+    padding:
+      source === "initial"
+        ? INITIAL_MAP_FIT_BOUNDS_PADDING
+        : INTERACTIVE_MAP_FIT_BOUNDS_PADDING,
+    duration: source === "initial" ? 0 : 500,
+    maxZoom: source === "initial" ? 14.25 : 15,
   });
 }
 
@@ -408,6 +414,8 @@ export function MapLibreVendorMap({
   timeTheme,
   onSelectVendor,
   onMapError,
+  onMapReady,
+  onMarkersVisible,
   styleUrl,
 }: MapLibreVendorMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -422,8 +430,11 @@ export function MapLibreVendorMap({
   const lastSelectionCameraTokenRef = useRef<number | null>(null);
   const latestSelectVendorRef = useRef(onSelectVendor);
   const latestMapErrorRef = useRef(onMapError);
+  const latestMapReadyRef = useRef(onMapReady);
+  const latestMarkersVisibleRef = useRef(onMarkersVisible);
   const latestVendorsRef = useRef(vendors);
   const latestSelectedVendorIdRef = useRef(selectedVendorId);
+  const hasReportedVisibleMarkersRef = useRef(false);
   const cameraStateRef = useRef<CameraState>({
     count: 0,
     lastAction: null,
@@ -442,10 +453,20 @@ export function MapLibreVendorMap({
   useEffect(() => {
     latestSelectVendorRef.current = onSelectVendor;
     latestMapErrorRef.current = onMapError;
+    latestMapReadyRef.current = onMapReady;
+    latestMarkersVisibleRef.current = onMarkersVisible;
     latestResolvedUserLocationRef.current = resolvedUserLocation;
     latestVendorsRef.current = vendors;
     latestSelectedVendorIdRef.current = selectedVendorId;
-  }, [onMapError, onSelectVendor, resolvedUserLocation, selectedVendorId, vendors]);
+  }, [
+    onMapError,
+    onMapReady,
+    onMarkersVisible,
+    onSelectVendor,
+    resolvedUserLocation,
+    selectedVendorId,
+    vendors,
+  ]);
 
   useEffect(() => {
     activeUserLocationRef.current = resolvedUserLocation;
@@ -454,7 +475,9 @@ export function MapLibreVendorMap({
   useEffect(() => {
     let cancelled = false;
     let loadTimeout: number | null = null;
+    let readySettleFrame: number | null = null;
     let layoutSettleFrame: number | null = null;
+    let hasReportedMapReady = false;
 
     async function initializeMap() {
       try {
@@ -540,6 +563,22 @@ export function MapLibreVendorMap({
         map.on("error", (event) => {
           console.warn("[vendor-map] non-fatal MapLibre error", event);
         });
+        map.once("render", () => {
+          if (cancelled || hasReportedMapReady) {
+            return;
+          }
+
+          hasReportedMapReady = true;
+          readySettleFrame = window.requestAnimationFrame(() => {
+            if (cancelled) {
+              return;
+            }
+
+            map.resize();
+            setMapReady(true);
+            latestMapReadyRef.current();
+          });
+        });
 
         map.once("load", () => {
           if (cancelled) {
@@ -556,7 +595,6 @@ export function MapLibreVendorMap({
               return;
             }
 
-            map.resize();
             applyThemeBackground(map, timeTheme);
             syncUserMarker(maplibre, map, userMarkerRef, activeUserLocationRef.current);
             syncVendorMarkers(
@@ -567,6 +605,13 @@ export function MapLibreVendorMap({
               latestVendorsRef.current,
               latestSelectedVendorIdRef.current,
             );
+            if (
+              !hasReportedVisibleMarkersRef.current &&
+              Object.keys(markersRef.current).length > 0
+            ) {
+              hasReportedVisibleMarkersRef.current = true;
+              latestMarkersVisibleRef.current();
+            }
             fitMapToDiscoveryBounds(
               maplibre,
               map,
@@ -577,12 +622,9 @@ export function MapLibreVendorMap({
             );
             lastViewportKeyRef.current = viewportKey;
             installMapDebug(map, cameraStateRef, latestVendorsRef, markersRef);
-            setMapReady(true);
           };
 
-          layoutSettleFrame = window.requestAnimationFrame(() => {
-            layoutSettleFrame = window.requestAnimationFrame(settleMapLayout);
-          });
+          layoutSettleFrame = window.requestAnimationFrame(settleMapLayout);
         });
       } catch {
         if (!cancelled) {
@@ -597,6 +639,9 @@ export function MapLibreVendorMap({
       cancelled = true;
       if (loadTimeout !== null) {
         window.clearTimeout(loadTimeout);
+      }
+      if (readySettleFrame !== null) {
+        window.cancelAnimationFrame(readySettleFrame);
       }
       if (layoutSettleFrame !== null) {
         window.cancelAnimationFrame(layoutSettleFrame);
@@ -617,6 +662,7 @@ export function MapLibreVendorMap({
         count: 0,
         lastAction: null,
       };
+      hasReportedVisibleMarkersRef.current = false;
       window.__LOCAL_MAN_MAP_DEBUG__ = undefined;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- map init must stay pinned to the style URL
@@ -651,6 +697,14 @@ export function MapLibreVendorMap({
         "filter",
       );
       lastViewportKeyRef.current = viewportKey;
+    }
+
+    if (
+      !hasReportedVisibleMarkersRef.current &&
+      Object.keys(markersRef.current).length > 0
+    ) {
+      hasReportedVisibleMarkersRef.current = true;
+      latestMarkersVisibleRef.current();
     }
   }, [selectedVendorId, vendors, viewportKey]);
 
@@ -713,9 +767,16 @@ export function MapLibreVendorMap({
       className="discovery-map"
       aria-label="Nearby vendor map"
       data-map-mode={mapReady ? "maplibre" : "loading"}
+      data-map-ready={mapReady ? "true" : "false"}
       data-time-theme={timeTheme ?? "morning"}
     >
       <div className="maplibre-map-surface" ref={containerRef} />
+      <div
+        aria-hidden="true"
+        className={mapReady ? "map-loading-overlay map-loading-overlay-ready" : "map-loading-overlay"}
+      >
+        <span>Loading map…</span>
+      </div>
       <div className="map-legend">
         <span>Search location</span>
         <span>{vendors.length} vendors</span>

@@ -2620,6 +2620,7 @@ h2 {
   min-height: min(64vh, 680px);
   height: min(64vh, 680px);
   width: 100%;
+  position: relative;
   overscroll-behavior: contain;
   background:
     linear-gradient(90deg, rgba(37, 41, 36, 0.08) 1px, transparent 1px),
@@ -2787,6 +2788,40 @@ h2 {
   padding: 10px 12px;
   font-size: 0.9rem;
   font-weight: 800;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06)),
+    radial-gradient(circle at top right, rgba(242, 139, 29, 0.12), transparent 34%);
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  opacity: 1;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.map-loading-overlay span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 20px rgba(37, 41, 36, 0.08);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.map-loading-overlay-ready {
+  opacity: 0;
 }
 
 .map-fallback-notice {
