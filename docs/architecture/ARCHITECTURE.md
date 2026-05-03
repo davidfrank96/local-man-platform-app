@@ -24,6 +24,7 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - optional approximate location provider interface
 - internal reverse geocoding route for human-readable labels
 - Google Maps deep links for directions only
+- the interactive discovery map should initialize immediately with the default-city center while location resolution and nearby vendor loading continue asynchronously
 
 ### Deployment
 - DigitalOcean App Platform

@@ -218,6 +218,23 @@ async function setMockGeolocationMode(page: Page, nextMode: MockGeolocationMode)
   }, { mode: nextMode });
 }
 
+async function installPendingGeolocation(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        clearWatch() {},
+        getCurrentPosition() {
+          return undefined;
+        },
+        watchPosition() {
+          return 0;
+        },
+      },
+    });
+  });
+}
+
 async function setMockClientTime(page: Page, isoString: string) {
   const timestamp = new Date(isoString).valueOf();
 
@@ -657,6 +674,28 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByText("Showing Abuja")).toHaveCount(0);
     await expect(page.getByText("Approximate location was unavailable.")).toHaveCount(0);
     await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("map initializes and default-city vendors load while browser geolocation is still pending", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const nearbyUrls: string[] = [];
+
+    await installPendingGeolocation(page);
+    await page.route("**/api/vendors/nearby**", async (route) => {
+      nearbyUrls.push(route.request().url());
+      await route.continue();
+    });
+
+    await page.goto("/");
+
+    await expect(page.locator(".discovery-map")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+
+    expect(nearbyUrls.length).toBeGreaterThan(0);
+    expect(nearbyUrls[0]).not.toContain("lat=");
+    expect(nearbyUrls[0]).not.toContain("lng=");
 
     await expectNoClientErrors(errors);
   });

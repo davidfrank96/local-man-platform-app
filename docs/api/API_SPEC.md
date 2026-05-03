@@ -71,7 +71,7 @@ Behavior:
 - `location_source = precise` means browser/device geolocation.
 - `location_source = approximate` means IP-based or other low-accuracy approximation.
 - `location_source = default_city` means no user coordinates were available and Abuja was used.
-- The frontend location hook should call `/api/vendors/nearby` with precise coordinates first, approximate coordinates second, or no coordinates when default city fallback is needed.
+- The frontend discovery flow may call `/api/vendors/nearby` without coordinates first so default-city vendors can render while precise browser geolocation is still resolving, then upgrade to precise or approximate coordinates when they become available.
 - Reverse geocoding is a separate best-effort UI concern and does not block or alter the nearby vendor response.
 - Candidate vendors are fetched with a latitude/longitude bounding box before precise distance calculation.
 - Base candidate filtering for `price_band` is pushed into the Supabase vendor query.

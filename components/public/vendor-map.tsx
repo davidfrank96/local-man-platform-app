@@ -1,16 +1,22 @@
 "use client";
 
-import { memo, useEffect, useState, type ComponentType } from "react";
+import { memo, useEffect, useRef, useState, type ComponentType } from "react";
 import {
   browserSupportsVendorMapRendering,
   getPublicMapStyleUrl,
   MAP_FALLBACK_NOTICE,
 } from "./vendor-map-config.ts";
+import { endDevTimer, startDevTimer } from "../../lib/public/dev-performance.ts";
 import { VendorMapFallback } from "./vendor-map-fallback.tsx";
 import type { VendorMapProps } from "./vendor-map-types.ts";
 
 type MapLibreVendorMapComponent = ComponentType<
-  VendorMapProps & { onMapError: () => void; styleUrl: string }
+  VendorMapProps & {
+    onMapError: () => void;
+    onMapReady: () => void;
+    onMarkersVisible: () => void;
+    styleUrl: string;
+  }
 >;
 
 function VendorMapComponent(props: VendorMapProps) {
@@ -25,6 +31,31 @@ function VendorMapComponent(props: VendorMapProps) {
     return styleUrl.length === 0 ? "missing_style_url" : null;
   });
   const mapStyleUrl = getPublicMapStyleUrl();
+  const mapInitReportedRef = useRef(false);
+  const markersVisibleReportedRef = useRef(false);
+
+  useEffect(() => {
+    startDevTimer("map_init");
+    startDevTimer("markers_visible");
+  }, []);
+
+  const handleMapReady = () => {
+    if (mapInitReportedRef.current) {
+      return;
+    }
+
+    endDevTimer("map_init");
+    mapInitReportedRef.current = true;
+  };
+
+  const handleMarkersVisible = () => {
+    if (markersVisibleReportedRef.current) {
+      return;
+    }
+
+    endDevTimer("markers_visible");
+    markersVisibleReportedRef.current = true;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +129,8 @@ function VendorMapComponent(props: VendorMapProps) {
       <MapLibreComponent
         {...props}
         onMapError={() => setFallbackReason("map_error")}
+        onMapReady={handleMapReady}
+        onMarkersVisible={handleMarkersVisible}
         styleUrl={mapStyleUrl}
       />
     </div>
