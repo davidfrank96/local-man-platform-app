@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { memo, type ReactNode } from "react";
-import type { LocationSource, NearbyVendorsResponseData } from "../../types/index.ts";
+import type { LocationSource } from "../../types/index.ts";
 import {
   formatVendorCardDistance,
   getVendorOpenStateDisplay,
   formatVendorCardPriceBand,
   formatVendorCardRating,
 } from "../../lib/vendors/card-display.ts";
+import {
+  hasValidVendorCoordinates,
+  type NormalizedVendor,
+} from "../../lib/public/vendor-normalization.ts";
 import { VendorActions } from "./vendor-actions.tsx";
 
-type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
-
 type VendorCardProps = {
-  vendor: NearbyVendor;
+  vendor: NormalizedVendor;
   selected: boolean;
   isPopular: boolean;
   approximateDistance: boolean;
@@ -21,8 +23,23 @@ type VendorCardProps = {
   onSelect: (vendorId: string, source: "card") => void;
 };
 
-function getVendorCue(vendor: NearbyVendor): string | null {
+function getVendorCue(vendor: NormalizedVendor): string | null {
   return vendor.featured_dish?.dish_name ?? vendor.short_description;
+}
+
+function getVendorDistanceLabel(
+  vendor: NormalizedVendor,
+  approximateDistance: boolean,
+): string {
+  if (typeof vendor.distanceKm === "number" && Number.isFinite(vendor.distanceKm)) {
+    return formatVendorCardDistance(vendor.distanceKm, approximateDistance);
+  }
+
+  if (hasValidVendorCoordinates(vendor)) {
+    return formatVendorCardDistance(vendor.distance_km, approximateDistance);
+  }
+
+  return "Distance unavailable";
 }
 
 function CardIcon({ children }: { children: ReactNode }) {
@@ -38,9 +55,22 @@ function VendorCardComponent({
   locationSource,
   onSelect,
 }: VendorCardProps) {
+  const vendorId = vendor.vendor_id || vendor.id;
+  const vendorName =
+    typeof vendor.name === "string" && vendor.name.trim().length > 0
+      ? vendor.name.trim()
+      : "Unknown Vendor";
+  const vendorArea =
+    typeof vendor.area === "string" && vendor.area.trim().length > 0
+      ? vendor.area.trim()
+      : null;
+  const vendorTodayHours =
+    typeof vendor.today_hours === "string" && vendor.today_hours.trim().length > 0
+      ? vendor.today_hours.trim()
+      : "Hours unavailable";
   const metaLine = [
     formatVendorCardPriceBand(vendor.price_band),
-    vendor.area,
+    vendorArea,
   ]
     .filter(Boolean)
     .join(" • ");
@@ -61,21 +91,21 @@ function VendorCardComponent({
   return (
     <article
       className={selected ? "vendor-card selected" : "vendor-card"}
-      data-vendor-id={vendor.vendor_id}
+      data-vendor-id={vendorId}
     >
       <button
-        aria-label={`Preview ${vendor.name} on map`}
+        aria-label={`Preview ${vendorName} on map`}
         aria-pressed={selected}
         className="vendor-card-preview"
         type="button"
-        onClick={() => onSelect(vendor.vendor_id, "card")}
+        onClick={() => onSelect(vendorId, "card")}
       >
         <div className="vendor-card-main">
           {isPopular ? <span className="vendor-card-popular-badge">Popular nearby</span> : null}
           <div className="vendor-card-shell">
             <div className="vendor-card-copy">
               <div className="vendor-card-head">
-                <h3>{vendor.name}</h3>
+                <h3>{vendorName}</h3>
                 <span className={statusBadgeClassName}>{openState.label}</span>
               </div>
               {cue ? (
@@ -99,7 +129,7 @@ function VendorCardComponent({
                       <circle cx="8" cy="7" r="1.5" />
                     </svg>
                   </CardIcon>
-                  <span>{formatVendorCardDistance(vendor.distance_km, approximateDistance)}</span>
+                  <span>{getVendorDistanceLabel(vendor, approximateDistance)}</span>
                   <span className="vendor-card-status-separator" aria-hidden="true">•</span>
                   <span className={`vendor-card-status-text ${openState.toneClassName}`}>{openState.label}</span>
                 </p>
@@ -113,7 +143,7 @@ function VendorCardComponent({
                   <span>
                     <span className="vendor-card-hours-label vendor-card-hours-label-desktop">Active hours:</span>
                     <span className="vendor-card-hours-label vendor-card-hours-label-mobile">Active hours:</span>{" "}
-                    {vendor.today_hours}
+                    {vendorTodayHours}
                   </span>
                 </p>
                 {metaLine ? (
@@ -145,15 +175,17 @@ function VendorCardComponent({
         </div>
       </button>
       <div className="vendor-card-footer">
-        <VendorActions
-          latitude={vendor.latitude}
-          longitude={vendor.longitude}
-          phoneNumber={vendor.phone_number}
-          source="card"
-          vendorId={vendor.vendor_id}
-          vendorSlug={vendor.slug}
-          locationSource={locationSource}
-        />
+        {hasValidVendorCoordinates(vendor) ? (
+          <VendorActions
+            latitude={vendor.latitude}
+            longitude={vendor.longitude}
+            phoneNumber={vendor.phone_number}
+            source="card"
+            vendorId={vendorId}
+            vendorSlug={vendor.slug}
+            locationSource={locationSource}
+          />
+        ) : null}
         <Link className="vendor-card-detail-link" href={detailHref}>
           View details →
         </Link>

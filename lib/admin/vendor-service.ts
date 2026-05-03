@@ -51,6 +51,26 @@ export type DeleteVendorResult = {
   is_active: false;
 };
 
+type VendorCleanupCandidate = {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+  is_test?: boolean | null;
+};
+
+export type CleanupTestVendorsResult = {
+  deleted_count: number;
+  deleted_vendors: Array<{
+    id: string;
+    name: string | null;
+    slug: string | null;
+  }>;
+};
+
+export type CleanupQaAdminVendorsResult = {
+  deletedCount: number;
+};
+
 export type ListVendorsResult = {
   vendors: VendorSummaryRecord[];
   pagination: {
@@ -65,6 +85,15 @@ type AdminVendorServiceContext = {
   config?: AdminAuthConfig | null;
   fetchImpl?: typeof fetch;
 };
+
+const vendorCleanupCandidateSchema = z.object({
+  id: uuidSchema,
+  name: z.string().nullish(),
+  slug: z.string().nullish(),
+  is_test: z.boolean().nullish(),
+}).passthrough();
+
+const vendorCleanupCandidatesSchema = z.array(vendorCleanupCandidateSchema);
 
 function requireServiceConfig(
   config: AdminAuthConfig | null | undefined,
@@ -209,6 +238,56 @@ function parseReturnedCategories(payload: unknown): VendorCategoryRecord[] {
 
 function sanitizeSupabaseSearch(value: string): string {
   return value.replaceAll("*", "").replaceAll(",", " ").trim();
+}
+
+function isQaTestVendor(candidate: VendorCleanupCandidate): boolean {
+  return candidate.name?.trim().startsWith("QA_TEST_") === true
+    || candidate.is_test === true;
+}
+
+function isQaAdminVendor(candidate: VendorCleanupCandidate): boolean {
+  return candidate.name?.trim().startsWith("QA Admin Vendor") === true;
+}
+
+async function deleteVendorRow(
+  vendorId: string,
+  resolvedConfig: AdminAuthConfig,
+  session: AdminSession,
+  fetchImpl: typeof fetch,
+  errorMessage: string,
+): Promise<void> {
+  const useServiceRole = Boolean(resolvedConfig.supabaseServiceRoleKey);
+  const headers: HeadersInit = {
+    apikey: useServiceRole
+      ? resolvedConfig.supabaseServiceRoleKey ?? resolvedConfig.supabaseAnonKey
+      : resolvedConfig.supabaseAnonKey,
+    authorization: `Bearer ${
+      useServiceRole
+        ? resolvedConfig.supabaseServiceRoleKey ?? session.accessToken
+        : session.accessToken
+    }`,
+    prefer: "return=minimal",
+  };
+
+  const response = await fetchImpl(
+    createRestUrl(resolvedConfig, "vendors", {
+      id: `eq.${vendorId}`,
+    }),
+    {
+      method: "DELETE",
+      headers,
+    },
+  );
+
+  if (!response.ok) {
+    const payload = await readJson(response);
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      errorMessage,
+      502,
+      payload,
+    );
+  }
 }
 
 export async function listVendors(
@@ -662,38 +741,98 @@ export async function hardDeleteVendor(
   }: AdminVendorServiceContext,
 ): Promise<void> {
   const resolvedConfig = requireServiceConfig(config);
-  const useServiceRole = Boolean(resolvedConfig.supabaseServiceRoleKey);
-  const headers: HeadersInit = {
-    apikey: useServiceRole
-      ? resolvedConfig.supabaseServiceRoleKey ?? resolvedConfig.supabaseAnonKey
-      : resolvedConfig.supabaseAnonKey,
-    authorization: `Bearer ${
-      useServiceRole
-        ? resolvedConfig.supabaseServiceRoleKey ?? session.accessToken
-        : session.accessToken
-    }`,
-    prefer: "return=minimal",
-  };
+  await deleteVendorRow(
+    params.id,
+    resolvedConfig,
+    session,
+    fetchImpl,
+    "Unable to delete vendor.",
+  );
+}
 
-  const response = await fetchImpl(
+export async function cleanupQaTestVendors(
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<CleanupTestVendorsResult> {
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
     createRestUrl(resolvedConfig, "vendors", {
-      id: `eq.${params.id}`,
+      select: "*",
     }),
     {
-      method: "DELETE",
-      headers,
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
     },
+    fetchImpl,
   );
+  const candidates = parseSupabasePayload(vendorCleanupCandidatesSchema, payload);
+  const qaVendors = candidates.filter(isQaTestVendor);
 
-  if (!response.ok) {
-    const payload = await readJson(response);
-    throw new AdminServiceError(
-      "UPSTREAM_ERROR",
-      "Unable to rollback the vendor after upload failure.",
-      502,
-      payload,
+  for (const vendor of qaVendors) {
+    await deleteVendorRow(
+      vendor.id,
+      resolvedConfig,
+      session,
+      fetchImpl,
+      "Unable to cleanup QA test vendors.",
     );
   }
+
+  console.info("[admin][vendor-cleanup] deleted QA test vendors", {
+    deletedCount: qaVendors.length,
+    vendorIds: qaVendors.map((vendor) => vendor.id),
+  });
+
+  return {
+    deleted_count: qaVendors.length,
+    deleted_vendors: qaVendors.map((vendor) => ({
+      id: vendor.id,
+      name: vendor.name ?? null,
+      slug: vendor.slug ?? null,
+    })),
+  };
+}
+
+export async function cleanupQaAdminVendors(
+  {
+    session,
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<CleanupQaAdminVendorsResult> {
+  const resolvedConfig = requireServiceConfig(config);
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "vendors", {
+      select: "id,name,slug",
+      name: "like.QA Admin Vendor*",
+    }),
+    {
+      method: "GET",
+      headers: createHeaders(session, resolvedConfig, ""),
+    },
+    fetchImpl,
+  );
+  const candidates = parseSupabasePayload(vendorCleanupCandidatesSchema, payload);
+  const qaAdminVendors = candidates.filter(isQaAdminVendor);
+
+  for (const vendor of qaAdminVendors) {
+    await deleteVendorRow(
+      vendor.id,
+      resolvedConfig,
+      session,
+      fetchImpl,
+      "Unable to cleanup QA Admin vendors.",
+    );
+  }
+
+  console.log("Deleted QA vendors:", qaAdminVendors.length);
+
+  return {
+    deletedCount: qaAdminVendors.length,
+  };
 }
 
 export async function replaceVendorHours(

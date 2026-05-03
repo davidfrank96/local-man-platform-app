@@ -5,11 +5,19 @@ import {
   POST as createVendorRoute,
 } from "../app/api/admin/vendors/route.ts";
 import {
+  DELETE as cleanupQaAdminRoute,
+} from "../app/api/admin/vendors/cleanup-qa-admin/route.ts";
+import {
+  DELETE as cleanupTestDataRoute,
+} from "../app/api/admin/vendors/cleanup-test-data/route.ts";
+import {
   DELETE as deleteVendorRoute,
   PUT as updateVendorRoute,
 } from "../app/api/admin/vendors/[id]/route.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
+const secondVendorId = "00000000-0000-4000-8000-000000000002";
+const thirdVendorId = "00000000-0000-4000-8000-000000000003";
 const timestamp = "2026-04-22T00:00:00+00:00";
 
 const vendorRecord = {
@@ -548,6 +556,190 @@ test("admin delete vendor route soft-disables vendor and writes audit log", asyn
   }
 });
 
+test("admin cleanup test data route deletes only QA vendors", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const deletedVendorFilters: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url.pathname}`);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          ...vendorRecord,
+          id: vendorId,
+          name: "QA_TEST_Biryani House",
+          slug: "qa-biryani-house",
+        },
+        {
+          ...vendorRecord,
+          id: secondVendorId,
+          name: "Real Vendor",
+          slug: "real-vendor",
+        },
+        {
+          ...vendorRecord,
+          id: thirdVendorId,
+          name: "Integration Seed Vendor",
+          slug: "integration-seed-vendor",
+          is_test: true,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "DELETE") {
+      deletedVendorFilters.push(url.searchParams.get("id") ?? "");
+      return new Response(null, { status: 204 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await cleanupTestDataRoute(
+      new Request("http://localhost/api/admin/vendors/cleanup-test-data", {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer admin-token",
+        },
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.deleted_count, 2);
+    assert.deepEqual(
+      body.data.deleted_vendors.map((vendor: { id: string }) => vendor.id),
+      [vendorId, thirdVendorId],
+    );
+    assert.deepEqual(deletedVendorFilters, [
+      `eq.${vendorId}`,
+      `eq.${thirdVendorId}`,
+    ]);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendors",
+      "DELETE /rest/v1/vendors",
+      "DELETE /rest/v1/vendors",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin cleanup QA admin route deletes only QA Admin Vendor prefix matches", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const requestedUrls: URL[] = [];
+  const deletedVendorFilters: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url.pathname}`);
+    requestedUrls.push(url);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          ...vendorRecord,
+          id: vendorId,
+          name: "QA Admin Vendor Alpha",
+          slug: "qa-admin-vendor-alpha",
+        },
+        {
+          ...vendorRecord,
+          id: secondVendorId,
+          name: "QA Admin Vendor Beta",
+          slug: "qa-admin-vendor-beta",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "DELETE") {
+      deletedVendorFilters.push(url.searchParams.get("id") ?? "");
+      return new Response(null, { status: 204 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await cleanupQaAdminRoute(
+      new Request("http://localhost/api/admin/vendors/cleanup-qa-admin", {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer admin-token",
+        },
+      }),
+    );
+    const body = await response.json();
+    const vendorUrl = requestedUrls.find((url) => url.pathname === "/rest/v1/vendors" && !url.searchParams.get("id"));
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.deletedCount, 2);
+    assert.equal(vendorUrl?.searchParams.get("name"), "like.QA Admin Vendor*");
+    assert.equal(vendorUrl?.searchParams.get("select"), "id,name,slug");
+    assert.deepEqual(deletedVendorFilters, [
+      `eq.${vendorId}`,
+      `eq.${secondVendorId}`,
+    ]);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendors",
+      "DELETE /rest/v1/vendors",
+      "DELETE /rest/v1/vendors",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("agent create vendor route remains allowed", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -648,6 +840,64 @@ test("agent delete vendor route is forbidden", async () => {
       {
         params: Promise.resolve({ id: vendorId }),
       },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(body.error.code, "FORBIDDEN");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("agent cleanup test data route is forbidden", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await cleanupTestDataRoute(
+      new Request("http://localhost/api/admin/vendors/cleanup-test-data", {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer agent-token",
+        },
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(body.error.code, "FORBIDDEN");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("agent cleanup QA admin route is forbidden", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await cleanupQaAdminRoute(
+      new Request("http://localhost/api/admin/vendors/cleanup-qa-admin", {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer agent-token",
+        },
+      }),
     );
     const body = await response.json();
 

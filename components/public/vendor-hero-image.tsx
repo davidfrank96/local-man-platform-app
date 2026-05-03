@@ -1,10 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  buildVendorResponsiveImageSources,
-  isSeedPlaceholderUrl,
-} from "../../lib/vendors/images.ts";
+import { useEffect, useState } from "react";
+import { isSeedPlaceholderUrl } from "../../lib/vendors/images.ts";
 
 type VendorHeroImageProps = {
   imageUrl: string | null;
@@ -13,27 +10,29 @@ type VendorHeroImageProps = {
 };
 
 const heroImageSizes = "(max-width: 767px) 100vw, (max-width: 1200px) 50vw, 640px";
-const heroImageWidths = [480, 720, 960] as const;
 
 export function VendorHeroImage({
   imageUrl,
   storageObjectPath = null,
   alt,
 }: VendorHeroImageProps) {
-  const [hasFailed, setHasFailed] = useState(false);
-  const responsiveSources = useMemo(
-    () =>
-      imageUrl
-        ? buildVendorResponsiveImageSources(imageUrl, storageObjectPath, heroImageWidths, {
-            height: 720,
-            quality: 72,
-            resize: "cover",
-          })
-        : null,
-    [imageUrl, storageObjectPath],
-  );
+  const [hasOriginalFailed, setHasOriginalFailed] = useState(false);
+  const isValidHttpImageUrl =
+    typeof imageUrl === "string" &&
+    imageUrl.startsWith("http") &&
+    !isSeedPlaceholderUrl(imageUrl);
 
-  if (!imageUrl || hasFailed || isSeedPlaceholderUrl(imageUrl)) {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("IMAGE URL:", imageUrl);
+    }
+  }, [imageUrl, storageObjectPath]);
+
+  if (!isValidHttpImageUrl) {
+    return <span>No image available</span>;
+  }
+
+  if (hasOriginalFailed) {
     return <span>No image available</span>;
   }
 
@@ -45,10 +44,9 @@ export function VendorHeroImage({
       height={720}
       loading="lazy"
       sizes={heroImageSizes}
-      src={responsiveSources?.src ?? imageUrl}
-      srcSet={responsiveSources?.srcSet ?? undefined}
+      src={imageUrl}
       width={960}
-      onError={() => setHasFailed(true)}
+      onError={() => setHasOriginalFailed(true)}
     />
   );
 }
