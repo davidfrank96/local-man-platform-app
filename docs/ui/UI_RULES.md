@@ -79,6 +79,7 @@ The Local Man — UI Rules
 - visible detail link text: `View details →`
 - tapping the card body should preview the vendor on the map without interfering with call, directions, or details
 - `Active hours:`, distance, and open/closed state must remain visible before and after the card is selected.
+- open/closed state and `Active hours:` must come from the shared server-computed availability fields so the card badge and hours line never contradict each other
 - compact card density matters: metadata rows should scan quickly without making the card tall
 - selected cards must stay readable in every time theme and use a clear but compact highlight treatment
 - browser back and `Back to map` must restore discovery state without leaving the search and filter controls blocked or requiring a manual reload
@@ -88,6 +89,8 @@ The Local Man — UI Rules
 
 ## Vendor Detail Rules
 - a compact hero image is allowed only on the detail page
+- Supabase-hosted vendor hero images should use responsive transformed widths instead of always loading the original-size asset
+- vendor detail images should lazy load and decode asynchronously when rendered by the browser
 - visible primary actions near top
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
 - compact summary cards or chips are preferred when they reduce scrolling without hiding information

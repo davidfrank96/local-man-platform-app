@@ -9,6 +9,7 @@ Vendor cards on discovery and list surfaces are intentionally image-free.
 Rules:
 
 - no vendor images or thumbnails
+- no vendor image payload dependency from nearby list rendering
 - compact layout
 - text-first scanning
 - lightweight metadata icons only
@@ -99,3 +100,9 @@ Related but separate discovery surfaces:
 - Last selected vendor
 
 These are not selected vendor cards. They are retention/supporting surfaces and should not be documented as the primary preview panel.
+
+## Vendor detail image rule
+
+- vendor profile images remain detail-page only
+- detail-page images should request responsive transformed widths when the source is a Supabase Storage object
+- detail-page images should lazy load and decode asynchronously without changing the visible layout box

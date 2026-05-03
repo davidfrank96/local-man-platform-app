@@ -34,7 +34,6 @@ type AnalyticsEventRow = {
   event_type: string;
   vendor_id: string | null;
   vendor_slug: string | null;
-  page_path: string;
   device_type: string;
   location_source: string | null;
   timestamp: string;
@@ -49,11 +48,10 @@ type VendorLookupRow = {
 
 const ANALYTICS_PAGE_SIZE = 1000;
 const MAX_ANALYTICS_EVENTS = 5000;
-const RECENT_EVENTS_LIMIT = 25;
+const ANALYTICS_RECENT_EVENTS_LIMIT = 25;
 const analyticsCacheTtlMs = 30_000;
 const analyticsQueryWarnThresholdMs = 3_000;
 const analyticsFetchTimeoutMs = 4_000;
-const analyticsRecentEventsLimit = 25;
 const meaningfulInteractionEvents = new Set([
   "vendor_selected",
   "vendor_detail_opened",
@@ -208,7 +206,7 @@ async function fetchAnalyticsSnapshotViaRpc(
       headers: createHeaders(session, config),
       body: JSON.stringify({
         range_start: getRangeStart(range),
-        recent_limit: analyticsRecentEventsLimit,
+        recent_limit: ANALYTICS_RECENT_EVENTS_LIMIT,
       }),
       signal: controller.signal,
     });
@@ -282,7 +280,6 @@ async function fetchEventRows(
     "event_type",
     "vendor_id",
     "vendor_slug",
-    "page_path",
     "device_type",
     "location_source",
     "timestamp",
@@ -481,6 +478,16 @@ function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
   return rows.filter((row) => normalizeAnalyticsEventType(row.event_type) === expected).length;
 }
 
+function ensureRowsOrderedByNewestFirst(rows: AnalyticsEventRow[]): AnalyticsEventRow[] {
+  for (let index = 1; index < rows.length; index += 1) {
+    if (rows[index - 1]!.timestamp < rows[index]!.timestamp) {
+      return [...rows].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+    }
+  }
+
+  return rows;
+}
+
 function getVendorAggregateKey(row: AnalyticsEventRow): string | null {
   if (typeof row.vendor_id === "string" && row.vendor_id.length > 0) {
     return `id:${row.vendor_id}`;
@@ -676,11 +683,9 @@ export async function getAdminAnalytics(
     range,
     true,
   );
-  const rows = [...eventResult.rows].sort(
-    (left, right) => new Date(right.timestamp).valueOf() - new Date(left.timestamp).valueOf(),
-  );
+  const rows = ensureRowsOrderedByNewestFirst(eventResult.rows);
   const recentVendorIds = rows
-    .slice(0, RECENT_EVENTS_LIMIT)
+    .slice(0, ANALYTICS_RECENT_EVENTS_LIMIT)
     .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
   const rankedVendorKeys = [
     ...getTopVendorKeys(rows, ["vendor_selected"]),
@@ -707,7 +712,7 @@ export async function getAdminAnalytics(
       typeof row.session_id === "string" && row.session_id.length > 0 ? [row.session_id] : [],
     ),
   );
-  const recentEvents = rows.slice(0, RECENT_EVENTS_LIMIT).map((row) => {
+  const recentEvents = rows.slice(0, ANALYTICS_RECENT_EVENTS_LIMIT).map((row) => {
     const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
     const normalizedEventType = normalizeAnalyticsEventType(row.event_type);
 

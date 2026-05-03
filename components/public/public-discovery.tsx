@@ -342,12 +342,12 @@ export function PublicDiscovery({
     selectedVendorIdRef.current = selectedVendorId;
   }, [selectedVendorId]);
 
-  function recordSelectionIntent(source: VendorSelectionSource) {
+  const recordSelectionIntent = useCallback((source: VendorSelectionSource) => {
     selectionSourceRef.current = source;
     setSelectionSource(source);
     selectionActionTokenRef.current += 1;
     setSelectionActionToken(selectionActionTokenRef.current);
-  }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -510,7 +510,7 @@ export function PublicDiscovery({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [discoverySnapshotKey]);
+  }, [discoverySnapshotKey, recordSelectionIntent]);
 
   useEffect(() => {
     if (!snapshotHydrated) return;
@@ -571,7 +571,7 @@ export function PublicDiscovery({
     return () => {
       window.removeEventListener("pageshow", restorePreviewSelectionFromSnapshot);
     };
-  }, [discoverySnapshotKey]);
+  }, [discoverySnapshotKey, recordSelectionIntent]);
 
   useEffect(() => {
     let isActive = true;
@@ -660,7 +660,7 @@ export function PublicDiscovery({
         }
       }
     },
-    [],
+    [recordSelectionIntent],
   );
 
   useEffect(() => {
@@ -690,6 +690,10 @@ export function PublicDiscovery({
     () => sortDiscoveryVendors(nearbyData?.vendors ?? [], filters),
     [filters, nearbyData],
   );
+  const vendorById = useMemo(
+    () => new Map(vendors.map((vendor) => [vendor.vendor_id, vendor] as const)),
+    [vendors],
+  );
   const popularVendorIds = useMemo(() => getPopularVendorIds(vendors), [vendors]);
   const popularVendors = useMemo(
     () => vendors.filter((vendor) => popularVendorIds.has(vendor.vendor_id)).slice(0, 3),
@@ -697,8 +701,8 @@ export function PublicDiscovery({
   );
   const resolvedLocation = location ?? nearbyData?.location ?? null;
   const selectedVendor = useMemo(
-    () => vendors.find((vendor) => vendor.vendor_id === selectedVendorId) ?? null,
-    [selectedVendorId, vendors],
+    () => (selectedVendorId ? vendorById.get(selectedVendorId) ?? null : null),
+    [selectedVendorId, vendorById],
   );
   const selectedVendorOpenState = useMemo(
     () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
@@ -707,9 +711,9 @@ export function PublicDiscovery({
   const rememberedSelectedVendor = useMemo(
     () =>
       lastSelectedVendorMemory
-        ? vendors.find((vendor) => vendor.vendor_id === lastSelectedVendorMemory.vendor_id) ?? null
+        ? vendorById.get(lastSelectedVendorMemory.vendor_id) ?? null
         : null,
-    [lastSelectedVendorMemory, vendors],
+    [lastSelectedVendorMemory, vendorById],
   );
   const isResolvingLocation = locationStatus === "resolving";
   const isLoading = isResolvingLocation || isFetchingVendors;
@@ -728,19 +732,19 @@ export function PublicDiscovery({
     [location, locationDisplayLabel, locationStatus],
   );
 
-  function applyFilters(nextFilters: DiscoveryFilters) {
+  const applyFilters = useCallback((nextFilters: DiscoveryFilters) => {
     recordSelectionIntent("filter");
     setFilters(nextFilters);
     setActiveVendorSection("nearby");
     setDesktopFiltersOpen(false);
     setMobileFiltersOpen(false);
-  }
+  }, [recordSelectionIntent]);
 
-  function selectVendorById(vendorId: string, source: "card" | "map" = "map") {
-    const vendor = vendors.find((entry) => entry.vendor_id === vendorId);
+  const selectVendorById = useCallback((vendorId: string, source: "card" | "map" = "map") => {
+    const vendor = vendorById.get(vendorId);
     recordSelectionIntent(source);
 
-    if (vendor?.vendor_id === selectedVendorId) {
+    if (vendor?.vendor_id === selectedVendorIdRef.current) {
       return;
     }
 
@@ -776,9 +780,9 @@ export function PublicDiscovery({
     preferredSelectedVendorIdRef.current = vendor?.vendor_id ?? null;
     selectedVendorIdRef.current = vendor?.vendor_id ?? null;
     setSelectedVendorId(vendor?.vendor_id ?? null);
-  }
+  }, [activeLocationSource, discoverySnapshotKey, pathname, recordSelectionIntent, vendorById]);
 
-  async function retryLocation() {
+  const retryLocation = useCallback(async () => {
     setNearbyError(null);
 
     try {
@@ -788,7 +792,7 @@ export function PublicDiscovery({
         error instanceof Error ? error.message : "Unable to refresh location.",
       );
     }
-  }
+  }, [refreshLocation]);
 
   return (
     <main

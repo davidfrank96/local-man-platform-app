@@ -28,6 +28,19 @@ function setPublicEnv(): () => void {
   };
 }
 
+function createDailyHours(vendor_id: string) {
+  return Array.from({ length: 7 }, (_, day_of_week) => ({
+    id: `20000000-0000-4000-8000-00000000000${day_of_week + 1}`,
+    vendor_id,
+    day_of_week,
+    open_time: "08:00:00",
+    close_time: "18:00:00",
+    is_closed: false,
+    created_at: timestamp,
+    updated_at: timestamp,
+  }));
+}
+
 test("public categories route returns category summaries", async () => {
   const restoreEnv = setPublicEnv();
   const originalFetch = globalThis.fetch;
@@ -94,21 +107,10 @@ test("public vendor detail route returns transformed vendor detail", async () =>
         average_rating: 4.2,
         review_count: 5,
         is_active: true,
-        is_open_override: null,
+        is_open_override: true,
         created_at: timestamp,
         updated_at: timestamp,
-        vendor_hours: [
-          {
-            id: "20000000-0000-4000-8000-000000000001",
-            vendor_id: vendorId,
-            day_of_week: 1,
-            open_time: "08:00:00",
-            close_time: "18:00:00",
-            is_closed: false,
-            created_at: timestamp,
-            updated_at: timestamp,
-          },
-        ],
+        vendor_hours: createDailyHours(vendorId),
         vendor_category_map: [
           {
             vendor_categories: {
@@ -165,11 +167,13 @@ test("public vendor detail route returns transformed vendor detail", async () =>
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
     assert.equal(body.data.vendor.slug, "test-vendor");
-    assert.equal(body.data.vendor.hours[0].day_of_week, 1);
+    assert.equal(body.data.vendor.hours[0].day_of_week, 0);
     assert.equal(body.data.vendor.categories[0].slug, "rice");
     assert.equal(body.data.vendor.featured_dishes[0].dish_name, "Jollof rice");
     assert.equal(body.data.vendor.images.length, 1);
     assert.equal(body.data.vendor.images[0].storage_object_path, "test/hero.jpg");
+    assert.equal(body.data.vendor.is_open_now, true);
+    assert.equal(body.data.vendor.today_hours, "8:00 AM - 6:00 PM");
     assert.deepEqual(body.data.vendor.rating_summary, {
       average_rating: 4.2,
       review_count: 5,
@@ -292,6 +296,8 @@ test("public vendor detail route still succeeds when linked data is missing", as
     assert.deepEqual(body.data.vendor.hours, []);
     assert.deepEqual(body.data.vendor.featured_dishes, []);
     assert.deepEqual(body.data.vendor.images, []);
+    assert.equal(body.data.vendor.is_open_now, false);
+    assert.equal(body.data.vendor.today_hours, "Hours not listed");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

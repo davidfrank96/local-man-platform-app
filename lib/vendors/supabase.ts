@@ -1,4 +1,8 @@
-import { getNearbyBoundingBox, type VendorLocationRecord } from "./nearby.ts";
+import {
+  getNearbyBoundingBox,
+  getVendorAvailabilitySnapshot,
+  type VendorLocationRecord,
+} from "./nearby.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import {
   vendorCategorySchema,
@@ -25,17 +29,21 @@ type SupabaseServiceRoleConfig = {
   serviceRoleKey: string;
 };
 
-type UserEventRow = {
-  vendor_id: string | null;
-  event_type: string;
+type VendorUsageScoreRow = {
+  vendor_id: string;
+  ranking_score: number;
 };
 
-const vendorUsageEventWeights = {
-  vendor_selected: 1,
-  vendor_detail_opened: 3,
-  directions_clicked: 5,
-  call_clicked: 8,
-} as const;
+type VendorUsageEventType =
+  | "vendor_selected"
+  | "vendor_detail_opened"
+  | "directions_clicked"
+  | "call_clicked";
+
+type VendorUsageEventRow = {
+  vendor_id: string | null;
+  event_type: VendorUsageEventType | null;
+};
 
 const nearbyVendorBaseSelect = [
   "id",
@@ -53,6 +61,20 @@ const nearbyVendorBaseSelect = [
   "vendor_hours(day_of_week,open_time,close_time,is_closed)",
   "vendor_featured_dishes(dish_name,description,is_featured)",
 ].join(",");
+
+const vendorUsageEventTypes: VendorUsageEventType[] = [
+  "vendor_selected",
+  "vendor_detail_opened",
+  "directions_clicked",
+  "call_clicked",
+];
+
+const vendorUsageEventWeights: Record<VendorUsageEventType, number> = {
+  vendor_selected: 1,
+  vendor_detail_opened: 3,
+  directions_clicked: 5,
+  call_clicked: 8,
+};
 
 type VendorDetailRestRecord = Vendor & {
   vendor_hours?: VendorHours[] | null;
@@ -122,6 +144,31 @@ async function fetchSupabaseJson<T>(
   return (await response.json()) as T;
 }
 
+async function callSupabaseServiceRoleRpc<T>(
+  functionName: string,
+  payload: Record<string, unknown>,
+  config: SupabaseServiceRoleConfig,
+  errorLabel: string,
+): Promise<T> {
+  const url = new URL(`/rest/v1/rpc/${functionName}`, config.url);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: config.serviceRoleKey,
+      authorization: `Bearer ${config.serviceRoleKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`${errorLabel}: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 async function fetchSupabaseServiceRoleJson<T>(
   url: URL,
   config: SupabaseServiceRoleConfig,
@@ -142,6 +189,72 @@ async function fetchSupabaseServiceRoleJson<T>(
   return (await response.json()) as T;
 }
 
+function normalizeVendorUsageScoreRows(
+  rows: VendorUsageScoreRow[],
+): VendorUsageScoreMap {
+  const scores: VendorUsageScoreMap = new Map();
+
+  for (const row of rows) {
+    if (!row.vendor_id || !Number.isFinite(row.ranking_score)) {
+      continue;
+    }
+    scores.set(row.vendor_id, Math.max(0, Math.trunc(row.ranking_score)));
+  }
+
+  return scores;
+}
+
+async function fetchVendorUsageScoresFromEvents(
+  vendorIds: string[],
+  config: SupabaseServiceRoleConfig,
+): Promise<VendorUsageScoreMap> {
+  const pageSize = 1000;
+  const rows: VendorUsageEventRow[] = [];
+
+  for (let offset = 0; ; offset += pageSize) {
+    const url = new URL("/rest/v1/user_events", config.url);
+    url.searchParams.set("select", "vendor_id,event_type");
+    appendFilter(url, "vendor_id", `in.(${vendorIds.join(",")})`);
+    appendFilter(
+      url,
+      "event_type",
+      `in.(${vendorUsageEventTypes.join(",")})`,
+    );
+    url.searchParams.set("limit", String(pageSize));
+    url.searchParams.set("offset", String(offset));
+
+    const page = await fetchSupabaseServiceRoleJson<VendorUsageEventRow[]>(
+      url,
+      config,
+      "Supabase vendor usage fallback query failed",
+    );
+
+    rows.push(...page);
+
+    if (page.length < pageSize) {
+      break;
+    }
+  }
+
+  const scores: VendorUsageScoreMap = new Map();
+
+  for (const row of rows) {
+    if (!row.vendor_id || !row.event_type) {
+      continue;
+    }
+
+    const weight = vendorUsageEventWeights[row.event_type];
+
+    if (!weight) {
+      continue;
+    }
+
+    scores.set(row.vendor_id, (scores.get(row.vendor_id) ?? 0) + weight);
+  }
+
+  return scores;
+}
+
 export async function fetchNearbyVendorCandidates(
   query: ResolvedNearbyVendorsQuery,
   config: SupabaseRestConfig,
@@ -149,7 +262,7 @@ export async function fetchNearbyVendorCandidates(
   const box = getNearbyBoundingBox(query);
   const url = new URL("/rest/v1/vendors", config.url);
   const select = query.category
-    ? `${nearbyVendorBaseSelect},vendor_category_map(vendor_categories(slug))`
+    ? `${nearbyVendorBaseSelect},vendor_category_map!inner(vendor_categories!inner(slug))`
     : nearbyVendorBaseSelect;
 
   url.searchParams.set("select", select);
@@ -161,6 +274,14 @@ export async function fetchNearbyVendorCandidates(
 
   if (query.price_band) {
     appendFilter(url, "price_band", `eq.${query.price_band}`);
+  }
+
+  if (query.category) {
+    appendFilter(
+      url,
+      "vendor_category_map.vendor_categories.slug",
+      `eq.${query.category}`,
+    );
   }
 
   if (query.search) {
@@ -187,40 +308,32 @@ export async function fetchVendorUsageScores(
     return new Map();
   }
 
-  const url = new URL("/rest/v1/user_events", config.url);
-  url.searchParams.set("select", "vendor_id,event_type");
-  url.searchParams.set("vendor_id", `in.(${vendorIds.join(",")})`);
-  url.searchParams.set(
-    "event_type",
-    `in.(${Object.keys(vendorUsageEventWeights).join(",")})`,
-  );
+  const uniqueVendorIds = [...new Set(vendorIds)];
+  try {
+    const rows = await callSupabaseServiceRoleRpc<VendorUsageScoreRow[]>(
+      "get_vendor_usage_scores",
+      {
+        vendor_ids: uniqueVendorIds,
+      },
+      config,
+      "Supabase vendor usage RPC failed",
+    );
 
-  const rows = await fetchSupabaseServiceRoleJson<UserEventRow[]>(
-    url,
-    config,
-    "Supabase vendor usage query failed",
-  );
+    return normalizeVendorUsageScoreRows(rows);
+  } catch (rpcError) {
+    try {
+      return await fetchVendorUsageScoresFromEvents(uniqueVendorIds, config);
+    } catch (fallbackError) {
+      const rpcMessage =
+        rpcError instanceof Error ? rpcError.message : String(rpcError);
+      const fallbackMessage =
+        fallbackError instanceof Error
+          ? fallbackError.message
+          : String(fallbackError);
 
-  const scores: VendorUsageScoreMap = new Map();
-
-  for (const row of rows) {
-    if (!row.vendor_id) {
-      continue;
+      throw new Error(`${rpcMessage}; fallback failed: ${fallbackMessage}`);
     }
-
-    const weight =
-      vendorUsageEventWeights[
-        row.event_type as keyof typeof vendorUsageEventWeights
-      ];
-
-    if (!weight) {
-      continue;
-    }
-
-    scores.set(row.vendor_id, (scores.get(row.vendor_id) ?? 0) + weight);
   }
-
-  return scores;
 }
 
 export async function fetchPublicCategoriesFromSupabase(
@@ -285,6 +398,7 @@ export async function fetchVendorDetailBySlugFromSupabase(
     ).toSorted((left, right) => left.sort_order - right.sort_order) ?? [];
   const featuredDishes =
     vendor.vendor_featured_dishes?.filter((dish) => dish.is_featured) ?? [];
+  const availability = getVendorAvailabilitySnapshot(hours, vendor.is_open_override);
 
   return vendorDetailResponseDataSchema.parse({
     ...vendor,
@@ -292,6 +406,8 @@ export async function fetchVendorDetailBySlugFromSupabase(
     categories,
     featured_dishes: featuredDishes,
     images,
+    is_open_now: availability.isOpenNow,
+    today_hours: availability.todayHours,
     rating_summary: {
       average_rating: vendor.average_rating,
       review_count: vendor.review_count,

@@ -496,6 +496,8 @@ export const vendorDetailResponseDataSchema = vendorSchema.extend({
   categories: z.array(vendorCategorySchema),
   featured_dishes: z.array(vendorFeaturedDishSchema),
   images: z.array(vendorImageSchema),
+  is_open_now: z.boolean(),
+  today_hours: z.string(),
   rating_summary: ratingSummarySchema,
 });
 

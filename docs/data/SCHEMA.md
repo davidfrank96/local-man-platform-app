@@ -156,6 +156,7 @@ Notes:
 - vendors.area
 - vendors.is_active
 - vendors.latitude and vendors.longitude for active vendor lookup
+- vendors.price_band
 - vendors text search across name, description, area, and city
 - vendor_hours.vendor_id
 - vendor_category_map.vendor_id
@@ -163,8 +164,19 @@ Notes:
 - vendor_featured_dishes.vendor_id
 - vendor_images.vendor_id and sort_order
 - ratings.vendor_id
+- user_events.event_type and timestamp
+- user_events.vendor_id and timestamp
+- user_events.session_id and timestamp
+- user_events.vendor_id plus event_type for ranking aggregation
+- admin_users.email
+- admin_users.id
 - audit_logs.admin_user_id
 - audit_logs.entity_type and entity_id
+
+Current notes:
+- `vendors.is_open_now` is not a persisted column in this schema; open status is derived from `vendor_hours` and `is_open_override`, so there is no direct database index for `is_open_now`.
+- `admin_users.id` is the auth user id primary key, so it already has an index through the primary key constraint.
+- `admin_users.email` is unique, so it already has an index through the unique constraint.
 
 ## Row-Level Security
 All MVP tables enable row-level security.

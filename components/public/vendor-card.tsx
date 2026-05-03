@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { LocationSource, NearbyVendorsResponseData } from "../../types/index.ts";
 import {
   formatVendorCardDistance,
@@ -29,7 +29,7 @@ function CardIcon({ children }: { children: ReactNode }) {
   return <span className="vendor-card-icon" aria-hidden="true">{children}</span>;
 }
 
-export function VendorCard({
+function VendorCardComponent({
   vendor,
   selected,
   isPopular,
@@ -161,3 +161,5 @@ export function VendorCard({
     </article>
   );
 }
+
+export const VendorCard = memo(VendorCardComponent);

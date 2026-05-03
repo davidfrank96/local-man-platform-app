@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
+import { memo, useEffect, useState, type ComponentType } from "react";
 import {
   browserSupportsVendorMapRendering,
   getPublicMapStyleUrl,
@@ -13,7 +13,7 @@ type MapLibreVendorMapComponent = ComponentType<
   VendorMapProps & { onMapError: () => void; styleUrl: string }
 >;
 
-export function VendorMap(props: VendorMapProps) {
+function VendorMapComponent(props: VendorMapProps) {
   const mapTheme = props.timeTheme ?? "morning";
   const [MapLibreComponent, setMapLibreComponent] = useState<MapLibreVendorMapComponent | null>(
     null,
@@ -103,3 +103,5 @@ export function VendorMap(props: VendorMapProps) {
     </div>
   );
 }
+
+export const VendorMap = memo(VendorMapComponent);

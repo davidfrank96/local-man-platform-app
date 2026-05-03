@@ -338,6 +338,82 @@ test("admin analytics route uses the aggregated rpc snapshot when available", as
   }
 });
 
+test("admin analytics route caches aggregated rpc responses by range", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  let rpcRequestCount = 0;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_admin_analytics_snapshot") {
+      rpcRequestCount += 1;
+
+      return Response.json({
+        summary: {
+          total_sessions: 2,
+          total_events: 4,
+          vendor_selections: 1,
+          vendor_detail_opens: 1,
+          call_clicks: 1,
+          directions_clicks: 0,
+          searches_used: 1,
+          filters_applied: 0,
+        },
+        vendor_performance: {
+          most_selected_vendors: [],
+          most_viewed_vendor_details: [],
+          most_call_clicks: [],
+          most_directions_clicks: [],
+        },
+        dropoff: {
+          session_metrics_available: true,
+          sessions_without_meaningful_interaction: 0,
+          sessions_with_search_without_vendor_click: 0,
+          sessions_with_detail_without_action: 0,
+        },
+        recent_events: [],
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const firstResponse = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=7d"),
+    );
+    const secondResponse = await analyticsRoute(
+      createAdminNextRequest("http://localhost/api/admin/analytics?range=7d"),
+    );
+
+    assert.equal(firstResponse.status, 200);
+    assert.equal(secondResponse.status, 200);
+    assert.equal(rpcRequestCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin analytics route blocks non-admin access", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -737,7 +813,7 @@ test("admin analytics route uses bounded paginated user_events queries", async (
     assert.equal(analyticsReadRequest?.searchParams.get("order"), "timestamp.desc");
     assert.equal(
       analyticsReadRequest?.searchParams.get("select"),
-      "id,event_type,vendor_id,vendor_slug,page_path,device_type,location_source,timestamp,session_id",
+      "id,event_type,vendor_id,vendor_slug,device_type,location_source,timestamp,session_id",
     );
   } finally {
     globalThis.fetch = originalFetch;
