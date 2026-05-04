@@ -29,6 +29,7 @@ import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   fetchNearbyVendors,
   fetchPublicCategories,
+  sanitizePublicSearchInput,
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
 import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
@@ -114,7 +115,7 @@ function parseDiscoveryUrlState(
 } {
   return {
     filters: {
-      search: searchParams.get("q")?.trim() || initialSearch,
+      search: sanitizePublicSearchInput(searchParams.get("q") ?? initialSearch),
       radiusKm: parseRadius(searchParams.get("radius_km")),
       openNow: parseOpenNow(searchParams.get("open_now")),
       priceBand: parsePriceBand(searchParams.get("price_band")),
@@ -129,9 +130,10 @@ function buildDiscoverySearchParams(
   locationSource: LocationSource | null,
 ): URLSearchParams {
   const params = new URLSearchParams();
+  const normalizedSearch = sanitizePublicSearchInput(filters.search);
 
-  if (filters.search) {
-    params.set("q", filters.search);
+  if (normalizedSearch) {
+    params.set("q", normalizedSearch);
   }
 
   if (filters.radiusKm !== defaultFilters.radiusKm) {
@@ -253,7 +255,7 @@ function createNearbyFilters(
     open_now: filters.openNow || undefined,
     price_band: filters.priceBand || undefined,
     category: filters.category || undefined,
-    search: filters.search || undefined,
+    search: sanitizePublicSearchInput(filters.search) || undefined,
   };
 }
 
@@ -265,7 +267,7 @@ function buildNearbyRequestKey(
     source: location.source,
     lat: location.coordinates.lat,
     lng: location.coordinates.lng,
-    search: filters.search,
+    search: sanitizePublicSearchInput(filters.search),
     radiusKm: filters.radiusKm,
     openNow: filters.openNow,
     priceBand: filters.priceBand,
@@ -823,12 +825,8 @@ export function PublicDiscovery({
       };
     }
 
-    if (locationStatus === "idle" || locationStatus === "resolving") {
-      return fallbackDiscoveryLocation;
-    }
-
-    return null;
-  }, [fallbackDiscoveryLocation, location, locationStatus, nearbyData]);
+    return fallbackDiscoveryLocation;
+  }, [fallbackDiscoveryLocation, location, nearbyData]);
 
   useEffect(() => {
     if (!isOnline) {
@@ -957,6 +955,10 @@ export function PublicDiscovery({
   const isResolvingLocation = locationStatus === "resolving";
   const isLoading = canUseNetwork && (isResolvingLocation || isFetchingVendors);
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
+  const showNearbyEmptyState =
+    snapshotHydrated &&
+    vendors.length === 0 &&
+    !isLoading;
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
       ? resolvedLocationLabel.label
@@ -1245,7 +1247,7 @@ export function PublicDiscovery({
               </span>
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
-            {!nearbyError && vendors.length === 0 && !isLoading ? (
+            {showNearbyEmptyState ? (
               <p className="empty-state">
                 {isOnline
                   ? "No vendors matched this search."

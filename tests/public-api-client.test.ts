@@ -4,6 +4,7 @@ import {
   fetchNearbyVendors,
   getDirectionsUrl,
   getPhoneHref,
+  sanitizePublicSearchInput,
 } from "../lib/vendors/public-api-client.ts";
 
 test("public API client builds nearby vendor query params", async () => {
@@ -55,6 +56,48 @@ test("public API client builds nearby vendor query params", async () => {
   assert.equal(url.searchParams.get("search"), "jollof");
 });
 
+test("public API client sanitizes and encodes special-character search input safely", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+
+    return Response.json({
+      success: true,
+      data: {
+        location: {
+          source: "default_city",
+          label: "Abuja",
+          coordinates: {
+            lat: 9.0765,
+            lng: 7.3986,
+          },
+          isApproximate: true,
+        },
+        vendors: [],
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  await fetchNearbyVendors(
+    {
+      search: "   ' OR 1=1--   ",
+    },
+    fetchImpl,
+  );
+
+  assert.match(requestedUrls[0] ?? "", /search=%27%20OR%201%3D1--/);
+  const url = new URL(requestedUrls[0] ?? "", "http://localhost");
+  assert.equal(url.searchParams.get("search"), "' OR 1=1--");
+});
+
+test("public API client trims and caps search input length", () => {
+  assert.equal(sanitizePublicSearchInput("   jollof rice   "), "jollof rice");
+  assert.equal(sanitizePublicSearchInput(""), "");
+  assert.equal(sanitizePublicSearchInput(null), "");
+  assert.equal(sanitizePublicSearchInput("x".repeat(120)).length, 100);
+});
+
 test("public API client creates call and directions links", () => {
   assert.equal(getPhoneHref("+234 800 000 0000"), "tel:+2348000000000");
   assert.equal(getPhoneHref(null), null);
@@ -76,6 +119,33 @@ test("public API client reports non-json failures clearly", async () => {
     () => fetchNearbyVendors({}, fetchImpl),
     /HTTP_ERROR: API request failed with status 503/,
   );
+});
+
+test("public API client returns empty nearby results when a search request fails", async () => {
+  const fetchImpl = (async () =>
+    new Response("Service unavailable", {
+      status: 503,
+    })) as typeof fetch;
+
+  const result = await fetchNearbyVendors(
+    {
+      search: "' OR 1=1--",
+    },
+    fetchImpl,
+  );
+
+  assert.deepEqual(result, {
+    location: {
+      source: "default_city",
+      label: "Abuja",
+      coordinates: {
+        lat: 9.0765,
+        lng: 7.3986,
+      },
+      isApproximate: true,
+    },
+    vendors: [],
+  });
 });
 
 test("public API client reports malformed API responses clearly", async () => {

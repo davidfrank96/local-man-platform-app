@@ -1,4 +1,5 @@
 import type { ApiResponse } from "../api/responses.ts";
+import { DEFAULT_CITY_LOCATION } from "../location/user-location.ts";
 import type {
   LocationSource,
   NearbyVendorsResponseData,
@@ -20,12 +21,72 @@ export type PublicNearbyFilters = {
 
 export type PublicCategory = Pick<VendorCategory, "id" | "name" | "slug">;
 
+const MAX_PUBLIC_SEARCH_LENGTH = 100;
+
 function appendDefinedParam(params: URLSearchParams, key: string, value: unknown) {
   if (value === undefined || value === null || value === "") {
     return;
   }
 
   params.set(key, String(value));
+}
+
+export function sanitizePublicSearchInput(input: string | null | undefined): string {
+  if (typeof input !== "string") {
+    return "";
+  }
+
+  return input.trim().slice(0, MAX_PUBLIC_SEARCH_LENGTH);
+}
+
+function encodePublicSearchQuery(input: string): string {
+  return encodeURIComponent(input).replaceAll("'", "%27");
+}
+
+function buildNearbyFallbackLocation(
+  filters: PublicNearbyFilters,
+): NearbyVendorsResponseData["location"] {
+  if (typeof filters.lat === "number" && typeof filters.lng === "number") {
+    const source = filters.location_source ?? "precise";
+
+    return {
+      source,
+      label: source === "approximate" ? "Approximate location" : "Current location",
+      coordinates: {
+        lat: filters.lat,
+        lng: filters.lng,
+      },
+      isApproximate: source !== "precise",
+    };
+  }
+
+  return {
+    source: "default_city",
+    label: DEFAULT_CITY_LOCATION.label,
+    coordinates: DEFAULT_CITY_LOCATION.coordinates,
+    isApproximate: true,
+  };
+}
+
+function buildNearbyQueryString(filters: PublicNearbyFilters): string {
+  const params = new URLSearchParams();
+  appendDefinedParam(params, "lat", filters.lat);
+  appendDefinedParam(params, "lng", filters.lng);
+  appendDefinedParam(params, "location_source", filters.location_source);
+  appendDefinedParam(params, "radius_km", filters.radius_km);
+  appendDefinedParam(params, "open_now", filters.open_now);
+  appendDefinedParam(params, "category", filters.category);
+  appendDefinedParam(params, "price_band", filters.price_band);
+
+  const querySegments = [params.toString()];
+  const normalizedSearch = sanitizePublicSearchInput(filters.search);
+
+  if (normalizedSearch) {
+    const safeQuery = encodePublicSearchQuery(normalizedSearch);
+    querySegments.push(`search=${safeQuery}`);
+  }
+
+  return querySegments.filter(Boolean).join("&");
 }
 
 async function requestPublicApi<T>(
@@ -83,22 +144,24 @@ export async function fetchNearbyVendors(
   filters: PublicNearbyFilters,
   fetchImpl?: typeof fetch,
 ): Promise<NearbyVendorsResponseData> {
-  const params = new URLSearchParams();
-  appendDefinedParam(params, "lat", filters.lat);
-  appendDefinedParam(params, "lng", filters.lng);
-  appendDefinedParam(params, "location_source", filters.location_source);
-  appendDefinedParam(params, "radius_km", filters.radius_km);
-  appendDefinedParam(params, "open_now", filters.open_now);
-  appendDefinedParam(params, "category", filters.category);
-  appendDefinedParam(params, "price_band", filters.price_band);
-  appendDefinedParam(params, "search", filters.search);
+  const queryString = buildNearbyQueryString(filters);
+  const normalizedSearch = sanitizePublicSearchInput(filters.search);
 
-  const queryString = params.toString();
+  try {
+    return await requestPublicApi<NearbyVendorsResponseData>(
+      `/api/vendors/nearby${queryString ? `?${queryString}` : ""}`,
+      fetchImpl,
+    );
+  } catch (error) {
+    if (!normalizedSearch) {
+      throw error;
+    }
 
-  return requestPublicApi<NearbyVendorsResponseData>(
-    `/api/vendors/nearby${queryString ? `?${queryString}` : ""}`,
-    fetchImpl,
-  );
+    return {
+      location: buildNearbyFallbackLocation(filters),
+      vendors: [],
+    };
+  }
 }
 
 export async function fetchPublicCategories(
