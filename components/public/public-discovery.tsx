@@ -308,6 +308,7 @@ export function PublicDiscovery({
   const [activeVendorSection, setActiveVendorSection] =
     useState<VendorSection>("nearby");
   const [showLocationReminder, setShowLocationReminder] = useState(true);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [browserReady, setBrowserReady] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
@@ -325,6 +326,7 @@ export function PublicDiscovery({
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const hasRestoredScrollRef = useRef(false);
+  const discoveryTopRef = useRef<HTMLElement | null>(null);
   const firstRenderTimerStateRef = useRef({
     firstRenderStarted: false,
     firstRenderEnded: false,
@@ -927,6 +929,42 @@ export function PublicDiscovery({
     endDevTimer("first_vendor_render");
     firstRenderTimerStateRef.current.vendorRenderEnded = true;
   }, [vendors.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const mobileMediaQuery = window.matchMedia("(max-width: 767px)");
+    let frameId = 0;
+
+    const updateVisibility = () => {
+      frameId = 0;
+      const nextVisible = mobileMediaQuery.matches && window.scrollY > 300;
+
+      setShowBackToTop((current) => (current === nextVisible ? current : nextVisible));
+    };
+
+    const scheduleUpdate = () => {
+      if (frameId !== 0) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(updateVisibility);
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    mobileMediaQuery.addEventListener("change", scheduleUpdate);
+    updateVisibility();
+
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      mobileMediaQuery.removeEventListener("change", scheduleUpdate);
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, []);
   const vendorById = useMemo(
     () => new Map(vendors.map((vendor) => [vendor.vendor_id, vendor] as const)),
     [vendors],
@@ -1060,12 +1098,23 @@ export function PublicDiscovery({
     }
   }, [isOnline, locationStatus, refreshLocation]);
 
+  const scrollToDiscoveryTop = useCallback(() => {
+    discoveryTopRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
   return (
     <main
       className="public-shell"
       data-time-theme={timeTheme ?? undefined}
     >
-      <section className="discovery-layout" aria-labelledby="discovery-title">
+      <section
+        ref={discoveryTopRef}
+        className="discovery-layout"
+        aria-labelledby="discovery-title"
+      >
         <div className="discovery-sidebar">
           <div className="discovery-heading">
             <p className="eyebrow">Abuja pilot</p>
@@ -1545,6 +1594,34 @@ export function PublicDiscovery({
             )}
           </section>
         </div>
+        {showBackToTop ? (
+          <button
+            type="button"
+            aria-label="Back to top"
+            onClick={scrollToDiscoveryTop}
+            style={{
+              position: "fixed",
+              right: "14px",
+              bottom: "96px",
+              zIndex: 50,
+              display: "inline-flex",
+              width: "44px",
+              height: "44px",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid rgba(36, 97, 79, 0.16)",
+              borderRadius: "999px",
+              background: "rgba(20, 23, 20, 0.92)",
+              boxShadow: "0 12px 24px rgba(37, 41, 36, 0.18)",
+              color: "#fff",
+              fontSize: "1.2rem",
+              fontWeight: 800,
+              lineHeight: 1,
+            }}
+          >
+            ↑
+          </button>
+        ) : null}
       </section>
     </main>
   );
