@@ -255,6 +255,12 @@ async function fetchVendorUsageScoresFromEvents(
   return scores;
 }
 
+function sanitizeNearbySearchInput(search: string | null | undefined): string {
+  return String(search || "")
+    .replace(/[^\w\s-]/g, "")
+    .trim();
+}
+
 export async function fetchNearbyVendorCandidates(
   query: ResolvedNearbyVendorsQuery,
   config: SupabaseRestConfig,
@@ -284,12 +290,13 @@ export async function fetchNearbyVendorCandidates(
     );
   }
 
-  if (query.search) {
-    const escapedSearch = query.search.replaceAll("*", "").replaceAll(",", " ");
+  const safeSearch = sanitizeNearbySearchInput(query.search);
+
+  if (safeSearch) {
     appendFilter(
       url,
       "or",
-      `(name.ilike.*${escapedSearch}*,short_description.ilike.*${escapedSearch}*,area.ilike.*${escapedSearch}*)`,
+      `(name.ilike.*${safeSearch}*,short_description.ilike.*${safeSearch}*,area.ilike.*${safeSearch}*)`,
     );
   }
 

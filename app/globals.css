@@ -2939,8 +2939,13 @@ h2 {
 }
 
 .selected-vendor-slug-value {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.9em;
+  display: inline-block;
+  max-width: min(100%, 28ch);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .selected-vendor-actions {

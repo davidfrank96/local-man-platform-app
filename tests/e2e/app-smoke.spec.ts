@@ -1013,6 +1013,8 @@ test.describe("Phase 3 browser smoke", () => {
 
     await expect(page.locator(".discovery-map")).toBeVisible();
     await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
+    await expect(page.locator(".vendor-section-nav").getByRole("button", { name: "Last selected" })).toBeVisible();
+    await expect(page.locator(".retention-panel-secondary")).toBeHidden();
     await expect(page.locator(".vendor-card").first()).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(
@@ -1062,7 +1064,11 @@ test.describe("Phase 3 browser smoke", () => {
     const firstCard = page.locator(".vendor-card").first();
     const firstVendorName = await firstCard.locator("h3").textContent();
     const firstVendorId = await firstCard.getAttribute("data-vendor-id");
+    const secondCard = page.locator(".vendor-card").nth(1);
+    const secondVendorId = await secondCard.getAttribute("data-vendor-id");
+    const secondVendorName = await secondCard.locator("h3").textContent();
     expect(firstVendorId).toBeTruthy();
+    expect(secondVendorId).toBeTruthy();
     await page.locator(".discovery-map").scrollIntoViewIfNeeded();
     const scrollBeforeMarkerTap = await page.evaluate(() => window.scrollY);
     const cameraStateBeforeMarkerTap = await readMapCameraState(page);
@@ -1085,10 +1091,24 @@ test.describe("Phase 3 browser smoke", () => {
       expect(cameraStateAfterMarkerTap.count).toBe(cameraStateBeforeMarkerTap.count);
     }
 
-    await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
-    await expect(selectedPanel.locator("h2")).toContainText(firstVendorName ?? "");
-    await expect(page.locator(`.discovery-map [data-vendor-id="${firstVendorId}"].selected`)).toBeVisible();
+    await secondCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(selectedPanel.locator("h2")).toContainText(secondVendorName ?? "");
     await expectUniqueMapVendorMarkers(page);
+    await expect(page.locator(".retention-panel-secondary")).toBeHidden();
+
+    const lastSelectedTab = page.locator(".vendor-section-nav").getByRole("button", {
+      name: "Last selected",
+    });
+    await lastSelectedTab.click();
+    const lastSelectedPanel = page.locator(".retention-panel-secondary");
+    await expect(lastSelectedPanel).toBeVisible();
+    await expect(lastSelectedPanel.getByText("Last selected vendor")).toBeVisible();
+    await expect(lastSelectedPanel).toContainText(secondVendorName ?? "");
+    await expect(lastSelectedPanel.getByRole("button", { name: "Preview again" })).toBeVisible();
+
+    await page.locator(".vendor-section-nav").getByRole("button", { name: "Nearby" }).click();
+    await expect(lastSelectedPanel).toBeHidden();
+    await expect(page.locator(`.discovery-map [data-vendor-id="${secondVendorId}"].selected`)).toBeVisible();
 
     await openDiscoveryFilters(page);
     await page.locator('select[name="radiusKm"]:visible').selectOption("30");

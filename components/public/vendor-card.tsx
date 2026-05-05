@@ -6,6 +6,7 @@ import {
   getVendorOpenStateDisplay,
   formatVendorCardPriceBand,
   formatVendorCardRating,
+  getVendorCue,
 } from "../../lib/vendors/card-display.ts";
 import {
   hasValidVendorCoordinates,
@@ -23,8 +24,16 @@ type VendorCardProps = {
   onSelect: (vendorId: string, source: "card") => void;
 };
 
-function getVendorCue(vendor: NormalizedVendor): string | null {
-  return vendor.featured_dish?.dish_name ?? vendor.short_description;
+function getDisplayVendorName(vendor: NormalizedVendor): string {
+  const raw = vendor?.name;
+
+  if (!raw) return "Unknown Vendor";
+
+  const trimmed = String(raw).trim();
+
+  if (trimmed.length === 0) return "Unknown Vendor";
+
+  return trimmed;
 }
 
 function getVendorDistanceLabel(
@@ -56,10 +65,7 @@ function VendorCardComponent({
   onSelect,
 }: VendorCardProps) {
   const vendorId = vendor.vendor_id || vendor.id;
-  const vendorName =
-    typeof vendor.name === "string" && vendor.name.trim().length > 0
-      ? vendor.name.trim()
-      : "Unknown Vendor";
+  const vendorName = getDisplayVendorName(vendor);
   const vendorArea =
     typeof vendor.area === "string" && vendor.area.trim().length > 0
       ? vendor.area.trim()

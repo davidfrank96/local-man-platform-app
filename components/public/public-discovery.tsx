@@ -29,10 +29,14 @@ import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   fetchNearbyVendors,
   fetchPublicCategories,
+  sanitizePublicSearchInput,
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
-import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
-import { getVendorOpenStateDisplay } from "../../lib/vendors/card-display.ts";
+import {
+  formatVendorCardDistance,
+  getVendorCue,
+  getVendorOpenStateDisplay,
+} from "../../lib/vendors/card-display.ts";
 import {
   getPopularVendorIds,
   sortDiscoveryVendors,
@@ -114,7 +118,7 @@ function parseDiscoveryUrlState(
 } {
   return {
     filters: {
-      search: searchParams.get("q")?.trim() || initialSearch,
+      search: sanitizePublicSearchInput(searchParams.get("q") ?? initialSearch),
       radiusKm: parseRadius(searchParams.get("radius_km")),
       openNow: parseOpenNow(searchParams.get("open_now")),
       priceBand: parsePriceBand(searchParams.get("price_band")),
@@ -129,9 +133,10 @@ function buildDiscoverySearchParams(
   locationSource: LocationSource | null,
 ): URLSearchParams {
   const params = new URLSearchParams();
+  const normalizedSearch = sanitizePublicSearchInput(filters.search);
 
-  if (filters.search) {
-    params.set("q", filters.search);
+  if (normalizedSearch) {
+    params.set("q", normalizedSearch);
   }
 
   if (filters.radiusKm !== defaultFilters.radiusKm) {
@@ -253,7 +258,7 @@ function createNearbyFilters(
     open_now: filters.openNow || undefined,
     price_band: filters.priceBand || undefined,
     category: filters.category || undefined,
-    search: filters.search || undefined,
+    search: sanitizePublicSearchInput(filters.search) || undefined,
   };
 }
 
@@ -265,7 +270,7 @@ function buildNearbyRequestKey(
     source: location.source,
     lat: location.coordinates.lat,
     lng: location.coordinates.lng,
-    search: filters.search,
+    search: sanitizePublicSearchInput(filters.search),
     radiusKm: filters.radiusKm,
     openNow: filters.openNow,
     priceBand: filters.priceBand,
@@ -303,6 +308,7 @@ export function PublicDiscovery({
   const [activeVendorSection, setActiveVendorSection] =
     useState<VendorSection>("nearby");
   const [showLocationReminder, setShowLocationReminder] = useState(true);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [browserReady, setBrowserReady] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
@@ -320,6 +326,7 @@ export function PublicDiscovery({
   const reverseGeocodeRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const hasRestoredScrollRef = useRef(false);
+  const discoveryTopRef = useRef<HTMLElement | null>(null);
   const firstRenderTimerStateRef = useRef({
     firstRenderStarted: false,
     firstRenderEnded: false,
@@ -823,12 +830,8 @@ export function PublicDiscovery({
       };
     }
 
-    if (locationStatus === "idle" || locationStatus === "resolving") {
-      return fallbackDiscoveryLocation;
-    }
-
-    return null;
-  }, [fallbackDiscoveryLocation, location, locationStatus, nearbyData]);
+    return fallbackDiscoveryLocation;
+  }, [fallbackDiscoveryLocation, location, nearbyData]);
 
   useEffect(() => {
     if (!isOnline) {
@@ -926,6 +929,42 @@ export function PublicDiscovery({
     endDevTimer("first_vendor_render");
     firstRenderTimerStateRef.current.vendorRenderEnded = true;
   }, [vendors.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const mobileMediaQuery = window.matchMedia("(max-width: 767px)");
+    let frameId = 0;
+
+    const updateVisibility = () => {
+      frameId = 0;
+      const nextVisible = mobileMediaQuery.matches && window.scrollY > 300;
+
+      setShowBackToTop((current) => (current === nextVisible ? current : nextVisible));
+    };
+
+    const scheduleUpdate = () => {
+      if (frameId !== 0) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(updateVisibility);
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    mobileMediaQuery.addEventListener("change", scheduleUpdate);
+    updateVisibility();
+
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      mobileMediaQuery.removeEventListener("change", scheduleUpdate);
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, []);
   const vendorById = useMemo(
     () => new Map(vendors.map((vendor) => [vendor.vendor_id, vendor] as const)),
     [vendors],
@@ -947,6 +986,10 @@ export function PublicDiscovery({
     () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
     [selectedVendor?.is_open_now],
   );
+  const selectedVendorCue = useMemo(
+    () => (selectedVendor ? getVendorCue(selectedVendor) : null),
+    [selectedVendor],
+  );
   const rememberedSelectedVendor = useMemo(
     () =>
       lastSelectedVendorMemory
@@ -957,6 +1000,10 @@ export function PublicDiscovery({
   const isResolvingLocation = locationStatus === "resolving";
   const isLoading = canUseNetwork && (isResolvingLocation || isFetchingVendors);
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
+  const showNearbyEmptyState =
+    snapshotHydrated &&
+    vendors.length === 0 &&
+    !isLoading;
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
       ? resolvedLocationLabel.label
@@ -1051,12 +1098,23 @@ export function PublicDiscovery({
     }
   }, [isOnline, locationStatus, refreshLocation]);
 
+  const scrollToDiscoveryTop = useCallback(() => {
+    discoveryTopRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
   return (
     <main
       className="public-shell"
       data-time-theme={timeTheme ?? undefined}
     >
-      <section className="discovery-layout" aria-labelledby="discovery-title">
+      <section
+        ref={discoveryTopRef}
+        className="discovery-layout"
+        aria-labelledby="discovery-title"
+      >
         <div className="discovery-sidebar">
           <div className="discovery-heading">
             <p className="eyebrow">Abuja pilot</p>
@@ -1224,6 +1282,18 @@ export function PublicDiscovery({
             >
               Popular
             </button>
+            <button
+              aria-pressed={activeVendorSection === "lastSelected"}
+              className={
+                activeVendorSection === "lastSelected"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveVendorSection("lastSelected")}
+            >
+              Last selected
+            </button>
           </section>
 
           <section
@@ -1245,7 +1315,7 @@ export function PublicDiscovery({
               </span>
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
-            {!nearbyError && vendors.length === 0 && !isLoading ? (
+            {showNearbyEmptyState ? (
               <p className="empty-state">
                 {isOnline
                   ? "No vendors matched this search."
@@ -1349,8 +1419,9 @@ export function PublicDiscovery({
           </section>
 
           <section
-            className="retention-panel retention-panel-muted retention-panel-secondary"
+            className="retention-panel retention-panel-muted retention-panel-secondary vendor-section-pane"
             data-desktop-active={activeVendorSection === "lastSelected"}
+            data-mobile-active={activeVendorSection === "lastSelected"}
           >
             <div className="result-heading">
               <strong>Last selected vendor</strong>
@@ -1465,17 +1536,19 @@ export function PublicDiscovery({
                     </span>
                     <span className="selected-vendor-label">Active hours:</span> {selectedVendor.today_hours}
                   </p>
-                  <p className="selected-vendor-slug-line">
-                    <span className="selected-vendor-summary-icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                        <path d="M4 5.25h8" strokeLinecap="round" />
-                        <path d="M4 8h8" strokeLinecap="round" />
-                        <path d="M4 10.75h5.5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <span className="selected-vendor-label">Slug:</span>{" "}
-                    <span className="selected-vendor-slug-value">{selectedVendor.slug}</span>
-                  </p>
+                  {selectedVendorCue ? (
+                    <p className="selected-vendor-slug-line">
+                      <span className="selected-vendor-summary-icon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <path d="M4.5 2.5v11" strokeLinecap="round" />
+                          <path d="M8.5 2.5v11" strokeLinecap="round" />
+                          <path d="M2.5 5.5h8" strokeLinecap="round" />
+                          <path d="M11.5 2.5a2.5 2.5 0 1 1 0 5v4.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <span className="selected-vendor-slug-value">{selectedVendorCue}</span>
+                    </p>
+                  ) : null}
                   {selectedVendor.area ? (
                     <p className="selected-vendor-area-line">
                       <span className="selected-vendor-summary-icon" aria-hidden="true">
@@ -1521,6 +1594,34 @@ export function PublicDiscovery({
             )}
           </section>
         </div>
+        {showBackToTop ? (
+          <button
+            type="button"
+            aria-label="Back to top"
+            onClick={scrollToDiscoveryTop}
+            style={{
+              position: "fixed",
+              right: "14px",
+              bottom: "96px",
+              zIndex: 50,
+              display: "inline-flex",
+              width: "44px",
+              height: "44px",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid rgba(36, 97, 79, 0.16)",
+              borderRadius: "999px",
+              background: "rgba(20, 23, 20, 0.92)",
+              boxShadow: "0 12px 24px rgba(37, 41, 36, 0.18)",
+              color: "#fff",
+              fontSize: "1.2rem",
+              fontWeight: 800,
+              lineHeight: 1,
+            }}
+          >
+            ↑
+          </button>
+        ) : null}
       </section>
     </main>
   );

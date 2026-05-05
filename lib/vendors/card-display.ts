@@ -28,6 +28,12 @@ export function formatVendorCardRating(
   return `★ ${averageRating.toFixed(1)}`;
 }
 
+export function getVendorCue(
+  vendor: Pick<NearbyVendor, "featured_dish" | "short_description">,
+): string | null {
+  return vendor.featured_dish?.dish_name ?? vendor.short_description;
+}
+
 export function formatVendorCardDistance(
   distanceKm: number,
   approximateDistance: boolean,

@@ -1,6 +1,9 @@
 import { useId, useState, type FormEvent } from "react";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
-import type { PublicCategory } from "../../lib/vendors/public-api-client.ts";
+import {
+  sanitizePublicSearchInput,
+  type PublicCategory,
+} from "../../lib/vendors/public-api-client.ts";
 import { trackPublicUserAction } from "../../lib/public/user-action-tracking.ts";
 import { countActiveDiscoveryFilters } from "../../lib/vendors/discovery-ranking.ts";
 
@@ -36,7 +39,7 @@ function readFormFilters(form: HTMLFormElement): DiscoveryFilters {
   const formData = new FormData(form);
 
   return {
-    search: String(formData.get("search") ?? "").trim(),
+    search: sanitizePublicSearchInput(String(formData.get("search") ?? "")),
     radiusKm: Number(String(formData.get("radiusKm") ?? "10")),
     openNow: formData.get("openNow") === "on",
     priceBand: String(formData.get("priceBand") ?? "") as DiscoveryFilters["priceBand"],
