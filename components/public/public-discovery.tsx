@@ -32,8 +32,11 @@ import {
   sanitizePublicSearchInput,
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
-import { formatVendorCardDistance } from "../../lib/vendors/card-display.ts";
-import { getVendorOpenStateDisplay } from "../../lib/vendors/card-display.ts";
+import {
+  formatVendorCardDistance,
+  getVendorCue,
+  getVendorOpenStateDisplay,
+} from "../../lib/vendors/card-display.ts";
 import {
   getPopularVendorIds,
   sortDiscoveryVendors,
@@ -945,6 +948,10 @@ export function PublicDiscovery({
     () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
     [selectedVendor?.is_open_now],
   );
+  const selectedVendorCue = useMemo(
+    () => (selectedVendor ? getVendorCue(selectedVendor) : null),
+    [selectedVendor],
+  );
   const rememberedSelectedVendor = useMemo(
     () =>
       lastSelectedVendorMemory
@@ -1480,17 +1487,19 @@ export function PublicDiscovery({
                     </span>
                     <span className="selected-vendor-label">Active hours:</span> {selectedVendor.today_hours}
                   </p>
-                  <p className="selected-vendor-slug-line">
-                    <span className="selected-vendor-summary-icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                        <path d="M4 5.25h8" strokeLinecap="round" />
-                        <path d="M4 8h8" strokeLinecap="round" />
-                        <path d="M4 10.75h5.5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <span className="selected-vendor-label">Slug:</span>{" "}
-                    <span className="selected-vendor-slug-value">{selectedVendor.slug}</span>
-                  </p>
+                  {selectedVendorCue ? (
+                    <p className="selected-vendor-slug-line">
+                      <span className="selected-vendor-summary-icon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <path d="M4.5 2.5v11" strokeLinecap="round" />
+                          <path d="M8.5 2.5v11" strokeLinecap="round" />
+                          <path d="M2.5 5.5h8" strokeLinecap="round" />
+                          <path d="M11.5 2.5a2.5 2.5 0 1 1 0 5v4.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <span className="selected-vendor-slug-value">{selectedVendorCue}</span>
+                    </p>
+                  ) : null}
                   {selectedVendor.area ? (
                     <p className="selected-vendor-area-line">
                       <span className="selected-vendor-summary-icon" aria-hidden="true">

@@ -6,6 +6,7 @@ import {
   getVendorOpenStateDisplay,
   formatVendorCardPriceBand,
   formatVendorCardRating,
+  getVendorCue,
 } from "../../lib/vendors/card-display.ts";
 import {
   hasValidVendorCoordinates,
@@ -22,10 +23,6 @@ type VendorCardProps = {
   locationSource?: LocationSource | null;
   onSelect: (vendorId: string, source: "card") => void;
 };
-
-function getVendorCue(vendor: NormalizedVendor): string | null {
-  return vendor.featured_dish?.dish_name ?? vendor.short_description;
-}
 
 function getDisplayVendorName(vendor: NormalizedVendor): string {
   const raw = vendor?.name;
