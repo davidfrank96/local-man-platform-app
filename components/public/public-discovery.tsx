@@ -1226,6 +1226,18 @@ export function PublicDiscovery({
             >
               Popular
             </button>
+            <button
+              aria-pressed={activeVendorSection === "lastSelected"}
+              className={
+                activeVendorSection === "lastSelected"
+                  ? "vendor-section-tab active"
+                  : "vendor-section-tab"
+              }
+              type="button"
+              onClick={() => setActiveVendorSection("lastSelected")}
+            >
+              Last selected
+            </button>
           </section>
 
           <section
@@ -1351,8 +1363,9 @@ export function PublicDiscovery({
           </section>
 
           <section
-            className="retention-panel retention-panel-muted retention-panel-secondary"
+            className="retention-panel retention-panel-muted retention-panel-secondary vendor-section-pane"
             data-desktop-active={activeVendorSection === "lastSelected"}
+            data-mobile-active={activeVendorSection === "lastSelected"}
           >
             <div className="result-heading">
               <strong>Last selected vendor</strong>
