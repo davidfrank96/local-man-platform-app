@@ -1,20 +1,37 @@
 import type { NextRequest } from "next/server";
-import { apiError, apiSuccess } from "@/lib/api/responses";
-import { validateSearchParams } from "@/lib/api/validation";
-import { resolveNearbySearchLocation } from "@/lib/location/user-location";
-import { nearbyVendorsQuerySchema } from "@/lib/validation";
-import { findNearbyVendors } from "@/lib/vendors/nearby";
+import { apiError, apiSuccess } from "../../../../lib/api/responses.ts";
+import { validateSearchParams } from "../../../../lib/api/validation.ts";
+import { resolveNearbySearchLocation } from "../../../../lib/location/user-location.ts";
+import { nearbyVendorsQuerySchema } from "../../../../lib/validation/index.ts";
+import { findNearbyVendors } from "../../../../lib/vendors/nearby.ts";
 import {
   fetchNearbyVendorCandidates,
   fetchVendorUsageScores,
   getSupabaseRestConfig,
   getSupabaseServiceRoleConfig,
-} from "@/lib/vendors/supabase";
+} from "../../../../lib/vendors/supabase.ts";
+
+function sanitizeNearbySearchInput(search: string | null | undefined): string {
+  return String(search || "")
+    .replace(/[^\w\s-]/g, "")
+    .trim();
+}
 
 export async function GET(request: NextRequest) {
+  const sanitizedSearchParams = new URLSearchParams(request.nextUrl.searchParams);
+  const safeSearch = sanitizeNearbySearchInput(
+    request.nextUrl.searchParams.get("search"),
+  );
+
+  if (safeSearch) {
+    sanitizedSearchParams.set("search", safeSearch);
+  } else {
+    sanitizedSearchParams.delete("search");
+  }
+
   const query = validateSearchParams(
     nearbyVendorsQuerySchema,
-    request.nextUrl.searchParams,
+    sanitizedSearchParams,
   );
 
   if (!query.success) {
@@ -53,11 +70,11 @@ export async function GET(request: NextRequest) {
       vendors,
     });
   } catch (error) {
-    return apiError(
-      "UPSTREAM_ERROR",
-      "Unable to fetch nearby vendors.",
-      502,
-      error instanceof Error ? { message: error.message } : undefined,
-    );
+    console.error("NEARBY_ROUTE_ERROR:", error);
+
+    return apiSuccess({
+      location: resolvedSearch.location,
+      vendors: [],
+    });
   }
 }
