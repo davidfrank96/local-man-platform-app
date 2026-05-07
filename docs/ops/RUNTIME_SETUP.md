@@ -19,6 +19,8 @@ The current runtime gate has executable checks for environment validation and ne
 ```bash
 npm run runtime:check-env
 npm run runtime:check-db-env
+npm run db:migrate
+npm run db:check
 NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run smoke:nearby
 ```
 
@@ -51,7 +53,7 @@ DATABASE_URL=<postgres-connection-string>
 
 `DATABASE_URL` is only required for the `npm run db:migrate` and `npm run db:seed:abuja` scripts. Those scripts load `.env.local` before invoking `psql`. If using the Supabase Dashboard SQL Editor, `DATABASE_URL` is not required locally.
 
-`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations, public analytics event writes, admin analytics reads, and server-side admin user creation.
+`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations, public analytics event writes, public vendor rating writes, admin analytics reads, and server-side admin user creation.
 
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional. Set it only if you want the public discovery page to render a real MapLibre map. If it is left empty, the discovery page will continue to use the built-in coordinate fallback map and the rest of the app will behave normally.
 
@@ -104,11 +106,16 @@ Migration runner behavior:
 Dashboard fallback:
 1. Open the Supabase project.
 2. Go to SQL Editor.
-3. Run both migration files in filename order.
+3. Run every file in `supabase/migrations` in filename order.
 4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, and `app_schema_migrations`.
 5. Confirm `public.vendor_images` includes `storage_object_path`.
 6. Confirm `public.user_events` exists for Phase 6 analytics.
 7. Confirm `public.submit_public_vendor_rating(uuid, integer, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
+
+Rollback note:
+- current migrations are additive and tracked in `public.app_schema_migrations`
+- if a release must be rolled back, restore the previous app deploy first
+- do not manually remove applied schema objects unless a verified migration defect requires a targeted SQL fix
 
 ## Abuja Seed Data
 Seed file:

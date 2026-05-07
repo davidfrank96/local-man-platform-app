@@ -5,10 +5,10 @@ The Local Man — Environment Variables
 - `NEXT_PUBLIC_APP_URL`: public application origin used by smoke scripts and client-side API helpers.
 - `NEXT_PUBLIC_MAP_STYLE_URL`: optional MapLibre-compatible browser style URL for the public discovery map. The current production target uses a browser-safe MapTiler `style.json` URL. If omitted, the app uses the built-in coordinate fallback map instead of a real tile map.
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL. Required by public read routes and admin route verification.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and admin-user authenticated writes.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and the server-side admin login/session exchange against Supabase Auth.
 
 ## Server / Secure
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload/delete, public analytics event writes, admin analytics reads, and server-side admin user creation/recovery.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload/delete, public analytics event writes, public vendor rating writes, admin analytics reads, and server-side admin user creation/recovery.
 - `DATABASE_URL`: direct database connection string for migrations or server-only maintenance tasks.
 - `ADMIN_SEED_EMAIL`: optional initial admin account email for seed/setup workflows.
 - `ADMIN_SEED_PASSWORD`: optional initial admin account password for seed/setup workflows.

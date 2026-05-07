@@ -95,7 +95,10 @@ Potential future work only after real usage signals justify it:
 - trust-first location hardening with a real approximate-location provider
 - ranking-tuning from live usage signals without making ordering opaque
 - retention refinement for recently viewed and last-selected vendor return paths
+- distributed abuse protection if production scales beyond a single app instance
+- stronger release and runtime observability for graceful-degradation paths
 - stronger deployment monitoring and analytics operations
+- clustering only if pilot vendor density makes the current single-marker map interaction less usable
 - broader city rollout only after Abuja pilot quality is stable
 
 Status: planned

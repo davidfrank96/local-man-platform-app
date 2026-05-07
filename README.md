@@ -182,6 +182,7 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 
 - admin user creation
 - public analytics event writes at `/api/events`
+- public vendor rating writes at `/api/vendors/[slug]/ratings`
 - backend analytics and audit-log fallback routes
 - server-side vendor image storage operations
 
@@ -194,6 +195,7 @@ Public abuse protection is centralized server-side in the API layer:
 - `/api/vendors/[slug]/ratings`: `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse
 - `/api/vendors/nearby` search requests only: `45` requests per minute per client/IP with a `2` minute block window
 - public limiter correlation may issue a non-privileged HTTP-only cookie so repeated browser abuse cannot avoid the per-IP bucket simply by retrying
+- the current limiter is in-memory and process-local, so it is best-effort for a single app instance rather than a distributed global throttle
 
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 
@@ -206,6 +208,8 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only in DigitalOcean runtime secrets
 - the MapTiler key embedded in `NEXT_PUBLIC_MAP_STYLE_URL` must be browser-safe because the value is public
 - after changing Supabase or map env vars in DigitalOcean, trigger a redeploy so Next.js rebuilds with the updated public env
+- schema-changing releases must apply migrations before the new app build is promoted
+- current migrations are additive; rollback should restore the previous app deploy first rather than manually removing applied schema objects unless a migration defect is confirmed
 
 ## Runtime Validation
 Before deployment or major continuation work, keep the runtime gate green:

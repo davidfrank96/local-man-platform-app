@@ -218,6 +218,7 @@ Protection rules:
 - repeated duplicate write submissions are collapsed before they fan out into duplicate upstream writes
 - blocked requests return structured `TOO_MANY_REQUESTS` responses or safe degraded `202` responses, depending on the endpoint contract
 - limiter logging records hashed identifiers only and never logs raw client IPs
+- the current limiter is process-local and in-memory, so it protects a single app instance but is not yet a distributed global throttle
 
 Current thresholds:
 - admin login: `5` attempts per `10` minutes, `15` minute block
@@ -328,6 +329,12 @@ The public app keeps a small amount of client-only memory:
 - discovery snapshots currently expire after 5 minutes and are only restored when the nearby vendor payload is still fresh enough to trust
 - admin vendor mutations invalidate discovery snapshots through the shared public invalidation channel so restored discovery state cannot outlive a vendor edit, deactivate, hours change, image change, or featured-dish change
 - these helpers improve return navigation without requiring login or backend persistence
+
+## Operational Caveats
+
+- structured logs exist for auth, abuse protection, analytics, and audit-log flows, but the repo does not yet provide distributed tracing or a centralized observability backend
+- public discovery prefers graceful degraded responses over hard crashes, so some upstream nearby failures may surface as unexpectedly empty vendor results until logs or smoke checks are reviewed
+- the current real map intentionally ships without clustering; revisit clustering only if pilot density makes marker usability worse than the current single-marker interaction model
 
 ## Core Product Logic
 
