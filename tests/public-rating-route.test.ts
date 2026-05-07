@@ -52,22 +52,16 @@ test("public vendor ratings route saves a rating and returns updated summary", a
         {
           id: vendorId,
           slug: "test-vendor",
-          average_rating: 4,
-          review_count: 2,
         },
       ]);
     }
 
-    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
-      return new Response(null, { status: 201 });
-    }
-
-    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
-      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
-    }
-
-    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
-      return new Response(null, { status: 204 });
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.33,
+        review_count: 3,
+      });
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -99,18 +93,12 @@ test("public vendor ratings route saves a rating and returns updated summary", a
     });
     assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [
       "GET /rest/v1/vendors",
-      "POST /rest/v1/ratings",
-      "GET /rest/v1/ratings",
-      "PATCH /rest/v1/vendors",
+      "POST /rest/v1/rpc/submit_public_vendor_rating",
     ]);
     assert.deepEqual(calls[1]?.body, {
-      vendor_id: vendorId,
-      score: 4,
-      source_type: "public_simple_rating",
-    });
-    assert.deepEqual(calls[3]?.body, {
-      average_rating: 4.33,
-      review_count: 3,
+      target_vendor_id: vendorId,
+      target_score: 4,
+      target_source_type: "public_simple_rating",
     });
   } finally {
     globalThis.fetch = originalFetch;
@@ -129,6 +117,32 @@ test("public vendor ratings route rejects invalid scores", async () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({ score: 7 }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route rejects malformed payloads", async () => {
+  const restoreEnv = setRatingEnv();
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({}),
       }),
       {
         params: Promise.resolve({ slug: "test-vendor" }),
@@ -187,23 +201,17 @@ test("public vendor ratings route deduplicates sequential retry submissions", as
         {
           id: vendorId,
           slug: "test-vendor",
-          average_rating: 4,
-          review_count: 2,
         },
       ]);
     }
 
-    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
       ratingsInsertCount += 1;
-      return new Response(null, { status: 201 });
-    }
-
-    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
-      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
-    }
-
-    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
-      return new Response(null, { status: 204 });
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.33,
+        review_count: 3,
+      });
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -255,24 +263,18 @@ test("public vendor ratings route shares one upstream write across concurrent du
         {
           id: vendorId,
           slug: "test-vendor",
-          average_rating: 4,
-          review_count: 2,
         },
       ]);
     }
 
-    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
       ratingsInsertCount += 1;
       await insertReady;
-      return new Response(null, { status: 201 });
-    }
-
-    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
-      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
-    }
-
-    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
-      return new Response(null, { status: 204 });
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.25,
+        review_count: 4,
+      });
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -324,22 +326,16 @@ test("public vendor ratings route rate limits repeated submissions from one clie
         {
           id: vendorId,
           slug: "test-vendor",
-          average_rating: 4,
-          review_count: 2,
         },
       ]);
     }
 
-    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
-      return new Response(null, { status: 201 });
-    }
-
-    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
-      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
-    }
-
-    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
-      return new Response(null, { status: 204 });
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.33,
+        review_count: 3,
+      });
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -369,6 +365,86 @@ test("public vendor ratings route rate limits repeated submissions from one clie
 
     assert.equal(lastResponse!.status, 429);
     assert.equal(body.error.code, "TOO_MANY_REQUESTS");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route returns a controlled upstream error when the ratings RPC fails", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      return Response.json({ message: "rpc failed" }, { status: 500 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ score: 4 }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "UPSTREAM_ERROR");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route returns a controlled upstream error when vendor lookup cannot reach the database", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () => {
+    throw new Error("connect ECONNREFUSED");
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ score: 4 }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "UPSTREAM_ERROR");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

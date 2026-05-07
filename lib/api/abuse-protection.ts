@@ -422,6 +422,7 @@ export function startSingleFlightGuard<T>(
     resolvePromise = resolve;
     rejectPromise = reject;
   });
+  void promise.catch(() => {});
 
   const entry: StoredSingleFlightEntry = {
     expiresAt: nowMs + ttlMs,

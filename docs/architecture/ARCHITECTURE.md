@@ -304,16 +304,17 @@ Public vendor ratings use this path:
 
 1. user submits a 1-5 star score on vendor detail
 2. `/api/vendors/[slug]/ratings` validates the score and resolves the vendor by slug
-3. server inserts a lightweight `ratings` row
-4. vendor aggregate fields update:
-   - `average_rating`
-   - `review_count`
-5. public discovery and detail render `★ <rating>` when ratings exist or `New` when they do not
+3. server calls a database-side `submit_public_vendor_rating` RPC with the resolved vendor id
+4. Postgres inserts the `ratings` row and refreshes `vendors.average_rating` / `vendors.review_count`
+5. the route returns the authoritative post-write summary from the database
+6. public discovery and detail render `★ <rating>` when ratings exist or `New` when they do not
 
 Rules:
+- rollout requires the ratings RPC migration to be applied before the route is released
 - no login is required for the current lightweight rating flow
 - no comments or full review system exist yet
 - rating writes stay separate from `user_events`
+- summary ownership stays in Postgres so concurrent inserts do not depend on Node-side full-table recalculation
 
 ## Discovery Retention State
 

@@ -187,15 +187,17 @@ Returns:
 Behavior:
 - no login required for the initial lightweight flow
 - validates the vendor slug and rating score
-- inserts a row into `ratings`
-- updates vendor aggregate rating fields after insert
+- resolves the active vendor id first, then submits the write through the server-only `submit_public_vendor_rating` RPC
+- database-side aggregation owns `vendors.average_rating` and `vendors.review_count`
+- the response returns the authoritative post-write summary from the database instead of recalculating scores in Node
+- release requires `supabase/migrations/20260507193000_public_rating_submission_rpc.sql` to be applied so the ratings RPC and summary refresh function exist
 - does not support review comments
 - abuse protection:
   - threshold: `8` accepted submissions per `10` minutes per client/IP
   - block window: `10` minutes after exceeding the threshold
   - sequential or concurrent duplicate retry submissions for the same vendor/score are collapsed into one upstream write for `60` seconds
 - returns `NOT_FOUND` when the vendor slug does not resolve to an active vendor
-- returns `UPSTREAM_ERROR` when the rating write or aggregate update fails
+- returns `UPSTREAM_ERROR` when the rating RPC or summary refresh fails
 
 ### GET /api/categories
 Purpose: fetch filter categories

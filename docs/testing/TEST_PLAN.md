@@ -99,12 +99,15 @@ Test:
 - valid 1-5 vendor rating is accepted
 - invalid scores are rejected
 - unknown vendor slug returns `NOT_FOUND`
+- rating RPC failures return `UPSTREAM_ERROR`
+- vendor lookup connectivity failures return `UPSTREAM_ERROR`
 - rating summary updates:
   - `average_rating`
   - `review_count`
 - vendor cards and detail continue to show `New` when no ratings exist
 - repeated rating spam from one client is rate limited
 - duplicate sequential and concurrent rating retries collapse into one upstream write
+- route returns the database-owned post-write summary instead of recomputing ratings client-side
 
 Current automated coverage:
 - `tests/public-rating-route.test.ts`

@@ -211,9 +211,10 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 Before deployment or major continuation work, keep the runtime gate green:
 
 1. apply migrations
-2. seed the Abuja pilot dataset
-3. start the app with real Supabase env vars
-4. run:
+2. run `npm run db:check`
+3. seed the Abuja pilot dataset
+4. start the app with real Supabase env vars
+5. run:
    - `npm run smoke:nearby`
 
 Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
