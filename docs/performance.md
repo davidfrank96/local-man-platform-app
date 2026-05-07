@@ -28,6 +28,7 @@ Current stability rules include:
 - no vendor-list refetch on simple selected-vendor changes
 - no flicker of the nearby-results helper row during vendor selection
 - no scroll-anchor jumps from dynamic upper panels such as the selected vendor panel or last-selected panel
+- no horizontal viewport growth on narrow mobile widths, including 320px long unbroken vendor content cases
 
 ## Known regression fixes in this phase
 

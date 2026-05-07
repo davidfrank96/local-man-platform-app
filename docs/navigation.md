@@ -33,6 +33,7 @@ The mobile vendor navbar switches between existing sections:
 - `Nearby`
 - `Recent`
 - `Popular`
+- `Last selected`
 
 Default:
 
@@ -72,7 +73,10 @@ Default:
 - vendor card body click/tap previews a vendor on the map
 - `View details` opens the vendor detail page
 - `Back to map` returns to discovery
-- discovery search, filters, selected vendor, and scroll position are restored through query state plus a session snapshot
+- discovery search, filters, selected vendor, and scroll position are restored through query state plus a short-lived session snapshot
+- restored nearby vendor data is reused only when the snapshot is still fresh enough to trust
+- restored nearby vendor data still yields to one live nearby fetch before it becomes authoritative again
+- admin vendor create, update, deactivate, hours, image, and featured-dish mutations invalidate restored discovery vendor data
 
 ## Search and filter rules
 

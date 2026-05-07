@@ -26,10 +26,10 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - popular-vendor highlighting when ranking signals exist
 - selected vendor preview below the map on mobile and beside the map on web
   - selected vendor name
-  - `Slug:`
   - distance
   - open/closed state
   - `Active hours:`
+  - featured dish or short description cue when available
   - area
   - call, directions, and detail actions
 - MapLibre rendered with a single vendor-marker system:
@@ -49,6 +49,11 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - approximate location only when usable and clearly labeled
   - Abuja default city fallback without claiming it is the user’s exact location
 - lightweight location reminder toast on discovery load with auto-dismiss and manual close
+- bounded public discovery freshness:
+  - nearby vendor reads use a short 5 second server revalidation window
+  - session snapshot restore expires after 5 minutes
+  - restored discovery data yields to one live nearby fetch before it becomes authoritative again
+  - admin vendor mutations invalidate restored public discovery vendor data
 - morning, afternoon, and night discovery themes based on browser-local time
 
 ### Admin

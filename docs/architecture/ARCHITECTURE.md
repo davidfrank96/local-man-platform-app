@@ -222,9 +222,12 @@ Rules:
 ### Navigation Restoration
 - discovery state is restored through a combination of:
   - URL query state
-  - `sessionStorage` snapshot state
+  - short-lived `sessionStorage` snapshot state
   - selected vendor id
   - preserved scroll position
+- restored nearby vendor data is reused only while the snapshot remains fresh
+- restored nearby vendor data still yields to one live nearby fetch before it becomes authoritative again
+- admin vendor mutations invalidate restored discovery vendor data through the shared public invalidation channel
 
 ### Admin Session State
 - admin login uses Supabase email/password auth
@@ -288,7 +291,7 @@ The public app keeps a small amount of client-only memory:
 - `sessionStorage` stores a short-lived discovery snapshot for back-navigation recovery
 - vendor detail visits update recently viewed memory
 - list selection updates last-selected memory
-- discovery snapshots are only restored when the nearby vendor payload is fresh enough to trust
+- discovery snapshots currently expire after 5 minutes and are only restored when the nearby vendor payload is still fresh enough to trust
 - admin vendor mutations invalidate discovery snapshots through the shared public invalidation channel so restored discovery state cannot outlive a vendor edit, deactivate, hours change, image change, or featured-dish change
 - these helpers improve return navigation without requiring login or backend persistence
 

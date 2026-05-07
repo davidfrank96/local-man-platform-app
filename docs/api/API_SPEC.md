@@ -78,7 +78,7 @@ Behavior:
 - Base candidate filtering for `category` is pushed into the Supabase vendor query through the `vendor_category_map` join.
 - Base candidate filtering for `search` currently matches vendor name, short description, and area in the Supabase vendor query and is rechecked in application logic for safety.
 - The Supabase nearby candidate read uses a short `5` second Next revalidation window so discovery can stay bounded without holding vendor edits, deactivations, or hours changes for the older generic `30` second window.
-- Client discovery snapshots are only reused for a short freshness window and must yield to a live nearby fetch on restore before they can become authoritative again.
+- Client discovery snapshots currently expire after `5` minutes and must yield to a live nearby fetch on restore before they can become authoritative again.
 - Admin vendor mutations publish a public discovery invalidation event so restored discovery state is cleared after vendor create, update, deactivate, hours, image, and featured-dish changes.
 - Usage-signal ranking is aggregated server-side through the `get_vendor_usage_scores` SQL function instead of fetching raw `user_events` rows into Node.
 - If that SQL function is unavailable in a partially migrated environment, the API falls back to a service-role `user_events` read so nearby discovery still responds.

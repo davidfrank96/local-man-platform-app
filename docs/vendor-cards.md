@@ -78,7 +78,8 @@ The selected vendor card is separate from the discovery list cards.
 - selected vendor name
 - distance chip
 - open/closed chip
-- `Today` hours
+- `Active hours`
+- featured dish or short description cue when available
 - area when available
 - `Call`
 - `Directions`
@@ -89,6 +90,7 @@ The selected vendor card is separate from the discovery list cards.
 - compact by design
 - does not take over the page
 - must not force the map off screen on web
+- must stay within the viewport on narrow mobile widths, including 320px long-content cases
 - must update smoothly when the selection changes
 
 ## Retention panels
