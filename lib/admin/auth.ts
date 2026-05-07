@@ -224,88 +224,6 @@ async function fetchAdminUser(
   };
 }
 
-async function createDefaultAdminUserRecord(
-  user: SupabaseAuthUser,
-  requestId: string,
-  config: AdminAuthConfig,
-  fetchImpl: typeof fetch,
-): Promise<AdminUserRecord | null> {
-  const serviceRoleKey = config.supabaseServiceRoleKey?.trim() ?? "";
-
-  if (!serviceRoleKey || !user.email?.trim()) {
-    return null;
-  }
-
-  const url = new URL("/rest/v1/admin_users", config.supabaseUrl);
-  const payload = {
-    id: user.id,
-    email: user.email,
-    full_name: null,
-    role: "agent" as const,
-  };
-
-  const response = await fetchImpl(url, {
-    method: "POST",
-    headers: {
-      apikey: serviceRoleKey,
-      authorization: `Bearer ${serviceRoleKey}`,
-      "content-type": "application/json",
-      prefer: "return=representation",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (response.ok) {
-    const rows = (await response.json()) as Array<{
-      id: string;
-      email: string;
-      full_name: string | null;
-      role: string;
-    }>;
-    const created = rows[0] ?? null;
-
-    if (!created || !isAdminRole(created.role)) {
-      logStructuredEvent("warn", {
-        type: "ADMIN_USER_AUTO_CREATE_FAILED",
-        requestId,
-        userId: user.id,
-        email: user.email,
-        status: response.status,
-        details: rows,
-        reason: "invalid_payload",
-      });
-
-      return await fetchAdminUser(user.id, serviceRoleKey, config, fetchImpl);
-    }
-
-    logStructuredEvent("info", {
-      type: "ADMIN_USER_AUTO_CREATED",
-      requestId,
-      userId: created.id,
-      email: created.email,
-      role: created.role,
-    });
-
-    return {
-      ...created,
-      role: created.role,
-    };
-  }
-
-  const details = await response.json().catch(() => null);
-
-  logStructuredEvent("warn", {
-    type: "ADMIN_USER_AUTO_CREATE_FAILED",
-    requestId,
-    userId: user.id,
-    email: user.email,
-    status: response.status,
-    details,
-  });
-
-  return await fetchAdminUser(user.id, serviceRoleKey, config, fetchImpl);
-}
-
 export async function requireAdmin(
   request: Request,
   {
@@ -389,17 +307,13 @@ export async function requireAdmin(
 
     const adminUser = await fetchAdminUser(user.id, accessToken, config, fetchImpl);
 
-    const resolvedAdminUser = adminUser ?? await (async () => {
+    if (!adminUser) {
       logStructuredEvent("warn", {
         type: "ADMIN_USER_MISSING",
         requestId,
         userId: user.id,
+        email: user.email ?? null,
       });
-
-      return await createDefaultAdminUserRecord(user, requestId, config, fetchImpl);
-    })();
-
-    if (!resolvedAdminUser) {
       logAdminAuthEvent("warn", "authenticated user is not present in admin_users", {
         requestId,
         userId: user.id,
@@ -422,7 +336,7 @@ export async function requireAdmin(
     logAdminAuthEvent("info", "admin membership verified", {
       requestId,
       userId: user.id,
-      role: resolvedAdminUser.role,
+      role: adminUser.role,
       lookupMode: config.supabaseServiceRoleKey ? "service_role" : "user_token",
       authTransport: bearerToken ? "bearer" : "cookie",
     });
@@ -433,7 +347,7 @@ export async function requireAdmin(
         requestId,
         accessToken,
         user,
-        adminUser: resolvedAdminUser,
+        adminUser,
       },
       responseHeaders: [...responseHeaders.keys()].length > 0 ? responseHeaders : null,
     };

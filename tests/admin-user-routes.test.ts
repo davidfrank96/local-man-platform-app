@@ -920,7 +920,7 @@ test("admin can delete another agent account", async () => {
   }
 });
 
-test("agent cannot access admin user management routes", async () => {
+test("team access API still rejects direct browser calls even if the client exposes the UI", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];

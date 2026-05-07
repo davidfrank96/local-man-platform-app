@@ -72,6 +72,8 @@ Admin browser enforcement rules:
 - privileged admin and agent reads and mutations go through protected `/api/admin/**` routes only
 - the active admin browser flow no longer instantiates a direct Supabase client for privileged operations
 - RBAC is enforced on the backend through `requireAdmin()` and `requireAdminPermission()`, with client role checks kept for navigation and UX only
+- authenticated users gain admin workspace access only through an explicit `admin_users` assignment; authentication alone is not enough
+- hidden navigation, role-based redirects, and denied-state rendering in React are not security boundaries and must not be treated as authorization
 
 ### API Routes
 Handle:
@@ -238,6 +240,7 @@ Rules:
 - admin login uses Supabase email/password auth
 - privileged admin and agent sessions are stored in HTTP-only same-origin cookies
 - `/api/admin/session` validates and refreshes the cookie-backed session against `admin_users`
+- authenticated users missing from `admin_users` are denied and any cookie-backed privileged session is cleared
 - protected routes resolve through the admin route guard
 
 ### Usage Signal State

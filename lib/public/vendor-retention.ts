@@ -84,6 +84,16 @@ function writeStoredValue(
   }
 }
 
+function clearStoredValue(key: string, storageImpl?: StorageLike): void {
+  const storage = getStorage(storageImpl);
+
+  try {
+    storage?.setItem(key, JSON.stringify([]));
+  } catch {
+    // Ignore retention storage failures.
+  }
+}
+
 export function createRetainedVendorPreview(
   vendor: NearbyVendor | VendorRetentionSource,
 ): RetainedVendorPreview {
@@ -141,4 +151,32 @@ export function rememberLastSelectedVendor(
 ): RetainedVendorPreview {
   writeStoredValue(LAST_SELECTED_KEY, vendor, storageImpl);
   return vendor;
+}
+
+export function removeRetainedVendorPreview(
+  vendorId: string,
+  storageImpl?: StorageLike,
+): {
+  recentlyViewed: RetainedVendorPreview[];
+  lastSelected: RetainedVendorPreview | null;
+} {
+  const nextRecentlyViewed = readRecentlyViewedVendors(storageImpl).filter(
+    (entry) => entry.vendor_id !== vendorId,
+  );
+  const currentLastSelected = readLastSelectedVendor(storageImpl);
+  const nextLastSelected =
+    currentLastSelected?.vendor_id === vendorId ? null : currentLastSelected;
+
+  writeStoredValue(RECENTLY_VIEWED_KEY, nextRecentlyViewed, storageImpl);
+
+  if (nextLastSelected) {
+    writeStoredValue(LAST_SELECTED_KEY, nextLastSelected, storageImpl);
+  } else {
+    clearStoredValue(LAST_SELECTED_KEY, storageImpl);
+  }
+
+  return {
+    recentlyViewed: nextRecentlyViewed,
+    lastSelected: nextLastSelected,
+  };
 }

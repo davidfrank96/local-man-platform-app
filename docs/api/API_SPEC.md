@@ -253,6 +253,7 @@ Behavior:
 - validates email and password
 - exchanges credentials against Supabase Auth server-side
 - verifies the authenticated user against `admin_users`
+- denies authenticated users who are not explicitly assigned in `admin_users`
 - returns the authenticated Supabase user plus the matching `admin_users` record
 - sets secure same-origin HTTP-only access and refresh cookies
 
@@ -277,6 +278,7 @@ Behavior:
 - refreshes the access cookie server-side when the refresh cookie remains valid
 - verifies the Supabase user
 - verifies that the authenticated user exists in `admin_users`
+- clears the privileged cookies when the authenticated user no longer has an `admin_users` row
 - returns the authenticated user and matching admin user record
 
 ### GET /api/admin/analytics

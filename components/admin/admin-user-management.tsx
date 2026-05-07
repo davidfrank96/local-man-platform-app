@@ -51,6 +51,8 @@ function logAdminUsersSyncError(error: unknown) {
 export function AdminUserManagement() {
   const { session } = useAdminSession();
   const currentAdminUserId = session?.adminUser.id ?? null;
+  // Client role-based debug visibility is intentionally cosmetic. Team access
+  // itself is still protected by backend permission checks.
   const canViewDebugInfo = session?.adminUser.role === "admin";
   const cachedAdminUsers = readAdminUsersCache();
   const hasCachedAdminUsers = cachedAdminUsers !== null;

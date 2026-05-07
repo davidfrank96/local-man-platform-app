@@ -42,6 +42,7 @@ RBAC is enforced in three places:
 3. Supabase RLS policies
 
 Frontend hiding is not treated as sufficient protection.
+Client role checks exist only to shape navigation, redirects, and copy. Any direct browser request to a protected admin route or API is expected to be revalidated and rejected server-side when the permission is missing.
 
 ## Auth flow
 
@@ -51,8 +52,9 @@ After successful workspace login:
 - `agent` resolves to `/admin/agent`
 - the browser session is restored through secure same-origin HTTP-only cookies and `/api/admin/session`
 
-Authenticated users missing from `admin_users` are auto-provisioned as `agent` by default. This avoids auth success followed by workspace rejection while preventing role escalation.
-For normal team-access management, `admin_users.role` is the authoritative role source. Supabase Auth `user_metadata.role` is mirrored from `admin_users.role` during create and role-change flows so session reads, dashboard routing, and the admin UI stay aligned.
+Authentication proves identity only. Privileged workspace access exists only when the authenticated user already has an explicit row in `admin_users`.
+`admin_users.role` is the authoritative role source. Supabase Auth `user_metadata.role` is mirrored from `admin_users.role` during create and role-change flows so session reads, dashboard routing, and the admin UI stay aligned.
+Authenticated users missing from `admin_users` are denied workspace access and must be granted a role through team access first.
 
 ## Current permission model
 

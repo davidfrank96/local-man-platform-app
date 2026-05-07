@@ -58,6 +58,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
 
 ### Admin
 - Supabase email/password admin login with secure HTTP-only cookie-backed sessions
+- explicit privilege assignment through `admin_users`; authenticated users without a team-access row are denied the workspace
 - role-aware admin landing and dashboards:
   - `/admin/dashboard` for admins
   - `/admin/agent` for agents
@@ -181,6 +182,7 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 - server-side vendor image storage operations
 
 Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
+Authentication alone is not enough for workspace access: the authenticated user must already exist in `admin_users`.
 
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 

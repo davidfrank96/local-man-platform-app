@@ -27,6 +27,9 @@ export function AdminRouteGuard({
   const pathname = usePathname();
   const { status, error, session, signOut } = useAdminSession();
   const role = session?.adminUser.role ?? null;
+  // Client-side role checks are a UX affordance only. Protected pages and
+  // `/api/admin/**` routes still revalidate the session and permission scope
+  // on the backend before any privileged data or mutation is allowed.
   const hasAllowedRole = !allowedRoles || (role ? allowedRoles.includes(role) : false);
   const hasRequiredPermission =
     !requiredPermission || (role ? hasAdminPermission(role, requiredPermission) : false);

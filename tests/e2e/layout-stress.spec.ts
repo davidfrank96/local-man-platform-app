@@ -1,65 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
+import {
+  createMockNearbyVendor,
+  expectNoClientErrors,
+  installLocalmanBrowserStateIsolation,
+  openDiscoveryFilters,
+  trackClientErrors,
+  uuid,
+} from "./helpers/public-discovery.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
-type MockNearbyVendor = Omit<NearbyVendor, "ranking_score"> & {
-  ranking_score?: number;
-};
-
-function trackClientErrors(page: Page): string[] {
-  const errors: string[] = [];
-
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      errors.push(message.text());
-    }
-  });
-
-  page.on("pageerror", (error) => {
-    errors.push(error.message);
-  });
-
-  return errors;
-}
-
-async function expectNoClientErrors(errors: string[]) {
-  expect(errors, errors.join("\n")).toEqual([]);
-}
-
-async function openDiscoveryFilters(page: Page) {
-  const toggle = page.locator('button[aria-label="Open filters"]:visible').first();
-  await toggle.click();
-}
-
-function uuid(index: number): string {
-  return `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
-}
-
-function createVendor(index: number, overrides: Partial<MockNearbyVendor> = {}): NearbyVendor {
-  return {
-    vendor_id: uuid(index + 1),
-    name: `Vendor ${index + 1}`,
-    slug: `vendor-${index + 1}`,
-    short_description: "Local food vendor",
-    phone_number: "+2348000000000",
-    area: "Abuja",
-    latitude: 9.08 + index * 0.001,
-    longitude: 7.4 + index * 0.001,
-    price_band: "standard",
-    average_rating: 4.5,
-    review_count: 24,
-    ranking_score: 0,
-    distance_km: Number((0.12 + index * 0.08).toFixed(2)),
-    is_open_now: index % 2 === 0,
-    featured_dish: {
-      dish_name: `Dish ${index + 1}`,
-      description: null,
-    },
-    today_hours: "9:00 AM - 6:00 PM",
-    ...overrides,
-  };
-}
 
 function longText(prefix: string, length: number): string {
   return `${prefix}${"X".repeat(length)}`;
@@ -144,11 +95,15 @@ async function mockDiscovery(page: Page, options: {
 }
 
 test.describe("Layout stress", () => {
+  test.beforeEach(async ({ page }) => {
+    await installLocalmanBrowserStateIsolation(page.context());
+  });
+
   test("320px long content stays within bounds", async ({ page }) => {
     const errors = trackClientErrors(page);
 
     const vendors = Array.from({ length: 12 }, (_, index) =>
-      createVendor(index, {
+      createMockNearbyVendor(index, {
         name: longText("ULTRALONGVENDORNAMEWITHOUTSPACES_", 140),
         short_description: longText("Y", 240),
         area: longText("EXTREMELY_LONG_AREA_", 120),
@@ -193,7 +148,7 @@ test.describe("Layout stress", () => {
     const errors = trackClientErrors(page);
 
     const vendors = Array.from({ length: 30 }, (_, index) =>
-      createVendor(index, {
+      createMockNearbyVendor(index, {
         name: `Vendor ${index + 1} ${"N".repeat(index % 5 === 0 ? 80 : 18)}`,
         short_description: index % 3 === 0 ? null : `Description ${index + 1}`,
         area: index % 4 === 0 ? null : `Area ${index + 1}`,
@@ -247,7 +202,7 @@ test.describe("Layout stress", () => {
   test("loading, empty, and error states render cleanly", async ({ page }) => {
     const loadingErrors = trackClientErrors(page);
 
-    const vendors = [createVendor(0)];
+    const vendors = [createMockNearbyVendor(0)];
 
     await mockDiscovery(page, { vendors, nearbyDelayMs: 800 });
     await page.setViewportSize({ width: 320, height: 844 });
@@ -280,7 +235,7 @@ test.describe("Layout stress", () => {
     const errors = trackClientErrors(page);
 
     const vendors = [
-      createVendor(0, {
+      createMockNearbyVendor(0, {
         name: longText("PARTIAL_VENDOR_NAME_", 80),
         short_description: "Local food vendor",
         area: null,

@@ -434,7 +434,7 @@ test("admin analytics route blocks non-admin access", async () => {
   }
 });
 
-test("admin analytics route blocks agent access", async () => {
+test("admin analytics route blocks direct browser requests even if the client guard is bypassed", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   globalThis.fetch = createAnalyticsFetchMock({

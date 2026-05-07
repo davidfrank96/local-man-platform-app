@@ -1,3 +1,10 @@
+import {
+  removeRetainedVendorPreview,
+} from "./vendor-retention.ts";
+import {
+  isDestructiveVendorInvalidationReason,
+} from "../testing/playwright-artifacts.ts";
+
 const DISCOVERY_SNAPSHOT_PREFIX = "public-discovery:";
 const DISCOVERY_OFFLINE_CACHE_PREFIX = "public-discovery-offline:public-discovery:";
 const PUBLIC_DISCOVERY_INVALIDATION_STORAGE_KEY = "public-discovery:vendors:invalidation";
@@ -211,6 +218,24 @@ function readStoredInvalidationPayload(
   }
 }
 
+export function applyStoredPublicDiscoveryInvalidationToRetention(options?: {
+  localStorage?: StorageLike;
+}): void {
+  const invalidationPayload = readStoredInvalidationPayload(options?.localStorage);
+
+  if (
+    !invalidationPayload?.vendorId
+    || !isDestructiveVendorInvalidationReason(invalidationPayload.reason)
+  ) {
+    return;
+  }
+
+  removeRetainedVendorPreview(
+    invalidationPayload.vendorId,
+    options?.localStorage,
+  );
+}
+
 export function clearPublicDiscoveryVendorCache(options?: {
   sessionStorage?: StorageLike;
   localStorage?: StorageLike;
@@ -262,6 +287,13 @@ export function invalidatePublicDiscoveryVendorCache(
     );
   } catch {
     // Ignore localStorage failures.
+  }
+
+  if (
+    payload.vendorId
+    && isDestructiveVendorInvalidationReason(payload.reason)
+  ) {
+    removeRetainedVendorPreview(payload.vendorId, localStorage);
   }
 
   if (typeof window !== "undefined" && typeof CustomEvent !== "undefined") {

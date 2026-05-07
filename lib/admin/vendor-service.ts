@@ -16,6 +16,10 @@ import {
 } from "./auth.ts";
 import { AdminServiceError } from "./errors.ts";
 import {
+  matchesPlaywrightQaAdminVendorName,
+  matchesPlaywrightTestVendorName,
+} from "../testing/playwright-artifacts.ts";
+import {
   buildVendorImageStoragePath,
   buildVendorImagePublicUrl,
   deleteVendorImageObject,
@@ -241,12 +245,12 @@ function sanitizeSupabaseSearch(value: string): string {
 }
 
 function isQaTestVendor(candidate: VendorCleanupCandidate): boolean {
-  return candidate.name?.trim().startsWith("QA_TEST_") === true
+  return matchesPlaywrightTestVendorName(candidate.name)
     || candidate.is_test === true;
 }
 
 function isQaAdminVendor(candidate: VendorCleanupCandidate): boolean {
-  return candidate.name?.trim().startsWith("QA Admin Vendor") === true;
+  return matchesPlaywrightQaAdminVendorName(candidate.name);
 }
 
 async function deleteVendorRow(

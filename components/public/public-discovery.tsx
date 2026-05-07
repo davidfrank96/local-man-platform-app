@@ -19,13 +19,13 @@ import {
   trackPublicUserAction,
 } from "../../lib/public/user-action-tracking.ts";
 import {
+  applyStoredPublicDiscoveryInvalidationToRetention,
   clearPublicDiscoveryVendorCache,
   isPublicDiscoverySnapshotFresh,
   readPublicDiscoverySnapshot,
   shouldSkipPublicDiscoveryFetch,
   subscribeToPublicDiscoveryVendorInvalidation,
   writePublicDiscoverySnapshot,
-  type PublicDiscoverySnapshot,
 } from "../../lib/public/discovery-cache.ts";
 import {
   createRetainedVendorPreview,
@@ -34,11 +34,20 @@ import {
   rememberLastSelectedVendor,
   type RetainedVendorPreview,
 } from "../../lib/public/vendor-retention.ts";
-import type { LocationSource, PriceBand } from "../../types/index.ts";
+import {
+  buildDiscoveryReturnTo,
+  buildDiscoverySearchParams,
+  buildNearbyRequestKey,
+  buildVendorDetailHref,
+  createNearbyFilters,
+  getDiscoverySnapshotKey,
+  parseDiscoveryUrlState,
+  resolveSnapshotSelectedVendorId,
+  shouldRestoreDiscoveryScroll,
+} from "../../lib/public/discovery-state.ts";
 import {
   fetchNearbyVendors,
   fetchPublicCategories,
-  sanitizePublicSearchInput,
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
 import {
@@ -65,7 +74,11 @@ import {
   VendorFilters,
   type DiscoveryFilters,
 } from "./vendor-filters.tsx";
-import { VendorActions } from "./vendor-actions.tsx";
+import {
+  SelectedVendorPanel,
+  VendorSectionTabs,
+  type VendorSection,
+} from "./public-discovery-sections.tsx";
 import { VendorCard } from "./vendor-card.tsx";
 import { VendorMap } from "./vendor-map.tsx";
 import type { VendorSelectionSource } from "./vendor-map-types.ts";
@@ -80,8 +93,6 @@ type PublicDiscoveryProps = {
   initialSearch?: string;
 };
 
-type VendorSection = "nearby" | "recent" | "popular" | "lastSelected";
-
 const defaultFilters: DiscoveryFilters = {
   search: "",
   radiusKm: 10,
@@ -91,177 +102,6 @@ const defaultFilters: DiscoveryFilters = {
 };
 const DEFAULT_CITY_BOOTSTRAP_DELAY_MS = 250;
 
-type DiscoverySnapshot = PublicDiscoverySnapshot<NearbyVendorsResponseData>;
-
-function parseRadius(value: string | null): number {
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultFilters.radiusKm;
-}
-
-function parseOpenNow(value: string | null): boolean {
-  return value === "1" || value === "true";
-}
-
-function parsePriceBand(value: string | null): PriceBand | "" {
-  return value === "budget" || value === "standard" || value === "premium" ? value : "";
-}
-
-function parseLocationSource(value: string | null): LocationSource | null {
-  return value === "precise" || value === "approximate" || value === "default_city"
-    ? value
-    : null;
-}
-
-function parseDiscoveryUrlState(
-  searchParams: URLSearchParams,
-  initialSearch: string,
-): {
-  filters: DiscoveryFilters;
-  locationSource: LocationSource | null;
-} {
-  return {
-    filters: {
-      search: sanitizePublicSearchInput(searchParams.get("q") ?? initialSearch),
-      radiusKm: parseRadius(searchParams.get("radius_km")),
-      openNow: parseOpenNow(searchParams.get("open_now")),
-      priceBand: parsePriceBand(searchParams.get("price_band")),
-      category: searchParams.get("category")?.trim() || "",
-    },
-    locationSource: parseLocationSource(searchParams.get("location_source")),
-  };
-}
-
-function buildDiscoverySearchParams(
-  filters: DiscoveryFilters,
-  locationSource: LocationSource | null,
-): URLSearchParams {
-  const params = new URLSearchParams();
-  const normalizedSearch = sanitizePublicSearchInput(filters.search);
-
-  if (normalizedSearch) {
-    params.set("q", normalizedSearch);
-  }
-
-  if (filters.radiusKm !== defaultFilters.radiusKm) {
-    params.set("radius_km", String(filters.radiusKm));
-  }
-
-  if (filters.openNow) {
-    params.set("open_now", "1");
-  }
-
-  if (filters.priceBand) {
-    params.set("price_band", filters.priceBand);
-  }
-
-  if (filters.category) {
-    params.set("category", filters.category);
-  }
-
-  if (locationSource === "default_city") {
-    params.set("location_source", locationSource);
-  }
-
-  return params;
-}
-
-function getDiscoverySnapshotKey(pathname: string, queryString: string): string {
-  return `public-discovery:${pathname}${queryString ? `?${queryString}` : ""}`;
-}
-
-function buildVendorDetailHref(
-  slug: string,
-  returnTo: string,
-  locationSource: LocationSource | null,
-): string {
-  const params = new URLSearchParams();
-  params.set("returnTo", returnTo);
-  if (locationSource) {
-    params.set("location_source", locationSource);
-  }
-
-  return `/vendors/${slug}?${params.toString()}`;
-}
-
-function buildDiscoveryReturnTo(
-  pathname: string,
-  filters: DiscoveryFilters,
-  locationSource: LocationSource | null,
-): string {
-  const queryString = buildDiscoverySearchParams(
-    filters,
-    locationSource,
-  ).toString();
-
-  return `${pathname}${queryString ? `?${queryString}` : ""}`;
-}
-
-function resolveSnapshotSelectedVendorId(snapshot: DiscoverySnapshot): string | null {
-  if (snapshot.selectedVendorId) {
-    return snapshot.selectedVendorId;
-  }
-
-  if (!snapshot.selectedVendorSlug || !snapshot.nearbyData) {
-    return null;
-  }
-
-  return (
-    snapshot.nearbyData.vendors.find((vendor) => vendor.slug === snapshot.selectedVendorSlug)
-      ?.vendor_id ?? null
-  );
-}
-
-function shouldRestoreDiscoveryScroll(): boolean {
-  const navigationEntry = performance
-    .getEntriesByType("navigation")
-    .at(0) as PerformanceNavigationTiming | undefined;
-
-  if (navigationEntry?.type === "back_forward") {
-    return true;
-  }
-
-  return /\/vendors\/[^/]+$/.test(document.referrer);
-}
-
-function createNearbyFilters(
-  location: AcquiredUserLocation,
-  filters: DiscoveryFilters,
-) {
-  const shouldSendCoordinates = location.source !== "default_city";
-
-  return {
-    ...(shouldSendCoordinates
-      ? {
-          lat: location.coordinates.lat,
-          lng: location.coordinates.lng,
-        }
-      : {}),
-    location_source: location.source,
-    radius_km: filters.radiusKm,
-    open_now: filters.openNow || undefined,
-    price_band: filters.priceBand || undefined,
-    category: filters.category || undefined,
-    search: sanitizePublicSearchInput(filters.search) || undefined,
-  };
-}
-
-function buildNearbyRequestKey(
-  location: Pick<AcquiredUserLocation, "source" | "coordinates">,
-  filters: DiscoveryFilters,
-): string {
-  return JSON.stringify({
-    source: location.source,
-    lat: location.coordinates.lat,
-    lng: location.coordinates.lng,
-    search: sanitizePublicSearchInput(filters.search),
-    radiusKm: filters.radiusKm,
-    openNow: filters.openNow,
-    priceBand: filters.priceBand,
-    category: filters.category,
-  });
-}
-
 export function PublicDiscovery({
   title = "The Local Man",
   initialSearch = "",
@@ -270,7 +110,12 @@ export function PublicDiscovery({
   const router = useRouter();
   const searchParams = useSearchParams();
   const parsedUrlState = useMemo(
-    () => parseDiscoveryUrlState(new URLSearchParams(searchParams.toString()), initialSearch),
+    () =>
+      parseDiscoveryUrlState(
+        new URLSearchParams(searchParams.toString()),
+        initialSearch,
+        defaultFilters.radiusKm,
+      ),
     [initialSearch, searchParams],
   );
   const [filters, setFilters] = useState<DiscoveryFilters>(parsedUrlState.filters);
@@ -332,12 +177,12 @@ export function PublicDiscovery({
   const activeLocationSource = location?.source ?? nearbyData?.location.source ?? urlLocationSource;
   const discoveryQueryString = useMemo(
     () =>
-      buildDiscoverySearchParams(filters, activeLocationSource).toString(),
+      buildDiscoverySearchParams(filters, activeLocationSource, defaultFilters.radiusKm).toString(),
     [activeLocationSource, filters],
   );
   const discoverySnapshotQueryString = useMemo(
     () =>
-      buildDiscoverySearchParams(filters, activeLocationSource).toString(),
+      buildDiscoverySearchParams(filters, activeLocationSource, defaultFilters.radiusKm).toString(),
     [activeLocationSource, filters],
   );
   const filterFormKey = useMemo(
@@ -359,12 +204,12 @@ export function PublicDiscovery({
     () =>
       getDiscoverySnapshotKey(
         pathname,
-        buildDiscoverySearchParams(filters, null).toString(),
+        buildDiscoverySearchParams(filters, null, defaultFilters.radiusKm).toString(),
       ),
     [filters, pathname],
   );
   const discoveryReturnTo = useMemo(
-    () => buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
+    () => buildDiscoveryReturnTo(pathname, filters, activeLocationSource, defaultFilters.radiusKm),
     [activeLocationSource, filters, pathname],
   );
   const fallbackDiscoveryLocation = useMemo<AcquiredUserLocation>(
@@ -379,6 +224,7 @@ export function PublicDiscovery({
   );
 
   const hydrateRetentionState = useCallback(() => {
+    applyStoredPublicDiscoveryInvalidationToRetention();
     setRecentlyViewedVendors(readRecentlyViewedVendors());
     setLastSelectedVendorMemory(readLastSelectedVendor());
   }, []);
@@ -682,7 +528,11 @@ export function PublicDiscovery({
   ]);
 
   useEffect(() => {
-    function restorePreviewSelectionFromSnapshot() {
+    function restorePreviewSelectionFromSnapshot(event: PageTransitionEvent) {
+      if (!event.persisted && !shouldRestoreDiscoveryScroll()) {
+        return;
+      }
+
       const snapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(discoverySnapshotKey);
       const fallbackSnapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(fallbackDiscoverySnapshotKey);
       const restoredSnapshot = snapshot ?? fallbackSnapshot;
@@ -851,6 +701,7 @@ export function PublicDiscovery({
 
     return subscribeToPublicDiscoveryVendorInvalidation(() => {
       clearPublicDiscoveryVendorCache();
+      hydrateRetentionState();
       nearbyDataUpdatedAtRef.current = null;
       nearbyRequestKeyRef.current = null;
       restoredSnapshotNeedsLiveFetchRef.current = true;
@@ -864,6 +715,7 @@ export function PublicDiscovery({
     activeFetchLocation,
     canUseNetwork,
     filters,
+    hydrateRetentionState,
     isOnline,
     loadNearbyVendors,
     snapshotHydrated,
@@ -1235,107 +1087,17 @@ export function PublicDiscovery({
           {!isOnline && retryMessage ? <p className="runtime-note">{retryMessage}</p> : null}
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
-          <section className="desktop-vendor-section-nav" aria-label="Vendor sections">
-            <button
-              aria-pressed={activeVendorSection === "nearby"}
-              className={
-                activeVendorSection === "nearby"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("nearby")}
-            >
-              Nearby
-            </button>
-            <button
-              aria-pressed={activeVendorSection === "recent"}
-              className={
-                activeVendorSection === "recent"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("recent")}
-            >
-              Recent
-            </button>
-            <button
-              aria-pressed={activeVendorSection === "popular"}
-              className={
-                activeVendorSection === "popular"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("popular")}
-            >
-              Popular
-            </button>
-            <button
-              aria-pressed={activeVendorSection === "lastSelected"}
-              className={
-                activeVendorSection === "lastSelected"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("lastSelected")}
-            >
-              Last selected
-            </button>
-          </section>
+          <VendorSectionTabs
+            activeVendorSection={activeVendorSection}
+            className="desktop-vendor-section-nav"
+            onChange={setActiveVendorSection}
+          />
 
-          <section className="vendor-section-nav" aria-label="Vendor sections">
-            <button
-              aria-pressed={activeVendorSection === "nearby"}
-              className={
-                activeVendorSection === "nearby"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("nearby")}
-            >
-              Nearby
-            </button>
-            <button
-              aria-pressed={activeVendorSection === "recent"}
-              className={
-                activeVendorSection === "recent"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("recent")}
-            >
-              Recent
-            </button>
-            <button
-              aria-pressed={activeVendorSection === "popular"}
-              className={
-                activeVendorSection === "popular"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("popular")}
-            >
-              Popular
-            </button>
-            <button
-              aria-pressed={activeVendorSection === "lastSelected"}
-              className={
-                activeVendorSection === "lastSelected"
-                  ? "vendor-section-tab active"
-                  : "vendor-section-tab"
-              }
-              type="button"
-              onClick={() => setActiveVendorSection("lastSelected")}
-            >
-              Last selected
-            </button>
-          </section>
+          <VendorSectionTabs
+            activeVendorSection={activeVendorSection}
+            className="vendor-section-nav"
+            onChange={setActiveVendorSection}
+          />
 
           <section
             aria-live="polite"
@@ -1368,7 +1130,12 @@ export function PublicDiscovery({
                 approximateDistance={isApproximateDistance}
                 detailHref={buildVendorDetailHref(
                   vendor.slug,
-                  buildDiscoveryReturnTo(pathname, filters, activeLocationSource),
+                  buildDiscoveryReturnTo(
+                    pathname,
+                    filters,
+                    activeLocationSource,
+                    defaultFilters.radiusKm,
+                  ),
                   activeLocationSource ?? null,
                 )}
                 key={vendor.vendor_id}
@@ -1531,109 +1298,14 @@ export function PublicDiscovery({
             />
           </div>
 
-          <section className="selected-vendor-panel">
-            <p className="eyebrow">Selected vendor</p>
-            {selectedVendor ? (
-              <>
-                <h2>{selectedVendor.name}</h2>
-                <div className="selected-vendor-summary">
-                  <p className="selected-vendor-status-line">
-                    <span className="selected-vendor-chip">
-                      <span className="selected-vendor-chip-icon" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                          <path d="M8 14s4-3.9 4-7A4 4 0 1 0 4 7c0 3.1 4 7 4 7Z" strokeLinejoin="round" />
-                          <circle cx="8" cy="7" r="1.5" />
-                        </svg>
-                      </span>
-                      {formatVendorCardDistance(
-                        selectedVendor.distanceKm ?? selectedVendor.distance_km,
-                        isApproximateDistance,
-                      )}
-                    </span>
-                    <span
-                      className={
-                        selectedVendorOpenState.toneClassName === "vendor-card-status-open"
-                          ? "selected-vendor-chip selected-vendor-status-open"
-                          : selectedVendorOpenState.toneClassName === "vendor-card-status-closed"
-                            ? "selected-vendor-chip selected-vendor-status-closed"
-                            : "selected-vendor-chip selected-vendor-status-unavailable"
-                      }
-                    >
-                      <span className="selected-vendor-chip-icon" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                          <circle cx="8" cy="8" r="5.5" />
-                          <path d="M8 4.8v3.6l2.4 1.4" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                      {selectedVendorOpenState.label}
-                    </span>
-                  </p>
-                  <p className="selected-vendor-hours-line">
-                    <span className="selected-vendor-summary-icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                        <circle cx="8" cy="8" r="5.5" />
-                        <path d="M8 4.8v3.6l2.4 1.4" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <span className="selected-vendor-label">Active hours:</span> {selectedVendor.today_hours}
-                  </p>
-                  {selectedVendorCue ? (
-                    <p className="selected-vendor-slug-line">
-                      <span className="selected-vendor-summary-icon" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                          <path d="M4.5 2.5v11" strokeLinecap="round" />
-                          <path d="M8.5 2.5v11" strokeLinecap="round" />
-                          <path d="M2.5 5.5h8" strokeLinecap="round" />
-                          <path d="M11.5 2.5a2.5 2.5 0 1 1 0 5v4.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                      <span className="selected-vendor-slug-value">{selectedVendorCue}</span>
-                    </p>
-                  ) : null}
-                  {selectedVendor.area ? (
-                    <p className="selected-vendor-area-line">
-                      <span className="selected-vendor-summary-icon" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                          <path d="M3 4h10" strokeLinecap="round" />
-                          <path d="M3 8h10" strokeLinecap="round" />
-                          <path d="M3 12h10" strokeLinecap="round" />
-                        </svg>
-                      </span>
-                      <span className="selected-vendor-label">Area:</span> {selectedVendor.area}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="selected-vendor-actions">
-                  {hasValidVendorCoordinates(selectedVendor) ? (
-                    <VendorActions
-                      latitude={selectedVendor.latitude}
-                      longitude={selectedVendor.longitude}
-                      phoneNumber={selectedVendor.phone_number}
-                      source="selected_preview"
-                      vendorId={selectedVendor.vendor_id}
-                      vendorSlug={selectedVendor.slug}
-                      locationSource={activeLocationSource ?? null}
-                    />
-                  ) : null}
-                  <Link
-                    className="button-secondary compact-button selected-vendor-detail-link"
-                    href={buildVendorDetailHref(
-                      selectedVendor.slug,
-                      discoveryReturnTo,
-                      activeLocationSource ?? null,
-                    )}
-                  >
-                    View details
-                  </Link>
-                </div>
-              </>
-            ) : (
-              <>
-                <h2>No vendor selected</h2>
-                <p>Select a marker or vendor result.</p>
-              </>
-            )}
-          </section>
+          <SelectedVendorPanel
+            activeLocationSource={activeLocationSource ?? null}
+            discoveryReturnTo={discoveryReturnTo}
+            isApproximateDistance={isApproximateDistance}
+            selectedVendor={selectedVendor}
+            selectedVendorCue={selectedVendorCue}
+            selectedVendorOpenState={selectedVendorOpenState}
+          />
         </div>
         {showBackToTop ? (
           <button

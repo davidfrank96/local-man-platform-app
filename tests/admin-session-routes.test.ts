@@ -106,6 +106,68 @@ test("admin login route sets httpOnly session cookies after a valid login", asyn
   }
 });
 
+test("admin login route denies authenticated users without an explicit admin_users row", async () => {
+  const originalFetch = globalThis.fetch;
+
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname === "/auth/v1/token") {
+        return Response.json({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_in: 3600,
+          user: {
+            id: "auth-only-id",
+            email: "auth-only@example.com",
+          },
+        });
+      }
+
+      if (url.pathname === "/auth/v1/user") {
+        return Response.json({
+          id: "auth-only-id",
+          email: "auth-only@example.com",
+        });
+      }
+
+      if (url.pathname === "/rest/v1/admin_users") {
+        return Response.json([]);
+      }
+
+      throw new Error(`Unexpected fetch: ${url.pathname} (${init?.method ?? "GET"})`);
+    }) as typeof fetch,
+  });
+
+  try {
+    const response = await loginAdmin(new Request("http://localhost/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "auth-only@example.com",
+        password: "secret",
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+    }));
+
+    const payload = await response.json();
+    const setCookies = response.headers.getSetCookie?.() ?? [];
+
+    assert.equal(response.status, 403);
+    assert.equal(payload.error.code, "FORBIDDEN");
+    assert.equal(payload.error.details.userId, "auth-only-id");
+    assert.equal(setCookies.length, 0);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+    });
+  }
+});
+
 test("admin session route can refresh a cookie-backed session server-side", async () => {
   const originalFetch = globalThis.fetch;
 
@@ -166,6 +228,52 @@ test("admin session route can refresh a cookie-backed session server-side", asyn
     assert.equal(payload.data.adminUser.role, "agent");
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=new-access-token")), true);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=new-refresh-token")), true);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+    });
+  }
+});
+
+test("admin session route clears cookies when admin_users membership has been removed", async () => {
+  const originalFetch = globalThis.fetch;
+
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: (async (input: URL | RequestInfo) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname === "/auth/v1/user") {
+        return Response.json({
+          id: "removed-user-id",
+          email: "removed@example.com",
+        });
+      }
+
+      if (url.pathname === "/rest/v1/admin_users") {
+        return Response.json([]);
+      }
+
+      throw new Error(`Unexpected fetch: ${url.pathname}`);
+    }) as typeof fetch,
+  });
+
+  try {
+    const response = await getAdminSession(new Request("http://localhost/api/admin/session", {
+      headers: {
+        cookie: "localman_admin_access=stale-access-token",
+      },
+    }));
+
+    const payload = await response.json();
+    const setCookies = response.headers.getSetCookie?.() ?? [response.headers.get("set-cookie") ?? ""];
+
+    assert.equal(response.status, 403);
+    assert.equal(payload.error.code, "FORBIDDEN");
+    assert.equal(payload.error.details.userId, "removed-user-id");
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_access=") && value.includes("Max-Age=0")), true);
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=") && value.includes("Max-Age=0")), true);
   } finally {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
