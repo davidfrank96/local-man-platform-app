@@ -151,13 +151,107 @@ test("accepts authenticated agent users for general admin workspace access", asy
   }
 });
 
-test("auto-creates a default agent admin_users row for authenticated auth-only users", async () => {
+test("accepts cookie-backed admin sessions without an Authorization header", async () => {
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/vendors", {
+      headers: {
+        cookie: "localman_admin_access=cookie-admin-token",
+      },
+    }),
+    {
+      config,
+      fetchImpl: (async (input: URL | RequestInfo) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "cookie-admin-id",
+            email: "admin@example.com",
+          });
+        }
+
+        return Response.json([
+          {
+            id: "cookie-admin-id",
+            email: "admin@example.com",
+            full_name: "Admin User",
+            role: "admin",
+          },
+        ]);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.accessToken, "cookie-admin-token");
+    assert.equal(result.session.adminUser.role, "admin");
+  }
+});
+
+test("requireAdmin can refresh a cookie-backed session when allowed", async () => {
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/session", {
+      headers: {
+        cookie: "localman_admin_refresh=refresh-cookie",
+      },
+    }),
+    {
+      config,
+      allowCookieRefresh: true,
+      fetchImpl: (async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/auth/v1/token") {
+          const body = JSON.parse(String(init?.body ?? "{}"));
+          assert.equal(body.refresh_token, "refresh-cookie");
+
+          return Response.json({
+            access_token: "fresh-cookie-token",
+            refresh_token: "next-refresh-cookie",
+            expires_in: 3600,
+            user: {
+              id: "agent-id",
+              email: "agent@example.com",
+            },
+          });
+        }
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "agent-id",
+            email: "agent@example.com",
+          });
+        }
+
+        return Response.json([
+          {
+            id: "agent-id",
+            email: "agent@example.com",
+            full_name: "Agent User",
+            role: "agent",
+          },
+        ]);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.accessToken, "fresh-cookie-token");
+    const setCookies = result.responseHeaders?.getSetCookie?.() ?? [];
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_access=fresh-cookie-token")), true);
+  }
+});
+
+test("rejects authenticated users who do not have an explicit admin_users row", async () => {
   const requests: Array<{
     pathname: string;
     method: string;
     authorization: string | null;
     apikey: string | null;
-    body?: unknown;
   }> = [];
 
   const result = await requireAdmin(
@@ -181,7 +275,6 @@ test("auto-creates a default agent admin_users row for authenticated auth-only u
           method,
           authorization: headers.get("authorization"),
           apikey: headers.get("apikey"),
-          body: init?.body ? JSON.parse(String(init.body)) : undefined,
         });
 
         if (url.pathname === "/auth/v1/user") {
@@ -195,28 +288,19 @@ test("auto-creates a default agent admin_users row for authenticated auth-only u
           return Response.json([]);
         }
 
-        if (url.pathname === "/rest/v1/admin_users" && method === "POST") {
-          return Response.json([
-            {
-              id: "fresh-user-id",
-              email: "fresh@example.com",
-              full_name: null,
-              role: "agent",
-            },
-          ]);
-        }
-
         throw new Error(`Unexpected request: ${method} ${url.pathname}`);
       }) as typeof fetch,
     },
   );
 
-  assert.equal(result.success, true);
+  assert.equal(result.success, false);
 
-  if (result.success) {
-    assert.equal(result.session.adminUser.id, "fresh-user-id");
-    assert.equal(result.session.adminUser.email, "fresh@example.com");
-    assert.equal(result.session.adminUser.role, "agent");
+  if (!result.success) {
+    assert.equal(result.response.status, 403);
+    const payload = await result.response.json();
+    assert.equal(payload.error.code, "FORBIDDEN");
+    assert.equal(payload.error.details.userId, "fresh-user-id");
+    assert.equal(payload.error.details.table, "admin_users");
   }
 
   assert.deepEqual(requests, [
@@ -225,37 +309,17 @@ test("auto-creates a default agent admin_users row for authenticated auth-only u
       method: "GET",
       authorization: "Bearer fresh-user-token",
       apikey: "anon-key",
-      body: undefined,
     },
     {
       pathname: "/rest/v1/admin_users",
       method: "GET",
       authorization: "Bearer service-role-key",
       apikey: "service-role-key",
-      body: undefined,
-    },
-    {
-      pathname: "/rest/v1/admin_users",
-      method: "POST",
-      authorization: "Bearer service-role-key",
-      apikey: "service-role-key",
-      body: {
-        id: "fresh-user-id",
-        email: "fresh@example.com",
-        full_name: null,
-        role: "agent",
-      },
     },
   ]);
 });
 
-test("auth-only users cannot self-elevate through auth metadata during admin_users auto-provisioning", async () => {
-  const requests: Array<{
-    pathname: string;
-    method: string;
-    body?: unknown;
-  }> = [];
-
+test("ignores auth metadata role claims when admin_users access is missing", async () => {
   const result = await requireAdmin(
     new Request("http://localhost/api/admin/vendors", {
       headers: {
@@ -271,12 +335,6 @@ test("auth-only users cannot self-elevate through auth metadata during admin_use
         const url = input instanceof URL ? input : new URL(String(input));
         const method = init?.method ?? "GET";
 
-        requests.push({
-          pathname: url.pathname,
-          method,
-          body: init?.body ? JSON.parse(String(init.body)) : undefined,
-        });
-
         if (url.pathname === "/auth/v1/user") {
           return Response.json({
             id: "fresh-user-id",
@@ -291,15 +349,46 @@ test("auth-only users cannot self-elevate through auth metadata during admin_use
           return Response.json([]);
         }
 
-        if (url.pathname === "/rest/v1/admin_users" && method === "POST") {
-          return Response.json([
-            {
-              id: "fresh-user-id",
-              email: "fresh@example.com",
-              full_name: null,
-              role: "agent",
-            },
-          ]);
+        throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, false);
+
+  if (!result.success) {
+    assert.equal(result.response.status, 403);
+    const payload = await result.response.json();
+    assert.equal(payload.error.code, "FORBIDDEN");
+    assert.equal(payload.error.details.userId, "fresh-user-id");
+  }
+});
+
+test("removed admin_users membership invalidates a cookie-backed session immediately", async () => {
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/session", {
+      headers: {
+        cookie: "localman_admin_access=stale-access-token",
+      },
+    }),
+    {
+      config: {
+        ...config,
+        supabaseServiceRoleKey: "service-role-key",
+      },
+      fetchImpl: (async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+        const method = init?.method ?? "GET";
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "removed-user-id",
+            email: "removed@example.com",
+          });
+        }
+
+        if (url.pathname === "/rest/v1/admin_users" && method === "GET") {
+          return Response.json([]);
         }
 
         throw new Error(`Unexpected request: ${method} ${url.pathname}`);
@@ -307,25 +396,21 @@ test("auth-only users cannot self-elevate through auth metadata during admin_use
     },
   );
 
-  assert.equal(result.success, true);
+  assert.equal(result.success, false);
 
-  if (result.success) {
-    assert.equal(result.session.adminUser.role, "agent");
+  if (!result.success) {
+    assert.equal(result.response.status, 403);
+    const payload = await result.response.json();
+    const setCookies = result.response.headers.getSetCookie?.() ?? [];
+
+    assert.equal(payload.error.code, "FORBIDDEN");
+    assert.equal(payload.error.details.userId, "removed-user-id");
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_access=") && value.includes("Max-Age=0")), true);
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=") && value.includes("Max-Age=0")), true);
   }
-
-  assert.deepEqual(requests[2], {
-    pathname: "/rest/v1/admin_users",
-    method: "POST",
-    body: {
-      id: "fresh-user-id",
-      email: "fresh@example.com",
-      full_name: null,
-      role: "agent",
-    },
-  });
 });
 
-test("blocks agent users from admin-only permissions", async () => {
+test("server permission checks reject admin-only actions even if client role state is stale", async () => {
   const result = await requireAdminPermission(
     new Request("http://localhost/api/admin/analytics", {
       headers: {

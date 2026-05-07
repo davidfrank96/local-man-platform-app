@@ -1,6 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
+import {
+  installLocalmanBrowserStateIsolation,
+  seedPublicDiscoverySnapshot,
+} from "./helpers/public-discovery.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 type MockNearbyVendor = Omit<NearbyVendor, "ranking_score"> & {
@@ -64,15 +68,27 @@ async function dispatchVendorMapClick(page: Page, vendorId: string) {
 }
 
 async function expectUniqueMapVendorMarkers(page: Page) {
-  const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
-  if (mapMode !== "maplibre") {
-    return;
-  }
-
   const markerLocator = page.locator(
     '.discovery-map[data-map-mode="maplibre"] .maplibre-vendor-marker[data-vendor-id]',
   );
-  await expect.poll(async () => markerLocator.count()).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
+
+    if (mapMode === "fallback") {
+      return "fallback";
+    }
+
+    if (mapMode === "maplibre" && (await markerLocator.count()) > 0) {
+      return "maplibre";
+    }
+
+    return "pending";
+  }).not.toBe("pending");
+
+  const settledMapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
+  if (settledMapMode === "fallback") {
+    return;
+  }
 
   const vendorIds = await markerLocator.evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-vendor-id") ?? ""),
@@ -330,6 +346,10 @@ async function mockReverseGeocode(page: Page, label: string | null, status = 200
 }
 
 test.describe("Phase 3 browser smoke", () => {
+  test.beforeEach(async ({ page }) => {
+    await installLocalmanBrowserStateIsolation(page.context());
+  });
+
   test("homepage loads, vendor cards render, and details are clickable", async ({ page }) => {
     const errors = trackClientErrors(page);
 
@@ -753,6 +773,7 @@ test.describe("Phase 3 browser smoke", () => {
   test("selection keeps open and closed status consistent across card and selected preview", async ({ page }) => {
     const errors = trackClientErrors(page);
 
+    await setMockClientTime(page, "2026-04-25T13:04:00Z");
     await primePublicLocation(page);
     await mockReverseGeocode(page, "Wuse II, Abuja");
     await mockNearbyDiscovery(page, [
@@ -914,7 +935,9 @@ test.describe("Phase 3 browser smoke", () => {
     await page.getByRole("textbox", { name: "Search" }).fill("rice");
     await openDiscoveryFilters(page);
     await page.locator('select[name="radiusKm"]:visible').selectOption("30");
-    await page.locator('button:has-text("Apply"):visible').click();
+    const applyButton = page.locator('button:has-text("Apply"):visible');
+    await applyButton.scrollIntoViewIfNeeded();
+    await applyButton.click();
 
     await expect(page).toHaveURL(/q=rice/);
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
@@ -948,6 +971,135 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page).toHaveURL(/price_band=budget/);
     await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
     await expect(page.locator(".vendor-card").first().locator(".vendor-card-hours-line")).toContainText("Active hours:");
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("cleanup invalidation prevents stale discovery snapshot and retention state from resurfacing deleted vendors", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const staleVendorId = "39999999-0000-4000-8000-000000000001";
+    const staleVendorSlug = "qa-admin-vendor-playwright-stale";
+
+    await seedPublicDiscoverySnapshot(page.context(), {
+      snapshot: {
+        nearbyData: {
+          location: {
+            source: "precise",
+            label: "Current location",
+            coordinates: {
+              lat: 9.08,
+              lng: 7.4,
+            },
+            isApproximate: false,
+          },
+          vendors: [
+            {
+              vendor_id: staleVendorId,
+              name: "QA Admin Vendor PLAYWRIGHT_STALE",
+              slug: staleVendorSlug,
+              short_description: "Stale deleted vendor",
+              phone_number: "+2348000000099",
+              area: "Jabi",
+              latitude: 9.0606,
+              longitude: 7.4219,
+              price_band: "standard",
+              average_rating: 0,
+              review_count: 0,
+              ranking_score: 0,
+              distance_km: 1.1,
+              is_open_now: true,
+              featured_dish: {
+                dish_name: "Old dish",
+                description: null,
+              },
+              today_hours: "9:00 AM - 5:00 PM",
+            },
+          ],
+        },
+        nearbyDataUpdatedAt: "2026-05-07T17:00:00.000Z",
+        selectedVendorId: staleVendorId,
+        selectedVendorSlug: staleVendorSlug,
+        scrollY: 180,
+      },
+      invalidationPayload: {
+        reason: "vendor_cleanup",
+        vendorId: staleVendorId,
+        timestamp: "2026-05-07T17:01:00.000Z",
+      },
+      recentlyViewed: [
+        {
+          vendor_id: staleVendorId,
+          slug: staleVendorSlug,
+          name: "QA Admin Vendor PLAYWRIGHT_STALE",
+          area: "Jabi",
+          today_hours: "9:00 AM - 5:00 PM",
+          is_open_now: true,
+          timestamp: "2026-05-07T17:00:00.000Z",
+        },
+      ],
+      lastSelected: {
+        vendor_id: staleVendorId,
+        slug: staleVendorSlug,
+        name: "QA Admin Vendor PLAYWRIGHT_STALE",
+        area: "Jabi",
+        today_hours: "9:00 AM - 5:00 PM",
+        is_open_now: true,
+        timestamp: "2026-05-07T17:00:00.000Z",
+      },
+    });
+
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await mockNearbyDiscovery(page, [
+      {
+        vendor_id: "30000000-0000-4000-8000-000000000099",
+        name: "Fresh Nearby Grill",
+        slug: "fresh-nearby-grill",
+        short_description: "Fresh live vendor after cleanup",
+        phone_number: "+2348000000098",
+        area: "Wuse",
+        latitude: 9.071,
+        longitude: 7.43,
+        price_band: "premium",
+        average_rating: 4.7,
+        review_count: 32,
+        distance_km: 2.45,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Grilled chicken",
+          description: null,
+        },
+        today_hours: "10:00 AM - 11:00 PM",
+      },
+    ]);
+
+    await page.goto("/");
+    await expect(page.locator(".vendor-card")).toHaveCount(1);
+    await expect(page.locator(".vendor-card").first()).toContainText("Fresh Nearby Grill");
+    await expect(page.getByText("QA Admin Vendor PLAYWRIGHT_STALE")).toHaveCount(0);
+
+    const retainedStateAfterInvalidation = await page.evaluate(() => ({
+      recentlyViewed: window.localStorage.getItem("public-recently-viewed-vendors"),
+      lastSelected: window.localStorage.getItem("public-last-selected-vendor"),
+    }));
+    expect(retainedStateAfterInvalidation.recentlyViewed).toBe("[]");
+    expect(
+      retainedStateAfterInvalidation.lastSelected === null
+      || retainedStateAfterInvalidation.lastSelected === "[]",
+    ).toBeTruthy();
+
+    const lastSelectedTab = page
+      .locator(".vendor-section-nav")
+      .getByRole("button", { name: "Last selected" });
+    if ((await lastSelectedTab.count()) > 0) {
+      await lastSelectedTab.click();
+      await expect(page.locator(".retention-panel-secondary")).toContainText("No saved vendor yet");
+      await expect(page.locator(".retention-panel-secondary")).not.toContainText("QA Admin Vendor PLAYWRIGHT_STALE");
+    }
+
+    await page.reload();
+    await expect(page.locator(".vendor-card")).toHaveCount(1);
+    await expect(page.getByText("QA Admin Vendor PLAYWRIGHT_STALE")).toHaveCount(0);
 
     await expectNoClientErrors(errors);
   });

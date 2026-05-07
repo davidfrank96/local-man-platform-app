@@ -50,8 +50,9 @@ function logAdminUsersSyncError(error: unknown) {
 
 export function AdminUserManagement() {
   const { session } = useAdminSession();
-  const accessToken = session?.accessToken ?? null;
   const currentAdminUserId = session?.adminUser.id ?? null;
+  // Client role-based debug visibility is intentionally cosmetic. Team access
+  // itself is still protected by backend permission checks.
   const canViewDebugInfo = session?.adminUser.role === "admin";
   const cachedAdminUsers = readAdminUsersCache();
   const hasCachedAdminUsers = cachedAdminUsers !== null;
@@ -65,18 +66,18 @@ export function AdminUserManagement() {
   const [isLoading, setIsLoading] = useState(!hasCachedAdminUsers);
 
   const syncAdminUsers = useCallback(async () => {
-    if (!accessToken) {
+    if (!session) {
       throw new Error("Admin session is missing.");
     }
 
-    const rows = await listAdminUsers({ accessToken });
+    const rows = await listAdminUsers();
     setAdminUsers(rows);
     writeAdminUsersCache(rows);
     return rows;
-  }, [accessToken]);
+  }, [session]);
 
   const loadAdminUsers = useCallback(async () => {
-    if (!accessToken) {
+    if (!session) {
       setFeedback(createAdminFeedback("error", "Admin session is missing. Sign in again."));
       setIsLoading(false);
       return;
@@ -98,7 +99,7 @@ export function AdminUserManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, syncAdminUsers]);
+  }, [session, syncAdminUsers]);
 
   useEffect(() => {
     if (hasCachedAdminUsers) {
@@ -117,7 +118,7 @@ export function AdminUserManagement() {
   async function handleCreateAdminUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!accessToken) {
+    if (!session) {
       setFeedback(createAdminFeedback("error", "Admin session is missing. Sign in again."));
       return;
     }
@@ -140,7 +141,6 @@ export function AdminUserManagement() {
           full_name: fullName.length > 0 ? fullName : null,
           role,
         },
-        { accessToken },
       );
       const createdUser = result.adminUser;
       setAdminUsers((current) => {
@@ -180,7 +180,7 @@ export function AdminUserManagement() {
       role?: AdminRole;
     },
   ) {
-    if (!accessToken) {
+    if (!session) {
       setFeedback(createAdminFeedback("error", "Admin session is missing. Sign in again."));
       return;
     }
@@ -189,9 +189,7 @@ export function AdminUserManagement() {
     setFeedback(createAdminFeedback("neutral", "Updating team access…"));
 
     try {
-      const updatedUser = await updateManagedAdminUserRole(adminUserId, data, {
-        accessToken,
-      });
+      const updatedUser = await updateManagedAdminUserRole(adminUserId, data);
       setAdminUsers((current) => {
         const next = current.map((user) => (user.id === updatedUser.id ? updatedUser : user));
         writeAdminUsersCache(next);
@@ -216,7 +214,7 @@ export function AdminUserManagement() {
   }
 
   async function handleDeleteAdminUser(adminUserId: string, email: string) {
-    if (!accessToken) {
+    if (!session) {
       setFeedback(createAdminFeedback("error", "Admin session is missing. Sign in again."));
       return;
     }
@@ -225,7 +223,7 @@ export function AdminUserManagement() {
     setFeedback(createAdminFeedback("neutral", "Removing account…"));
 
     try {
-      await deleteManagedAdminUser(adminUserId, { accessToken });
+      await deleteManagedAdminUser(adminUserId);
       setAdminUsers((current) => {
         const next = current.filter((user) => user.id !== adminUserId);
         writeAdminUsersCache(next);

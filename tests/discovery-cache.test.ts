@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  applyStoredPublicDiscoveryInvalidationToRetention,
   PUBLIC_DISCOVERY_SNAPSHOT_TTL_MS,
   clearPublicDiscoveryVendorCache,
   invalidatePublicDiscoveryVendorCache,
@@ -91,6 +92,111 @@ test("invalidatePublicDiscoveryVendorCache clears caches and records an invalida
   assert.equal(payload.reason, "vendor_updated");
   assert.equal(payload.vendorId, "vendor-123");
   assert.equal(typeof payload.timestamp, "string");
+});
+
+test("destructive discovery invalidation prunes retained vendor memory for the invalidated vendor", () => {
+  const sessionStorage = createStorage([
+    ["public-discovery:/search?q=rice", "{\"nearbyData\":{}}"],
+  ]);
+  const localStorage = createStorage([
+    ["public-discovery-offline:public-discovery:/search?q=rice", "{\"nearbyData\":{}}"],
+    [
+      "public-recently-viewed-vendors",
+      JSON.stringify([
+        {
+          vendor_id: "vendor-123",
+          slug: "vendor-123",
+          name: "Vendor 123",
+          area: "Wuse",
+          today_hours: "9:00 AM - 5:00 PM",
+          is_open_now: true,
+          timestamp: "2026-05-07T17:00:00.000Z",
+        },
+      ]),
+    ],
+    [
+      "public-last-selected-vendor",
+      JSON.stringify({
+        vendor_id: "vendor-123",
+        slug: "vendor-123",
+        name: "Vendor 123",
+        area: "Wuse",
+        today_hours: "9:00 AM - 5:00 PM",
+        is_open_now: true,
+        timestamp: "2026-05-07T17:00:00.000Z",
+      }),
+    ],
+  ]);
+
+  invalidatePublicDiscoveryVendorCache(
+    {
+      reason: "vendor_deactivated",
+      vendorId: "vendor-123",
+    },
+    {
+      sessionStorage,
+      localStorage,
+    },
+  );
+
+  assert.equal(
+    localStorage.getItem("public-recently-viewed-vendors"),
+    "[]",
+  );
+  assert.equal(
+    localStorage.getItem("public-last-selected-vendor"),
+    "[]",
+  );
+});
+
+test("stored destructive invalidation prunes retained vendor memory before hydration", () => {
+  const localStorage = createStorage([
+    [
+      "public-discovery:vendors:invalidation",
+      JSON.stringify({
+        reason: "vendor_cleanup",
+        vendorId: "vendor-123",
+        timestamp: "2026-05-07T17:01:00.000Z",
+      }),
+    ],
+    [
+      "public-recently-viewed-vendors",
+      JSON.stringify([
+        {
+          vendor_id: "vendor-123",
+          slug: "vendor-123",
+          name: "Vendor 123",
+          area: "Wuse",
+          today_hours: "9:00 AM - 5:00 PM",
+          is_open_now: true,
+          timestamp: "2026-05-07T17:00:00.000Z",
+        },
+      ]),
+    ],
+    [
+      "public-last-selected-vendor",
+      JSON.stringify({
+        vendor_id: "vendor-123",
+        slug: "vendor-123",
+        name: "Vendor 123",
+        area: "Wuse",
+        today_hours: "9:00 AM - 5:00 PM",
+        is_open_now: true,
+        timestamp: "2026-05-07T17:00:00.000Z",
+      }),
+    ],
+  ]);
+
+  applyStoredPublicDiscoveryInvalidationToRetention({ localStorage });
+
+  assert.equal(
+    localStorage.getItem("public-recently-viewed-vendors"),
+    "[]",
+  );
+  assert.equal(
+    localStorage.getItem("public-last-selected-vendor"),
+    "[]",
+  );
 });
 
 test("expired discovery snapshot does not restore cached nearby vendor data", () => {

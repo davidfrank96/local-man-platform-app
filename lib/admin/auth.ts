@@ -1,5 +1,12 @@
 import { apiError } from "../api/responses.ts";
+import { AppError } from "../errors/app-error.ts";
 import { getOrCreateRequestId, logStructuredEvent } from "../observability.ts";
+import {
+  appendAdminSessionCookies,
+  appendClearedAdminSessionCookies,
+  readAdminSessionCookies,
+  refreshAdminCookieSession,
+} from "./session-cookies.ts";
 import {
   hasAdminPermission,
   isAdminRole,
@@ -35,6 +42,7 @@ export type AdminSession = {
 type AdminAuthSuccess = {
   success: true;
   session: AdminSession;
+  responseHeaders?: Headers | null;
 };
 
 type AdminAuthFailure = {
@@ -45,6 +53,7 @@ type AdminAuthFailure = {
 type RequireAdminOptions = {
   config?: AdminAuthConfig | null;
   fetchImpl?: typeof fetch;
+  allowCookieRefresh?: boolean;
 };
 
 export type AdminAuthResult = AdminAuthSuccess | AdminAuthFailure;
@@ -82,6 +91,66 @@ export function getBearerToken(request: Request): string | null {
   if (scheme?.toLowerCase() !== "bearer" || !token) return null;
 
   return token;
+}
+
+function mergeResponseHeaders(response: Response, headers?: Headers | null): Response {
+  if (!headers) {
+    return response;
+  }
+
+  const setCookies = typeof (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
+    ? (headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
+    : [];
+
+  for (const value of setCookies) {
+    response.headers.append("set-cookie", value);
+  }
+
+  headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie" && setCookies.length > 0) {
+      return;
+    }
+
+    response.headers.append(key, value);
+  });
+
+  return response;
+}
+
+function createAuthFailureResponse(
+  {
+    code,
+    message,
+    status,
+    details,
+    detail,
+    clearCookies = false,
+  }: {
+    code: import("../api/contracts.ts").AppErrorCode;
+    message: string;
+    status: number;
+    details?: unknown;
+    detail?: string;
+    clearCookies?: boolean;
+  },
+): AdminAuthFailure {
+  const response = apiError(code, message, status, details, detail);
+
+  if (clearCookies) {
+    appendClearedAdminSessionCookies(response.headers);
+  }
+
+  return {
+    success: false,
+    response,
+  };
+}
+
+export function applyAdminSessionResponseHeaders(
+  response: Response,
+  headers?: Headers | null,
+): Response {
+  return mergeResponseHeaders(response, headers);
 }
 
 async function fetchAuthUser(
@@ -155,108 +224,16 @@ async function fetchAdminUser(
   };
 }
 
-async function createDefaultAdminUserRecord(
-  user: SupabaseAuthUser,
-  requestId: string,
-  config: AdminAuthConfig,
-  fetchImpl: typeof fetch,
-): Promise<AdminUserRecord | null> {
-  const serviceRoleKey = config.supabaseServiceRoleKey?.trim() ?? "";
-
-  if (!serviceRoleKey || !user.email?.trim()) {
-    return null;
-  }
-
-  const url = new URL("/rest/v1/admin_users", config.supabaseUrl);
-  const payload = {
-    id: user.id,
-    email: user.email,
-    full_name: null,
-    role: "agent" as const,
-  };
-
-  const response = await fetchImpl(url, {
-    method: "POST",
-    headers: {
-      apikey: serviceRoleKey,
-      authorization: `Bearer ${serviceRoleKey}`,
-      "content-type": "application/json",
-      prefer: "return=representation",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (response.ok) {
-    const rows = (await response.json()) as Array<{
-      id: string;
-      email: string;
-      full_name: string | null;
-      role: string;
-    }>;
-    const created = rows[0] ?? null;
-
-    if (!created || !isAdminRole(created.role)) {
-      logStructuredEvent("warn", {
-        type: "ADMIN_USER_AUTO_CREATE_FAILED",
-        requestId,
-        userId: user.id,
-        email: user.email,
-        status: response.status,
-        details: rows,
-        reason: "invalid_payload",
-      });
-
-      return await fetchAdminUser(user.id, serviceRoleKey, config, fetchImpl);
-    }
-
-    logStructuredEvent("info", {
-      type: "ADMIN_USER_AUTO_CREATED",
-      requestId,
-      userId: created.id,
-      email: created.email,
-      role: created.role,
-    });
-
-    return {
-      ...created,
-      role: created.role,
-    };
-  }
-
-  const details = await response.json().catch(() => null);
-
-  logStructuredEvent("warn", {
-    type: "ADMIN_USER_AUTO_CREATE_FAILED",
-    requestId,
-    userId: user.id,
-    email: user.email,
-    status: response.status,
-    details,
-  });
-
-  return await fetchAdminUser(user.id, serviceRoleKey, config, fetchImpl);
-}
-
 export async function requireAdmin(
   request: Request,
   {
     config = getAdminAuthConfig(),
     fetchImpl = fetch,
+    allowCookieRefresh = false,
   }: RequireAdminOptions = {},
 ): Promise<AdminAuthResult> {
-  const accessToken = getBearerToken(request);
+  const bearerToken = getBearerToken(request);
   const requestId = getOrCreateRequestId(request);
-
-  if (!accessToken) {
-    return {
-      success: false,
-      response: apiError(
-        "UNAUTHORIZED",
-        "Admin authentication requires an Authorization bearer token.",
-        401,
-      ),
-    };
-  }
 
   if (!config) {
     return {
@@ -269,70 +246,99 @@ export async function requireAdmin(
     };
   }
 
-  try {
-    const user = await fetchAuthUser(accessToken, config, fetchImpl);
+  const cookieSession = readAdminSessionCookies(request);
+  const usingCookieSession = !bearerToken && !!(cookieSession.accessToken || cookieSession.refreshToken);
+  let accessToken = bearerToken ?? cookieSession.accessToken;
+  const responseHeaders = new Headers();
+  let hasRefreshedCookieSession = false;
 
-    if (!user) {
+  const refreshCookieSession = async () => {
+    if (bearerToken || !allowCookieRefresh || !cookieSession.refreshToken) {
+      return false;
+    }
+
+    const refreshedSession = await refreshAdminCookieSession(
+      cookieSession.refreshToken,
+      config,
+      fetchImpl,
+    );
+    accessToken = refreshedSession.accessToken;
+    appendAdminSessionCookies(responseHeaders, refreshedSession);
+    hasRefreshedCookieSession = true;
+    return true;
+  };
+
+  try {
+    if (!accessToken) {
+      if (!(await refreshCookieSession())) {
+        return createAuthFailureResponse({
+          code: "UNAUTHORIZED",
+          message: "Admin session is missing. Sign in again.",
+          status: 401,
+          clearCookies: usingCookieSession,
+        });
+      }
+    }
+
+    let user = accessToken ? await fetchAuthUser(accessToken, config, fetchImpl) : null;
+
+    if (!user && !hasRefreshedCookieSession && await refreshCookieSession()) {
+      user = accessToken ? await fetchAuthUser(accessToken, config, fetchImpl) : null;
+    }
+
+    if (!user || !accessToken) {
       logAdminAuthEvent("warn", "session rejected because auth user lookup returned no user", {
         requestId,
-        hasAccessToken: true,
+        hasAccessToken: !!accessToken,
+        usedCookieSession: usingCookieSession,
       });
-      return {
-        success: false,
-        response: apiError("UNAUTHORIZED", "Invalid admin session.", 401),
-      };
+      return createAuthFailureResponse({
+        code: "UNAUTHORIZED",
+        message: "Invalid admin session.",
+        status: 401,
+        clearCookies: usingCookieSession,
+      });
     }
 
     logAdminAuthEvent("info", "auth user verified", {
       requestId,
       userId: user.id,
-      email: user.email ?? null,
     });
 
     const adminUser = await fetchAdminUser(user.id, accessToken, config, fetchImpl);
 
-    const resolvedAdminUser = adminUser ?? await (async () => {
+    if (!adminUser) {
       logStructuredEvent("warn", {
         type: "ADMIN_USER_MISSING",
         requestId,
         userId: user.id,
         email: user.email ?? null,
       });
-
-      return await createDefaultAdminUserRecord(user, requestId, config, fetchImpl);
-    })();
-
-    logAdminAuthEvent("info", "session debug", {
-      requestId,
-      email: user.email ?? null,
-      role: resolvedAdminUser?.role ?? null,
-      adminUserExists: !!resolvedAdminUser,
-    });
-
-    if (!resolvedAdminUser) {
       logAdminAuthEvent("warn", "authenticated user is not present in admin_users", {
         requestId,
         userId: user.id,
-        email: user.email ?? null,
         role: null,
         adminUserExists: false,
       });
-      return {
-        success: false,
-        response: apiError("FORBIDDEN", "Your account does not have access.", 403, {
+      return createAuthFailureResponse({
+        code: "FORBIDDEN",
+        message: "Your account does not have access.",
+        status: 403,
+        details: {
           userId: user.id,
           email: user.email ?? null,
           table: "admin_users",
-        }),
-      };
+        },
+        clearCookies: usingCookieSession,
+      });
     }
 
     logAdminAuthEvent("info", "admin membership verified", {
       requestId,
       userId: user.id,
-      email: user.email ?? null,
-      role: resolvedAdminUser.role,
+      role: adminUser.role,
       lookupMode: config.supabaseServiceRoleKey ? "service_role" : "user_token",
+      authTransport: bearerToken ? "bearer" : "cookie",
     });
 
     return {
@@ -341,10 +347,24 @@ export async function requireAdmin(
         requestId,
         accessToken,
         user,
-        adminUser: resolvedAdminUser,
+        adminUser,
       },
+      responseHeaders: [...responseHeaders.keys()].length > 0 ? responseHeaders : null,
     };
   } catch (error) {
+    if (error instanceof AppError && usingCookieSession) {
+      return createAuthFailureResponse({
+        code: error.code === "AUTH_ERROR" ? "UNAUTHORIZED" : error.code,
+        message: error.code === "AUTH_ERROR"
+          ? "Admin session expired. Sign in again."
+          : error.message,
+        status: error.code === "AUTH_ERROR" ? 401 : error.status ?? 401,
+        details: error.details,
+        detail: error.detail,
+        clearCookies: true,
+      });
+    }
+
     logAdminAuthEvent("error", "admin session verification failed", {
       requestId,
       message: error instanceof Error ? error.message : "Unknown error",

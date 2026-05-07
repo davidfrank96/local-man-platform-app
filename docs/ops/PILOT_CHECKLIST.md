@@ -8,10 +8,11 @@ This is an operator runbook, not a feature document. It should stay short, pract
 
 ## Before Launch
 - [ ] Confirm `docs/ops/RUNTIME_SETUP.md` passes end to end on the target Supabase project.
-- [ ] Confirm `.env.local` contains the current Supabase URL, anon key, and database connection string.
+- [ ] Confirm `.env.local` contains the current Supabase URL, anon key, service role key, and database connection string.
 - [ ] Confirm `npm run runtime:check-env` passes.
 - [ ] Confirm `npm run runtime:check-db-env` passes.
 - [ ] Confirm migration applied successfully.
+- [ ] Confirm `npm run db:check` passes.
 - [ ] Confirm Abuja seed applied successfully.
 - [ ] Confirm `npm run smoke:nearby` passes against the real Supabase environment.
 - [ ] Confirm admin login works for a user present in `admin_users`.
@@ -66,7 +67,7 @@ For each vendor before activation:
 - [ ] Confirm filters still work.
 - [ ] Confirm vendor cards open the vendor detail page.
 - [ ] Confirm call and directions actions render correctly.
-- [ ] Confirm the selected vendor panel shows open state, area, phone, price, rating, and featured dish count.
+- [ ] Confirm the selected vendor panel shows open state, area, active hours, and call/directions/detail actions.
 
 ## Mobile Geolocation Test
 - [ ] Test on a mobile browser with location permission allowed.
@@ -100,9 +101,10 @@ If storage uploads are broken:
 
 ## Known Limitations
 - IP approximation is still an interface, not a concrete provider.
-- Public map rendering is still the MVP coordinate grid.
+- Public map rendering may use MapLibre with a browser-safe MapTiler style URL or the coordinate fallback when the style URL is absent or the real map cannot load.
 - Admin login uses Supabase email/password sessions backed by the current admin authorization model.
 - Missing vendor images fall back cleanly, but some seed data still uses placeholder image URLs.
+- Public rate limiting is still process-local and best-effort for a single app instance rather than a distributed global throttle.
 - Browser-level smoke tests cover the core flows, not every admin edge case.
 
 ## Daily Checks

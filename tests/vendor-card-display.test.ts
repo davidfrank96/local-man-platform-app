@@ -41,6 +41,7 @@ test("reconciles displayed active hours with a stale closed flag", () => {
     getVendorOpenStateDisplayFromSnapshot({
       isOpenNow: false,
       todayHours: "10:00 AM - 7:00 PM",
+      now: new Date("2026-05-07T13:04:00.000Z"),
     }),
     {
       label: "Open",

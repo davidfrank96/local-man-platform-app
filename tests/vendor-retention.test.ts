@@ -4,6 +4,7 @@ import {
   createRetainedVendorPreview,
   readLastSelectedVendor,
   readRecentlyViewedVendors,
+  removeRetainedVendorPreview,
   rememberLastSelectedVendor,
   rememberRecentlyViewedVendor,
   type RetainedVendorPreview,
@@ -67,6 +68,27 @@ test("last selected vendor memory stores and reads back the latest vendor", () =
   rememberLastSelectedVendor(vendor, storage);
 
   assert.deepEqual(readLastSelectedVendor(storage), vendor);
+});
+
+test("removing a retained vendor prunes recent and last-selected memory safely", () => {
+  const storage = createStorage();
+  const removedVendor = createVendor(2);
+  const keptVendor = createVendor(3);
+
+  rememberRecentlyViewedVendor(removedVendor, storage);
+  rememberRecentlyViewedVendor(keptVendor, storage);
+  rememberLastSelectedVendor(removedVendor, storage);
+
+  const result = removeRetainedVendorPreview(removedVendor.vendor_id, storage);
+
+  assert.deepEqual(result.recentlyViewed.map((vendor) => vendor.slug), [
+    keptVendor.slug,
+  ]);
+  assert.equal(result.lastSelected, null);
+  assert.deepEqual(readRecentlyViewedVendors(storage).map((vendor) => vendor.slug), [
+    keptVendor.slug,
+  ]);
+  assert.equal(readLastSelectedVendor(storage), null);
 });
 
 test("retained vendor previews can be created from nearby vendor-like data", () => {

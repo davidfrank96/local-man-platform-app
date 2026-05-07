@@ -1,5 +1,11 @@
 import { apiError, apiSuccess } from "../../../../../lib/api/responses.ts";
 import {
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+  PUBLIC_RATING_RATE_LIMIT,
+  startSingleFlightGuard,
+} from "../../../../../lib/api/abuse-protection.ts";
+import {
   validateInput,
   validateJsonBody,
 } from "../../../../../lib/api/validation.ts";
@@ -22,6 +28,10 @@ type RatingWriteConfig = {
 type VendorRatingTarget = {
   id: string;
   slug: string;
+};
+
+type RatingSubmissionResult = {
+  vendor_id: string;
   average_rating: number;
   review_count: number;
 };
@@ -62,7 +72,7 @@ async function fetchVendorTarget(
   config: RatingWriteConfig,
 ): Promise<VendorRatingTarget | null> {
   const url = new URL("/rest/v1/vendors", config.supabaseUrl);
-  url.searchParams.set("select", "id,slug,average_rating,review_count");
+  url.searchParams.set("select", "id,slug");
   url.searchParams.set("slug", `eq.${slug}`);
   url.searchParams.set("is_active", "eq.true");
   url.searchParams.set("limit", "1");
@@ -84,106 +94,66 @@ async function fetchVendorTarget(
   return (payload[0] as VendorRatingTarget | undefined) ?? null;
 }
 
-async function insertRating(
+function normalizeRatingSubmissionPayload(payload: unknown): RatingSubmissionResult | null {
+  const candidate = Array.isArray(payload) ? payload[0] : payload;
+
+  if (!candidate || typeof candidate !== "object") {
+    return null;
+  }
+
+  const vendorId = "vendor_id" in candidate ? (candidate as { vendor_id?: unknown }).vendor_id : null;
+  const averageRating = "average_rating" in candidate
+    ? (candidate as { average_rating?: unknown }).average_rating
+    : null;
+  const reviewCount = "review_count" in candidate
+    ? (candidate as { review_count?: unknown }).review_count
+    : null;
+
+  if (
+    typeof vendorId !== "string" ||
+    typeof averageRating !== "number" ||
+    typeof reviewCount !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    vendor_id: vendorId,
+    average_rating: averageRating,
+    review_count: reviewCount,
+  };
+}
+
+async function submitPublicVendorRating(
   vendorId: string,
   score: number,
   config: RatingWriteConfig,
-): Promise<void> {
-  const response = await fetch(new URL("/rest/v1/ratings", config.supabaseUrl), {
-    method: "POST",
-    headers: createHeaders(config),
-    body: JSON.stringify({
-      vendor_id: vendorId,
-      score,
-      source_type: "public_simple_rating",
-    }),
-  });
+): Promise<RatingSubmissionResult | null> {
+  const response = await fetch(
+    new URL("/rest/v1/rpc/submit_public_vendor_rating", config.supabaseUrl),
+    {
+      method: "POST",
+      headers: createHeaders(config, ""),
+      body: JSON.stringify({
+        target_vendor_id: vendorId,
+        target_score: score,
+        target_source_type: "public_simple_rating",
+      }),
+    },
+  );
   const payload = await readJson(response);
 
   if (!response.ok) {
     throw new Error(
-      `Rating insert failed: ${response.status} ${
+      `Rating submission failed: ${response.status} ${
         typeof payload === "object" && payload !== null && "message" in payload
           ? String((payload as { message?: unknown }).message ?? "")
           : ""
       }`.trim(),
     );
   }
-}
 
-async function fetchVendorScores(
-  vendorId: string,
-  config: RatingWriteConfig,
-): Promise<number[]> {
-  const url = new URL("/rest/v1/ratings", config.supabaseUrl);
-  url.searchParams.set("select", "score");
-  url.searchParams.set("vendor_id", `eq.${vendorId}`);
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: createHeaders(config, ""),
-  });
-  const payload = await readJson(response);
-
-  if (!response.ok) {
-    throw new Error(`Ratings aggregate fetch failed: ${response.status}`);
-  }
-
-  if (!Array.isArray(payload)) {
-    throw new Error("Ratings aggregate payload was malformed.");
-  }
-
-  return payload
-    .flatMap((row) =>
-      typeof row === "object" &&
-      row !== null &&
-      "score" in row &&
-      typeof (row as { score?: unknown }).score === "number"
-        ? [(row as { score: number }).score]
-        : [],
-    );
-}
-
-function computeRatingSummary(scores: number[]): { average_rating: number; review_count: number } {
-  const reviewCount = scores.length;
-
-  if (reviewCount === 0) {
-    return {
-      average_rating: 0,
-      review_count: 0,
-    };
-  }
-
-  const average = scores.reduce((sum, score) => sum + score, 0) / reviewCount;
-
-  return {
-    average_rating: Number(average.toFixed(2)),
-    review_count: reviewCount,
-  };
-}
-
-async function updateVendorRatingSummary(
-  vendorId: string,
-  summary: { average_rating: number; review_count: number },
-  config: RatingWriteConfig,
-): Promise<void> {
-  const url = new URL("/rest/v1/vendors", config.supabaseUrl);
-  url.searchParams.set("id", `eq.${vendorId}`);
-
-  const response = await fetch(url, {
-    method: "PATCH",
-    headers: createHeaders(config),
-    body: JSON.stringify(summary),
-  });
-  const payload = await readJson(response);
-
-  if (!response.ok) {
-    throw new Error(`Vendor rating summary update failed: ${response.status}`);
-  }
-
-  if (payload !== null && !Array.isArray(payload)) {
-    throw new Error("Vendor rating summary update payload was malformed.");
-  }
+  return normalizeRatingSubmissionPayload(payload);
 }
 
 export async function POST(request: Request, { params }: VendorRatingsRouteContext) {
@@ -209,28 +179,114 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     );
   }
 
+  const rateLimit = consumeRateLimit(request, {
+    policy: PUBLIC_RATING_RATE_LIMIT,
+  });
+
+  if (!rateLimit.allowed) {
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "TOO_MANY_REQUESTS",
+        "Too many rating submissions. Please wait before trying again.",
+        429,
+        {
+          retry_after_seconds: rateLimit.retryAfterSeconds,
+        },
+        "Rating is temporarily rate limited to protect Local Man.",
+      ),
+      rateLimit,
+    );
+  }
+
+  let activeDedupeGuard:
+    | Extract<
+      ReturnType<typeof startSingleFlightGuard<{
+        vendor_id: string;
+        rating_summary: {
+          average_rating: number;
+          review_count: number;
+        };
+      }>>,
+      { status: "fresh" }
+    >
+    | null = null;
+
   try {
     const vendor = await fetchVendorTarget(routeParams.data.slug, config);
 
     if (!vendor) {
-      return apiError("NOT_FOUND", "Vendor was not found.", 404);
+      return applyRateLimitResponseHeaders(
+        apiError("NOT_FOUND", "Vendor was not found.", 404),
+        rateLimit,
+      );
     }
 
-    await insertRating(vendor.id, body.data.score, config);
-    const scores = await fetchVendorScores(vendor.id, config);
-    const ratingSummary = computeRatingSummary(scores);
-    await updateVendorRatingSummary(vendor.id, ratingSummary, config);
+    const dedupeGuard = startSingleFlightGuard<{
+      vendor_id: string;
+      rating_summary: {
+        average_rating: number;
+        review_count: number;
+      };
+    }>(
+      [
+        rateLimit.identityKey,
+        vendor.id,
+        String(body.data.score),
+      ].join("|"),
+      60_000,
+    );
+    if (dedupeGuard.status === "fresh") {
+      activeDedupeGuard = dedupeGuard;
+    }
 
-    return apiSuccess({
-      vendor_id: vendor.id,
-      rating_summary: ratingSummary,
-    }, 201);
+    if (dedupeGuard.status === "joined") {
+      try {
+        const payload = await dedupeGuard.promise;
+
+        return applyRateLimitResponseHeaders(apiSuccess(payload, 200), rateLimit);
+      } catch (error) {
+        return applyRateLimitResponseHeaders(
+          apiError(
+            "UPSTREAM_ERROR",
+            "Unable to save vendor rating.",
+            502,
+            error instanceof Error ? { message: error.message } : undefined,
+          ),
+          rateLimit,
+        );
+      }
+    }
+
+    const ratingSummary = await submitPublicVendorRating(vendor.id, body.data.score, config);
+
+    if (!ratingSummary) {
+      dedupeGuard.reject(new Error("Vendor was not found."));
+      return applyRateLimitResponseHeaders(
+        apiError("NOT_FOUND", "Vendor was not found.", 404),
+        rateLimit,
+      );
+    }
+
+    const responseData = {
+      vendor_id: ratingSummary.vendor_id,
+      rating_summary: {
+        average_rating: ratingSummary.average_rating,
+        review_count: ratingSummary.review_count,
+      },
+    };
+    dedupeGuard.resolve(responseData);
+
+    return applyRateLimitResponseHeaders(apiSuccess(responseData, 201), rateLimit);
   } catch (error) {
-    return apiError(
-      "UPSTREAM_ERROR",
-      "Unable to save vendor rating.",
-      502,
-      error instanceof Error ? { message: error.message } : undefined,
+    activeDedupeGuard?.reject(error);
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "UPSTREAM_ERROR",
+        "Unable to save vendor rating.",
+        502,
+        error instanceof Error ? { message: error.message } : undefined,
+      ),
+      rateLimit,
     );
   }
 }

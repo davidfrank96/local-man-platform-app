@@ -611,7 +611,6 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
 
 export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
   const { session, signOut } = useAdminSession();
-  const accessToken = session?.accessToken ?? null;
   const initialRange = initialData?.range ?? "7d";
   const initialAnalytics = initialData ?? readAnalyticsCache(initialRange);
   const initialAuditCache = readAuditLogCache(
@@ -678,7 +677,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
   }, []);
 
   const loadAnalytics = useCallback(async (nextRange: AdminAnalyticsRange) => {
-    if (!accessToken) {
+    if (!session) {
       setStatus("Admin session is missing. Sign in again.");
       return;
     }
@@ -710,10 +709,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
 
     try {
       const startedAt = performance.now();
-      const result = await fetchAdminAnalytics(
-        { range: nextRange },
-        { accessToken },
-      );
+      const result = await fetchAdminAnalytics({ range: nextRange });
       if (result.error) {
         logAnalyticsFetch({
           scope: "analytics",
@@ -800,13 +796,13 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, logAnalyticsFetch, setSafeAnalyticsFallbackState, signOut]);
+  }, [logAnalyticsFetch, session, setSafeAnalyticsFallbackState, signOut]);
 
   const loadAuditLogs = useCallback(async (
     filters: AuditLogFilterState,
     options?: { append?: boolean; cursor?: string | null; offset?: number },
   ) => {
-    if (!accessToken) {
+    if (!session) {
       setAuditStatus("Admin session is missing. Sign in again.");
       return;
     }
@@ -859,7 +855,6 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
           user_role: filters.userRole === "all" ? undefined : filters.userRole,
           action: filters.action === "all" ? undefined : filters.action,
         },
-        { accessToken },
       );
       if (response.error) {
         logAnalyticsFetch({
@@ -958,7 +953,7 @@ export function AdminAnalytics({ initialData = null }: AdminAnalyticsProps) {
     } finally {
       setIsAuditLoading(false);
     }
-  }, [accessToken, logAnalyticsFetch, setSafeAuditFallbackState, signOut]);
+  }, [logAnalyticsFetch, session, setSafeAuditFallbackState, signOut]);
 
   const runAnalyticsLoadSafely = useCallback(async (nextRange: AdminAnalyticsRange) => {
     try {

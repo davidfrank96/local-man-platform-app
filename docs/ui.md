@@ -84,6 +84,10 @@ The admin workspace now has two user-facing shells:
   - CSV vendor intake
 
 Restricted workspace areas are hidden before render based on resolved session role. Server-side route and API checks remain the source of truth.
+Those client-side checks are presentation-only:
+- they reduce clutter
+- they improve redirects and denied-state copy
+- they must never be treated as the authorization boundary
 
 ## Source of truth
 

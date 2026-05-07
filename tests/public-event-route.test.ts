@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { POST as trackEventRoute } from "../app/api/events/route.ts";
+import {
+  PUBLIC_EVENT_RATE_LIMIT,
+  resetAbuseProtectionStateForTests,
+} from "../lib/api/abuse-protection.ts";
 
 function setTrackingEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -23,6 +27,10 @@ function setTrackingEnv(): () => void {
     }
   };
 }
+
+test.beforeEach(() => {
+  resetAbuseProtectionStateForTests();
+});
 
 test("public event route stores accepted tracking events", async () => {
   const restoreEnv = setTrackingEnv();
@@ -247,5 +255,97 @@ test("public event route fails clearly when write config is missing", async () =
     } else {
       process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
     }
+  }
+});
+
+test("public event route deduplicates immediate retry payloads", async () => {
+  const restoreEnv = setTrackingEnv();
+  const originalFetch = globalThis.fetch;
+  let upstreamWrites = 0;
+
+  globalThis.fetch = (async () => {
+    upstreamWrites += 1;
+    return new Response(null, { status: 201 });
+  }) as typeof fetch;
+
+  try {
+    const createRequest = () =>
+      new Request("http://localhost/api/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.10",
+        },
+        body: JSON.stringify({
+          event_type: "vendor_selected",
+          session_id: "90000000-0000-4000-8000-000000000001",
+          vendor_id: "00000000-0000-4000-8000-000000000001",
+          vendor_slug: "test-vendor",
+          device_type: "mobile",
+          location_source: "precise",
+          page_path: "/",
+        }),
+      });
+
+    const firstResponse = await trackEventRoute(createRequest());
+    const secondResponse = await trackEventRoute(createRequest());
+    const firstBody = await firstResponse.json();
+    const secondBody = await secondResponse.json();
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 202);
+    assert.equal(firstBody.data.accepted, true);
+    assert.equal(secondBody.data.accepted, true);
+    assert.equal(secondBody.data.deduplicated, true);
+    assert.equal(upstreamWrites, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public event route stops accepting flood traffic after the route threshold", async () => {
+  const restoreEnv = setTrackingEnv();
+  const originalFetch = globalThis.fetch;
+  let upstreamWrites = 0;
+
+  globalThis.fetch = (async () => {
+    upstreamWrites += 1;
+    return new Response(null, { status: 201 });
+  }) as typeof fetch;
+
+  try {
+    let lastResponse: Response | null = null;
+
+    for (let index = 0; index <= PUBLIC_EVENT_RATE_LIMIT.maxRequests; index += 1) {
+      lastResponse = await trackEventRoute(
+        new Request("http://localhost/api/events", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.22",
+          },
+          body: JSON.stringify({
+            event_type: "search_used",
+            session_id: `90000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+            device_type: "desktop",
+            location_source: "default_city",
+            page_path: "/search",
+            search_query: `rice-${index}`,
+          }),
+        }),
+      );
+    }
+
+    assert.ok(lastResponse);
+    const body = await lastResponse!.json();
+
+    assert.equal(lastResponse!.status, 202);
+    assert.equal(body.data.accepted, false);
+    assert.equal(body.data.reason, "rate_limited");
+    assert.equal(upstreamWrites, PUBLIC_EVENT_RATE_LIMIT.maxRequests);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
   }
 });

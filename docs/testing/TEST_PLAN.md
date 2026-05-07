@@ -99,20 +99,43 @@ Test:
 - valid 1-5 vendor rating is accepted
 - invalid scores are rejected
 - unknown vendor slug returns `NOT_FOUND`
+- rating RPC failures return `UPSTREAM_ERROR`
+- vendor lookup connectivity failures return `UPSTREAM_ERROR`
 - rating summary updates:
   - `average_rating`
   - `review_count`
 - vendor cards and detail continue to show `New` when no ratings exist
+- repeated rating spam from one client is rate limited
+- duplicate sequential and concurrent rating retries collapse into one upstream write
+- route returns the database-owned post-write summary instead of recomputing ratings client-side
 
 Current automated coverage:
 - `tests/public-rating-route.test.ts`
 
+### Abuse Protection Logic
+Test:
+- repeated invalid admin login attempts are rate limited
+- repeated public search abuse is rate limited without blocking normal default-city browsing
+- repeated public analytics event floods are rate limited without turning analytics failures into public UX failures
+- repeated identical event retries collapse into one upstream write
+- blocked responses expose structured `TOO_MANY_REQUESTS` or endpoint-safe degraded responses
+- hashed limiter logging never requires raw client IP assertions in tests
+
+Current automated coverage:
+- `tests/admin-session-routes.test.ts`
+- `tests/public-event-route.test.ts`
+- `tests/public-nearby-route.test.ts`
+- `tests/public-rating-route.test.ts`
+
 ### Admin Foundation Logic
 Test:
-- missing admin bearer token returns `UNAUTHORIZED`
+- missing admin session returns `UNAUTHORIZED`
 - authenticated non-admin user returns `FORBIDDEN`
+- authenticated user missing `admin_users` membership returns `FORBIDDEN`
 - authenticated admin user is accepted
-- admin session validation route returns the authenticated admin identity
+- cookie-backed admin session validation route returns the authenticated admin identity
+- expired cookie-backed admin sessions refresh server-side when a valid refresh cookie is present
+- removed `admin_users` membership clears privileged cookies and blocks the stale session
 - vendor listing supports pagination and filters
 - vendor create writes audit log
 - vendor update writes audit log
@@ -244,3 +267,29 @@ Test:
 - duplicate slugs
 - invalid hours
 - unsupported image type
+
+## Test Artifact Discipline
+For any Playwright or QA flow that creates persistent admin-side records, use deterministic namespaces so cleanup stays scoped and reversible.
+
+Current approved namespaces:
+- vendor names: `QA Admin Vendor PLAYWRIGHT_...`
+- vendor names for generic QA records: `QA_TEST_PLAYWRIGHT_...`
+- explicit test marker prefix: `PLAYWRIGHT_...`
+- ratings/comments marker prefix: `QA_E2E_PLAYWRIGHT_...`
+- test-only account local parts: `qa_admin_playwright_...`, `qa_agent_playwright_...`
+
+Cleanup utilities:
+- `npm run db:inspect:playwright`
+- `npm run db:cleanup:playwright`
+
+Shared helpers:
+- browser-state isolation: [tests/e2e/helpers/public-discovery.ts](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/tests/e2e/helpers/public-discovery.ts)
+- artifact factories and cleanup registry: [tests/e2e/helpers/playwright-artifacts.ts](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/tests/e2e/helpers/playwright-artifacts.ts)
+- namespace matchers: [lib/testing/playwright-artifacts.ts](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/lib/testing/playwright-artifacts.ts)
+
+Rules:
+- inventory first, then review the candidate list before deletion
+- never reuse these prefixes for seeded or production records
+- storage uploads created by tests should remain linked to those namespaces so the cleanup SQL can remove only verified test objects
+- shared-environment cleanup requires explicit acknowledgement through `LOCALMAN_ALLOW_SHARED_ENV_TEST_CLEANUP=1` unless CI already sets `CI=true`
+- destructive vendor invalidation must prune browser retention state as well as discovery snapshots

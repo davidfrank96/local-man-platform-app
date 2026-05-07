@@ -40,6 +40,10 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - no clustering in the current release
 - vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
 - lightweight vendor rating input with 1-5 stars and no comments
+- public abuse protection on write-heavy and search-heavy routes:
+  - `/api/events` rate limits repeated event floods and deduplicates immediate retry payloads
+  - `/api/vendors/[slug]/ratings` rate limits repeated rating spam and collapses duplicate retry submissions
+  - `/api/vendors/nearby` rate limits search-bearing abuse traffic without throttling normal default-city browsing
 - local retention helpers:
   - recently viewed vendors
   - last selected vendor memory
@@ -57,7 +61,8 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - morning, afternoon, and night discovery themes based on browser-local time
 
 ### Admin
-- Supabase email/password admin login
+- Supabase email/password admin login with secure HTTP-only cookie-backed sessions
+- explicit privilege assignment through `admin_users`; authenticated users without a team-access row are denied the workspace
 - role-aware admin landing and dashboards:
   - `/admin/dashboard` for admins
   - `/admin/agent` for agents
@@ -177,8 +182,20 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 
 - admin user creation
 - public analytics event writes at `/api/events`
+- public vendor rating writes at `/api/vendors/[slug]/ratings`
 - backend analytics and audit-log fallback routes
 - server-side vendor image storage operations
+
+Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
+Authentication alone is not enough for workspace access: the authenticated user must already exist in `admin_users`.
+
+Public abuse protection is centralized server-side in the API layer:
+- `/api/admin/login`: `5` attempts per `10` minutes per IP/email with a `15` minute block window
+- `/api/events`: `120` accepted requests per `5` minutes per client/IP with a short duplicate-submission collapse window
+- `/api/vendors/[slug]/ratings`: `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse
+- `/api/vendors/nearby` search requests only: `45` requests per minute per client/IP with a `2` minute block window
+- public limiter correlation may issue a non-privileged HTTP-only cookie so repeated browser abuse cannot avoid the per-IP bucket simply by retrying
+- the current limiter is in-memory and process-local, so it is best-effort for a single app instance rather than a distributed global throttle
 
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 
@@ -191,14 +208,17 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only in DigitalOcean runtime secrets
 - the MapTiler key embedded in `NEXT_PUBLIC_MAP_STYLE_URL` must be browser-safe because the value is public
 - after changing Supabase or map env vars in DigitalOcean, trigger a redeploy so Next.js rebuilds with the updated public env
+- schema-changing releases must apply migrations before the new app build is promoted
+- current migrations are additive; rollback should restore the previous app deploy first rather than manually removing applied schema objects unless a migration defect is confirmed
 
 ## Runtime Validation
 Before deployment or major continuation work, keep the runtime gate green:
 
 1. apply migrations
-2. seed the Abuja pilot dataset
-3. start the app with real Supabase env vars
-4. run:
+2. run `npm run db:check`
+3. seed the Abuja pilot dataset
+4. start the app with real Supabase env vars
+5. run:
    - `npm run smoke:nearby`
 
 Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
@@ -239,7 +259,7 @@ Phase 6 currently covers:
 - admin-only analytics route at `/admin/analytics`
 - summary cards, vendor performance, drop-off signals, and recent activity
 - non-blocking tracking writes that must never interfere with public discovery
-- direct Supabase analytics reads in production, with backend fallback routes retained for development and operational debugging
+- backend-only analytics reads in production, with the admin analytics route handling RPC and query fallback server-side
 
 ## Admin and Agent Summary
 

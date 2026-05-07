@@ -68,6 +68,13 @@ Handles:
 - featured dish management
 - vendor image upload and removal
 
+Admin browser enforcement rules:
+- privileged admin and agent reads and mutations go through protected `/api/admin/**` routes only
+- the active admin browser flow no longer instantiates a direct Supabase client for privileged operations
+- RBAC is enforced on the backend through `requireAdmin()` and `requireAdminPermission()`, with client role checks kept for navigation and UX only
+- authenticated users gain admin workspace access only through an explicit `admin_users` assignment; authentication alone is not enough
+- hidden navigation, role-based redirects, and denied-state rendering in React are not security boundaries and must not be treated as authorization
+
 ### API Routes
 Handle:
 - public nearby vendor reads
@@ -79,6 +86,7 @@ Handle:
 - backend analytics and team-access routes
 - admin subresource loading
 - shared vendor availability computation in `lib/vendors/hours.ts` for `is_open_now` and `today_hours`
+- centralized abuse protection for public writes, search-heavy reads, and admin login
 
 ### Database
 Stores:
@@ -194,6 +202,30 @@ Admin workflow rules:
 - team-access reads use `admin_users` as the source of truth
 - existing auth users may be recovered and role-assigned without surfacing a false failure
 
+## Abuse Protection Model
+
+Centralized rate limiting lives in `lib/api/abuse-protection.ts`.
+
+Current protected surfaces:
+- `/api/admin/login`
+- `/api/events`
+- `/api/vendors/[slug]/ratings`
+- `/api/vendors/nearby` when a search term is present
+
+Protection rules:
+- backend routes are authoritative; the browser does not enforce abuse limits
+- rate limiting uses IP-based buckets and may add a non-privileged HTTP-only client correlation cookie for public traffic
+- repeated duplicate write submissions are collapsed before they fan out into duplicate upstream writes
+- blocked requests return structured `TOO_MANY_REQUESTS` responses or safe degraded `202` responses, depending on the endpoint contract
+- limiter logging records hashed identifiers only and never logs raw client IPs
+- the current limiter is process-local and in-memory, so it protects a single app instance but is not yet a distributed global throttle
+
+Current thresholds:
+- admin login: `5` attempts per `10` minutes, `15` minute block
+- public events: `120` requests per `5` minutes, `2` minute block, `2` second duplicate collapse
+- public ratings: `8` requests per `10` minutes, `10` minute block, `60` second duplicate collapse
+- public nearby search: `45` search requests per `60` seconds, `2` minute block
+
 ## Vendor Image Pipeline
 
 Vendor profile images use this path:
@@ -231,7 +263,9 @@ Rules:
 
 ### Admin Session State
 - admin login uses Supabase email/password auth
-- browser-stored session is validated against `admin_users`
+- privileged admin and agent sessions are stored in HTTP-only same-origin cookies
+- `/api/admin/session` validates and refreshes the cookie-backed session against `admin_users`
+- authenticated users missing from `admin_users` are denied and any cookie-backed privileged session is cleared
 - protected routes resolve through the admin route guard
 
 ### Usage Signal State
@@ -271,16 +305,17 @@ Public vendor ratings use this path:
 
 1. user submits a 1-5 star score on vendor detail
 2. `/api/vendors/[slug]/ratings` validates the score and resolves the vendor by slug
-3. server inserts a lightweight `ratings` row
-4. vendor aggregate fields update:
-   - `average_rating`
-   - `review_count`
-5. public discovery and detail render `★ <rating>` when ratings exist or `New` when they do not
+3. server calls a database-side `submit_public_vendor_rating` RPC with the resolved vendor id
+4. Postgres inserts the `ratings` row and refreshes `vendors.average_rating` / `vendors.review_count`
+5. the route returns the authoritative post-write summary from the database
+6. public discovery and detail render `★ <rating>` when ratings exist or `New` when they do not
 
 Rules:
+- rollout requires the ratings RPC migration to be applied before the route is released
 - no login is required for the current lightweight rating flow
 - no comments or full review system exist yet
 - rating writes stay separate from `user_events`
+- summary ownership stays in Postgres so concurrent inserts do not depend on Node-side full-table recalculation
 
 ## Discovery Retention State
 
@@ -294,6 +329,12 @@ The public app keeps a small amount of client-only memory:
 - discovery snapshots currently expire after 5 minutes and are only restored when the nearby vendor payload is still fresh enough to trust
 - admin vendor mutations invalidate discovery snapshots through the shared public invalidation channel so restored discovery state cannot outlive a vendor edit, deactivate, hours change, image change, or featured-dish change
 - these helpers improve return navigation without requiring login or backend persistence
+
+## Operational Caveats
+
+- structured logs exist for auth, abuse protection, analytics, and audit-log flows, but the repo does not yet provide distributed tracing or a centralized observability backend
+- public discovery prefers graceful degraded responses over hard crashes, so some upstream nearby failures may surface as unexpectedly empty vendor results until logs or smoke checks are reviewed
+- the current real map intentionally ships without clustering; revisit clustering only if pilot density makes marker usability worse than the current single-marker interaction model
 
 ## Core Product Logic
 

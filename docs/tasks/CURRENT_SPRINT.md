@@ -74,7 +74,9 @@ Phase 6 signal visibility is ready when:
 - Reverse geocoding is best-effort and depends on external availability.
 - The public discovery map now uses optional client-side MapLibre with a browser-safe MapTiler style URL when configured and degrades to the existing coordinate fallback when it is not.
 - The current real map intentionally ships without clustering; it uses one vendor-marker system, stable marker selection, and mobile-safe selected-preview placement.
-- Admin auth still uses browser-stored session state and bearer-backed API requests rather than an HTTP-only cookie SSR model.
+- Admin auth now uses secure HTTP-only cookie-backed sessions; bearer-header support remains server-side only for compatibility and targeted tests.
+- Active admin and agent browser workflows now use protected `/api/admin/**` routes for privileged reads and mutations instead of direct privileged Supabase browser access.
+- Privileged admin and agent access now requires an explicit `admin_users` assignment; authenticated users are no longer auto-provisioned into the workspace.
 - Pilot quality still depends on complete and accurate vendor data entry.
 - Historical `user_events` rows may not include `session_id`, so exact session drop-off reporting can be incomplete until newer traffic accumulates.
 - Discovery retention is browser-local only and does not sync across devices.

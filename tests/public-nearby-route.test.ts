@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as nearbyRoute } from "../app/api/vendors/nearby/route.ts";
 import {
+  PUBLIC_NEARBY_SEARCH_RATE_LIMIT,
+  resetAbuseProtectionStateForTests,
+} from "../lib/api/abuse-protection.ts";
+import {
   fetchNearbyVendorCandidates,
   PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS,
 } from "../lib/vendors/supabase.ts";
@@ -74,6 +78,10 @@ function toUrl(input: URL | RequestInfo): URL {
 
   return new URL(String(input));
 }
+
+test.beforeEach(() => {
+  resetAbuseProtectionStateForTests();
+});
 
 test("nearby candidate query pushes category, price, and search filters into Supabase", async () => {
   const originalFetch = globalThis.fetch;
@@ -200,6 +208,45 @@ test("nearby route sanitizes injection-like search input and does not use the ra
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
     assert.ok(body.data.vendors.length <= 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("nearby route rate limits repeated public search abuse without blocking normal browsing defaults", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+  let vendorReads = 0;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = toUrl(input);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      vendorReads += 1;
+      return Response.json([createCandidateVendor(0)]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    let lastResponse: Response | null = null;
+
+    for (let index = 0; index <= PUBLIC_NEARBY_SEARCH_RATE_LIMIT.maxRequests; index += 1) {
+      lastResponse = await nearbyRoute(
+        createNearbyNextRequest(
+          `http://localhost/api/vendors/nearby?search=rice-${index}&lat=9.0765&lng=7.3986&location_source=precise`,
+        ),
+      );
+    }
+
+    assert.ok(lastResponse);
+    const body = await lastResponse!.json();
+
+    assert.equal(lastResponse!.status, 429);
+    assert.equal(body.error.code, "TOO_MANY_REQUESTS");
+    assert.equal(vendorReads, PUBLIC_NEARBY_SEARCH_RATE_LIMIT.maxRequests);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

@@ -10,22 +10,18 @@ import {
 } from "react";
 import {
   AdminSessionError,
-  clearStoredAdminSession,
+  clearLegacyAdminSessionArtifacts,
   fetchAdminSessionIdentity,
-  persistAdminSession,
-  readStoredAdminSession,
-  refreshAdminSession,
-  shouldRefreshAdminSession,
   signInAdminSession,
   signOutAdminSession,
+  subscribeToAdminSessionEvents,
   type AdminSessionIdentity,
-  type StoredAdminSession,
 } from "../../lib/admin/session-client.ts";
 import { handleAppError } from "../../lib/errors/ui-error.ts";
 
 export type AdminSessionState = {
   status: "loading" | "authenticated" | "unauthenticated" | "forbidden";
-  session: (StoredAdminSession & AdminSessionIdentity) | null;
+  session: AdminSessionIdentity | null;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -45,61 +41,33 @@ function getForbiddenSessionMessage(error: AdminSessionError): string {
   return error.message || "Your account does not have access.";
 }
 
-async function validateStoredSession(
-  storedSession: StoredAdminSession,
-): Promise<(StoredAdminSession & AdminSessionIdentity) | null> {
-  let nextSession = storedSession;
-
-  if (shouldRefreshAdminSession(storedSession) && storedSession.refreshToken) {
-    nextSession = await refreshAdminSession(storedSession.refreshToken);
-    persistAdminSession(nextSession);
-  }
-
-  const identity = await fetchAdminSessionIdentity(nextSession.accessToken);
-
-  const validatedSession = {
-    ...nextSession,
-    ...identity,
-  };
-
-  persistAdminSession(nextSession);
-  return validatedSession;
-}
-
-export function AdminSessionProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AdminSessionState["status"]>("loading");
-  const [session, setSession] = useState<(StoredAdminSession & AdminSessionIdentity) | null>(
-    null,
+export function AdminSessionProvider(
+  {
+    children,
+    hasInitialSessionCookie = false,
+  }: {
+    children: ReactNode;
+    hasInitialSessionCookie?: boolean;
+  },
+) {
+  const [status, setStatus] = useState<AdminSessionState["status"]>(
+    hasInitialSessionCookie ? "loading" : "unauthenticated",
   );
+  const [session, setSession] = useState<AdminSessionIdentity | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const resetToSignedOut = useCallback(async () => {
-    const storedSession = readStoredAdminSession();
-
-    if (storedSession?.accessToken) {
-      await signOutAdminSession(storedSession.accessToken).catch(() => undefined);
-    }
-
-    clearStoredAdminSession();
+    await signOutAdminSession().catch(() => undefined);
     setSession(null);
     setStatus("unauthenticated");
   }, []);
 
   const refresh = useCallback(async () => {
-    const storedSession = readStoredAdminSession();
-
-    if (!storedSession) {
-      setSession(null);
-      setStatus("unauthenticated");
-      setError(null);
-      return;
-    }
-
     setStatus("loading");
     setError(null);
 
     try {
-      const validatedSession = await validateStoredSession(storedSession);
+      const validatedSession = await fetchAdminSessionIdentity();
       setSession(validatedSession);
       setStatus("authenticated");
     } catch (error) {
@@ -107,10 +75,21 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
         error instanceof AdminSessionError &&
         (error.code === "FORBIDDEN" || error.status === 403)
       ) {
-        clearStoredAdminSession();
+        await clearLegacyAdminSessionArtifacts().catch(() => undefined);
         setSession(null);
         setStatus("forbidden");
         setError(getForbiddenSessionMessage(error));
+        return;
+      }
+
+      if (
+        error instanceof AdminSessionError &&
+        (error.code === "UNAUTHORIZED" || error.status === 401)
+      ) {
+        await clearLegacyAdminSessionArtifacts().catch(() => undefined);
+        setSession(null);
+        setStatus("unauthenticated");
+        setError(null);
         return;
       }
 
@@ -126,6 +105,12 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
   }, [resetToSignedOut]);
 
   useEffect(() => {
+    void clearLegacyAdminSessionArtifacts().catch(() => undefined);
+
+    if (!hasInitialSessionCookie) {
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       void refresh();
     }, 0);
@@ -133,6 +118,42 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
     return () => {
       window.clearTimeout(timeout);
     };
+  }, [hasInitialSessionCookie, refresh]);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      return;
+    }
+
+    const handleWindowFocus = () => {
+      void refresh();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refresh, status]);
+
+  useEffect(() => {
+    return subscribeToAdminSessionEvents((event) => {
+      if (event.type === "signed_out") {
+        setSession(null);
+        setStatus("unauthenticated");
+        setError(null);
+        return;
+      }
+
+      void refresh();
+    }) ?? undefined;
   }, [refresh]);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -140,20 +161,16 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const storedSession = await signInAdminSession(email, password);
-      persistAdminSession(storedSession);
-      const validatedSession = await validateStoredSession(storedSession);
+      const validatedSession = await signInAdminSession(email.trim(), password);
       setSession(validatedSession);
       setStatus("authenticated");
     } catch (error) {
-      clearStoredAdminSession();
       setSession(null);
 
       if (
         error instanceof AdminSessionError &&
         (error.code === "FORBIDDEN" || error.status === 403)
       ) {
-        clearStoredAdminSession();
         setStatus("forbidden");
         setError(getForbiddenSessionMessage(error));
         return;

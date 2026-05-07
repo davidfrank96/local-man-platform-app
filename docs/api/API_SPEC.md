@@ -93,6 +93,10 @@ Behavior:
 - The public map currently renders those vendor results as individual markers when MapLibre is enabled.
 - Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.
 - Distance is not stored in the database.
+- Search-bearing requests are abuse-protected with a centralized limiter:
+  - threshold: `45` requests per `60` seconds per client/IP
+  - block window: `2` minutes after exceeding the threshold
+  - non-search nearby browsing is not throttled by this route-level limiter
 - If the Supabase schema has not been migrated, the API returns `UPSTREAM_ERROR` from the failed Supabase query.
 
 Location response shape:
@@ -183,11 +187,17 @@ Returns:
 Behavior:
 - no login required for the initial lightweight flow
 - validates the vendor slug and rating score
-- inserts a row into `ratings`
-- updates vendor aggregate rating fields after insert
+- resolves the active vendor id first, then submits the write through the server-only `submit_public_vendor_rating` RPC
+- database-side aggregation owns `vendors.average_rating` and `vendors.review_count`
+- the response returns the authoritative post-write summary from the database instead of recalculating scores in Node
+- release requires `supabase/migrations/20260507193000_public_rating_submission_rpc.sql` to be applied so the ratings RPC and summary refresh function exist
 - does not support review comments
+- abuse protection:
+  - threshold: `8` accepted submissions per `10` minutes per client/IP
+  - block window: `10` minutes after exceeding the threshold
+  - sequential or concurrent duplicate retry submissions for the same vendor/score are collapsed into one upstream write for `60` seconds
 - returns `NOT_FOUND` when the vendor slug does not resolve to an active vendor
-- returns `UPSTREAM_ERROR` when the rating write or aggregate update fails
+- returns `UPSTREAM_ERROR` when the rating RPC or summary refresh fails
 
 ### GET /api/categories
 Purpose: fetch filter categories
@@ -228,18 +238,55 @@ Behavior:
 - uses server-side credentials only
 - returns `202` instead of surfacing public UX failures when tracking is unavailable
 - must not block or degrade public interactions
+- abuse protection:
+  - threshold: `120` accepted requests per `5` minutes per client/IP
+  - block window: `2` minutes after exceeding the threshold
+  - identical immediate retry payloads are collapsed into one upstream write for `2` seconds so mobile retries and beacon races do not spam `user_events`
 
 ## Admin Endpoints
 Admin endpoint rules:
-- Requests must include `Authorization: Bearer <supabase-access-token>`.
-- The bearer token is verified against Supabase Auth.
+- Browser admin requests authenticate through secure same-origin HTTP-only cookies issued by `/api/admin/login`.
+- `/api/admin/session` is the central server-side validation and refresh route for that cookie-backed session.
+- The underlying auth helper still accepts `Authorization: Bearer <supabase-access-token>` for compatibility and targeted tests.
+- Active admin and agent browser flows call protected `/api/admin/**` routes rather than talking to privileged Supabase REST or Storage endpoints directly.
 - The authenticated user id must exist in `admin_users`.
 - Authentication and admin membership are checked before route business logic runs.
-- The admin login UI obtains the bearer token from a Supabase email/password session instead of manual token paste.
+- The admin login UI never reads or persists privileged Supabase access or refresh tokens in browser-visible storage.
 - Request params and request bodies are still validated at the route boundary.
 - Vendor list, create, update, and delete routes call typed admin vendor service methods.
 - Vendor create, update, and delete routes write audit logs.
 - Unexpected Supabase response shapes return `UPSTREAM_ERROR` without leaking raw parser failures.
+
+### POST /api/admin/login
+Create a cookie-backed admin session
+
+Route file:
+- `app/api/admin/login/route.ts`
+
+Behavior:
+- validates email/password request shape before auth
+- rate limits repeated invalid attempts per IP/email:
+  - threshold: `5` attempts per `10` minutes
+  - block window: `15` minutes after exceeding the threshold
+- returns `TOO_MANY_REQUESTS` with `Retry-After` when the limiter blocks the request
+
+Behavior:
+- validates email and password
+- exchanges credentials against Supabase Auth server-side
+- verifies the authenticated user against `admin_users`
+- denies authenticated users who are not explicitly assigned in `admin_users`
+- returns the authenticated Supabase user plus the matching `admin_users` record
+- sets secure same-origin HTTP-only access and refresh cookies
+
+### POST /api/admin/logout
+Clear the current admin session
+
+Route file:
+- `app/api/admin/logout/route.ts`
+
+Behavior:
+- best-effort logs out the Supabase session upstream when an access cookie exists
+- clears the admin access and refresh cookies even if the upstream logout call fails
 
 ### GET /api/admin/session
 Validate the current admin session
@@ -248,9 +295,11 @@ Route file:
 - `app/api/admin/session/route.ts`
 
 Behavior:
-- requires `Authorization: Bearer <supabase-access-token>`
+- validates the current secure cookie-backed session
+- refreshes the access cookie server-side when the refresh cookie remains valid
 - verifies the Supabase user
 - verifies that the authenticated user exists in `admin_users`
+- clears the privileged cookies when the authenticated user no longer has an `admin_users` row
 - returns the authenticated user and matching admin user record
 
 ### GET /api/admin/analytics

@@ -28,6 +28,8 @@ export function AdminShell({ title, intro, children }: AdminShellProps) {
     { href: "/admin/vendors/new", label: "Create vendor" },
     { href: "/admin/team", label: "Team access", permission: "admin_users:manage" as const },
   ];
+  // Hiding restricted navigation keeps the workspace honest and uncluttered,
+  // but the backend remains authoritative for access control.
   const visibleNavItems = adminNavItems.filter(
     (item) => !item.permission || hasAdminPermission(role, item.permission),
   );

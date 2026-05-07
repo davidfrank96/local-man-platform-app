@@ -11,6 +11,8 @@ export function AdminHomeRedirect() {
   const { status, session, error, signOut } = useAdminSession();
 
   useEffect(() => {
+    // This redirect only improves the landing experience. Route handlers and
+    // protected APIs still validate the resolved role server-side.
     if (status === "unauthenticated") {
       router.replace("/admin/login");
       return;
