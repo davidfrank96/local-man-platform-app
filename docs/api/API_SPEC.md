@@ -231,15 +231,40 @@ Behavior:
 
 ## Admin Endpoints
 Admin endpoint rules:
-- Requests must include `Authorization: Bearer <supabase-access-token>`.
-- The bearer token is verified against Supabase Auth.
+- Browser admin requests authenticate through secure same-origin HTTP-only cookies issued by `/api/admin/login`.
+- `/api/admin/session` is the central server-side validation and refresh route for that cookie-backed session.
+- The underlying auth helper still accepts `Authorization: Bearer <supabase-access-token>` for compatibility and targeted tests.
+- Active admin and agent browser flows call protected `/api/admin/**` routes rather than talking to privileged Supabase REST or Storage endpoints directly.
 - The authenticated user id must exist in `admin_users`.
 - Authentication and admin membership are checked before route business logic runs.
-- The admin login UI obtains the bearer token from a Supabase email/password session instead of manual token paste.
+- The admin login UI never reads or persists privileged Supabase access or refresh tokens in browser-visible storage.
 - Request params and request bodies are still validated at the route boundary.
 - Vendor list, create, update, and delete routes call typed admin vendor service methods.
 - Vendor create, update, and delete routes write audit logs.
 - Unexpected Supabase response shapes return `UPSTREAM_ERROR` without leaking raw parser failures.
+
+### POST /api/admin/login
+Create a cookie-backed admin session
+
+Route file:
+- `app/api/admin/login/route.ts`
+
+Behavior:
+- validates email and password
+- exchanges credentials against Supabase Auth server-side
+- verifies the authenticated user against `admin_users`
+- returns the authenticated Supabase user plus the matching `admin_users` record
+- sets secure same-origin HTTP-only access and refresh cookies
+
+### POST /api/admin/logout
+Clear the current admin session
+
+Route file:
+- `app/api/admin/logout/route.ts`
+
+Behavior:
+- best-effort logs out the Supabase session upstream when an access cookie exists
+- clears the admin access and refresh cookies even if the upstream logout call fails
 
 ### GET /api/admin/session
 Validate the current admin session
@@ -248,7 +273,8 @@ Route file:
 - `app/api/admin/session/route.ts`
 
 Behavior:
-- requires `Authorization: Bearer <supabase-access-token>`
+- validates the current secure cookie-backed session
+- refreshes the access cookie server-side when the refresh cookie remains valid
 - verifies the Supabase user
 - verifies that the authenticated user exists in `admin_users`
 - returns the authenticated user and matching admin user record

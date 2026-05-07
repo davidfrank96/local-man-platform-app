@@ -465,9 +465,8 @@ export function AdminConsole({
 
   const loadVendorImages = useCallback(async function loadVendorImages(
     vendorId: string | null,
-    accessToken: string | undefined,
   ) {
-    if (!vendorId || !accessToken) {
+    if (!vendorId || !session) {
       setVendorImages([]);
       return;
     }
@@ -480,21 +479,18 @@ export function AdminConsole({
     }
 
     const requestId = ++vendorImagesRequestId.current;
-    const images = await listAdminVendorImages(vendorId, {
-      accessToken,
-    });
+    const images = await listAdminVendorImages(vendorId);
 
     if (requestId === vendorImagesRequestId.current) {
       setVendorImages(images);
       updateVendorArtifactCache(workspaceCacheScope, vendorId, "images", images);
     }
-  }, [workspaceCacheScope]);
+  }, [session, workspaceCacheScope]);
 
   const loadVendorHours = useCallback(async function loadVendorHours(
     vendorId: string | null,
-    accessToken: string | undefined,
   ) {
-    if (!vendorId || !accessToken) {
+    if (!vendorId || !session) {
       setVendorHours([]);
       return;
     }
@@ -507,21 +503,18 @@ export function AdminConsole({
     }
 
     const requestId = ++vendorHoursRequestId.current;
-    const hours = await listAdminVendorHours(vendorId, {
-      accessToken,
-    });
+    const hours = await listAdminVendorHours(vendorId);
 
     if (requestId === vendorHoursRequestId.current) {
       setVendorHours(hours);
       updateVendorArtifactCache(workspaceCacheScope, vendorId, "hours", hours);
     }
-  }, [workspaceCacheScope]);
+  }, [session, workspaceCacheScope]);
 
   const loadVendorDishes = useCallback(async function loadVendorDishes(
     vendorId: string | null,
-    accessToken: string | undefined,
   ) {
-    if (!vendorId || !accessToken) {
+    if (!vendorId || !session) {
       setVendorDishes([]);
       return;
     }
@@ -534,19 +527,17 @@ export function AdminConsole({
     }
 
     const requestId = ++vendorDishesRequestId.current;
-    const dishes = await listAdminVendorDishes(vendorId, {
-      accessToken,
-    });
+    const dishes = await listAdminVendorDishes(vendorId);
 
     if (requestId === vendorDishesRequestId.current) {
       setVendorDishes(dishes);
       updateVendorArtifactCache(workspaceCacheScope, vendorId, "dishes", dishes);
     }
-  }, [workspaceCacheScope]);
+  }, [session, workspaceCacheScope]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      void loadVendorImages(selectedVendor?.id ?? null, session?.accessToken).catch((error) => {
+      void loadVendorImages(selectedVendor?.id ?? null).catch((error) => {
         setVendorImages([]);
         setStatus(error instanceof Error ? error.message : "Unable to load vendor images.");
       });
@@ -555,11 +546,11 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorImages, selectedVendor?.id, session?.accessToken]);
+  }, [loadVendorImages, selectedVendor?.id]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      void loadVendorHours(selectedVendor?.id ?? null, session?.accessToken).catch((error) => {
+      void loadVendorHours(selectedVendor?.id ?? null).catch((error) => {
         setVendorHours([]);
         setStatus(formatAdminErrorStatus(error, "Unable to load vendor hours."));
       });
@@ -568,11 +559,11 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorHours, selectedVendor?.id, session?.accessToken]);
+  }, [loadVendorHours, selectedVendor?.id]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      void loadVendorDishes(selectedVendor?.id ?? null, session?.accessToken).catch((error) => {
+      void loadVendorDishes(selectedVendor?.id ?? null).catch((error) => {
         setVendorDishes([]);
         setStatus(formatAdminErrorStatus(error, "Unable to load vendor dishes."));
       });
@@ -581,7 +572,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorDishes, selectedVendor?.id, session?.accessToken]);
+  }, [loadVendorDishes, selectedVendor?.id]);
 
   const runAdminAction = useCallback(async function runAdminAction<T>(
     action: () => Promise<T>,
@@ -590,7 +581,7 @@ export function AdminConsole({
       rethrowErrors?: boolean;
     },
   ): Promise<T | null> {
-    if (!session?.accessToken) {
+    if (!session) {
       setStatus("Admin session is missing. Sign in again.");
       return null;
     }
@@ -621,7 +612,7 @@ export function AdminConsole({
     } finally {
       setIsLoading(false);
     }
-  }, [session?.accessToken, signOut]);
+  }, [session, signOut]);
 
   const applyVendorListResult = useCallback((result: Awaited<ReturnType<typeof listAdminVendors>>) => {
     setVendors(result.vendors);
@@ -647,14 +638,14 @@ export function AdminConsole({
 
   const refreshVendors = useCallback(async function refreshVendors(nextFilters = filters) {
     const result = await runAdminAction(
-      () => listAdminVendors(nextFilters, { accessToken: session?.accessToken ?? "" }),
+      () => listAdminVendors(nextFilters),
       "Vendor list refreshed.",
     );
 
     if (result) {
       applyVendorListResult(result);
     }
-  }, [applyVendorListResult, filters, runAdminAction, session?.accessToken]);
+  }, [applyVendorListResult, filters, runAdminAction]);
 
   const handleIntakeVendorsUploaded = useCallback(async (
     uploadedVendors: Array<{ id: string; name: string; slug: string }>,
@@ -667,7 +658,7 @@ export function AdminConsole({
   }, [refreshVendors]);
 
   useEffect(() => {
-    if (!session?.accessToken || isLoading || vendors.length > 0) {
+    if (!session || isLoading || vendors.length > 0) {
       return;
     }
 
@@ -678,7 +669,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [isLoading, refreshVendors, session?.accessToken, vendors.length]);
+  }, [isLoading, refreshVendors, session, vendors.length]);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -707,7 +698,7 @@ export function AdminConsole({
       imageUpload: FormData | null;
     },
   ) {
-    if (!session?.accessToken) {
+    if (!session) {
       setStatus("Admin session is missing. Sign in again.");
       return;
     }
@@ -716,9 +707,7 @@ export function AdminConsole({
     setStatus("Working…");
 
     try {
-      const createdVendor = await createAdminVendor(data, {
-        accessToken: session.accessToken,
-      });
+      const createdVendor = await createAdminVendor(data);
       const completionMessages = ["Vendor created successfully."];
       const failures: string[] = [];
 
@@ -728,9 +717,7 @@ export function AdminConsole({
 
       if (options?.hoursData) {
         try {
-          createdHours = await replaceAdminVendorHours(createdVendor.id, options.hoursData, {
-            accessToken: session.accessToken,
-          });
+          createdHours = await replaceAdminVendorHours(createdVendor.id, options.hoursData);
           completionMessages.push("Hours updated successfully.");
         } catch (error) {
           failures.push(`Hours update failed: ${formatAdminErrorStatus(error, "Hours update failed.")}`);
@@ -739,9 +726,7 @@ export function AdminConsole({
 
       if (options?.dishesData) {
         try {
-          createdDishes = await createAdminVendorDishes(createdVendor.id, options.dishesData, {
-            accessToken: session.accessToken,
-          });
+          createdDishes = await createAdminVendorDishes(createdVendor.id, options.dishesData);
           completionMessages.push("Featured dishes updated successfully.");
         } catch (error) {
           failures.push(`Featured dishes update failed: ${formatAdminErrorStatus(error, "Featured dishes update failed.")}`);
@@ -750,9 +735,7 @@ export function AdminConsole({
 
       if (options?.imageUpload) {
         try {
-          createdImages = await createAdminVendorImages(createdVendor.id, options.imageUpload, {
-            accessToken: session.accessToken,
-          });
+          createdImages = await createAdminVendorImages(createdVendor.id, options.imageUpload);
           completionMessages.push("Image uploaded successfully.");
         } catch (error) {
           failures.push(`Image upload failed: ${formatAdminErrorStatus(error, "Image upload failed.")}`);
@@ -768,9 +751,7 @@ export function AdminConsole({
       updateVendorArtifactCache(workspaceCacheScope, createdVendor.id, "images", createdImages ?? []);
 
       try {
-        const refreshed = await listAdminVendors(filters, {
-          accessToken: session.accessToken,
-        });
+        const refreshed = await listAdminVendors(filters);
         applyVendorListResult(refreshed);
         setSelectedVendorId(createdVendor.id);
       } catch {
@@ -806,7 +787,7 @@ export function AdminConsole({
     }
 
     const updatedVendor = await runAdminAction(
-      () => updateAdminVendor(selectedVendor.id, data, { accessToken: session?.accessToken ?? "" }),
+      () => updateAdminVendor(selectedVendor.id, data),
       "Vendor updated successfully.",
       { rethrowErrors: true },
     );
@@ -823,7 +804,7 @@ export function AdminConsole({
     }
 
     const deactivatedVendor = await runAdminAction(
-      () => deactivateAdminVendor(selectedVendor.id, { accessToken: session?.accessToken ?? "" }),
+      () => deactivateAdminVendor(selectedVendor.id),
       "Vendor deactivated successfully.",
     );
 
@@ -839,10 +820,7 @@ export function AdminConsole({
     }
 
     const hours = await runAdminAction(
-      () =>
-        replaceAdminVendorHours(selectedVendor.id, data, {
-          accessToken: session?.accessToken ?? "",
-        }),
+      () => replaceAdminVendorHours(selectedVendor.id, data),
       "Hours updated successfully.",
     );
 
@@ -859,10 +837,7 @@ export function AdminConsole({
     }
 
     const uploadedImages = await runAdminAction(
-      () =>
-        createAdminVendorImages(selectedVendor.id, data, {
-          accessToken: session?.accessToken ?? "",
-        }),
+      () => createAdminVendorImages(selectedVendor.id, data),
       "Image uploaded successfully.",
     );
 
@@ -892,10 +867,7 @@ export function AdminConsole({
     }
 
     const deletedImage = await runAdminAction(
-      () =>
-        deleteAdminVendorImage(selectedVendor.id, imageId, {
-          accessToken: session?.accessToken ?? "",
-        }),
+      () => deleteAdminVendorImage(selectedVendor.id, imageId),
       "Image removed successfully.",
     );
 
@@ -913,10 +885,7 @@ export function AdminConsole({
     }
 
     const dishes = await runAdminAction(
-      () =>
-        createAdminVendorDishes(selectedVendor.id, data, {
-          accessToken: session?.accessToken ?? "",
-        }),
+      () => createAdminVendorDishes(selectedVendor.id, data),
       "Featured dishes updated successfully.",
     );
 
@@ -934,10 +903,7 @@ export function AdminConsole({
     }
 
     const deletedDish = await runAdminAction(
-      () =>
-        deleteAdminVendorDish(selectedVendor.id, dishId, {
-          accessToken: session?.accessToken ?? "",
-        }),
+      () => deleteAdminVendorDish(selectedVendor.id, dishId),
       "Featured dish removed successfully.",
     );
 
@@ -1146,7 +1112,6 @@ export function AdminConsole({
           </section>
 
           <VendorCsvUploadPanel
-            accessToken={session?.accessToken}
             disabled={isLoading}
             onVendorsUploaded={handleIntakeVendorsUploaded}
           />
@@ -1246,7 +1211,6 @@ export function AdminConsole({
           />
           <div className="admin-stack">
             <VendorCsvUploadPanel
-              accessToken={session?.accessToken}
               disabled={isLoading}
               onVendorsUploaded={handleIntakeVendorsUploaded}
             />

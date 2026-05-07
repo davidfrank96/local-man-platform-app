@@ -1,21 +1,10 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AdminRole } from "../../types/index.ts";
-import { supabase } from "../supabase-client.ts";
-import { safeGetSession } from "../auth-guard.ts";
 import { AppError, mapExternalError } from "../errors/app-error.ts";
 import { logStructuredEvent } from "../observability.ts";
+import type { AdminRole } from "../../types/index.ts";
 
 const ADMIN_SESSION_STORAGE_KEY = "local-man-admin-session";
-
-export type StoredAdminSession = {
-  accessToken: string;
-  refreshToken: string | null;
-  expiresAt: number | null;
-  user: {
-    id: string;
-    email?: string;
-  };
-};
+const LEGACY_SUPABASE_AUTH_KEY_PATTERN = /^sb-.*-auth-token$/;
+const ADMIN_SESSION_CHANNEL_NAME = "localman_admin_session";
 
 export type AdminSessionIdentity = {
   user: {
@@ -30,25 +19,11 @@ export type AdminSessionIdentity = {
   };
 };
 
-type SupabaseAuthPayload = {
-  access_token: string;
-  refresh_token?: string | null;
-  expires_in?: number;
-  expires_at?: number;
-  user?: {
-    id?: string;
-    email?: string;
-  };
-  error_description?: string;
-  msg?: string;
-};
-
-type SessionClientConfig = {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-};
-
 export class AdminSessionError extends AppError {}
+
+export type AdminSessionBroadcastEvent = {
+  type: "signed_in" | "signed_out";
+};
 
 function logAdminSessionEvent(
   level: "info" | "warn" | "error",
@@ -63,339 +38,96 @@ function logAdminSessionEvent(
   });
 }
 
-function getClientConfig(): SessionClientConfig {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+function getLegacyStorageKeys(storage: Storage): string[] {
+  const keys: string[] = [];
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new AdminSessionError(
-      "CONFIG_ERROR",
-      "System configuration error.",
-      503,
-      { missing: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] },
-      "Supabase public environment variables are required for admin login.",
-    );
-  }
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
 
-  return {
-    supabaseUrl,
-    supabaseAnonKey,
-  };
-}
+    if (!key) {
+      continue;
+    }
 
-function getBrowserAdminSupabaseClient() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    void supabase.auth;
-    return supabase;
-  } catch {
-    return null;
-  }
-}
-
-function toExpiresAt(payload: SupabaseAuthPayload): number | null {
-  if (typeof payload.expires_at === "number") {
-    return payload.expires_at * 1000;
-  }
-
-  if (typeof payload.expires_in === "number") {
-    return Date.now() + payload.expires_in * 1000;
-  }
-
-  return null;
-}
-
-function createSessionFromPayload(payload: SupabaseAuthPayload): StoredAdminSession {
-  if (!payload.access_token || !payload.user?.id) {
-    throw new AdminSessionError(
-      "INVALID_RESPONSE",
-      "Unable to restore the admin session.",
-      502,
-      payload,
-      "Supabase login did not return a valid session.",
-    );
-  }
-
-  return {
-    accessToken: payload.access_token,
-    refreshToken: payload.refresh_token ?? null,
-    expiresAt: toExpiresAt(payload),
-    user: {
-      id: payload.user.id,
-      email: payload.user.email,
-    },
-  };
-}
-
-export async function syncAdminBrowserSession(session: StoredAdminSession): Promise<void> {
-  if (!session.refreshToken) {
-    return;
-  }
-
-  const client = getBrowserAdminSupabaseClient();
-
-  if (!client) {
-    return;
-  }
-
-  await client.auth.setSession({
-    access_token: session.accessToken,
-    refresh_token: session.refreshToken,
-  }).catch(() => undefined);
-}
-
-export async function clearAdminBrowserSession(): Promise<void> {
-  let client: SupabaseClient | null = null;
-
-  try {
-    client = getBrowserAdminSupabaseClient();
-  } catch {
-    client = null;
-  }
-
-  if (!client) {
-    return;
-  }
-
-  await client.auth.signOut().catch(() => undefined);
-}
-
-export async function getCurrentAdminAccessToken(): Promise<string | null> {
-  let client: SupabaseClient | null = null;
-
-  try {
-    client = getBrowserAdminSupabaseClient();
-  } catch {
-    client = null;
-  }
-
-  if (client) {
-    const liveSession = await safeGetSession().catch(() => null);
-    const liveToken = liveSession?.access_token ?? null;
-
-    if (liveToken) {
-      return liveToken;
+    if (key === ADMIN_SESSION_STORAGE_KEY || LEGACY_SUPABASE_AUTH_KEY_PATTERN.test(key)) {
+      keys.push(key);
     }
   }
 
-  return readStoredAdminSession()?.accessToken ?? null;
+  return keys;
 }
 
-async function requestSupabaseAuth(
+export async function clearLegacyAdminSessionArtifacts(): Promise<void> {
+  if (typeof window !== "undefined") {
+    try {
+      const storage = window.localStorage;
+
+      for (const key of getLegacyStorageKeys(storage)) {
+        storage.removeItem(key);
+      }
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+  }
+}
+
+function publishAdminSessionEvent(event: AdminSessionBroadcastEvent): void {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {
+    return;
+  }
+
+  try {
+    const channel = new BroadcastChannel(ADMIN_SESSION_CHANNEL_NAME);
+    channel.postMessage(event);
+    channel.close();
+  } catch {
+    // Ignore broadcast failures.
+  }
+}
+
+export function subscribeToAdminSessionEvents(
+  listener: (event: AdminSessionBroadcastEvent) => void,
+): (() => void) | null {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {
+    return null;
+  }
+
+  const channel = new BroadcastChannel(ADMIN_SESSION_CHANNEL_NAME);
+  const handleMessage = (message: MessageEvent<AdminSessionBroadcastEvent>) => {
+    if (
+      message.data?.type === "signed_in" ||
+      message.data?.type === "signed_out"
+    ) {
+      listener(message.data);
+    }
+  };
+
+  channel.addEventListener("message", handleMessage);
+
+  return () => {
+    channel.removeEventListener("message", handleMessage);
+    channel.close();
+  };
+}
+
+async function requestAdminSessionRoute<T>(
   path: string,
-  init: RequestInit,
+  init: RequestInit = {},
   fetchImpl: typeof fetch = fetch,
-): Promise<SupabaseAuthPayload> {
-  const config = getClientConfig();
-  const response = await fetchImpl(new URL(path, config.supabaseUrl), {
+): Promise<T> {
+  const response = await fetchImpl(path, {
+    credentials: "same-origin",
     ...init,
     headers: {
-      apikey: config.supabaseAnonKey,
-      "content-type": "application/json",
-      ...init.headers,
-    },
-  });
-
-  const payload = (await response.json().catch(() => null)) as SupabaseAuthPayload | null;
-
-  if (!response.ok) {
-    throw new AdminSessionError(
-      "AUTH_ERROR",
-      payload?.error_description ?? payload?.msg ?? "Admin authentication failed.",
-      response.status,
-      payload,
-      "Supabase authentication rejected the login request.",
-    );
-  }
-
-  if (!payload) {
-    throw new AdminSessionError(
-      "INVALID_RESPONSE",
-      "Unable to restore the admin session.",
-      502,
-      undefined,
-      "Supabase authentication returned an empty response.",
-    );
-  }
-
-  return payload;
-}
-
-export async function signInAdminSession(
-  email: string,
-  password: string,
-  fetchImpl?: typeof fetch,
-): Promise<StoredAdminSession> {
-  try {
-    const payload = await requestSupabaseAuth(
-      "/auth/v1/token?grant_type=password",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      },
-      fetchImpl,
-    );
-
-    const session = createSessionFromPayload(payload);
-    await syncAdminBrowserSession(session);
-    if (getBrowserAdminSupabaseClient()) {
-      const syncedSession = await safeGetSession().catch(() => null);
-
-      if (!syncedSession) {
-        throw new AdminSessionError(
-          "UNAUTHORIZED",
-          "Admin session is missing. Sign in again.",
-          401,
-          undefined,
-          "Browser session storage did not persist the Supabase login session.",
-        );
-      }
-    }
-
-    logAdminSessionEvent("info", "password sign-in succeeded", {
-      email,
-      userId: session.user.id,
-    });
-
-    return session;
-  } catch (error) {
-    const mapped = error instanceof AdminSessionError
-      ? error
-      : mapExternalError(error, {
-        code: "UNKNOWN_ERROR",
-        message: "Admin authentication failed.",
-        status: 502,
-        detail: "The login flow failed unexpectedly.",
-      });
-    logAdminSessionEvent("warn", "password sign-in failed", {
-      email,
-      code: mapped.code,
-      status: mapped.status ?? null,
-      detail: mapped.detail ?? null,
-      message: mapped.message,
-    });
-    throw mapped;
-  }
-}
-
-export async function refreshAdminSession(
-  refreshToken: string,
-  fetchImpl?: typeof fetch,
-): Promise<StoredAdminSession> {
-  const payload = await requestSupabaseAuth(
-    "/auth/v1/token?grant_type=refresh_token",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-      }),
-    },
-    fetchImpl,
-  );
-
-  const session = createSessionFromPayload(payload);
-  await syncAdminBrowserSession(session);
-  if (getBrowserAdminSupabaseClient()) {
-    const syncedSession = await safeGetSession().catch(() => null);
-
-    if (!syncedSession) {
-      throw new AdminSessionError(
-        "UNAUTHORIZED",
-        "Admin session is missing. Sign in again.",
-        401,
-        undefined,
-        "Browser session storage did not persist the refreshed Supabase session.",
-      );
-    }
-  }
-
-  return session;
-}
-
-export async function signOutAdminSession(
-  accessToken: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<void> {
-  const config = getClientConfig();
-
-  await fetchImpl(new URL("/auth/v1/logout", config.supabaseUrl), {
-    method: "POST",
-    headers: {
-      apikey: config.supabaseAnonKey,
-      authorization: `Bearer ${accessToken}`,
-    },
-  }).catch(() => undefined);
-  await clearAdminBrowserSession();
-}
-
-export function persistAdminSession(session: StoredAdminSession): void {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
-}
-
-export function readStoredAdminSession(): StoredAdminSession | null {
-  if (typeof window === "undefined") return null;
-
-  const rawValue = window.localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
-
-  if (!rawValue) return null;
-
-  try {
-    const parsed = JSON.parse(rawValue) as StoredAdminSession;
-
-    if (!parsed.accessToken || !parsed.user?.id) {
-      clearStoredAdminSession();
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    clearStoredAdminSession();
-    return null;
-  }
-}
-
-export function clearStoredAdminSession(): void {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
-  void clearAdminBrowserSession();
-}
-
-export async function fetchAdminSessionIdentity(
-  accessToken: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<AdminSessionIdentity> {
-  const resolvedAccessToken = await getCurrentAdminAccessToken().catch(() => null) ?? accessToken;
-
-  if (!resolvedAccessToken) {
-    throw new AdminSessionError(
-      "UNAUTHORIZED",
-      "Admin session is missing. Sign in again.",
-      401,
-      undefined,
-      "No Supabase access token is available for admin session validation.",
-    );
-  }
-
-  const response = await fetchImpl("/api/admin/session", {
-    headers: {
-      authorization: `Bearer ${resolvedAccessToken}`,
+      ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }),
       "x-request-id": crypto.randomUUID(),
+      ...init.headers,
     },
   });
 
   const payload = (await response.json().catch(() => null)) as
     | {
         success: boolean;
-        data: AdminSessionIdentity | null;
+        data: T | null;
         error?: {
           code?: string;
           message?: string;
@@ -406,7 +138,8 @@ export async function fetchAdminSessionIdentity(
     | null;
 
   if (!response.ok || !payload?.success || !payload.data) {
-    logAdminSessionEvent("warn", "admin identity validation failed", {
+    logAdminSessionEvent("warn", "admin session route request failed", {
+      path,
       status: response.status,
       code: payload?.error?.code ?? "SESSION_ERROR",
       message: payload?.error?.message ?? "Unable to validate admin session.",
@@ -420,18 +153,82 @@ export async function fetchAdminSessionIdentity(
     );
   }
 
-  logAdminSessionEvent("info", "admin identity validated", {
-    userId: payload.data.user.id,
-    role: payload.data.adminUser.role,
-  });
-
   return payload.data;
 }
 
-export function shouldRefreshAdminSession(session: StoredAdminSession): boolean {
-  if (!session.refreshToken || !session.expiresAt) {
-    return false;
-  }
+export async function signInAdminSession(
+  email: string,
+  password: string,
+  fetchImpl?: typeof fetch,
+): Promise<AdminSessionIdentity> {
+  try {
+    await clearLegacyAdminSessionArtifacts();
+    const identity = await requestAdminSessionRoute<AdminSessionIdentity>(
+      "/api/admin/login",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      },
+      fetchImpl,
+    );
 
-  return session.expiresAt - Date.now() <= 60_000;
+    logAdminSessionEvent("info", "password sign-in succeeded", {
+      userId: identity.user.id,
+      role: identity.adminUser.role,
+    });
+    publishAdminSessionEvent({ type: "signed_in" });
+
+    return identity;
+  } catch (error) {
+    const mapped = error instanceof AdminSessionError
+      ? error
+      : mapExternalError(error, {
+        code: "UNKNOWN_ERROR",
+        message: "Admin authentication failed.",
+        status: 502,
+        detail: "The login flow failed unexpectedly.",
+      });
+    logAdminSessionEvent("warn", "password sign-in failed", {
+      code: mapped.code,
+      status: mapped.status ?? null,
+      detail: mapped.detail ?? null,
+      message: mapped.message,
+    });
+    throw mapped;
+  }
+}
+
+export async function signOutAdminSession(fetchImpl: typeof fetch = fetch): Promise<void> {
+  await fetchImpl("/api/admin/logout", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "x-request-id": crypto.randomUUID(),
+    },
+  }).catch(() => undefined);
+
+  await clearLegacyAdminSessionArtifacts();
+  publishAdminSessionEvent({ type: "signed_out" });
+}
+
+export async function fetchAdminSessionIdentity(
+  fetchImpl: typeof fetch = fetch,
+): Promise<AdminSessionIdentity> {
+  const identity = await requestAdminSessionRoute<AdminSessionIdentity>(
+    "/api/admin/session",
+    {
+      method: "GET",
+    },
+    fetchImpl,
+  );
+
+  logAdminSessionEvent("info", "admin identity validated", {
+    userId: identity.user.id,
+    role: identity.adminUser.role,
+  });
+
+  return identity;
 }

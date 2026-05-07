@@ -151,6 +151,101 @@ test("accepts authenticated agent users for general admin workspace access", asy
   }
 });
 
+test("accepts cookie-backed admin sessions without an Authorization header", async () => {
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/vendors", {
+      headers: {
+        cookie: "localman_admin_access=cookie-admin-token",
+      },
+    }),
+    {
+      config,
+      fetchImpl: (async (input: URL | RequestInfo) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "cookie-admin-id",
+            email: "admin@example.com",
+          });
+        }
+
+        return Response.json([
+          {
+            id: "cookie-admin-id",
+            email: "admin@example.com",
+            full_name: "Admin User",
+            role: "admin",
+          },
+        ]);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.accessToken, "cookie-admin-token");
+    assert.equal(result.session.adminUser.role, "admin");
+  }
+});
+
+test("requireAdmin can refresh a cookie-backed session when allowed", async () => {
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/session", {
+      headers: {
+        cookie: "localman_admin_refresh=refresh-cookie",
+      },
+    }),
+    {
+      config,
+      allowCookieRefresh: true,
+      fetchImpl: (async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/auth/v1/token") {
+          const body = JSON.parse(String(init?.body ?? "{}"));
+          assert.equal(body.refresh_token, "refresh-cookie");
+
+          return Response.json({
+            access_token: "fresh-cookie-token",
+            refresh_token: "next-refresh-cookie",
+            expires_in: 3600,
+            user: {
+              id: "agent-id",
+              email: "agent@example.com",
+            },
+          });
+        }
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "agent-id",
+            email: "agent@example.com",
+          });
+        }
+
+        return Response.json([
+          {
+            id: "agent-id",
+            email: "agent@example.com",
+            full_name: "Agent User",
+            role: "agent",
+          },
+        ]);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.accessToken, "fresh-cookie-token");
+    const setCookies = result.responseHeaders?.getSetCookie?.() ?? [];
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_access=fresh-cookie-token")), true);
+  }
+});
+
 test("auto-creates a default agent admin_users row for authenticated auth-only users", async () => {
   const requests: Array<{
     pathname: string;

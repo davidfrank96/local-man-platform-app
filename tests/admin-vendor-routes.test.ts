@@ -914,22 +914,28 @@ test("agent cleanup QA admin route is forbidden", async () => {
 });
 
 test("admin create vendor route rejects missing admin token", async () => {
-  const response = await createVendorRoute(
-    new Request("http://localhost/api/admin/vendors", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        name: "Test Vendor",
-        slug: "test-vendor",
-        latitude: 9.0813,
-        longitude: 7.4694,
-      }),
-    }),
-  );
-  const body = await response.json();
+  const restoreEnv = setAdminEnv();
 
-  assert.equal(response.status, 401);
-  assert.equal(body.error.code, "UNAUTHORIZED");
+  try {
+    const response = await createVendorRoute(
+      new Request("http://localhost/api/admin/vendors", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Test Vendor",
+          slug: "test-vendor",
+          latitude: 9.0813,
+          longitude: 7.4694,
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 401);
+    assert.equal(body.error.code, "UNAUTHORIZED");
+  } finally {
+    restoreEnv();
+  }
 });

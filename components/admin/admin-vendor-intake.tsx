@@ -25,7 +25,6 @@ type CreatedVendorSummary = {
 };
 
 type SharedProps = {
-  accessToken: string | null | undefined;
   disabled?: boolean;
   onVendorsUploaded?: (vendors: CreatedVendorSummary[]) => Promise<void> | void;
 };
@@ -84,7 +83,6 @@ function selectRowsByNumber(
 }
 
 export function VendorCsvUploadPanel({
-  accessToken,
   disabled = false,
   onVendorsUploaded,
 }: SharedProps) {
@@ -113,11 +111,6 @@ export function VendorCsvUploadPanel({
   }
 
   async function previewUpload() {
-    if (!accessToken) {
-      setStatus("Admin session is missing. Sign in again.");
-      return;
-    }
-
     if (rows.length === 0) {
       setStatus("Select a non-empty CSV file first.");
       return;
@@ -132,7 +125,6 @@ export function VendorCsvUploadPanel({
           action: "preview",
           rows,
         },
-        { accessToken },
       );
 
       setPreview(result as VendorIntakePreviewResult);
@@ -153,7 +145,7 @@ export function VendorCsvUploadPanel({
   }
 
   async function uploadValidRows() {
-    if (!accessToken || validPreviewRows.length === 0) {
+    if (validPreviewRows.length === 0) {
       return;
     }
 
@@ -174,7 +166,6 @@ export function VendorCsvUploadPanel({
             action: "upload",
             rows: chunk,
           },
-          { accessToken },
         );
 
         if (!("uploadedRows" in result)) {

@@ -18,11 +18,12 @@ The Local Man — Environment Variables
 ## Runtime Requirements
 - Local static checks and unit tests do not require environment variables.
 - Public Supabase-backed routes require `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- Admin login uses the public Supabase env vars for browser email/password sign-in.
-- Admin routes still require an `Authorization: Bearer <supabase-access-token>` request header for an authenticated `admin_users` member.
+- Admin login uses the public Supabase env vars for the server-side `/api/admin/login` password exchange against Supabase Auth.
+- Browser admin and agent sessions are persisted in same-origin HTTP-only cookies, not `localStorage` or `sessionStorage`.
+- Browser admin API calls now authenticate through those cookies and `/api/admin/session`; callers no longer need to attach a bearer token manually.
 - Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.
 - Team access creation and existing-user recovery use the server-only service role key and must not be called directly from the browser.
-- Admin API auth still uses the admin bearer session for route authorization and audit scoping, but Storage writes themselves should not depend on the public anon key.
+- Server-side admin route authorization still supports bearer tokens for compatibility and targeted tests, but the primary browser flow is cookie-backed.
 - Current public map rendering uses MapLibre only when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. Otherwise it falls back to the local coordinate map. Google Maps keys are still not required for the current public map.
 
 ## Runtime Smoke Test

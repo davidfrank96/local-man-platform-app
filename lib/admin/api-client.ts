@@ -1,20 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
 import type { ApiResponse } from "../api/responses.ts";
 import { AppError } from "../errors/app-error.ts";
 import type { AppErrorCode } from "../api/contracts.ts";
-import { getCurrentAdminAccessToken } from "./session-client.ts";
 import { invalidatePublicDiscoveryVendorCache } from "../public/discovery-cache.ts";
-import {
-  adminUserSchema,
-  adminAnalyticsResponseDataSchema,
-  auditLogSchema,
-} from "../validation/schemas.ts";
-import {
-  getAuditActionFilterValues,
-  normalizeAnalyticsEventType,
-  normalizeAuditAction,
-  vendorSlugToNameFallback,
-} from "./activity-normalization.ts";
+import { adminUserSchema } from "../validation/schemas.ts";
 import type {
   AdminRole,
   AdminUser,
@@ -101,12 +89,11 @@ export type CreateAdminUserRequest = {
   role: AdminRole;
 };
 
-const vendorImageBucket = "vendor-images";
 const maxVendorImageBytes = 5 * 1024 * 1024;
-const vendorImageMimeTypes = new Map([
-  ["image/jpeg", "jpg"],
-  ["image/png", "png"],
-  ["image/webp", "webp"],
+const vendorImageMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
 ]);
 
 export type VendorIntakeRowInput = {
@@ -244,50 +231,14 @@ const adminAuditActions = new Set<AuditActionType>([
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
 ]);
-const analyticsPageSize = 1000;
-const maxAnalyticsEvents = 5000;
-const recentAnalyticsEventsLimit = 25;
-
-type AnalyticsEventRow = {
-  id: string;
-  event_type: string;
-  vendor_id: string | null;
-  vendor_slug: string | null;
-  device_type: string;
-  location_source: string | null;
-  timestamp: string;
-  session_id?: string | null;
-};
-
-type VendorLookupRow = {
-  id: string;
-  name: string;
-  slug: string;
-};
 
 type AdminApiClientOptions = {
-  accessToken: string;
   fetchImpl?: typeof fetch;
 };
 
-type AdminClientSupabaseConfig = {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-};
-
-async function resolveAdminAccessToken(fallbackToken: string): Promise<string> {
-  const liveToken = await getCurrentAdminAccessToken().catch(() => null);
-  return liveToken ?? fallbackToken;
-}
-
-function createAdminHeaders(
-  accessToken: string,
-  body?: BodyInit | null,
-): HeadersInit {
-  const requestId = crypto.randomUUID();
+function createAdminHeaders(body?: BodyInit | null): HeadersInit {
   const headers: HeadersInit = {
-    authorization: `Bearer ${accessToken}`,
-    "x-request-id": requestId,
+    "x-request-id": crypto.randomUUID(),
   };
 
   if (body instanceof FormData) {
@@ -308,49 +259,6 @@ function appendDefinedParam(params: URLSearchParams, key: string, value: unknown
   params.set(key, String(value));
 }
 
-function getAdminClientSupabaseConfig(): AdminClientSupabaseConfig {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new AdminApiError(
-      "CONFIG_ERROR",
-      "System configuration error.",
-      503,
-      { missing: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] },
-      "Supabase public environment variables are required for analytics reads.",
-    );
-  }
-
-  return {
-    supabaseUrl,
-    supabaseAnonKey,
-  };
-}
-
-function buildAdminSupabaseClient(options: AdminApiClientOptions) {
-  const { supabaseUrl, supabaseAnonKey } = getAdminClientSupabaseConfig();
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      fetch: options.fetchImpl,
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    accessToken: async () => resolveAdminAccessToken(options.accessToken),
-  });
-}
-
-async function disposeAdminSupabaseClient(
-  client: ReturnType<typeof buildAdminSupabaseClient>,
-): Promise<void> {
-  await client.removeAllChannels().catch(() => undefined);
-  client.realtime.disconnect();
-}
-
 function validateAdminVendorImageFile(file: File): string | null {
   if (file.size <= 0) {
     return "Image file is empty.";
@@ -365,18 +273,6 @@ function validateAdminVendorImageFile(file: File): string | null {
   }
 
   return null;
-}
-
-function buildClientVendorImageStoragePath(vendorId: string, file: File): string {
-  const extension = vendorImageMimeTypes.get(file.type) ?? "bin";
-  const sanitizedBaseName = file.name
-    .replace(/\.[^/.]+$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "vendor-image";
-
-  return `${vendorId}/${crypto.randomUUID()}-${sanitizedBaseName}.${extension}`;
 }
 
 function normalizeAuditLogFilters(filters: AdminAuditLogFilters): AdminAuditLogFilters {
@@ -437,331 +333,38 @@ function normalizeAnalyticsRange(range?: AdminAnalyticsRange): AdminAnalyticsRan
   return normalizedRange;
 }
 
-function shouldUseDevelopmentAnalyticsFallback(): boolean {
-  return process.env.NODE_ENV === "development";
-}
-
-function buildAnalyticsFallbackPath(range: AdminAnalyticsRange): string {
+function buildAnalyticsPath(range: AdminAnalyticsRange): string {
   const params = new URLSearchParams();
   appendDefinedParam(params, "range", range);
   return `/api/admin/analytics?${params.toString()}`;
 }
 
-function buildAuditLogsFallbackPath(filters: AdminAuditLogFilters): string {
+function buildAuditLogsPath(filters: AdminAuditLogFilters): string {
   const params = new URLSearchParams();
   appendDefinedParam(params, "limit", filters.limit ?? 10);
   appendDefinedParam(params, "offset", filters.offset ?? 0);
+  appendDefinedParam(params, "cursor", filters.cursor);
   appendDefinedParam(params, "user_role", filters.user_role);
   appendDefinedParam(params, "action", filters.action);
   appendDefinedParam(params, "since", filters.since);
   return `/api/admin/audit-logs?${params.toString()}`;
 }
 
-async function fetchAnalyticsViaDevelopmentFallback(
-  range: AdminAnalyticsRange,
-  options: AdminApiClientOptions,
-): Promise<AdminApiSafeResult<AdminAnalyticsResponseData>> {
-  return requestAdminApiResult<AdminAnalyticsResponseData>(
-    buildAnalyticsFallbackPath(range),
-    options,
-  );
-}
-
-async function fetchAuditLogsViaDevelopmentFallback(
-  filters: AdminAuditLogFilters,
-  options: AdminApiClientOptions,
-): Promise<AdminApiSafeResult<AdminAuditLogListResult>> {
-  const result = await requestAdminApiResult<{
-    auditLogs: AuditLog[];
-    pagination: { limit: number; offset: number; has_more: boolean };
-  }>(
-    buildAuditLogsFallbackPath(filters),
-    options,
-  );
-
-  if (result.error) {
-    return result;
-  }
-
-  const rows = Array.isArray(result.data.auditLogs) ? result.data.auditLogs : [];
-  const nextCursor = rows.length > 0 && result.data.pagination.has_more
-    ? rows[rows.length - 1]?.created_at ?? null
-    : null;
-
-  return {
-    data: {
-      auditLogs: rows,
-      pagination: {
-        limit: result.data.pagination.limit,
-        has_more: result.data.pagination.has_more,
-        next_cursor: nextCursor,
-      },
-    },
-    error: null,
-  };
-}
-
-async function fetchAnalyticsEventRows(
-  supabase: ReturnType<typeof buildAdminSupabaseClient>,
-  rangeStart: string | null,
-): Promise<{ rows: AnalyticsEventRow[]; sessionIdAvailable: boolean }> {
-  const baseSelect =
-    "id,event_type,vendor_id,vendor_slug,timestamp,device_type,location_source";
-
-  const loadPages = async (includeSessionId: boolean) => {
-    const rows: AnalyticsEventRow[] = [];
-    let offset = 0;
-
-    while (rows.length < maxAnalyticsEvents) {
-      const limit = Math.min(analyticsPageSize, maxAnalyticsEvents - rows.length);
-      let query = supabase
-        .from("user_events")
-        .select(includeSessionId ? `${baseSelect},session_id` : baseSelect)
-        .order("timestamp", { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (rangeStart) {
-        query = query.gte("timestamp", rangeStart);
-      }
-
-      const result = await query;
-
-      if (result.error) {
-        throw result.error;
-      }
-
-      const pageRows = Array.isArray(result.data)
-        ? result.data as unknown as AnalyticsEventRow[]
-        : [];
-      rows.push(...pageRows);
-
-      if (pageRows.length < limit) {
-        break;
-      }
-
-      offset += pageRows.length;
-    }
-
-    return rows;
-  };
-
-  try {
-    return {
-      rows: await loadPages(true),
-      sessionIdAvailable: true,
-    };
-  } catch (error) {
-    const supabaseError = error as { message?: string };
-    if (isMissingSessionIdColumn(supabaseError?.message)) {
-      return {
-        rows: await loadPages(false),
-        sessionIdAvailable: false,
-      };
-    }
-
-    throw error;
-  }
-}
-
-function getAnalyticsRangeStart(range: AdminAnalyticsRange): string | null {
-  const now = Date.now();
-
-  switch (range) {
-    case "24h":
-      return new Date(now - 24 * 60 * 60 * 1000).toISOString();
-    case "7d":
-      return new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
-    case "30d":
-      return new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
-    case "all":
-      return null;
-  }
-}
-
-function countEventType(rows: AnalyticsEventRow[], eventType: string): number {
-  const expected = normalizeAnalyticsEventType(eventType);
-  return rows.filter((row) => normalizeAnalyticsEventType(row.event_type) === expected).length;
-}
-
-function ensureRowsOrderedByNewestFirst(rows: AnalyticsEventRow[]): AnalyticsEventRow[] {
-  for (let index = 1; index < rows.length; index += 1) {
-    if (rows[index - 1]!.timestamp < rows[index]!.timestamp) {
-      return [...rows].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
-    }
-  }
-
-  return rows;
-}
-
-function isMissingSessionIdColumn(detail: string | undefined): boolean {
-  return typeof detail === "string" && detail.toLowerCase().includes("session_id");
-}
-
-function getVendorAggregateKey(row: AnalyticsEventRow): string | null {
-  if (typeof row.vendor_id === "string" && row.vendor_id.length > 0) {
-    return `id:${row.vendor_id}`;
-  }
-
-  if (typeof row.vendor_slug === "string" && row.vendor_slug.length > 0) {
-    return `slug:${row.vendor_slug}`;
-  }
-
-  return null;
-}
-
-function getTopVendorKeys(
-  rows: AnalyticsEventRow[],
-  eventTypes: string[],
-  limit = 5,
-): string[] {
-  const counts = new Map<string, number>();
-
-  for (const row of rows) {
-    const key = getVendorAggregateKey(row);
-
-    if (!key || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
-      continue;
-    }
-
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  return [...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, limit)
-    .map(([vendorKey]) => vendorKey);
-}
-
-function rankVendorEvents(
-  rows: AnalyticsEventRow[],
-  eventTypes: string[],
-  vendorLookup: Map<string, VendorLookupRow>,
-) {
-  const counts = new Map<string, { count: number; vendorId: string | null; vendorSlug: string | null }>();
-
-  for (const row of rows) {
-    const key = getVendorAggregateKey(row);
-
-    if (!key || !eventTypes.includes(normalizeAnalyticsEventType(row.event_type))) {
-      continue;
-    }
-
-    const current = counts.get(key);
-    counts.set(key, {
-      count: (current?.count ?? 0) + 1,
-      vendorId: row.vendor_id ?? current?.vendorId ?? null,
-      vendorSlug: row.vendor_slug ?? current?.vendorSlug ?? null,
-    });
-  }
-
-  return [...counts.entries()]
-    .map(([, value]) => {
-      const vendor = value.vendorId ? vendorLookup.get(value.vendorId) : null;
-
-      return {
-        vendor_id: value.vendorId,
-        vendor_name: vendor?.name ?? vendorSlugToNameFallback(value.vendorSlug),
-        vendor_slug: vendor?.slug ?? value.vendorSlug,
-        count: value.count,
-      };
-    })
-    .sort((left, right) => right.count - left.count || (left.vendor_name ?? "").localeCompare(right.vendor_name ?? ""))
-    .slice(0, 5);
-}
-
-function buildDropoffSummary(
-  rows: AnalyticsEventRow[],
-  sessionIdAvailable: boolean,
-) {
-  const meaningfulInteractionEvents = new Set([
-    "vendor_selected",
-    "vendor_detail_opened",
-    "call_clicked",
-    "directions_clicked",
-    "search_used",
-    "filter_applied",
-  ]);
-  const sessionRows = rows.filter((row) => typeof row.session_id === "string" && row.session_id.length > 0);
-
-  if (!sessionIdAvailable || sessionRows.length === 0) {
-    return {
-      session_metrics_available: false,
-      sessions_without_meaningful_interaction: null,
-      sessions_with_search_without_vendor_click: null,
-      sessions_with_detail_without_action: null,
-    };
-  }
-
-  const sessions = new Map<string, AnalyticsEventRow[]>();
-
-  for (const row of sessionRows) {
-    const sessionId = row.session_id as string;
-    const bucket = sessions.get(sessionId) ?? [];
-    bucket.push(row);
-    sessions.set(sessionId, bucket);
-  }
-
-  let noMeaningfulInteraction = 0;
-  let searchWithoutVendorClick = 0;
-  let detailWithoutAction = 0;
-
-  for (const sessionEvents of sessions.values()) {
-    const eventTypes = new Set(
-      sessionEvents.map((row) => normalizeAnalyticsEventType(row.event_type)),
-    );
-    const hasMeaningfulInteraction = [...eventTypes].some((eventType) =>
-      meaningfulInteractionEvents.has(eventType)
-    );
-
-    if (!hasMeaningfulInteraction) {
-      noMeaningfulInteraction += 1;
-    }
-
-    if (eventTypes.has("search_used") && !eventTypes.has("vendor_selected")) {
-      searchWithoutVendorClick += 1;
-    }
-
-    if (
-      eventTypes.has("vendor_detail_opened") &&
-      !eventTypes.has("call_clicked") &&
-      !eventTypes.has("directions_clicked")
-    ) {
-      detailWithoutAction += 1;
-    }
-  }
-
-  return {
-    session_metrics_available: true,
-    sessions_without_meaningful_interaction: noMeaningfulInteraction,
-    sessions_with_search_without_vendor_click: searchWithoutVendorClick,
-    sessions_with_detail_without_action: detailWithoutAction,
-  };
-}
-
 async function requestAdminApi<T>(
   path: string,
-  { accessToken, fetchImpl = fetch }: AdminApiClientOptions,
+  { fetchImpl = fetch }: AdminApiClientOptions = {},
   init: RequestInit = {},
+  hasRetried = false,
 ): Promise<T> {
-  const resolvedAccessToken = await resolveAdminAccessToken(accessToken);
-
-  if (!resolvedAccessToken) {
-    throw new AdminApiError(
-      "UNAUTHORIZED",
-      "Admin session is missing. Sign in again.",
-      401,
-      undefined,
-      "No Supabase access token is available for this admin request.",
-    );
-  }
-
   const response = await fetchImpl(path, {
+    credentials: "same-origin",
     ...init,
     headers: {
-      ...createAdminHeaders(resolvedAccessToken, init.body ?? null),
+      ...createAdminHeaders(init.body ?? null),
       ...init.headers,
     },
   });
+
   let payload: ApiResponse<T>;
 
   try {
@@ -799,6 +402,20 @@ async function requestAdminApi<T>(
     const message = payload.error?.message ?? "API request failed.";
     const detail = payload.error?.detail ?? null;
 
+    if (!hasRetried && response.status === 401 && code === "UNAUTHORIZED") {
+      const refreshed = await fetchImpl("/api/admin/session", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "x-request-id": crypto.randomUUID(),
+        },
+      }).catch(() => null);
+
+      if (refreshed?.ok) {
+        return requestAdminApi<T>(path, { fetchImpl }, init, true);
+      }
+    }
+
     throw new AdminApiError(
       code,
       message,
@@ -813,7 +430,7 @@ async function requestAdminApi<T>(
 
 async function requestAdminApiResult<T>(
   path: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
   init: RequestInit = {},
 ): Promise<AdminApiSafeResult<T>> {
   try {
@@ -857,7 +474,7 @@ function invalidatePublicDiscoveryAfterVendorMutation(
 
 export async function listAdminVendors(
   filters: AdminVendorFilters,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminVendorListResult> {
   const params = new URLSearchParams({
     limit: String(filters.limit ?? 100),
@@ -876,7 +493,7 @@ export async function listAdminVendors(
 
 export async function fetchAdminAnalytics(
   filters: AdminAnalyticsFilters,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminApiSafeResult<AdminAnalyticsResponseData>> {
   let normalizedRange: AdminAnalyticsRange;
 
@@ -904,200 +521,15 @@ export async function fetchAdminAnalytics(
     };
   }
 
-  const apiResult = await requestAdminApiResult<AdminAnalyticsResponseData>(
-    buildAnalyticsFallbackPath(normalizedRange),
+  return requestAdminApiResult<AdminAnalyticsResponseData>(
+    buildAnalyticsPath(normalizedRange),
     options,
   );
-
-  if (!apiResult.error) {
-    return apiResult;
-  }
-
-  if (!shouldUseDevelopmentAnalyticsFallback()) {
-    return apiResult;
-  }
-
-  try {
-    const supabase = buildAdminSupabaseClient(options);
-    try {
-      const rangeStart = getAnalyticsRangeStart(normalizedRange);
-      let eventResult: { rows: AnalyticsEventRow[]; sessionIdAvailable: boolean };
-
-      try {
-        eventResult = await fetchAnalyticsEventRows(supabase, rangeStart);
-      } catch (error) {
-        const supabaseError = error as { code?: string; message?: string };
-        const normalizedMessage = String(supabaseError?.message ?? "").toLowerCase();
-        const errorCode = supabaseError?.code === "42501" || normalizedMessage.includes("permission denied")
-          ? "FORBIDDEN"
-          : normalizedMessage.includes("jwt") || normalizedMessage.includes("auth")
-            ? "UNAUTHORIZED"
-            : "UPSTREAM_ERROR";
-
-        if (shouldUseDevelopmentAnalyticsFallback()) {
-          return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
-        }
-
-        return {
-          data: null,
-          error: {
-            code: errorCode,
-            message: errorCode === "FORBIDDEN"
-              ? "You do not have access to analytics"
-              : errorCode === "UNAUTHORIZED"
-                ? "Admin session expired. Sign in again."
-                : "Activity temporarily unavailable.",
-            detail: supabaseError?.message,
-          },
-        };
-      }
-
-      const rows = ensureRowsOrderedByNewestFirst(eventResult.rows);
-      const recentVendorIds = rows
-        .slice(0, recentAnalyticsEventsLimit)
-        .flatMap((row) => (row.vendor_id ? [row.vendor_id] : []));
-      const rankedVendorKeys = [
-        ...getTopVendorKeys(rows, ["vendor_selected"]),
-        ...getTopVendorKeys(rows, ["vendor_detail_opened"]),
-        ...getTopVendorKeys(rows, ["call_clicked"]),
-        ...getTopVendorKeys(rows, ["directions_clicked"]),
-      ];
-      const vendorIds = [...new Set([
-        ...recentVendorIds,
-        ...rankedVendorKeys
-          .filter((key) => key.startsWith("id:"))
-          .map((key) => key.slice(3)),
-      ])];
-      let vendorLookup = new Map<string, VendorLookupRow>();
-
-      if (vendorIds.length > 0) {
-        const vendorResult = await supabase
-          .from("vendors")
-          .select("id,name,slug")
-          .in("id", vendorIds);
-
-        if (vendorResult.error) {
-          if (shouldUseDevelopmentAnalyticsFallback()) {
-            return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
-          }
-
-          return {
-            data: null,
-            error: {
-              code: "UPSTREAM_ERROR",
-              message: "Activity temporarily unavailable.",
-              detail: vendorResult.error.message,
-            },
-          };
-        }
-
-        vendorLookup = new Map(
-          (vendorResult.data ?? []).map((vendor) => [vendor.id, vendor as VendorLookupRow]),
-        );
-      }
-
-      const sessionIds = new Set(
-        rows.flatMap((row) =>
-          typeof row.session_id === "string" && row.session_id.length > 0 ? [row.session_id] : []
-        ),
-      );
-      const recentEvents = rows.slice(0, recentAnalyticsEventsLimit).map((row) => {
-        const vendor = row.vendor_id ? vendorLookup.get(row.vendor_id) : null;
-        const normalizedEventType = normalizeAnalyticsEventType(row.event_type);
-
-        return {
-          id: row.id,
-          event_type: normalizedEventType,
-          vendor_id: row.vendor_id ?? null,
-          vendor_name: vendor?.name ?? vendorSlugToNameFallback(row.vendor_slug),
-          vendor_slug: vendor?.slug ?? row.vendor_slug ?? null,
-          device_type: row.device_type === "mobile" || row.device_type === "tablet" || row.device_type === "desktop"
-            ? row.device_type
-            : "unknown",
-          location_source:
-            row.location_source === "precise" ||
-            row.location_source === "approximate" ||
-            row.location_source === "default_city"
-              ? row.location_source
-              : null,
-          timestamp: row.timestamp,
-        };
-      });
-
-      const payload = adminAnalyticsResponseDataSchema.safeParse({
-        range: normalizedRange,
-        summary: {
-          total_sessions: sessionIds.size > 0 ? sessionIds.size : countEventType(rows, "session_started"),
-          total_events: rows.length,
-          vendor_selections: countEventType(rows, "vendor_selected"),
-          vendor_detail_opens: countEventType(rows, "vendor_detail_opened"),
-          call_clicks: countEventType(rows, "call_clicked"),
-          directions_clicks: countEventType(rows, "directions_clicked"),
-          searches_used: countEventType(rows, "search_used"),
-          filters_applied: countEventType(rows, "filter_applied"),
-        },
-        vendor_performance: {
-          most_selected_vendors: rankVendorEvents(rows, ["vendor_selected"], vendorLookup),
-          most_viewed_vendor_details: rankVendorEvents(rows, ["vendor_detail_opened"], vendorLookup),
-          most_call_clicks: rankVendorEvents(rows, ["call_clicked"], vendorLookup),
-          most_directions_clicks: rankVendorEvents(rows, ["directions_clicked"], vendorLookup),
-        },
-        dropoff: buildDropoffSummary(rows, eventResult.sessionIdAvailable),
-        recent_events: recentEvents,
-      });
-
-      if (!payload.success) {
-        return {
-          data: null,
-          error: {
-            code: "INVALID_RESPONSE",
-            message: "Activity temporarily unavailable.",
-            detail: "Supabase returned an unexpected analytics payload.",
-          },
-        };
-      }
-
-      return {
-        data: payload.data,
-        error: null,
-      };
-    } finally {
-      await disposeAdminSupabaseClient(supabase);
-    }
-  } catch (error) {
-    if (error instanceof AdminApiError) {
-      if (shouldUseDevelopmentAnalyticsFallback()) {
-        return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
-      }
-
-      return {
-        data: null,
-        error: {
-          code: error.code,
-          message: error.message,
-          detail: error.detail ?? undefined,
-        },
-      };
-    }
-
-    if (shouldUseDevelopmentAnalyticsFallback()) {
-      return fetchAnalyticsViaDevelopmentFallback(normalizedRange, options);
-    }
-
-    return {
-      data: null,
-      error: {
-        code: "UNKNOWN_ERROR",
-        message: "Activity temporarily unavailable.",
-        detail: error instanceof Error ? error.message : undefined,
-      },
-    };
-  }
 }
 
 export async function fetchAdminAuditLogs(
   filters: AdminAuditLogFilters,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminApiSafeResult<AdminAuditLogListResult>> {
   let normalizedFilters: AdminAuditLogFilters;
 
@@ -1125,155 +557,14 @@ export async function fetchAdminAuditLogs(
     };
   }
 
-  try {
-    const pageSize = Math.min(normalizedFilters.limit ?? 10, 10);
-    const supabase = buildAdminSupabaseClient(options);
-    try {
-
-    let query = supabase
-      .from("audit_logs")
-      .select("id,admin_user_id,user_role,entity_type,entity_id,action,metadata,created_at")
-      .order("created_at", { ascending: false })
-      .limit(pageSize + 1);
-
-    if (normalizedFilters.cursor) {
-      query = query.lt("created_at", normalizedFilters.cursor);
-    }
-
-    if (normalizedFilters.user_role) {
-      query = query.eq("user_role", normalizedFilters.user_role);
-    }
-
-    if (normalizedFilters.action) {
-      const actionValues = getAuditActionFilterValues(normalizedFilters.action);
-      query = actionValues.length > 1
-        ? query.in("action", actionValues)
-        : query.eq("action", actionValues[0] ?? normalizedFilters.action);
-    }
-
-    if (normalizedFilters.since) {
-      query = query.gte("created_at", normalizedFilters.since);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      const normalizedMessage = error.message.toLowerCase();
-      const errorCode = error.code === "42501" || normalizedMessage.includes("permission denied")
-        ? "FORBIDDEN"
-        : normalizedMessage.includes("jwt") || normalizedMessage.includes("auth")
-          ? "UNAUTHORIZED"
-          : "UPSTREAM_ERROR";
-
-      if (shouldUseDevelopmentAnalyticsFallback()) {
-        return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
-      }
-
-      return {
-        data: null,
-        error: {
-          code: errorCode,
-          message: errorCode === "FORBIDDEN"
-            ? "You do not have access to analytics"
-            : errorCode === "UNAUTHORIZED"
-              ? "Admin session expired. Sign in again."
-              : "Activity temporarily unavailable.",
-          detail: error.message,
-        },
-      };
-    }
-
-    const normalizedRows = Array.isArray(data)
-      ? data.map((row) => {
-        const candidate = row as Partial<AuditLog> | null;
-        const normalizedAction = normalizeAuditAction(
-          typeof candidate?.action === "string" ? candidate.action : null,
-        );
-
-        return {
-          id: typeof candidate?.id === "string" ? candidate.id : "",
-          admin_user_id: typeof candidate?.admin_user_id === "string" ? candidate.admin_user_id : null,
-          user_role: candidate?.user_role,
-          entity_type: candidate?.entity_type,
-          entity_id: typeof candidate?.entity_id === "string" ? candidate.entity_id : null,
-          action: normalizedAction,
-          metadata:
-            candidate?.metadata && typeof candidate.metadata === "object" && !Array.isArray(candidate.metadata)
-              ? candidate.metadata as Record<string, unknown>
-              : {},
-          created_at: typeof candidate?.created_at === "string" ? candidate.created_at : "",
-        };
-      }).filter((row) => row.action !== null)
-      : [];
-    const parsed = auditLogSchema.array().safeParse(normalizedRows);
-
-    if (!parsed.success) {
-      if (shouldUseDevelopmentAnalyticsFallback()) {
-        return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
-      }
-
-      return {
-        data: null,
-        error: {
-          code: "INVALID_RESPONSE",
-          message: "Activity temporarily unavailable.",
-          detail: "Supabase returned an unexpected audit log payload.",
-        },
-      };
-    }
-
-    const pageRows = parsed.data.slice(0, pageSize);
-    const nextCursor = pageRows.length > 0
-      ? pageRows[pageRows.length - 1]?.created_at ?? null
-      : null;
-
-    return {
-      data: {
-        auditLogs: pageRows,
-        pagination: {
-          limit: pageSize,
-          has_more: parsed.data.length > pageSize,
-          next_cursor: parsed.data.length > pageSize ? nextCursor : null,
-        },
-      },
-      error: null,
-    };
-    } finally {
-      await disposeAdminSupabaseClient(supabase);
-    }
-  } catch (error) {
-    if (error instanceof AdminApiError) {
-      if (shouldUseDevelopmentAnalyticsFallback()) {
-        return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
-      }
-
-      return {
-        data: null,
-        error: {
-          code: error.code,
-          message: error.message,
-          detail: error.detail ?? undefined,
-        },
-      };
-    }
-
-    if (shouldUseDevelopmentAnalyticsFallback()) {
-      return fetchAuditLogsViaDevelopmentFallback(normalizedFilters, options);
-    }
-
-    return {
-      data: null,
-      error: {
-        code: "UNKNOWN_ERROR",
-        message: "Activity temporarily unavailable.",
-        detail: error instanceof Error ? error.message : undefined,
-      },
-    };
-  }
+  return requestAdminApiResult<AdminAuditLogListResult>(
+    buildAuditLogsPath(normalizedFilters),
+    options,
+  );
 }
 
 export async function listAdminUsers(
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminUser[]> {
   const result = await requestAdminApi<{ adminUsers: AdminUser[] }>(
     "/api/admin/admin-users",
@@ -1287,9 +578,9 @@ export async function listAdminUsers(
 
 export async function createManagedAdminUser(
   data: CreateAdminUserRequest,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<{ adminUser: AdminUser; outcome: "created" | "existing" }> {
-  return await requestAdminApi<{ adminUser: AdminUser; outcome: "created" | "existing" }>(
+  return requestAdminApi<{ adminUser: AdminUser; outcome: "created" | "existing" }>(
     "/api/admin/create-user",
     options,
     {
@@ -1302,7 +593,7 @@ export async function createManagedAdminUser(
 export async function updateManagedAdminUserRole(
   adminUserId: string,
   data: UpdateAdminUserRequest,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminUser> {
   const result = await requestAdminApi<{ adminUser: AdminUser }>(
     `/api/admin/admin-users/${adminUserId}`,
@@ -1318,7 +609,7 @@ export async function updateManagedAdminUserRole(
 
 export async function deleteManagedAdminUser(
   adminUserId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<{ adminUserId: string }> {
   const result = await requestAdminApi<{ adminUserId: string }>(
     `/api/admin/admin-users/${adminUserId}`,
@@ -1333,7 +624,7 @@ export async function deleteManagedAdminUser(
 
 export async function createAdminVendor(
   data: CreateManagedVendorRequest,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminVendorSummary> {
   const result = await requestAdminApi<{ vendor: AdminVendorSummary }>(
     "/api/admin/vendors",
@@ -1353,7 +644,7 @@ export async function submitAdminVendorIntake(
     action: "preview" | "upload";
     rows: VendorIntakeRowInput[];
   },
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorIntakePreviewResult | VendorIntakeUploadResult> {
   const result = await requestAdminApi<VendorIntakePreviewResult | VendorIntakeUploadResult>(
     "/api/admin/vendors/intake",
@@ -1374,7 +665,7 @@ export async function submitAdminVendorIntake(
 export async function updateAdminVendor(
   vendorId: string,
   data: UpdateVendorRequest,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<AdminVendorSummary> {
   const result = await requestAdminApi<{ vendor: AdminVendorSummary }>(
     `/api/admin/vendors/${vendorId}`,
@@ -1391,7 +682,7 @@ export async function updateAdminVendor(
 
 export async function deactivateAdminVendor(
   vendorId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<{ vendor_id: string; is_active: false }> {
   const result = await requestAdminApi<{
     vendor: { vendor_id: string; is_active: false };
@@ -1406,7 +697,7 @@ export async function deactivateAdminVendor(
 export async function replaceAdminVendorHours(
   vendorId: string,
   data: ReplaceVendorHoursRequest,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorHours[]> {
   const result = await requestAdminApi<{ hours: VendorHours[] }>(
     `/api/admin/vendors/${vendorId}/hours`,
@@ -1423,7 +714,7 @@ export async function replaceAdminVendorHours(
 
 export async function listAdminVendorHours(
   vendorId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorHours[]> {
   const result = await requestAdminApi<{ hours: VendorHours[] }>(
     `/api/admin/vendors/${vendorId}/hours`,
@@ -1436,7 +727,7 @@ export async function listAdminVendorHours(
 export async function createAdminVendorImages(
   vendorId: string,
   data: FormData,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorImage[]> {
   const fileEntry = data.get("image");
 
@@ -1471,70 +762,26 @@ export async function createAdminVendorImages(
     );
   }
 
-  const supabase = buildAdminSupabaseClient(options);
+  const formData = new FormData();
+  formData.set("image", fileEntry);
+  formData.set("sort_order", String(sortOrderValue));
 
-  try {
-    const storageObjectPath = buildClientVendorImageStoragePath(vendorId, fileEntry);
-    const uploadResult = await supabase.storage
-      .from(vendorImageBucket)
-      .upload(storageObjectPath, fileEntry, {
-        contentType: fileEntry.type,
-        upsert: true,
-      });
+  const result = await requestAdminApi<{ images: VendorImage[] }>(
+    `/api/admin/vendors/${vendorId}/images`,
+    options,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 
-    if (uploadResult.error) {
-      console.error("UPLOAD ERROR:", uploadResult.error);
-      throw new AdminApiError(
-        uploadResult.error.message.toLowerCase().includes("permission")
-          ? "FORBIDDEN"
-          : "UPSTREAM_ERROR",
-        "Unable to upload vendor image.",
-        uploadResult.error.message.toLowerCase().includes("permission") ? 403 : 502,
-        {
-          bucket: vendorImageBucket,
-          path: storageObjectPath,
-        },
-        uploadResult.error.message,
-      );
-    }
-
-    const publicUrlResult = supabase.storage
-      .from(vendorImageBucket)
-      .getPublicUrl(storageObjectPath);
-    const publicUrl = publicUrlResult.data.publicUrl;
-
-    try {
-      const result = await requestAdminApi<{ images: VendorImage[] }>(
-        `/api/admin/vendors/${vendorId}/images`,
-        options,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            images: [
-              {
-                image_url: publicUrl,
-                storage_object_path: storageObjectPath,
-                sort_order: sortOrderValue,
-              },
-            ],
-          }),
-        },
-      );
-
-      invalidatePublicDiscoveryAfterVendorMutation("vendor_images_updated", vendorId);
-      return result.images;
-    } catch (error) {
-      await supabase.storage.from(vendorImageBucket).remove([storageObjectPath]);
-      throw error;
-    }
-  } finally {
-    await disposeAdminSupabaseClient(supabase);
-  }
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_images_updated", vendorId);
+  return result.images;
 }
 
 export async function listAdminVendorImages(
   vendorId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorImage[]> {
   const result = await requestAdminApi<{ images: VendorImage[] }>(
     `/api/admin/vendors/${vendorId}/images`,
@@ -1547,7 +794,7 @@ export async function listAdminVendorImages(
 export async function deleteAdminVendorImage(
   vendorId: string,
   imageId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorImage> {
   const result = await requestAdminApi<{ image: VendorImage }>(
     `/api/admin/vendors/${vendorId}/images/${imageId}`,
@@ -1564,7 +811,7 @@ export async function deleteAdminVendorImage(
 export async function createAdminVendorDishes(
   vendorId: string,
   data: CreateVendorDishesRequest,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorFeaturedDish[]> {
   const result = await requestAdminApi<{ dishes: VendorFeaturedDish[] }>(
     `/api/admin/vendors/${vendorId}/dishes`,
@@ -1581,7 +828,7 @@ export async function createAdminVendorDishes(
 
 export async function listAdminVendorDishes(
   vendorId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorFeaturedDish[]> {
   const result = await requestAdminApi<{ dishes: VendorFeaturedDish[] }>(
     `/api/admin/vendors/${vendorId}/dishes`,
@@ -1594,7 +841,7 @@ export async function listAdminVendorDishes(
 export async function deleteAdminVendorDish(
   vendorId: string,
   dishId: string,
-  options: AdminApiClientOptions,
+  options: AdminApiClientOptions = {},
 ): Promise<VendorFeaturedDish> {
   const result = await requestAdminApi<{ dish: VendorFeaturedDish }>(
     `/api/admin/vendors/${vendorId}/dishes/${dishId}`,

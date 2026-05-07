@@ -57,7 +57,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - morning, afternoon, and night discovery themes based on browser-local time
 
 ### Admin
-- Supabase email/password admin login
+- Supabase email/password admin login with secure HTTP-only cookie-backed sessions
 - role-aware admin landing and dashboards:
   - `/admin/dashboard` for admins
   - `/admin/agent` for agents
@@ -180,6 +180,8 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 - backend analytics and audit-log fallback routes
 - server-side vendor image storage operations
 
+Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
+
 Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
 
 ## Deployment Notes
@@ -239,7 +241,7 @@ Phase 6 currently covers:
 - admin-only analytics route at `/admin/analytics`
 - summary cards, vendor performance, drop-off signals, and recent activity
 - non-blocking tracking writes that must never interfere with public discovery
-- direct Supabase analytics reads in production, with backend fallback routes retained for development and operational debugging
+- backend-only analytics reads in production, with the admin analytics route handling RPC and query fallback server-side
 
 ## Admin and Agent Summary
 

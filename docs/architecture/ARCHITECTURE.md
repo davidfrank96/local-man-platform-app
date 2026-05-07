@@ -68,6 +68,11 @@ Handles:
 - featured dish management
 - vendor image upload and removal
 
+Admin browser enforcement rules:
+- privileged admin and agent reads and mutations go through protected `/api/admin/**` routes only
+- the active admin browser flow no longer instantiates a direct Supabase client for privileged operations
+- RBAC is enforced on the backend through `requireAdmin()` and `requireAdminPermission()`, with client role checks kept for navigation and UX only
+
 ### API Routes
 Handle:
 - public nearby vendor reads
@@ -231,7 +236,8 @@ Rules:
 
 ### Admin Session State
 - admin login uses Supabase email/password auth
-- browser-stored session is validated against `admin_users`
+- privileged admin and agent sessions are stored in HTTP-only same-origin cookies
+- `/api/admin/session` validates and refreshes the cookie-backed session against `admin_users`
 - protected routes resolve through the admin route guard
 
 ### Usage Signal State

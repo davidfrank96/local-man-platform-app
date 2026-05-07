@@ -109,10 +109,11 @@ Current automated coverage:
 
 ### Admin Foundation Logic
 Test:
-- missing admin bearer token returns `UNAUTHORIZED`
+- missing admin session returns `UNAUTHORIZED`
 - authenticated non-admin user returns `FORBIDDEN`
 - authenticated admin user is accepted
-- admin session validation route returns the authenticated admin identity
+- cookie-backed admin session validation route returns the authenticated admin identity
+- expired cookie-backed admin sessions refresh server-side when a valid refresh cookie is present
 - vendor listing supports pagination and filters
 - vendor create writes audit log
 - vendor update writes audit log
