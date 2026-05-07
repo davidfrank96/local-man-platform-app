@@ -1,11 +1,23 @@
 const DISCOVERY_SNAPSHOT_PREFIX = "public-discovery:";
 const DISCOVERY_OFFLINE_CACHE_PREFIX = "public-discovery-offline:public-discovery:";
 const PUBLIC_DISCOVERY_INVALIDATION_STORAGE_KEY = "public-discovery:vendors:invalidation";
+export const PUBLIC_DISCOVERY_SNAPSHOT_TTL_MS = 5 * 60_000;
 
 export const PUBLIC_DISCOVERY_INVALIDATION_EVENT =
   "public-discovery:vendors:invalidate";
 
-type StorageLike = Pick<Storage, "length" | "key" | "removeItem" | "setItem"> | null;
+type StorageLike = Pick<
+  Storage,
+  "getItem" | "length" | "key" | "removeItem" | "setItem"
+> | null;
+
+export type PublicDiscoverySnapshot<T = unknown> = {
+  nearbyData: T | null;
+  nearbyDataUpdatedAt?: string | null;
+  selectedVendorId: string | null;
+  selectedVendorSlug?: string | null;
+  scrollY: number;
+};
 
 export type PublicDiscoveryInvalidationPayload = {
   reason: string;
@@ -27,6 +39,104 @@ function getSessionStorage(storageImpl?: StorageLike): StorageLike {
   } catch {
     return null;
   }
+}
+
+export function readPublicDiscoverySnapshot<T = unknown>(
+  key: string,
+  options?: {
+    sessionStorage?: StorageLike;
+  },
+): PublicDiscoverySnapshot<T> | null {
+  const sessionStorage = getSessionStorage(options?.sessionStorage);
+
+  try {
+    const raw = sessionStorage?.getItem(key);
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as PublicDiscoverySnapshot<T>;
+  } catch {
+    return null;
+  }
+}
+
+export function writePublicDiscoverySnapshot<T = unknown>(
+  key: string,
+  snapshot: PublicDiscoverySnapshot<T>,
+  options?: {
+    sessionStorage?: StorageLike;
+  },
+): void {
+  const sessionStorage = getSessionStorage(options?.sessionStorage);
+
+  try {
+    sessionStorage?.setItem(key, JSON.stringify(snapshot));
+  } catch {
+    // Ignore session storage failures.
+  }
+}
+
+export function isPublicDiscoverySnapshotFresh(
+  snapshot: Pick<PublicDiscoverySnapshot, "nearbyData" | "nearbyDataUpdatedAt"> | null | undefined,
+  options?: {
+    localStorage?: StorageLike;
+    nowMs?: number;
+    ttlMs?: number;
+  },
+): boolean {
+  if (!snapshot?.nearbyData) {
+    return false;
+  }
+
+  if (typeof snapshot.nearbyDataUpdatedAt !== "string") {
+    return false;
+  }
+
+  const nearbyDataUpdatedAtMs = Date.parse(snapshot.nearbyDataUpdatedAt);
+
+  if (!Number.isFinite(nearbyDataUpdatedAtMs)) {
+    return false;
+  }
+
+  const ttlMs = options?.ttlMs ?? PUBLIC_DISCOVERY_SNAPSHOT_TTL_MS;
+  const nowMs = options?.nowMs ?? Date.now();
+
+  if (nowMs - nearbyDataUpdatedAtMs > ttlMs) {
+    return false;
+  }
+
+  const invalidationPayload = readStoredInvalidationPayload(options?.localStorage);
+  const invalidationTimestampMs = invalidationPayload?.timestamp
+    ? Date.parse(invalidationPayload.timestamp)
+    : Number.NaN;
+
+  if (Number.isFinite(invalidationTimestampMs) && invalidationTimestampMs > nearbyDataUpdatedAtMs) {
+    return false;
+  }
+
+  return true;
+}
+
+export function shouldSkipPublicDiscoveryFetch(options: {
+  existingRequestKey: string | null;
+  nextRequestKey: string;
+  restoredNearbyDataRequestKey: string | null;
+  requiresAuthoritativeFetch: boolean;
+}): boolean {
+  if (options.existingRequestKey === options.nextRequestKey) {
+    return true;
+  }
+
+  if (options.requiresAuthoritativeFetch) {
+    return false;
+  }
+
+  return (
+    !options.existingRequestKey &&
+    options.restoredNearbyDataRequestKey === options.nextRequestKey
+  );
 }
 
 function getLocalStorage(storageImpl?: StorageLike): StorageLike {
@@ -82,6 +192,23 @@ function normalizeInvalidationPayload(
         ? payload.timestamp
         : new Date().toISOString(),
   };
+}
+
+function readStoredInvalidationPayload(
+  storageImpl?: StorageLike,
+): PublicDiscoveryInvalidationPayload | null {
+  const localStorage = getLocalStorage(storageImpl);
+  const raw = localStorage?.getItem(PUBLIC_DISCOVERY_INVALIDATION_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return normalizeInvalidationPayload(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 export function clearPublicDiscoveryVendorCache(options?: {

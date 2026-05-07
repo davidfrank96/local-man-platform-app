@@ -3,7 +3,7 @@ import { memo, type ReactNode } from "react";
 import type { LocationSource } from "../../types/index.ts";
 import {
   formatVendorCardDistance,
-  getVendorOpenStateDisplay,
+  getVendorOpenStateDisplayFromSnapshot,
   formatVendorCardPriceBand,
   formatVendorCardRating,
   getVendorCue,
@@ -86,7 +86,10 @@ function VendorCardComponent({
     vendor.review_count,
   );
   const isNewRating = ratingLabel === "New";
-  const openState = getVendorOpenStateDisplay(vendor.is_open_now);
+  const openState = getVendorOpenStateDisplayFromSnapshot({
+    isOpenNow: vendor.is_open_now,
+    todayHours: vendorTodayHours,
+  });
   const statusBadgeClassName =
     openState.toneClassName === "vendor-card-status-open"
       ? "vendor-card-status-badge vendor-card-status-open"

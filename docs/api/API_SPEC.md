@@ -77,6 +77,9 @@ Behavior:
 - Base candidate filtering for `price_band` is pushed into the Supabase vendor query.
 - Base candidate filtering for `category` is pushed into the Supabase vendor query through the `vendor_category_map` join.
 - Base candidate filtering for `search` currently matches vendor name, short description, and area in the Supabase vendor query and is rechecked in application logic for safety.
+- The Supabase nearby candidate read uses a short `5` second Next revalidation window so discovery can stay bounded without holding vendor edits, deactivations, or hours changes for the older generic `30` second window.
+- Client discovery snapshots currently expire after `5` minutes and must yield to a live nearby fetch on restore before they can become authoritative again.
+- Admin vendor mutations publish a public discovery invalidation event so restored discovery state is cleared after vendor create, update, deactivate, hours, image, and featured-dish changes.
 - Usage-signal ranking is aggregated server-side through the `get_vendor_usage_scores` SQL function instead of fetching raw `user_events` rows into Node.
 - If that SQL function is unavailable in a partially migrated environment, the API falls back to a service-role `user_events` read so nearby discovery still responds.
 - `distance_km` is calculated dynamically with the Haversine formula.
@@ -152,7 +155,8 @@ Behavior:
 - Returns `NOT_FOUND` when no active vendor matches the slug.
 - Returns `CONFIGURATION_ERROR` when public Supabase env vars are missing.
 - Returns `UPSTREAM_ERROR` when the Supabase detail query fails.
-- `is_open_now` and `today_hours` are computed on the server from the shared availability helper that also powers `GET /api/vendors/nearby`, so discovery cards, selected vendor panels, and the detail page use the same source of truth.
+- `is_open_now` and `today_hours` are computed on the server from the shared availability helper in `lib/vendors/hours.ts`.
+- Public discovery cards, the selected vendor panel, and the detail page also resolve their status labels through that same helper, so a cached boolean cannot contradict the visible `today_hours` window.
 - When a `vendor_images` row has `storage_object_path` but no usable `image_url`, the server normalizes it into a public bucket URL before returning the vendor detail payload.
 - Missing hours, featured dishes, or images must not cause the detail route to fail.
 
@@ -311,6 +315,7 @@ Route file:
 Behavior:
 - requires admin auth
 - reads from `admin_users` as the source of truth
+- serves the team-access list through the app API so the admin UI does not read `admin_users` directly from the browser
 - returns `id`, `email`, `full_name`, `role`, and `created_at`
 - orders by `created_at desc`
 - uses a bounded list read sized for the current admin workspace
@@ -324,9 +329,11 @@ Route file:
 Behavior:
 - requires admin auth
 - creates a Supabase Auth user through a server-side service-role path
+- mirrors the selected role into Supabase Auth `user_metadata.role`
 - upserts the matching `admin_users` row
 - returns `outcome = created` for a new auth user
 - returns `outcome = existing` when the auth user already exists and only the role assignment/update was needed
+- keeps `admin_users.role` authoritative while synchronizing the mirrored auth metadata role before the request succeeds
 
 ### POST /api/admin/create-user
 Preferred team-access create route
@@ -340,6 +347,7 @@ Behavior:
 - uses server-side service-role auth user creation only
 - sets `email_confirm = true`
 - recovers existing auth users by email lookup when Supabase returns a duplicate-user create error
+- mirrors the selected role into Supabase Auth `user_metadata.role`
 - upserts `admin_users` so team access stays aligned with the database
 - returns the same `adminUser` payload shape as the legacy route plus `outcome = created | existing`
 
@@ -353,6 +361,7 @@ Behavior:
 - requires admin auth
 - updates `role` and/or `full_name`
 - persists the update to `admin_users`
+- mirrors role changes back into Supabase Auth metadata so dashboard/session role reads stay synchronized
 
 ### DELETE /api/admin/admin-users/:id
 Remove team access
@@ -362,8 +371,9 @@ Route file:
 
 Behavior:
 - requires admin auth
+- removes the matching Supabase Auth user
 - removes the selected `admin_users` row
-- removes the matching auth user when allowed by the current admin flow
+- succeeds only after both deletion steps complete
 
 ### POST /api/admin/vendors
 Create vendor

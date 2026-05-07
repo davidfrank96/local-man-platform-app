@@ -223,6 +223,7 @@ async function createAuthUser(
   input: {
     email: string;
     password: string;
+    role: AdminRole;
     fullName?: string | null;
   },
 ): Promise<{ id: string; email: string; outcome: "created" | "existing" }> {
@@ -251,11 +252,19 @@ async function createAuthUser(
   const timeoutMs = getAuthCreateTimeoutMs();
   const timedFetch = createTimeoutFetch(fetchImpl, timeoutMs);
   const url = new URL("/auth/v1/admin/users", config.supabaseUrl);
+  const userMetadata: Record<string, unknown> = {
+    role: input.role,
+  };
+
+  if (input.fullName) {
+    userMetadata.full_name = input.fullName;
+  }
+
   const requestBody = {
     email: normalizedEmail,
     password: input.password,
     email_confirm: true,
-    user_metadata: input.fullName ? { full_name: input.fullName } : {},
+    user_metadata: userMetadata,
   };
 
   let response: Response;
@@ -437,6 +446,76 @@ async function createAuthUser(
     email: String(createdUser.email),
     outcome: "created",
   };
+}
+
+function normalizeAuthUserMetadata(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return { ...(value as Record<string, unknown>) };
+}
+
+async function syncAuthUserRoleMetadata(
+  config: AdminAuthConfig,
+  fetchImpl: typeof fetch,
+  input: {
+    userId: string;
+    role: AdminRole;
+  },
+): Promise<void> {
+  const supabase = createAdminSupabaseClient(config, fetchImpl);
+  const currentUserResult = await supabase.auth.admin.getUserById(input.userId).catch((caughtError) => ({
+    data: { user: null },
+    error: caughtError instanceof Error ? caughtError : new Error("Unknown auth user lookup failure"),
+  }));
+
+  if (currentUserResult.error || !currentUserResult.data.user) {
+    throw new AdminServiceError(
+      "AUTH_PROVIDER_ERROR",
+      "Unable to persist the user role.",
+      502,
+      {
+        provider: "supabase_auth",
+        operation: "get_user_by_id",
+        userId: input.userId,
+        error: currentUserResult.error?.message ?? null,
+      },
+      "Supabase auth could not load the existing user metadata.",
+    );
+  }
+
+  const existingMetadata = normalizeAuthUserMetadata(currentUserResult.data.user.user_metadata);
+
+  if (existingMetadata.role === input.role) {
+    return;
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(input.userId, {
+    user_metadata: {
+      ...existingMetadata,
+      role: input.role,
+    },
+  }).catch((caughtError) => ({
+    data: { user: null },
+    error: caughtError instanceof Error ? caughtError : new Error("Unknown auth role sync failure"),
+  }));
+
+  if (error) {
+    throw new AdminServiceError(
+      "AUTH_PROVIDER_ERROR",
+      "Unable to persist the user role.",
+      502,
+      {
+        provider: "supabase_auth",
+        operation: "update_user_by_id",
+        userId: input.userId,
+        role: input.role,
+        error: error.message,
+      },
+      "Supabase auth could not mirror the admin role metadata.",
+    );
+  }
 }
 
 function isDuplicateEmailError(message: string): boolean {
@@ -637,10 +716,18 @@ export async function createAdminUser(
   const authUser = await createAuthUser(resolvedConfig, fetchImpl, {
     email: normalizedEmail,
     password: input.password,
+    role: input.role,
     fullName: input.full_name ?? null,
   });
 
   try {
+    if (authUser.outcome === "existing") {
+      await syncAuthUserRoleMetadata(resolvedConfig, fetchImpl, {
+        userId: authUser.id,
+        role: input.role,
+      });
+    }
+
     const payload = await requestJson(
       createRestUrl(resolvedConfig, "admin_users", {
         on_conflict: "id",
@@ -747,6 +834,42 @@ export async function updateAdminUserRole(
     fetchImpl,
   );
   const adminUser = parseAdminUser(payload);
+
+  if (input.role !== undefined && input.role !== existingAdminUser.role) {
+    try {
+      await syncAuthUserRoleMetadata(resolvedConfig, fetchImpl, {
+        userId: input.adminUserId,
+        role: input.role,
+      });
+    } catch (error) {
+      const rollbackPayload: { role?: AdminRole; full_name?: string | null } = {
+        role: existingAdminUser.role,
+      };
+
+      if (input.full_name !== undefined) {
+        rollbackPayload.full_name = existingAdminUser.full_name;
+      }
+
+      try {
+        await requestJson(
+          createRestUrl(resolvedConfig, "admin_users", {
+            id: `eq.${input.adminUserId}`,
+          }),
+          {
+            method: "PATCH",
+            headers: createServiceHeaders(resolvedConfig),
+            body: JSON.stringify(rollbackPayload),
+          },
+          fetchImpl,
+        );
+      } catch (rollbackError) {
+        console.error("ADMIN USER ROLE ROLLBACK ERROR:", rollbackError);
+      }
+
+      throw error;
+    }
+  }
+
   void writeAuditLogSafely(
     {
       entityId: adminUser.id,
@@ -816,6 +939,31 @@ export async function deleteAdminUser(
       502,
       payload,
     );
+  }
+
+  try {
+    await requestJson(
+      createRestUrl(resolvedConfig, "admin_users", {
+        id: `eq.${input.adminUserId}`,
+      }),
+      {
+        method: "DELETE",
+        headers: createServiceHeaders(resolvedConfig, ""),
+      },
+      fetchImpl,
+    );
+  } catch (error) {
+    if (error instanceof AdminServiceError) {
+      throw new AdminServiceError(
+        "UPSTREAM_ERROR",
+        "Unable to delete the admin user record.",
+        502,
+        error.details,
+        error.detail,
+      );
+    }
+
+    throw error;
   }
 
   void writeAuditLogSafely(

@@ -4,6 +4,7 @@ import {
   formatVendorCardPriceBand,
   formatVendorCardRating,
   getVendorOpenStateDisplay,
+  getVendorOpenStateDisplayFromSnapshot,
 } from "../lib/vendors/card-display.ts";
 
 test("formats vendor card price bands with compact user-facing labels", () => {
@@ -33,4 +34,17 @@ test("uses a single safe open-state display for cards and selected preview", () 
     label: "Status unavailable",
     toneClassName: "vendor-card-status-unavailable",
   });
+});
+
+test("reconciles displayed active hours with a stale closed flag", () => {
+  assert.deepEqual(
+    getVendorOpenStateDisplayFromSnapshot({
+      isOpenNow: false,
+      todayHours: "10:00 AM - 7:00 PM",
+    }),
+    {
+      label: "Open",
+      toneClassName: "vendor-card-status-open",
+    },
+  );
 });

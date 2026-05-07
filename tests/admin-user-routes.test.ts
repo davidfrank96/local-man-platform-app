@@ -59,6 +59,8 @@ function createFetchMock(
   calls: string[],
   options?: {
     role?: "admin" | "agent";
+    authCreateBodies?: unknown[];
+    authUpdateBodies?: Array<{ pathname: string; body: unknown }>;
   },
 ): typeof fetch {
   const role = options?.role ?? "admin";
@@ -91,10 +93,40 @@ function createFetchMock(
       const authBody = JSON.parse(String(init?.body ?? "{}")) as {
         email?: string;
       };
+      options?.authCreateBodies?.push(authBody);
       return Response.json({
         user: {
           id: newUserId,
           email: authBody.email ?? "new.agent@example.com",
+        },
+      });
+    }
+
+    if (url.pathname.startsWith("/auth/v1/admin/users/") && method === "GET") {
+      const userId = url.pathname.split("/").at(-1) ?? managedUserId;
+      return Response.json({
+        user: {
+          id: userId,
+          email: userId === newUserId ? "existing.agent@example.com" : "managed@example.com",
+          user_metadata: {
+            role: "admin",
+          },
+        },
+      });
+    }
+
+    if (url.pathname.startsWith("/auth/v1/admin/users/") && method === "PUT") {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      options?.authUpdateBodies?.push({
+        pathname: url.pathname,
+        body,
+      });
+      const userId = url.pathname.split("/").at(-1) ?? managedUserId;
+      return Response.json({
+        user: {
+          id: userId,
+          email: userId === newUserId ? "existing.agent@example.com" : "managed@example.com",
+          user_metadata: body?.user_metadata ?? null,
         },
       });
     }
@@ -134,6 +166,10 @@ function createFetchMock(
           created_at: "2026-04-28T00:00:00.000Z",
         },
       ]);
+    }
+
+    if (url.pathname === "/rest/v1/admin_users" && method === "DELETE") {
+      return new Response(null, { status: 204 });
     }
 
     if (url.pathname === "/rest/v1/audit_logs" && method === "POST") {
@@ -280,7 +316,8 @@ test("admin can create an agent account", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
-  globalThis.fetch = createFetchMock(calls);
+  const authCreateBodies: unknown[] = [];
+  globalThis.fetch = createFetchMock(calls, { authCreateBodies });
 
   try {
     const response = await createAdminUserRoute(
@@ -297,6 +334,17 @@ test("admin can create an agent account", async () => {
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "agent");
     assert.equal(body.data.outcome, "created");
+    assert.deepEqual(authCreateBodies, [
+      {
+        email: "new.agent@example.com",
+        password: "temp-pass-123",
+        email_confirm: true,
+        user_metadata: {
+          role: "agent",
+          full_name: "New Agent",
+        },
+      },
+    ]);
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -314,7 +362,8 @@ test("dedicated create-user route creates an agent account through the server", 
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
-  globalThis.fetch = createFetchMock(calls);
+  const authCreateBodies: unknown[] = [];
+  globalThis.fetch = createFetchMock(calls, { authCreateBodies });
 
   try {
     const response = await createManagedUserRoute(
@@ -331,6 +380,17 @@ test("dedicated create-user route creates an agent account through the server", 
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "agent");
     assert.equal(body.data.outcome, "created");
+    assert.deepEqual(authCreateBodies, [
+      {
+        email: "new.agent@example.com",
+        password: "temp-pass-123",
+        email_confirm: true,
+        user_metadata: {
+          role: "agent",
+          full_name: "New Agent",
+        },
+      },
+    ]);
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -348,7 +408,8 @@ test("admin can create an admin account", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
-  globalThis.fetch = createFetchMock(calls);
+  const authCreateBodies: unknown[] = [];
+  globalThis.fetch = createFetchMock(calls, { authCreateBodies });
 
   try {
     const response = await createAdminUserRoute(
@@ -365,6 +426,17 @@ test("admin can create an admin account", async () => {
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "admin");
     assert.equal(body.data.outcome, "created");
+    assert.deepEqual(authCreateBodies, [
+      {
+        email: "new.admin@example.com",
+        password: "temp-pass-123",
+        email_confirm: true,
+        user_metadata: {
+          role: "admin",
+          full_name: "New Admin",
+        },
+      },
+    ]);
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
@@ -382,6 +454,7 @@ test("creating an existing auth user recovers and assigns the role without faili
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
+  const authUpdateBodies: Array<{ pathname: string; body: unknown }> = [];
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = input instanceof URL ? input : new URL(String(input));
     const method = init?.method ?? "GET";
@@ -432,6 +505,34 @@ test("creating an existing auth user recovers and assigns the role without faili
       });
     }
 
+    if (url.pathname === `/auth/v1/admin/users/${newUserId}` && method === "GET") {
+      return Response.json({
+        user: {
+          id: newUserId,
+          email: "existing.agent@example.com",
+          user_metadata: {
+            role: "admin",
+          },
+        },
+      });
+    }
+
+    if (url.pathname === `/auth/v1/admin/users/${newUserId}` && method === "PUT") {
+      authUpdateBodies.push({
+        pathname: url.pathname,
+        body: JSON.parse(String(init?.body ?? "{}")),
+      });
+      return Response.json({
+        user: {
+          id: newUserId,
+          email: "existing.agent@example.com",
+          user_metadata: {
+            role: "agent",
+          },
+        },
+      });
+    }
+
     if (url.pathname === "/rest/v1/admin_users" && method === "POST") {
       return Response.json([
         {
@@ -463,11 +564,23 @@ test("creating an existing auth user recovers and assigns the role without faili
     assert.equal(body.data.adminUser.email, "existing.agent@example.com");
     assert.equal(body.data.adminUser.role, "agent");
     assert.equal(body.data.outcome, "existing");
+    assert.deepEqual(authUpdateBodies, [
+      {
+        pathname: `/auth/v1/admin/users/${newUserId}`,
+        body: {
+          user_metadata: {
+            role: "agent",
+          },
+        },
+      },
+    ]);
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "POST /auth/v1/admin/users",
       "GET /auth/v1/admin/users",
+      `GET /auth/v1/admin/users/${newUserId}`,
+      `PUT /auth/v1/admin/users/${newUserId}`,
       "POST /rest/v1/admin_users",
       "POST /rest/v1/audit_logs",
     ]);
@@ -654,7 +767,8 @@ test("admin can update another user's role", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
-  globalThis.fetch = createFetchMock(calls);
+  const authUpdateBodies: Array<{ pathname: string; body: unknown }> = [];
+  globalThis.fetch = createFetchMock(calls, { authUpdateBodies });
 
   try {
     const response = await updateAdminUserRoute(
@@ -672,11 +786,23 @@ test("admin can update another user's role", async () => {
     assert.equal(body.success, true);
     assert.equal(body.data.adminUser.role, "agent");
     assert.equal(body.data.adminUser.full_name, "Managed Agent");
+    assert.deepEqual(authUpdateBodies, [
+      {
+        pathname: `/auth/v1/admin/users/${managedUserId}`,
+        body: {
+          user_metadata: {
+            role: "agent",
+          },
+        },
+      },
+    ]);
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "GET /rest/v1/admin_users",
       "PATCH /rest/v1/admin_users",
+      `GET /auth/v1/admin/users/${managedUserId}`,
+      `PUT /auth/v1/admin/users/${managedUserId}`,
       "POST /rest/v1/audit_logs",
     ]);
   } finally {
@@ -785,6 +911,7 @@ test("admin can delete another agent account", async () => {
       "GET /rest/v1/admin_users",
       "GET /rest/v1/admin_users",
       `DELETE /auth/v1/admin/users/${managedUserId}`,
+      "DELETE /rest/v1/admin_users",
       "POST /rest/v1/audit_logs",
     ]);
   } finally {

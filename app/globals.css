@@ -2850,6 +2850,7 @@ h2 {
 
 .selected-vendor-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
   overflow-anchor: none;
@@ -2863,8 +2864,17 @@ h2 {
     linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(247, 249, 246, 0.86));
 }
 
+.selected-vendor-panel > *,
+.selected-vendor-summary,
+.selected-vendor-summary > *,
+.selected-vendor-actions,
+.selected-vendor-actions > * {
+  min-width: 0;
+}
+
 .selected-vendor-summary {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 4px 0;
 }
@@ -3416,9 +3426,12 @@ h2 {
   }
 
   .vendor-section-nav {
-    display: inline-flex;
+    display: flex;
     flex-wrap: nowrap;
     gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
     padding-bottom: 2px;
     scrollbar-width: none;

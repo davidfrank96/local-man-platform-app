@@ -1,6 +1,7 @@
 import { DEFAULT_CITY_LOCATION } from "../location/user-location.ts";
 import { calculateDistanceKm, roundDistanceKm } from "../location/distance.ts";
 import type { NearbyVendorsResponseData, LocationSource, PriceBand } from "../../types/index.ts";
+import { resolveVendorOpenState } from "../vendors/hours.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 type NearbyLocation = NearbyVendorsResponseData["location"];
@@ -252,6 +253,11 @@ export function normalizeVendor(value: unknown, index: number): NormalizedVendor
   const phoneNumber =
     normalizeString(value.phone_number) ?? normalizeString(value.phone);
   const area = normalizeString(value.area);
+  const todayHours = normalizeString(value.today_hours) ?? "Hours unavailable";
+  const resolvedIsOpenNow = resolveVendorOpenState({
+    isOpenNow: typeof value.is_open_now === "boolean" ? value.is_open_now : null,
+    todayHours,
+  });
   const featuredDish = isObject(value.featured_dish)
     ? {
         dish_name: normalizeString(value.featured_dish.dish_name) ?? "Featured dish",
@@ -282,9 +288,9 @@ export function normalizeVendor(value: unknown, index: number): NormalizedVendor
     ranking_score: normalizeInteger(value.ranking_score, 0),
     distance_km: distanceKm !== null && distanceKm >= 0 ? distanceKm : 0,
     distanceKm: distanceKm !== null && distanceKm >= 0 ? distanceKm : undefined,
-    is_open_now: typeof value.is_open_now === "boolean" ? value.is_open_now : false,
+    is_open_now: resolvedIsOpenNow === true,
     featured_dish: featuredDish,
-    today_hours: normalizeString(value.today_hours) ?? "Hours unavailable",
+    today_hours: todayHours,
     imageUrl: FALLBACK_VENDOR_IMAGE_URL,
     hasValidCoordinates,
   };

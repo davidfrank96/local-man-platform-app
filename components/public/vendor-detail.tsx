@@ -7,6 +7,7 @@ import { VendorDetailTracker } from "./vendor-detail-tracker.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
 import { VendorRating } from "./vendor-rating.tsx";
 import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
+import { resolveVendorOpenState } from "../../lib/vendors/hours.ts";
 
 type VendorDetailProps = {
   vendor: VendorDetailResponseData;
@@ -51,16 +52,22 @@ export function VendorDetail({
   const heroImage = selectPrimaryVendorImage(vendor.images);
   const locationSource = explicitLocationSource ?? readLocationSourceFromReturnTo(returnTo);
   const hasHours = vendor.hours.length > 0;
+  const resolvedIsOpenNow = resolveVendorOpenState({
+    hours: vendor.hours,
+    override: vendor.is_open_override,
+    isOpenNow: vendor.is_open_now,
+    todayHours: vendor.today_hours,
+  });
   const statusLabel =
     vendor.is_open_override === null && !hasHours
       ? "Hours not set"
-      : vendor.is_open_now
+      : resolvedIsOpenNow
         ? "Open now"
         : "Closed now";
   const statusTone =
     vendor.is_open_override === null && !hasHours
       ? "status-neutral"
-      : vendor.is_open_now
+      : resolvedIsOpenNow
         ? "status-open"
         : "status-closed";
   const featuredDishLabel =
@@ -72,7 +79,7 @@ export function VendorDetail({
   return (
     <main className="vendor-detail-shell">
       <VendorDetailTracker
-        isOpenNow={vendor.is_open_now}
+        isOpenNow={resolvedIsOpenNow === true}
         locationSource={locationSource}
         todayHours={todayHours}
         vendorArea={vendor.area}
