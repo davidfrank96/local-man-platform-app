@@ -8,17 +8,13 @@ import {
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import type { PriceBand } from "../../types";
 import { getVendorSearchRelevance } from "./discovery-ranking.ts";
-import { formatTodayHoursLabel } from "./time-display.ts";
+import {
+  getVendorAvailabilitySnapshot,
+  type VendorHourWindow,
+} from "./hours.ts";
 
 export const DEFAULT_NEARBY_RADIUS_KM = 10;
 export const MAX_NEARBY_VENDOR_RESULTS = 50;
-
-export type VendorHourWindow = {
-  day_of_week: number;
-  open_time: string | null;
-  close_time: string | null;
-  is_closed: boolean;
-};
 
 export type NearbyVendorFeaturedDishSummary = {
   dish_name: string;
@@ -77,118 +73,6 @@ type NearbyVendorSortable = NearbyVendorResult & {
 
 export type VendorUsageScoreMap = Map<string, number>;
 
-export type VendorAvailabilitySnapshot = {
-  isOpenNow: boolean;
-  todayHours: string;
-};
-
-const ABUJA_TIME_ZONE = "Africa/Lagos";
-
-function parseTimeToMinutes(time: string | null): number | null {
-  if (!time) return null;
-
-  const [hours, minutes] = time.split(":").map(Number);
-
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
-    return null;
-  }
-
-  return hours * 60 + minutes;
-}
-
-function getDayAndMinuteInAbuja(date: Date): {
-  dayOfWeek: number;
-  minuteOfDay: number;
-} {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: ABUJA_TIME_ZONE,
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-
-  const weekday = parts.find((part) => part.type === "weekday")?.value;
-  const hour = Number(parts.find((part) => part.type === "hour")?.value);
-  const minute = Number(parts.find((part) => part.type === "minute")?.value);
-  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
-    weekday ?? "",
-  );
-
-  return {
-    dayOfWeek,
-    minuteOfDay: hour * 60 + minute,
-  };
-}
-
-function getVendorHoursForCurrentTime(
-  hours: VendorHourWindow[] | null | undefined,
-  now = new Date(),
-): {
-  todayHours: VendorHourWindow | undefined;
-  previousHours: VendorHourWindow | undefined;
-  isOpenViaPreviousOvernight: boolean;
-} {
-  if (!hours?.length) {
-    return {
-      todayHours: undefined,
-      previousHours: undefined,
-      isOpenViaPreviousOvernight: false,
-    };
-  }
-
-  const { dayOfWeek, minuteOfDay } = getDayAndMinuteInAbuja(now);
-  const previousDay = (dayOfWeek + 6) % 7;
-  const todayHours = hours.find((entry) => entry.day_of_week === dayOfWeek);
-  const previousHours = hours.find((entry) => entry.day_of_week === previousDay);
-
-  return {
-    todayHours,
-    previousHours,
-    isOpenViaPreviousOvernight: isWindowOpenAtMinute(
-      previousHours,
-      minuteOfDay,
-      true,
-    ),
-  };
-}
-
-function isWindowOpenAtMinute(
-  hours: VendorHourWindow | undefined,
-  minuteOfDay: number,
-  checkPreviousOvernight: boolean,
-): boolean {
-  if (!hours || hours.is_closed) return false;
-
-  const open = parseTimeToMinutes(hours.open_time);
-  const close = parseTimeToMinutes(hours.close_time);
-
-  if (open === null || close === null) return false;
-
-  if (open <= close) {
-    return !checkPreviousOvernight && minuteOfDay >= open && minuteOfDay < close;
-  }
-
-  return checkPreviousOvernight ? minuteOfDay < close : minuteOfDay >= open;
-}
-
-export function isVendorOpenNow(
-  hours: VendorHourWindow[] | null | undefined,
-  override: boolean | null,
-  now = new Date(),
-): boolean {
-  if (override !== null) return override;
-  if (!hours?.length) return false;
-
-  const { minuteOfDay } = getDayAndMinuteInAbuja(now);
-  const { todayHours, previousHours } = getVendorHoursForCurrentTime(hours, now);
-
-  return (
-    isWindowOpenAtMinute(todayHours, minuteOfDay, false) ||
-    isWindowOpenAtMinute(previousHours, minuteOfDay, true)
-  );
-}
-
 export function getEffectiveNearbyRadiusKm(
   radiusKm: number | undefined,
 ): number {
@@ -233,56 +117,12 @@ function getFeaturedDishSummary(
   };
 }
 
-export function getTodayHoursSummary(
-  hours: VendorHourWindow[] | null | undefined,
-  now = new Date(),
-  override: boolean | null = null,
-): string {
-  if (!hours?.length) {
-    return "Hours not listed";
-  }
-
-  const {
-    todayHours,
-    previousHours,
-    isOpenViaPreviousOvernight,
-  } = getVendorHoursForCurrentTime(hours, now);
-
-  if (isOpenViaPreviousOvernight && previousHours) {
-    return formatTodayHoursLabel(
-      previousHours.open_time,
-      previousHours.close_time,
-      previousHours.is_closed,
-    );
-  }
-
-  if (!todayHours) {
-    return "Hours not listed";
-  }
-
-  const todayLabel = formatTodayHoursLabel(
-    todayHours.open_time,
-    todayHours.close_time,
-    todayHours.is_closed,
-  );
-
-  if (override === true && todayLabel === "Closed") {
-    return "Open now";
-  }
-
-  return todayLabel;
-}
-
-export function getVendorAvailabilitySnapshot(
-  hours: VendorHourWindow[] | null | undefined,
-  override: boolean | null,
-  now = new Date(),
-): VendorAvailabilitySnapshot {
-  return {
-    isOpenNow: isVendorOpenNow(hours, override, now),
-    todayHours: getTodayHoursSummary(hours, now, override),
-  };
-}
+export {
+  getTodayHoursSummary,
+  getVendorAvailabilitySnapshot,
+  isVendorOpenNow,
+  type VendorAvailabilitySnapshot,
+} from "./hours.ts";
 
 export function findNearbyVendors(
   vendors: VendorLocationRecord[],

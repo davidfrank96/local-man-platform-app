@@ -1,8 +1,8 @@
 import {
   getNearbyBoundingBox,
-  getVendorAvailabilitySnapshot,
   type VendorLocationRecord,
 } from "./nearby.ts";
+import { getVendorAvailabilitySnapshot } from "./hours.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import {
   vendorCategorySchema,
@@ -44,6 +44,8 @@ type VendorUsageEventRow = {
   vendor_id: string | null;
   event_type: VendorUsageEventType | null;
 };
+
+export const PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS = 5;
 
 const nearbyVendorBaseSelect = [
   "id",
@@ -304,6 +306,9 @@ export async function fetchNearbyVendorCandidates(
     url,
     config,
     "Supabase nearby vendor query failed",
+    {
+      revalidate: PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS,
+    },
   );
 }
 

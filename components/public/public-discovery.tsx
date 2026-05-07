@@ -19,6 +19,15 @@ import {
   trackPublicUserAction,
 } from "../../lib/public/user-action-tracking.ts";
 import {
+  clearPublicDiscoveryVendorCache,
+  isPublicDiscoverySnapshotFresh,
+  readPublicDiscoverySnapshot,
+  shouldSkipPublicDiscoveryFetch,
+  subscribeToPublicDiscoveryVendorInvalidation,
+  writePublicDiscoverySnapshot,
+  type PublicDiscoverySnapshot,
+} from "../../lib/public/discovery-cache.ts";
+import {
   createRetainedVendorPreview,
   readLastSelectedVendor,
   readRecentlyViewedVendors,
@@ -35,7 +44,7 @@ import {
 import {
   formatVendorCardDistance,
   getVendorCue,
-  getVendorOpenStateDisplay,
+  getVendorOpenStateDisplayFromSnapshot,
 } from "../../lib/vendors/card-display.ts";
 import {
   getPopularVendorIds,
@@ -82,12 +91,7 @@ const defaultFilters: DiscoveryFilters = {
 };
 const DEFAULT_CITY_BOOTSTRAP_DELAY_MS = 250;
 
-type DiscoverySnapshot = {
-  nearbyData: NearbyVendorsResponseData | null;
-  selectedVendorId: string | null;
-  selectedVendorSlug?: string | null;
-  scrollY: number;
-};
+type DiscoverySnapshot = PublicDiscoverySnapshot<NearbyVendorsResponseData>;
 
 function parseRadius(value: string | null): number {
   const parsed = Number(value);
@@ -193,26 +197,6 @@ function buildDiscoveryReturnTo(
   return `${pathname}${queryString ? `?${queryString}` : ""}`;
 }
 
-function readDiscoverySnapshot(key: string): DiscoverySnapshot | null {
-  try {
-    const raw = window.sessionStorage.getItem(key);
-
-    if (!raw) return null;
-
-    return JSON.parse(raw) as DiscoverySnapshot;
-  } catch {
-    return null;
-  }
-}
-
-function writeDiscoverySnapshot(key: string, snapshot: DiscoverySnapshot): void {
-  try {
-    window.sessionStorage.setItem(key, JSON.stringify(snapshot));
-  } catch {
-    // Ignore session storage failures.
-  }
-}
-
 function resolveSnapshotSelectedVendorId(snapshot: DiscoverySnapshot): string | null {
   if (snapshot.selectedVendorId) {
     return snapshot.selectedVendorId;
@@ -316,8 +300,10 @@ export function PublicDiscovery({
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
     useState<RetainedVendorPreview | null>(null);
   const nearbyDataRef = useRef<NearbyVendorsResponseData | null>(null);
+  const nearbyDataUpdatedAtRef = useRef<string | null>(null);
   const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
   const preferredSelectedVendorIdRef = useRef<string | null>(null);
+  const restoredSnapshotNeedsLiveFetchRef = useRef(false);
   const selectedVendorIdRef = useRef<string | null>(null);
   const selectionActionTokenRef = useRef(0);
   const selectionSourceRef = useRef<VendorSelectionSource>(null);
@@ -581,11 +567,12 @@ export function PublicDiscovery({
 
   useEffect(() => {
     const snapshot =
-      readDiscoverySnapshot(discoverySnapshotKey) ??
-      readDiscoverySnapshot(fallbackDiscoverySnapshotKey);
+      readPublicDiscoverySnapshot<NearbyVendorsResponseData>(discoverySnapshotKey) ??
+      readPublicDiscoverySnapshot<NearbyVendorsResponseData>(fallbackDiscoverySnapshotKey);
 
     if (!snapshot) {
       const timeout = window.setTimeout(() => {
+        restoredSnapshotNeedsLiveFetchRef.current = false;
         setSnapshotHydrated(true);
       }, 0);
 
@@ -595,10 +582,16 @@ export function PublicDiscovery({
     }
 
     const timeout = window.setTimeout(() => {
-      setNearbyData(snapshot.nearbyData);
+      const hasFreshNearbyData = isPublicDiscoverySnapshotFresh(snapshot);
+      const restoredNearbyData = hasFreshNearbyData ? snapshot.nearbyData : null;
+      nearbyDataUpdatedAtRef.current = hasFreshNearbyData
+        ? snapshot.nearbyDataUpdatedAt ?? null
+        : null;
+      restoredSnapshotNeedsLiveFetchRef.current = Boolean(restoredNearbyData);
+      setNearbyData(restoredNearbyData);
       const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
-      nearbyDataRef.current = snapshot.nearbyData;
+      nearbyDataRef.current = restoredNearbyData;
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
       setSelectedVendorId(snapshotSelectedVendorId);
@@ -620,14 +613,16 @@ export function PublicDiscovery({
   useEffect(() => {
     if (!snapshotHydrated) return;
 
-    writeDiscoverySnapshot(discoverySnapshotKey, {
+    writePublicDiscoverySnapshot(discoverySnapshotKey, {
       nearbyData,
+      nearbyDataUpdatedAt: nearbyData ? nearbyDataUpdatedAtRef.current : null,
       selectedVendorId,
       scrollY: window.scrollY,
     });
     if (fallbackDiscoverySnapshotKey !== discoverySnapshotKey) {
-      writeDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
+      writePublicDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
         nearbyData,
+        nearbyDataUpdatedAt: nearbyData ? nearbyDataUpdatedAtRef.current : null,
         selectedVendorId,
         scrollY: window.scrollY,
       });
@@ -644,22 +639,27 @@ export function PublicDiscovery({
     if (!snapshotHydrated) return;
 
     function persistScrollPosition() {
-      const snapshot = readDiscoverySnapshot(discoverySnapshotKey) ?? {
+      const snapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(discoverySnapshotKey) ?? {
         nearbyData: nearbyDataRef.current,
+        nearbyDataUpdatedAt: nearbyDataUpdatedAtRef.current,
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: 0,
       };
 
-      writeDiscoverySnapshot(discoverySnapshotKey, {
+      writePublicDiscoverySnapshot(discoverySnapshotKey, {
         ...snapshot,
         nearbyData: nearbyDataRef.current,
+        nearbyDataUpdatedAt:
+          nearbyDataRef.current ? (nearbyDataUpdatedAtRef.current ?? snapshot.nearbyDataUpdatedAt ?? null) : null,
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: window.scrollY,
       });
       if (fallbackDiscoverySnapshotKey !== discoverySnapshotKey) {
-        writeDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
+        writePublicDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
           ...snapshot,
           nearbyData: nearbyDataRef.current,
+          nearbyDataUpdatedAt:
+            nearbyDataRef.current ? (nearbyDataUpdatedAtRef.current ?? snapshot.nearbyDataUpdatedAt ?? null) : null,
           selectedVendorId: selectedVendorIdRef.current,
           scrollY: window.scrollY,
         });
@@ -683,21 +683,30 @@ export function PublicDiscovery({
 
   useEffect(() => {
     function restorePreviewSelectionFromSnapshot() {
-      const snapshot = readDiscoverySnapshot(discoverySnapshotKey);
-      const fallbackSnapshot = readDiscoverySnapshot(fallbackDiscoverySnapshotKey);
+      const snapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(discoverySnapshotKey);
+      const fallbackSnapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(fallbackDiscoverySnapshotKey);
       const restoredSnapshot = snapshot ?? fallbackSnapshot;
 
       if (!restoredSnapshot) {
         return;
       }
 
+      const hasFreshNearbyData = isPublicDiscoverySnapshotFresh(restoredSnapshot);
+      const restoredNearbyData = hasFreshNearbyData ? restoredSnapshot.nearbyData : null;
       const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(restoredSnapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
-      nearbyDataRef.current = restoredSnapshot.nearbyData;
+      nearbyDataRef.current = restoredNearbyData;
+      nearbyDataUpdatedAtRef.current = hasFreshNearbyData
+        ? restoredSnapshot.nearbyDataUpdatedAt ?? null
+        : nearbyDataUpdatedAtRef.current;
+      restoredSnapshotNeedsLiveFetchRef.current = restoredSnapshotNeedsLiveFetchRef.current ||
+        Boolean(restoredNearbyData);
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
       setSelectedVendorId(snapshotSelectedVendorId);
-      setNearbyData((current) => current ?? restoredSnapshot.nearbyData);
+      if (restoredNearbyData) {
+        setNearbyData((current) => current ?? restoredNearbyData);
+      }
     }
 
     window.addEventListener("pageshow", restorePreviewSelectionFromSnapshot);
@@ -754,6 +763,8 @@ export function PublicDiscovery({
           return;
         }
 
+        nearbyDataUpdatedAtRef.current = new Date().toISOString();
+        restoredSnapshotNeedsLiveFetchRef.current = false;
         setNearbyData(result);
         const nextSelectionSource =
           selectionSourceRef.current === "filter" ? "filter" : "restore";
@@ -834,6 +845,31 @@ export function PublicDiscovery({
   }, [fallbackDiscoveryLocation, location, nearbyData]);
 
   useEffect(() => {
+    if (!snapshotHydrated) {
+      return;
+    }
+
+    return subscribeToPublicDiscoveryVendorInvalidation(() => {
+      clearPublicDiscoveryVendorCache();
+      nearbyDataUpdatedAtRef.current = null;
+      nearbyRequestKeyRef.current = null;
+      restoredSnapshotNeedsLiveFetchRef.current = true;
+
+      if (canUseNetwork && isOnline && activeFetchLocation) {
+        nearbyRequestKeyRef.current = buildNearbyRequestKey(activeFetchLocation, filters);
+        void loadNearbyVendors(activeFetchLocation, filters);
+      }
+    });
+  }, [
+    activeFetchLocation,
+    canUseNetwork,
+    filters,
+    isOnline,
+    loadNearbyVendors,
+    snapshotHydrated,
+  ]);
+
+  useEffect(() => {
     if (!isOnline) {
       nearbyRequestKeyRef.current = null;
       return;
@@ -848,22 +884,22 @@ export function PublicDiscovery({
     }
 
     const requestKey = buildNearbyRequestKey(activeFetchLocation, filters);
+    const restoredNearbyDataRequestKey = nearbyData
+      ? buildNearbyRequestKey(
+          {
+            source: nearbyData.location.source,
+            coordinates: nearbyData.location.coordinates,
+          },
+          filters,
+        )
+      : null;
 
-    if (nearbyRequestKeyRef.current === requestKey) {
-      return;
-    }
-
-    if (
-      !nearbyRequestKeyRef.current &&
-      nearbyData &&
-      buildNearbyRequestKey(
-        {
-          source: nearbyData.location.source,
-          coordinates: nearbyData.location.coordinates,
-        },
-        filters,
-      ) === requestKey
-    ) {
+    if (shouldSkipPublicDiscoveryFetch({
+      existingRequestKey: nearbyRequestKeyRef.current,
+      nextRequestKey: requestKey,
+      restoredNearbyDataRequestKey,
+      requiresAuthoritativeFetch: restoredSnapshotNeedsLiveFetchRef.current,
+    })) {
       nearbyRequestKeyRef.current = requestKey;
       return;
     }
@@ -983,8 +1019,12 @@ export function PublicDiscovery({
     [selectedVendorId, vendorById],
   );
   const selectedVendorOpenState = useMemo(
-    () => getVendorOpenStateDisplay(selectedVendor?.is_open_now),
-    [selectedVendor?.is_open_now],
+    () =>
+      getVendorOpenStateDisplayFromSnapshot({
+        isOpenNow: selectedVendor?.is_open_now,
+        todayHours: selectedVendor?.today_hours,
+      }),
+    [selectedVendor?.is_open_now, selectedVendor?.today_hours],
   );
   const selectedVendorCue = useMemo(
     () => (selectedVendor ? getVendorCue(selectedVendor) : null),
@@ -1063,8 +1103,9 @@ export function PublicDiscovery({
     }
 
     if (typeof window !== "undefined") {
-      writeDiscoverySnapshot(discoverySnapshotKey, {
+      writePublicDiscoverySnapshot(discoverySnapshotKey, {
         nearbyData: nearbyDataRef.current,
+        nearbyDataUpdatedAt: nearbyDataRef.current ? nearbyDataUpdatedAtRef.current : null,
         selectedVendorId: vendor?.vendor_id ?? null,
         scrollY: window.scrollY,
       });

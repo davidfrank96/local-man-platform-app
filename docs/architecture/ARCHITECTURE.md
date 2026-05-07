@@ -78,7 +78,7 @@ Handle:
 - authenticated admin writes
 - backend analytics and team-access routes
 - admin subresource loading
-- shared vendor availability computation for `is_open_now` and `today_hours`
+- shared vendor availability computation in `lib/vendors/hours.ts` for `is_open_now` and `today_hours`
 
 ### Database
 Stores:
@@ -285,8 +285,11 @@ The public app keeps a small amount of client-only memory:
 
 - `localStorage` stores recently viewed vendors
 - `localStorage` stores the last selected vendor
+- `sessionStorage` stores a short-lived discovery snapshot for back-navigation recovery
 - vendor detail visits update recently viewed memory
 - list selection updates last-selected memory
+- discovery snapshots are only restored when the nearby vendor payload is fresh enough to trust
+- admin vendor mutations invalidate discovery snapshots through the shared public invalidation channel so restored discovery state cannot outlive a vendor edit, deactivate, hours change, image change, or featured-dish change
 - these helpers improve return navigation without requiring login or backend persistence
 
 ## Core Product Logic

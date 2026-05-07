@@ -3,6 +3,7 @@ import type { ApiResponse } from "../api/responses.ts";
 import { AppError } from "../errors/app-error.ts";
 import type { AppErrorCode } from "../api/contracts.ts";
 import { getCurrentAdminAccessToken } from "./session-client.ts";
+import { invalidatePublicDiscoveryVendorCache } from "../public/discovery-cache.ts";
 import {
   adminUserSchema,
   adminAnalyticsResponseDataSchema,
@@ -440,23 +441,6 @@ function shouldUseDevelopmentAnalyticsFallback(): boolean {
   return process.env.NODE_ENV === "development";
 }
 
-function mapDirectSupabaseReadError(error: { code?: string; message?: string } | null | undefined, fallbackMessage: string): AdminApiError {
-  const normalizedMessage = error?.message?.toLowerCase() ?? "";
-  const errorCode = error?.code === "42501" || normalizedMessage.includes("permission denied")
-    ? "FORBIDDEN"
-    : error?.code === "PGRST204" || normalizedMessage.includes("could not find")
-    ? "INVALID_RESPONSE"
-    : "UPSTREAM_ERROR";
-
-  return new AdminApiError(
-    errorCode,
-    errorCode === "FORBIDDEN" ? "You do not have access to this resource." : fallbackMessage,
-    errorCode === "FORBIDDEN" ? 403 : 502,
-    error ?? undefined,
-    error?.message ?? fallbackMessage,
-  );
-}
-
 function buildAnalyticsFallbackPath(range: AdminAnalyticsRange): string {
   const params = new URLSearchParams();
   appendDefinedParam(params, "range", range);
@@ -859,6 +843,16 @@ async function requestAdminApiResult<T>(
       },
     };
   }
+}
+
+function invalidatePublicDiscoveryAfterVendorMutation(
+  reason: string,
+  vendorId: string | null,
+): void {
+  invalidatePublicDiscoveryVendorCache({
+    reason,
+    vendorId,
+  });
 }
 
 export async function listAdminVendors(
@@ -1281,23 +1275,14 @@ export async function fetchAdminAuditLogs(
 export async function listAdminUsers(
   options: AdminApiClientOptions,
 ): Promise<AdminUser[]> {
-  const client = buildAdminSupabaseClient(options);
+  const result = await requestAdminApi<{ adminUsers: AdminUser[] }>(
+    "/api/admin/admin-users",
+    options,
+  );
 
-  try {
-    const response = await client
-      .from("admin_users")
-      .select("id,email,full_name,role,created_at")
-      .order("created_at", { ascending: false })
-      .limit(1000);
-
-    if (response.error) {
-      throw mapDirectSupabaseReadError(response.error, "Unable to load admin users.");
-    }
-
-    return (response.data ?? []).map((row) => adminUserSchema.parse(row));
-  } finally {
-    await disposeAdminSupabaseClient(client);
-  }
+  return (Array.isArray(result.adminUsers) ? result.adminUsers : []).map((row) =>
+    adminUserSchema.parse(row)
+  );
 }
 
 export async function createManagedAdminUser(
@@ -1359,6 +1344,7 @@ export async function createAdminVendor(
     },
   );
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_created", result.vendor.id);
   return result.vendor;
 }
 
@@ -1369,7 +1355,7 @@ export async function submitAdminVendorIntake(
   },
   options: AdminApiClientOptions,
 ): Promise<VendorIntakePreviewResult | VendorIntakeUploadResult> {
-  return requestAdminApi<VendorIntakePreviewResult | VendorIntakeUploadResult>(
+  const result = await requestAdminApi<VendorIntakePreviewResult | VendorIntakeUploadResult>(
     "/api/admin/vendors/intake",
     options,
     {
@@ -1377,6 +1363,12 @@ export async function submitAdminVendorIntake(
       body: JSON.stringify(data),
     },
   );
+
+  if (data.action === "upload" && "uploadedRows" in result && result.uploadedRows.length > 0) {
+    invalidatePublicDiscoveryAfterVendorMutation("vendor_created", null);
+  }
+
+  return result;
 }
 
 export async function updateAdminVendor(
@@ -1393,6 +1385,7 @@ export async function updateAdminVendor(
     },
   );
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_updated", result.vendor.id);
   return result.vendor;
 }
 
@@ -1406,6 +1399,7 @@ export async function deactivateAdminVendor(
     method: "DELETE",
   });
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_deactivated", result.vendor.vendor_id);
   return result.vendor;
 }
 
@@ -1423,6 +1417,7 @@ export async function replaceAdminVendorHours(
     },
   );
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_hours_updated", vendorId);
   return result.hours;
 }
 
@@ -1526,6 +1521,7 @@ export async function createAdminVendorImages(
         },
       );
 
+      invalidatePublicDiscoveryAfterVendorMutation("vendor_images_updated", vendorId);
       return result.images;
     } catch (error) {
       await supabase.storage.from(vendorImageBucket).remove([storageObjectPath]);
@@ -1561,6 +1557,7 @@ export async function deleteAdminVendorImage(
     },
   );
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_images_updated", vendorId);
   return result.image;
 }
 
@@ -1578,6 +1575,7 @@ export async function createAdminVendorDishes(
     },
   );
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_dishes_updated", vendorId);
   return result.dishes;
 }
 
@@ -1606,5 +1604,6 @@ export async function deleteAdminVendorDish(
     },
   );
 
+  invalidatePublicDiscoveryAfterVendorMutation("vendor_dishes_updated", vendorId);
   return result.dish;
 }

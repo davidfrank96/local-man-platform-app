@@ -79,7 +79,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - create admin/agent
   - update admin/agent role and name
   - delete admin/agent
-  - recover existing auth users cleanly and refresh the list from `admin_users`
+  - recover existing auth users cleanly, mirror role metadata, and refresh the list from the authoritative team-access API
 - centralized UI error boundary and toast notifications
 
 ## Tech Stack

@@ -51,6 +51,7 @@ After successful workspace login:
 - `agent` resolves to `/admin/agent`
 
 Authenticated users missing from `admin_users` are auto-provisioned as `agent` by default. This avoids auth success followed by workspace rejection while preventing role escalation.
+For normal team-access management, `admin_users.role` is the authoritative role source. Supabase Auth `user_metadata.role` is mirrored from `admin_users.role` during create and role-change flows so session reads, dashboard routing, and the admin UI stay aligned.
 
 ## Current permission model
 

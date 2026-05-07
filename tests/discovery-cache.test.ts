@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  PUBLIC_DISCOVERY_SNAPSHOT_TTL_MS,
   clearPublicDiscoveryVendorCache,
   invalidatePublicDiscoveryVendorCache,
+  isPublicDiscoverySnapshotFresh,
+  readPublicDiscoverySnapshot,
+  shouldSkipPublicDiscoveryFetch,
 } from "../lib/public/discovery-cache.ts";
 
 function createStorage(initialEntries: Array<[string, string]> = []) {
@@ -87,4 +91,124 @@ test("invalidatePublicDiscoveryVendorCache clears caches and records an invalida
   assert.equal(payload.reason, "vendor_updated");
   assert.equal(payload.vendorId, "vendor-123");
   assert.equal(typeof payload.timestamp, "string");
+});
+
+test("expired discovery snapshot does not restore cached nearby vendor data", () => {
+  const staleTimestamp = new Date(
+    Date.now() - PUBLIC_DISCOVERY_SNAPSHOT_TTL_MS - 1_000,
+  ).toISOString();
+  const sessionStorage = createStorage([
+    [
+      "public-discovery:/",
+      JSON.stringify({
+        nearbyData: {
+          location: {
+            source: "default_city",
+            label: "Abuja",
+            coordinates: {
+              lat: 9.0765,
+              lng: 7.3986,
+            },
+            isApproximate: true,
+          },
+          vendors: [
+            {
+              vendor_id: "vendor-1",
+            },
+          ],
+        },
+        nearbyDataUpdatedAt: staleTimestamp,
+        selectedVendorId: "vendor-1",
+        scrollY: 120,
+      }),
+    ],
+  ]);
+
+  const snapshot = readPublicDiscoverySnapshot("public-discovery:/", {
+    sessionStorage,
+  });
+
+  assert.ok(snapshot);
+  assert.equal(snapshot?.selectedVendorId, "vendor-1");
+  assert.equal(
+    isPublicDiscoverySnapshotFresh(snapshot, {
+      nowMs: Date.now(),
+    }),
+    false,
+  );
+});
+
+test("discovery snapshot is treated as stale after a later vendor invalidation", () => {
+  const nearbyDataUpdatedAt = new Date(Date.now() - 30_000).toISOString();
+  const sessionStorage = createStorage([
+    [
+      "public-discovery:/",
+      JSON.stringify({
+        nearbyData: {
+          location: {
+            source: "default_city",
+            label: "Abuja",
+            coordinates: {
+              lat: 9.0765,
+              lng: 7.3986,
+            },
+            isApproximate: true,
+          },
+          vendors: [
+            {
+              vendor_id: "vendor-1",
+            },
+          ],
+        },
+        nearbyDataUpdatedAt,
+        selectedVendorId: "vendor-1",
+        scrollY: 120,
+      }),
+    ],
+  ]);
+  const localStorage = createStorage([
+    [
+      "public-discovery:vendors:invalidation",
+      JSON.stringify({
+        reason: "vendor_deactivated",
+        vendorId: "vendor-1",
+        timestamp: new Date().toISOString(),
+      }),
+    ],
+  ]);
+
+  const snapshot = readPublicDiscoverySnapshot("public-discovery:/", {
+    sessionStorage,
+  });
+
+  assert.ok(snapshot);
+  assert.equal(
+    isPublicDiscoverySnapshotFresh(snapshot, {
+      localStorage,
+      nowMs: Date.now(),
+    }),
+    false,
+  );
+});
+
+test("restored snapshot still requires an authoritative fetch when freshness is forced", () => {
+  assert.equal(
+    shouldSkipPublicDiscoveryFetch({
+      existingRequestKey: null,
+      nextRequestKey: "{\"source\":\"default_city\"}",
+      restoredNearbyDataRequestKey: "{\"source\":\"default_city\"}",
+      requiresAuthoritativeFetch: true,
+    }),
+    false,
+  );
+
+  assert.equal(
+    shouldSkipPublicDiscoveryFetch({
+      existingRequestKey: null,
+      nextRequestKey: "{\"source\":\"default_city\"}",
+      restoredNearbyDataRequestKey: "{\"source\":\"default_city\"}",
+      requiresAuthoritativeFetch: false,
+    }),
+    true,
+  );
 });

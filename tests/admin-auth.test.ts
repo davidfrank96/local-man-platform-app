@@ -249,6 +249,82 @@ test("auto-creates a default agent admin_users row for authenticated auth-only u
   ]);
 });
 
+test("auth-only users cannot self-elevate through auth metadata during admin_users auto-provisioning", async () => {
+  const requests: Array<{
+    pathname: string;
+    method: string;
+    body?: unknown;
+  }> = [];
+
+  const result = await requireAdmin(
+    new Request("http://localhost/api/admin/vendors", {
+      headers: {
+        authorization: "Bearer fresh-user-token",
+      },
+    }),
+    {
+      config: {
+        ...config,
+        supabaseServiceRoleKey: "service-role-key",
+      },
+      fetchImpl: (async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+        const method = init?.method ?? "GET";
+
+        requests.push({
+          pathname: url.pathname,
+          method,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+
+        if (url.pathname === "/auth/v1/user") {
+          return Response.json({
+            id: "fresh-user-id",
+            email: "fresh@example.com",
+            user_metadata: {
+              role: "admin",
+            },
+          });
+        }
+
+        if (url.pathname === "/rest/v1/admin_users" && method === "GET") {
+          return Response.json([]);
+        }
+
+        if (url.pathname === "/rest/v1/admin_users" && method === "POST") {
+          return Response.json([
+            {
+              id: "fresh-user-id",
+              email: "fresh@example.com",
+              full_name: null,
+              role: "agent",
+            },
+          ]);
+        }
+
+        throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.success, true);
+
+  if (result.success) {
+    assert.equal(result.session.adminUser.role, "agent");
+  }
+
+  assert.deepEqual(requests[2], {
+    pathname: "/rest/v1/admin_users",
+    method: "POST",
+    body: {
+      id: "fresh-user-id",
+      email: "fresh@example.com",
+      full_name: null,
+      role: "agent",
+    },
+  });
+});
+
 test("blocks agent users from admin-only permissions", async () => {
   const result = await requireAdminPermission(
     new Request("http://localhost/api/admin/analytics", {

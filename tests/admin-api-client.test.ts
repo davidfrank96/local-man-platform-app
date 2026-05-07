@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AdminApiError,
+  createAdminVendorDishes,
   deleteAdminVendorImage,
   deleteAdminVendorDish,
   createAdminVendor,
   createManagedAdminUser,
   createAdminVendorImages,
+  deactivateAdminVendor,
   fetchAdminAnalytics,
   fetchAdminAuditLogs,
   listAdminUsers,
@@ -14,7 +16,9 @@ import {
   listAdminVendorHours,
   listAdminVendors,
   listAdminVendorImages,
+  replaceAdminVendorHours,
   submitAdminVendorIntake,
+  updateAdminVendor,
 } from "../lib/admin/api-client.ts";
 import {
   clearStoredAdminSession,
@@ -22,6 +26,135 @@ import {
 } from "../lib/admin/session-client.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
+
+function createAdminVendorSummary(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: vendorId,
+    name: "Test Vendor",
+    slug: "test-vendor",
+    short_description: "Test vendor",
+    phone_number: "+2340000000000",
+    area: "Wuse",
+    latitude: 9.0813,
+    longitude: 7.4694,
+    price_band: "budget",
+    average_rating: 0,
+    review_count: 0,
+    is_active: true,
+    is_open_override: null,
+    hours_count: 7,
+    images_count: 1,
+    featured_dishes_count: 1,
+    ...overrides,
+  };
+}
+
+function createStorage(initialEntries: Array<[string, string]> = []) {
+  const values = new Map(initialEntries);
+
+  return {
+    get length() {
+      return values.size;
+    },
+    key(index: number) {
+      return [...values.keys()][index] ?? null;
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+  };
+}
+
+async function withDiscoveryInvalidationStorage(
+  run: (
+    storage: {
+      localStorage: ReturnType<typeof createStorage>;
+      sessionStorage: ReturnType<typeof createStorage>;
+    },
+  ) => Promise<void>,
+) {
+  const originalWindow = globalThis.window;
+  const originalCustomEvent = globalThis.CustomEvent;
+  const localStorage = createStorage([
+    ["public-discovery-offline:public-discovery:/", "{\"nearbyData\":{}}"],
+  ]);
+  const sessionStorage = createStorage([
+    ["public-discovery:/", "{\"nearbyData\":{}}"],
+  ]);
+
+  class CustomEventShim<T = unknown> extends Event {
+    detail: T;
+
+    constructor(type: string, init?: CustomEventInit<T>) {
+      super(type);
+      this.detail = init?.detail as T;
+    }
+  }
+
+  Object.defineProperty(globalThis, "window", {
+    value: {
+      localStorage,
+      sessionStorage,
+      dispatchEvent() {
+        return true;
+      },
+    },
+    configurable: true,
+  });
+
+  Object.defineProperty(globalThis, "CustomEvent", {
+    value: originalCustomEvent ?? CustomEventShim,
+    configurable: true,
+  });
+
+  try {
+    await run({ localStorage, sessionStorage });
+  } finally {
+    if (originalWindow === undefined) {
+      Reflect.deleteProperty(globalThis, "window");
+    } else {
+      Object.defineProperty(globalThis, "window", {
+        value: originalWindow,
+        configurable: true,
+      });
+    }
+
+    if (originalCustomEvent === undefined) {
+      Reflect.deleteProperty(globalThis, "CustomEvent");
+    } else {
+      Object.defineProperty(globalThis, "CustomEvent", {
+        value: originalCustomEvent,
+        configurable: true,
+      });
+    }
+  }
+}
+
+function assertDiscoveryInvalidation(
+  storage: {
+    localStorage: ReturnType<typeof createStorage>;
+    sessionStorage: ReturnType<typeof createStorage>;
+  },
+  expectedReason: string,
+  expectedVendorId: string | null,
+) {
+  assert.equal(storage.sessionStorage.getItem("public-discovery:/"), null);
+  assert.equal(
+    storage.localStorage.getItem("public-discovery-offline:public-discovery:/"),
+    null,
+  );
+  const rawPayload = storage.localStorage.getItem("public-discovery:vendors:invalidation");
+  assert.ok(rawPayload);
+  const payload = JSON.parse(rawPayload);
+  assert.equal(payload.reason, expectedReason);
+  assert.equal(payload.vendorId, expectedVendorId);
+}
 
 function setSupabasePublicEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -133,43 +266,40 @@ test("admin API client sends bearer token and query params", async () => {
   assert.equal(url.searchParams.get("price_band"), "budget");
 });
 
-test("admin API client reads admin users directly from Supabase", async () => {
-  const restoreEnv = setSupabasePublicEnv();
+test("admin API client reads admin users through the team-access API route", async () => {
   const requestedUrls: string[] = [];
   const requestedHeaders: Headers[] = [];
   const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
     requestedUrls.push(String(input));
     requestedHeaders.push(new Headers(init?.headers));
 
-    return Response.json([
-      {
-        id: "40000000-0000-4000-8000-000000000001",
-        email: "admin@example.com",
-        full_name: "Admin User",
-        role: "admin",
-        created_at: "2026-04-28T12:00:00.000Z",
+    return Response.json({
+      success: true,
+      data: {
+        adminUsers: [
+          {
+            id: "40000000-0000-4000-8000-000000000001",
+            email: "admin@example.com",
+            full_name: "Admin User",
+            role: "admin",
+            created_at: "2026-04-28T12:00:00.000Z",
+          },
+        ],
       },
-    ]);
+      error: null,
+    });
   }) as typeof fetch;
 
-  try {
-    const result = await listAdminUsers({
-      accessToken: "admin-token",
-      fetchImpl,
-    });
+  const result = await listAdminUsers({
+    accessToken: "admin-token",
+    fetchImpl,
+  });
 
-    const url = new URL(requestedUrls[0]);
-    assert.equal(result.length, 1);
-    assert.equal(result[0]?.email, "admin@example.com");
-    assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
-    assert.equal(requestedHeaders[0].get("apikey"), "anon-key");
-    assert.equal(url.pathname, "/rest/v1/admin_users");
-    assert.equal(url.searchParams.get("select"), "id,email,full_name,role,created_at");
-    assert.equal(url.searchParams.get("order"), "created_at.desc");
-    assert.equal(url.searchParams.get("limit"), "1000");
-  } finally {
-    restoreEnv();
-  }
+  const url = new URL(requestedUrls[0], "http://localhost");
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.email, "admin@example.com");
+  assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
+  assert.equal(url.pathname, "/api/admin/admin-users");
 });
 
 test("admin API client creates managed users through the server route", async () => {
@@ -213,6 +343,240 @@ test("admin API client creates managed users through the server route", async ()
   assert.equal(result.outcome, "created");
   assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
   assert.equal(url.pathname, "/api/admin/create-user");
+});
+
+test("admin vendor mutations invalidate public discovery caches", async () => {
+  const mutationCases = [
+    {
+      reason: "vendor_created",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        createAdminVendor(
+          {
+            name: "Test Vendor",
+            slug: "test-vendor",
+            category_slug: "rice",
+            short_description: null,
+            phone_number: null,
+            address_text: null,
+            city: "Abuja",
+            area: "Wuse",
+            state: "FCT",
+            country: "Nigeria",
+            latitude: 9.0813,
+            longitude: 7.4694,
+            price_band: "budget",
+            is_active: true,
+            is_open_override: null,
+          },
+          {
+            accessToken: "admin-token",
+            fetchImpl,
+          },
+        ),
+      response: {
+        vendor: createAdminVendorSummary(),
+      },
+    },
+    {
+      reason: "vendor_updated",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        updateAdminVendor(
+          vendorId,
+          {
+            short_description: "Updated description",
+          },
+          {
+            accessToken: "admin-token",
+            fetchImpl,
+          },
+        ),
+      response: {
+        vendor: createAdminVendorSummary({
+          short_description: "Updated description",
+        }),
+      },
+    },
+    {
+      reason: "vendor_deactivated",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        deactivateAdminVendor(vendorId, {
+          accessToken: "admin-token",
+          fetchImpl,
+        }),
+      response: {
+        vendor: {
+          vendor_id: vendorId,
+          is_active: false,
+        },
+      },
+    },
+    {
+      reason: "vendor_hours_updated",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        replaceAdminVendorHours(
+          vendorId,
+          {
+            hours: [
+              {
+                day_of_week: 1,
+                open_time: "10:00:00",
+                close_time: "19:00:00",
+                is_closed: false,
+              },
+            ],
+          },
+          {
+            accessToken: "admin-token",
+            fetchImpl,
+          },
+        ),
+      response: {
+        hours: [
+          {
+            id: "50000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            day_of_week: 1,
+            open_time: "10:00:00",
+            close_time: "19:00:00",
+            is_closed: false,
+          },
+        ],
+      },
+    },
+    {
+      reason: "vendor_dishes_updated",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        createAdminVendorDishes(
+          vendorId,
+          {
+            dishes: [
+              {
+                dish_name: "Jollof rice",
+                description: "Test dish",
+                image_url: null,
+                is_featured: true,
+              },
+            ],
+          },
+          {
+            accessToken: "admin-token",
+            fetchImpl,
+          },
+        ),
+      response: {
+        dishes: [
+          {
+            id: "20000000-0000-4000-8000-000000000001",
+            vendor_id: vendorId,
+            dish_name: "Jollof rice",
+            description: "Test dish",
+            image_url: null,
+            is_featured: true,
+            created_at: "2026-04-22T00:00:00+00:00",
+            updated_at: "2026-04-22T00:00:00+00:00",
+          },
+        ],
+      },
+    },
+    {
+      reason: "vendor_dishes_updated",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        deleteAdminVendorDish(vendorId, "20000000-0000-4000-8000-000000000001", {
+          accessToken: "admin-token",
+          fetchImpl,
+        }),
+      response: {
+        dish: {
+          id: "20000000-0000-4000-8000-000000000001",
+          vendor_id: vendorId,
+          dish_name: "Jollof rice",
+          description: "Test dish",
+          image_url: null,
+          is_featured: true,
+          created_at: "2026-04-22T00:00:00+00:00",
+          updated_at: "2026-04-22T00:00:00+00:00",
+        },
+      },
+    },
+    {
+      reason: "vendor_images_updated",
+      vendorId,
+      run: (fetchImpl: typeof fetch) =>
+        deleteAdminVendorImage(vendorId, "10000000-0000-4000-8000-000000000001", {
+          accessToken: "admin-token",
+          fetchImpl,
+        }),
+      response: {
+        image: {
+          id: "10000000-0000-4000-8000-000000000001",
+          vendor_id: vendorId,
+          image_url: "https://example.supabase.co/storage/v1/object/public/vendor-images/vendor/image.jpg",
+          storage_object_path: "vendor/image.jpg",
+          sort_order: 2,
+        },
+      },
+    },
+    {
+      reason: "vendor_created",
+      vendorId: null,
+      run: (fetchImpl: typeof fetch) =>
+        submitAdminVendorIntake(
+          {
+            action: "upload",
+            rows: [
+              {
+                row_number: 2,
+                vendor_name: "Mama Put Rice",
+              },
+            ],
+          },
+          {
+            accessToken: "admin-token",
+            fetchImpl,
+          },
+        ),
+      response: {
+        totalRows: 1,
+        rows: [],
+        validRows: [],
+        invalidRows: [],
+        uploadedRows: [
+          {
+            rowNumber: 2,
+            vendor: {
+              id: vendorId,
+              name: "Mama Put Rice",
+              slug: "mama-put-rice",
+            },
+          },
+        ],
+        failedRows: [],
+        successCount: 1,
+        failedCount: 0,
+        errors: [],
+      },
+    },
+  ];
+
+  for (const mutationCase of mutationCases) {
+    await withDiscoveryInvalidationStorage(async (storage) => {
+      const fetchImpl = (async () =>
+        Response.json({
+          success: true,
+          data: mutationCase.response,
+          error: null,
+        })) as typeof fetch;
+
+      await mutationCase.run(fetchImpl);
+      assertDiscoveryInvalidation(storage, mutationCase.reason, mutationCase.vendorId);
+    });
+  }
 });
 
 test("admin API client uses the current stored session token for admin API routes", async () => {
@@ -321,32 +685,31 @@ test("admin API client does not call backend admin routes when no session token 
   assert.equal(called, false);
 });
 
-test("admin API client surfaces direct Supabase admin user read failures clearly", async () => {
-  const restoreEnv = setSupabasePublicEnv();
+test("admin API client surfaces team-access API failures clearly", async () => {
   const fetchImpl = (async () =>
     Response.json(
       {
-        code: "42501",
-        message: "permission denied for table admin_users",
+        success: false,
+        data: null,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have access to this resource.",
+        },
       },
       { status: 403 },
     )) as typeof fetch;
 
-  try {
-    await assert.rejects(
-      () =>
-        listAdminUsers({
-          accessToken: "agent-token",
-          fetchImpl,
-        }),
-      (error) =>
-        error instanceof AdminApiError &&
-        error.code === "FORBIDDEN" &&
-        error.message === "You do not have access to this resource.",
-    );
-  } finally {
-    restoreEnv();
-  }
+  await assert.rejects(
+    () =>
+      listAdminUsers({
+        accessToken: "agent-token",
+        fetchImpl,
+      }),
+    (error) =>
+      error instanceof AdminApiError &&
+      error.code === "FORBIDDEN" &&
+      error.message === "You do not have access to this resource.",
+  );
 });
 
 test("admin API client throws standard API errors", async () => {
@@ -852,28 +1215,31 @@ test("admin API client uploads image files directly to storage and then saves me
   );
   formData.set("sort_order", "2");
 
-  const images = await createAdminVendorImages(
-    vendorId,
-    formData,
-    {
-      accessToken: "admin-token",
-      fetchImpl,
-    },
-  );
-
   try {
-    assert.equal(images[0].storage_object_path, "vendor/image.jpg");
-    assert.equal(new URL(requestedUrls[0]).pathname.startsWith(`/storage/v1/object/vendor-images/${vendorId}/`), true);
-    assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
-    assert.ok(requestedBodies[0] !== null && requestedBodies[0] !== undefined);
-    assert.notEqual(typeof requestedBodies[0], "string");
-    assert.equal(new URL(requestedUrls[1], "http://localhost").pathname, `/api/admin/vendors/${vendorId}/images`);
-    const metadataBody = JSON.parse(String(requestedBodies[1] ?? "{}")) as {
-      images?: Array<{ image_url?: string; storage_object_path?: string; sort_order?: number }>;
-    };
-    assert.equal(metadataBody.images?.[0]?.sort_order, 2);
-    assert.equal(typeof metadataBody.images?.[0]?.image_url, "string");
-    assert.equal(typeof metadataBody.images?.[0]?.storage_object_path, "string");
+    await withDiscoveryInvalidationStorage(async (storage) => {
+      const images = await createAdminVendorImages(
+        vendorId,
+        formData,
+        {
+          accessToken: "admin-token",
+          fetchImpl,
+        },
+      );
+
+      assert.equal(images[0].storage_object_path, "vendor/image.jpg");
+      assert.equal(new URL(requestedUrls[0]).pathname.startsWith(`/storage/v1/object/vendor-images/${vendorId}/`), true);
+      assert.equal(requestedHeaders[0].get("authorization"), "Bearer admin-token");
+      assert.ok(requestedBodies[0] !== null && requestedBodies[0] !== undefined);
+      assert.notEqual(typeof requestedBodies[0], "string");
+      assert.equal(new URL(requestedUrls[1], "http://localhost").pathname, `/api/admin/vendors/${vendorId}/images`);
+      const metadataBody = JSON.parse(String(requestedBodies[1] ?? "{}")) as {
+        images?: Array<{ image_url?: string; storage_object_path?: string; sort_order?: number }>;
+      };
+      assert.equal(metadataBody.images?.[0]?.sort_order, 2);
+      assert.equal(typeof metadataBody.images?.[0]?.image_url, "string");
+      assert.equal(typeof metadataBody.images?.[0]?.storage_object_path, "string");
+      assertDiscoveryInvalidation(storage, "vendor_images_updated", vendorId);
+    });
   } finally {
     restoreEnv();
   }

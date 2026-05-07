@@ -1,4 +1,5 @@
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
+import { resolveVendorOpenState } from "./hours.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 
@@ -73,4 +74,16 @@ export function getVendorOpenStateDisplay(
     label: "Status unavailable",
     toneClassName: "vendor-card-status-unavailable",
   };
+}
+
+export function getVendorOpenStateDisplayFromSnapshot(input: {
+  isOpenNow: boolean | null | undefined;
+  todayHours: string | null | undefined;
+}): VendorOpenStateDisplay {
+  return getVendorOpenStateDisplay(
+    resolveVendorOpenState({
+      isOpenNow: input.isOpenNow,
+      todayHours: input.todayHours,
+    }),
+  );
 }
