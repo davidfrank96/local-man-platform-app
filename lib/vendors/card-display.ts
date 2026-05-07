@@ -79,11 +79,13 @@ export function getVendorOpenStateDisplay(
 export function getVendorOpenStateDisplayFromSnapshot(input: {
   isOpenNow: boolean | null | undefined;
   todayHours: string | null | undefined;
+  now?: Date;
 }): VendorOpenStateDisplay {
   return getVendorOpenStateDisplay(
     resolveVendorOpenState({
       isOpenNow: input.isOpenNow,
       todayHours: input.todayHours,
+      now: input.now,
     }),
   );
 }

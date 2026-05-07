@@ -1,4 +1,11 @@
 import { apiSuccess } from "../../../lib/api/responses.ts";
+import {
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+  PUBLIC_EVENT_RATE_LIMIT,
+  stableStringify,
+  startSingleFlightGuard,
+} from "../../../lib/api/abuse-protection.ts";
 import { getOrCreateRequestId, logStructuredEvent } from "../../../lib/observability.ts";
 import { userActionEventSchema } from "../../../lib/validation/index.ts";
 
@@ -79,6 +86,53 @@ export async function POST(request: Request) {
   }
 
   const event = parsedEvent.data;
+  const rateLimit = consumeRateLimit(request, {
+    policy: PUBLIC_EVENT_RATE_LIMIT,
+    sessionHint: event.session_id ?? null,
+  });
+
+  if (!rateLimit.allowed) {
+    return applyRateLimitResponseHeaders(
+      apiSuccess({ accepted: false, reason: "rate_limited" }, 202),
+      rateLimit,
+    );
+  }
+
+  const dedupeKey = [
+    rateLimit.identityKey,
+    stableStringify({
+      event_type: event.event_type,
+      session_id: event.session_id ?? null,
+      vendor_id: event.vendor_id ?? null,
+      vendor_slug: event.vendor_slug ?? null,
+      device_type: event.device_type,
+      location_source: event.location_source ?? null,
+      page_path: event.page_path ?? null,
+      search_query: event.search_query ?? null,
+      filters: event.filters ?? {},
+      metadata: event.metadata ?? {},
+    }),
+  ].join("|");
+  const dedupeGuard = startSingleFlightGuard<{ accepted: true; deduplicated?: boolean }>(
+    dedupeKey,
+    2_000,
+  );
+
+  if (dedupeGuard.status === "joined") {
+    try {
+      await dedupeGuard.promise;
+    } catch {
+      return applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+        rateLimit,
+      );
+    }
+
+    return applyRateLimitResponseHeaders(
+      apiSuccess({ accepted: true, deduplicated: true }, 202),
+      rateLimit,
+    );
+  }
 
   try {
     const response = await fetch(new URL("/rest/v1/user_events", config.supabaseUrl), {
@@ -117,10 +171,18 @@ export async function POST(request: Request) {
         status: response.status,
         details: details ?? { status: response.status },
       });
-      return apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202);
+      dedupeGuard.reject(new Error("tracking_unavailable"));
+      return applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+        rateLimit,
+      );
     }
 
-    return apiSuccess({ accepted: true }, 201);
+    dedupeGuard.resolve({ accepted: true });
+    return applyRateLimitResponseHeaders(
+      apiSuccess({ accepted: true }, 201),
+      rateLimit,
+    );
   } catch (error) {
     logStructuredEvent("error", {
       type: "PUBLIC_EVENT_TRACKING_FAILED",
@@ -128,6 +190,10 @@ export async function POST(request: Request) {
       eventType: event.event_type,
       error: error instanceof Error ? error.message : "Unknown error",
     });
-    return apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202);
+    dedupeGuard.reject(error);
+    return applyRateLimitResponseHeaders(
+      apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+      rateLimit,
+    );
   }
 }

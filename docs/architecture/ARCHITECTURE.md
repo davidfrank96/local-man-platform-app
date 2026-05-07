@@ -86,6 +86,7 @@ Handle:
 - backend analytics and team-access routes
 - admin subresource loading
 - shared vendor availability computation in `lib/vendors/hours.ts` for `is_open_now` and `today_hours`
+- centralized abuse protection for public writes, search-heavy reads, and admin login
 
 ### Database
 Stores:
@@ -200,6 +201,29 @@ Admin workflow rules:
 - featured dish image URLs are dish-scoped metadata and must not be treated as vendor profile images
 - team-access reads use `admin_users` as the source of truth
 - existing auth users may be recovered and role-assigned without surfacing a false failure
+
+## Abuse Protection Model
+
+Centralized rate limiting lives in `lib/api/abuse-protection.ts`.
+
+Current protected surfaces:
+- `/api/admin/login`
+- `/api/events`
+- `/api/vendors/[slug]/ratings`
+- `/api/vendors/nearby` when a search term is present
+
+Protection rules:
+- backend routes are authoritative; the browser does not enforce abuse limits
+- rate limiting uses IP-based buckets and may add a non-privileged HTTP-only client correlation cookie for public traffic
+- repeated duplicate write submissions are collapsed before they fan out into duplicate upstream writes
+- blocked requests return structured `TOO_MANY_REQUESTS` responses or safe degraded `202` responses, depending on the endpoint contract
+- limiter logging records hashed identifiers only and never logs raw client IPs
+
+Current thresholds:
+- admin login: `5` attempts per `10` minutes, `15` minute block
+- public events: `120` requests per `5` minutes, `2` minute block, `2` second duplicate collapse
+- public ratings: `8` requests per `10` minutes, `10` minute block, `60` second duplicate collapse
+- public nearby search: `45` search requests per `60` seconds, `2` minute block
 
 ## Vendor Image Pipeline
 

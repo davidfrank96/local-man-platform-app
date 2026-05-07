@@ -93,6 +93,10 @@ Behavior:
 - The public map currently renders those vendor results as individual markers when MapLibre is enabled.
 - Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.
 - Distance is not stored in the database.
+- Search-bearing requests are abuse-protected with a centralized limiter:
+  - threshold: `45` requests per `60` seconds per client/IP
+  - block window: `2` minutes after exceeding the threshold
+  - non-search nearby browsing is not throttled by this route-level limiter
 - If the Supabase schema has not been migrated, the API returns `UPSTREAM_ERROR` from the failed Supabase query.
 
 Location response shape:
@@ -186,6 +190,10 @@ Behavior:
 - inserts a row into `ratings`
 - updates vendor aggregate rating fields after insert
 - does not support review comments
+- abuse protection:
+  - threshold: `8` accepted submissions per `10` minutes per client/IP
+  - block window: `10` minutes after exceeding the threshold
+  - sequential or concurrent duplicate retry submissions for the same vendor/score are collapsed into one upstream write for `60` seconds
 - returns `NOT_FOUND` when the vendor slug does not resolve to an active vendor
 - returns `UPSTREAM_ERROR` when the rating write or aggregate update fails
 
@@ -228,6 +236,10 @@ Behavior:
 - uses server-side credentials only
 - returns `202` instead of surfacing public UX failures when tracking is unavailable
 - must not block or degrade public interactions
+- abuse protection:
+  - threshold: `120` accepted requests per `5` minutes per client/IP
+  - block window: `2` minutes after exceeding the threshold
+  - identical immediate retry payloads are collapsed into one upstream write for `2` seconds so mobile retries and beacon races do not spam `user_events`
 
 ## Admin Endpoints
 Admin endpoint rules:
@@ -248,6 +260,13 @@ Create a cookie-backed admin session
 
 Route file:
 - `app/api/admin/login/route.ts`
+
+Behavior:
+- validates email/password request shape before auth
+- rate limits repeated invalid attempts per IP/email:
+  - threshold: `5` attempts per `10` minutes
+  - block window: `15` minutes after exceeding the threshold
+- returns `TOO_MANY_REQUESTS` with `Retry-After` when the limiter blocks the request
 
 Behavior:
 - validates email and password

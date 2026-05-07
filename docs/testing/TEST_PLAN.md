@@ -103,8 +103,25 @@ Test:
   - `average_rating`
   - `review_count`
 - vendor cards and detail continue to show `New` when no ratings exist
+- repeated rating spam from one client is rate limited
+- duplicate sequential and concurrent rating retries collapse into one upstream write
 
 Current automated coverage:
+- `tests/public-rating-route.test.ts`
+
+### Abuse Protection Logic
+Test:
+- repeated invalid admin login attempts are rate limited
+- repeated public search abuse is rate limited without blocking normal default-city browsing
+- repeated public analytics event floods are rate limited without turning analytics failures into public UX failures
+- repeated identical event retries collapse into one upstream write
+- blocked responses expose structured `TOO_MANY_REQUESTS` or endpoint-safe degraded responses
+- hashed limiter logging never requires raw client IP assertions in tests
+
+Current automated coverage:
+- `tests/admin-session-routes.test.ts`
+- `tests/public-event-route.test.ts`
+- `tests/public-nearby-route.test.ts`
 - `tests/public-rating-route.test.ts`
 
 ### Admin Foundation Logic

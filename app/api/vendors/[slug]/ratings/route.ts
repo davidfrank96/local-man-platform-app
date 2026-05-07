@@ -1,5 +1,11 @@
 import { apiError, apiSuccess } from "../../../../../lib/api/responses.ts";
 import {
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+  PUBLIC_RATING_RATE_LIMIT,
+  startSingleFlightGuard,
+} from "../../../../../lib/api/abuse-protection.ts";
+import {
   validateInput,
   validateJsonBody,
 } from "../../../../../lib/api/validation.ts";
@@ -209,11 +215,82 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     );
   }
 
+  const rateLimit = consumeRateLimit(request, {
+    policy: PUBLIC_RATING_RATE_LIMIT,
+  });
+
+  if (!rateLimit.allowed) {
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "TOO_MANY_REQUESTS",
+        "Too many rating submissions. Please wait before trying again.",
+        429,
+        {
+          retry_after_seconds: rateLimit.retryAfterSeconds,
+        },
+        "Rating is temporarily rate limited to protect Local Man.",
+      ),
+      rateLimit,
+    );
+  }
+
+  let activeDedupeGuard:
+    | Extract<
+      ReturnType<typeof startSingleFlightGuard<{
+        vendor_id: string;
+        rating_summary: {
+          average_rating: number;
+          review_count: number;
+        };
+      }>>,
+      { status: "fresh" }
+    >
+    | null = null;
+
   try {
     const vendor = await fetchVendorTarget(routeParams.data.slug, config);
 
     if (!vendor) {
-      return apiError("NOT_FOUND", "Vendor was not found.", 404);
+      return applyRateLimitResponseHeaders(
+        apiError("NOT_FOUND", "Vendor was not found.", 404),
+        rateLimit,
+      );
+    }
+
+    const dedupeGuard = startSingleFlightGuard<{
+      vendor_id: string;
+      rating_summary: {
+        average_rating: number;
+        review_count: number;
+      };
+    }>(
+      [
+        rateLimit.identityKey,
+        vendor.id,
+        String(body.data.score),
+      ].join("|"),
+      60_000,
+    );
+    if (dedupeGuard.status === "fresh") {
+      activeDedupeGuard = dedupeGuard;
+    }
+
+    if (dedupeGuard.status === "joined") {
+      try {
+        const payload = await dedupeGuard.promise;
+
+        return applyRateLimitResponseHeaders(apiSuccess(payload, 200), rateLimit);
+      } catch (error) {
+        return applyRateLimitResponseHeaders(
+          apiError(
+            "UPSTREAM_ERROR",
+            "Unable to save vendor rating.",
+            502,
+            error instanceof Error ? { message: error.message } : undefined,
+          ),
+          rateLimit,
+        );
+      }
     }
 
     await insertRating(vendor.id, body.data.score, config);
@@ -221,16 +298,23 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     const ratingSummary = computeRatingSummary(scores);
     await updateVendorRatingSummary(vendor.id, ratingSummary, config);
 
-    return apiSuccess({
+    const responseData = {
       vendor_id: vendor.id,
       rating_summary: ratingSummary,
-    }, 201);
+    };
+    dedupeGuard.resolve(responseData);
+
+    return applyRateLimitResponseHeaders(apiSuccess(responseData, 201), rateLimit);
   } catch (error) {
-    return apiError(
-      "UPSTREAM_ERROR",
-      "Unable to save vendor rating.",
-      502,
-      error instanceof Error ? { message: error.message } : undefined,
+    activeDedupeGuard?.reject(error);
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "UPSTREAM_ERROR",
+        "Unable to save vendor rating.",
+        502,
+        error instanceof Error ? { message: error.message } : undefined,
+      ),
+      rateLimit,
     );
   }
 }

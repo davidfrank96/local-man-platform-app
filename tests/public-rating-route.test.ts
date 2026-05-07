@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { POST as vendorRatingsRoute } from "../app/api/vendors/[slug]/ratings/route.ts";
+import {
+  PUBLIC_RATING_RATE_LIMIT,
+  resetAbuseProtectionStateForTests,
+} from "../lib/api/abuse-protection.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 
@@ -25,6 +29,10 @@ function setRatingEnv(): () => void {
     }
   };
 }
+
+test.beforeEach(() => {
+  resetAbuseProtectionStateForTests();
+});
 
 test("public vendor ratings route saves a rating and returns updated summary", async () => {
   const restoreEnv = setRatingEnv();
@@ -159,6 +167,208 @@ test("public vendor ratings route returns not found for unknown vendor", async (
     assert.equal(response.status, 404);
     assert.equal(body.success, false);
     assert.equal(body.error.code, "NOT_FOUND");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route deduplicates sequential retry submissions", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  let ratingsInsertCount = 0;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+          average_rating: 4,
+          review_count: 2,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
+      ratingsInsertCount += 1;
+      return new Response(null, { status: 201 });
+    }
+
+    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
+      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
+      return new Response(null, { status: 204 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const createRequest = () =>
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.30",
+        },
+        body: JSON.stringify({ score: 4 }),
+      });
+
+    const firstResponse = await vendorRatingsRoute(createRequest(), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+    const secondResponse = await vendorRatingsRoute(createRequest(), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 200);
+    assert.equal(ratingsInsertCount, 1);
+    assert.deepEqual((await firstResponse.json()).data, (await secondResponse.json()).data);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route shares one upstream write across concurrent duplicate submissions", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  let ratingsInsertCount = 0;
+  let resolveInsert: (() => void) | undefined;
+  const insertReady = new Promise<void>((resolve) => {
+    resolveInsert = resolve;
+  });
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+          average_rating: 4,
+          review_count: 2,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
+      ratingsInsertCount += 1;
+      await insertReady;
+      return new Response(null, { status: 201 });
+    }
+
+    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
+      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
+      return new Response(null, { status: 204 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const createRequest = () =>
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.31",
+        },
+        body: JSON.stringify({ score: 5 }),
+      });
+
+    const firstPromise = vendorRatingsRoute(createRequest(), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+    const secondPromise = vendorRatingsRoute(createRequest(), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(resolveInsert);
+    resolveInsert();
+
+    const [firstResponse, secondResponse] = await Promise.all([firstPromise, secondPromise]);
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 200);
+    assert.equal(ratingsInsertCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route rate limits repeated submissions from one client", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+          average_rating: 4,
+          review_count: 2,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/ratings" && method === "POST") {
+      return new Response(null, { status: 201 });
+    }
+
+    if (url.pathname === "/rest/v1/ratings" && method === "GET") {
+      return Response.json([{ score: 4 }, { score: 5 }, { score: 4 }]);
+    }
+
+    if (url.pathname === "/rest/v1/vendors" && method === "PATCH") {
+      return new Response(null, { status: 204 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    let lastResponse: Response | null = null;
+
+    for (let index = 0; index <= PUBLIC_RATING_RATE_LIMIT.maxRequests; index += 1) {
+      lastResponse = await vendorRatingsRoute(
+        new Request("http://localhost/api/vendors/test-vendor/ratings", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.32",
+          },
+          body: JSON.stringify({ score: index % 2 === 0 ? 4 : 5 }),
+        }),
+        {
+          params: Promise.resolve({ slug: "test-vendor" }),
+        },
+      );
+    }
+
+    assert.ok(lastResponse);
+    const body = await lastResponse!.json();
+
+    assert.equal(lastResponse!.status, 429);
+    assert.equal(body.error.code, "TOO_MANY_REQUESTS");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

@@ -1,5 +1,11 @@
 import type { NextRequest } from "next/server";
 import { apiError, apiSuccess } from "../../../../lib/api/responses.ts";
+import {
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+  PUBLIC_NEARBY_SEARCH_RATE_LIMIT,
+  type RateLimitDecision,
+} from "../../../../lib/api/abuse-protection.ts";
 import { validateSearchParams } from "../../../../lib/api/validation.ts";
 import { resolveNearbySearchLocation } from "../../../../lib/location/user-location.ts";
 import { nearbyVendorsQuerySchema } from "../../../../lib/validation/index.ts";
@@ -39,6 +45,27 @@ export async function GET(request: NextRequest) {
   }
 
   const resolvedSearch = resolveNearbySearchLocation(query.data);
+  const activeSearchRateLimit: RateLimitDecision | null = query.data.search
+    ? consumeRateLimit(request, {
+      policy: PUBLIC_NEARBY_SEARCH_RATE_LIMIT,
+      scope: "search",
+    })
+    : null;
+
+  if (activeSearchRateLimit && !activeSearchRateLimit.allowed) {
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "TOO_MANY_REQUESTS",
+        "Too many search requests. Please wait before trying again.",
+        429,
+        {
+          retry_after_seconds: activeSearchRateLimit.retryAfterSeconds,
+        },
+        "Search is temporarily rate limited to protect Local Man.",
+      ),
+      activeSearchRateLimit,
+    );
+  }
   const config = getSupabaseRestConfig();
 
   if (!config) {
@@ -65,16 +92,24 @@ export async function GET(request: NextRequest) {
       usageScores,
     );
 
-    return apiSuccess({
+    const response = apiSuccess({
       location: resolvedSearch.location,
       vendors,
     });
+
+    return activeSearchRateLimit
+      ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
+      : response;
   } catch (error) {
     console.error("NEARBY_ROUTE_ERROR:", error);
 
-    return apiSuccess({
+    const response = apiSuccess({
       location: resolvedSearch.location,
       vendors: [],
     });
+
+    return activeSearchRateLimit
+      ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
+      : response;
   }
 }

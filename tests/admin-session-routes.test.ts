@@ -3,6 +3,10 @@ import test from "node:test";
 import { GET as getAdminSession } from "../app/api/admin/session/route.ts";
 import { POST as loginAdmin } from "../app/api/admin/login/route.ts";
 import { POST as logoutAdmin } from "../app/api/admin/logout/route.ts";
+import {
+  ADMIN_LOGIN_RATE_LIMIT,
+  resetAbuseProtectionStateForTests,
+} from "../lib/api/abuse-protection.ts";
 
 const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -11,6 +15,10 @@ const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+test.beforeEach(() => {
+  resetAbuseProtectionStateForTests();
+});
 
 test.after(() => {
   if (previousUrl === undefined) {
@@ -160,6 +168,61 @@ test("admin login route denies authenticated users without an explicit admin_use
     assert.equal(payload.error.code, "FORBIDDEN");
     assert.equal(payload.error.details.userId, "auth-only-id");
     assert.equal(setCookies.length, 0);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+    });
+  }
+});
+
+test("admin login route rate limits repeated invalid credential attempts", async () => {
+  const originalFetch = globalThis.fetch;
+  let tokenAttempts = 0;
+
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: (async (input: URL | RequestInfo) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname === "/auth/v1/token") {
+        tokenAttempts += 1;
+        return Response.json(
+          {
+            error: "invalid_grant",
+            error_description: "Invalid login credentials",
+          },
+          { status: 400 },
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url.pathname}`);
+    }) as typeof fetch,
+  });
+
+  try {
+    let lastResponse: Response | null = null;
+
+    for (let index = 0; index <= ADMIN_LOGIN_RATE_LIMIT.maxRequests; index += 1) {
+      lastResponse = await loginAdmin(new Request("http://localhost/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: "admin@example.com",
+          password: "wrong-secret",
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.40",
+        },
+      }));
+    }
+
+    assert.ok(lastResponse);
+    const payload = await lastResponse!.json();
+
+    assert.equal(lastResponse!.status, 429);
+    assert.equal(payload.error.code, "TOO_MANY_REQUESTS");
+    assert.equal(tokenAttempts, ADMIN_LOGIN_RATE_LIMIT.maxRequests);
   } finally {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,

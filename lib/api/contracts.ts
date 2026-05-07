@@ -16,6 +16,7 @@ export type AppErrorCode =
   | "NETWORK_ERROR"
   | "INVALID_RESPONSE"
   | "UNKNOWN_ERROR"
+  | "TOO_MANY_REQUESTS"
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND";

@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { apiError, apiSuccess } from "../../../../lib/api/responses.ts";
+import {
+  ADMIN_LOGIN_RATE_LIMIT,
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+} from "../../../../lib/api/abuse-protection.ts";
 import { validateJsonBody } from "../../../../lib/api/validation.ts";
 import {
   applyAdminSessionResponseHeaders,
@@ -24,13 +29,37 @@ export async function POST(request: Request) {
     return body.response;
   }
 
+  const rateLimit = consumeRateLimit(request, {
+    policy: ADMIN_LOGIN_RATE_LIMIT,
+    scope: body.data.email,
+    useClientCookie: false,
+  });
+
+  if (!rateLimit.allowed) {
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "TOO_MANY_REQUESTS",
+        "Too many login attempts. Please wait before trying again.",
+        429,
+        {
+          retry_after_seconds: rateLimit.retryAfterSeconds,
+        },
+        "Authentication is temporarily rate limited to protect Local Man.",
+      ),
+      rateLimit,
+    );
+  }
+
   const config = getAdminAuthConfig();
 
   if (!config) {
-    return apiError(
-      "CONFIGURATION_ERROR",
-      "Supabase environment variables are required for admin authentication.",
-      503,
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "CONFIGURATION_ERROR",
+        "Supabase environment variables are required for admin authentication.",
+        503,
+      ),
+      rateLimit,
     );
   }
 
@@ -52,7 +81,7 @@ export async function POST(request: Request) {
     });
 
     if (!admin.success) {
-      return admin.response;
+      return applyRateLimitResponseHeaders(admin.response, rateLimit);
     }
 
     const response = apiSuccess({
@@ -61,7 +90,10 @@ export async function POST(request: Request) {
     });
 
     appendAdminSessionCookies(response.headers, cookieSession);
-    return applyAdminSessionResponseHeaders(response, admin.responseHeaders);
+    return applyRateLimitResponseHeaders(
+      applyAdminSessionResponseHeaders(response, admin.responseHeaders),
+      rateLimit,
+    );
   } catch (error) {
     const mapped = error instanceof AppError
       ? error
@@ -72,12 +104,15 @@ export async function POST(request: Request) {
         detail: "The login flow failed unexpectedly.",
       });
 
-    return apiError(
-      mapped.code,
-      mapped.message,
-      mapped.status ?? 500,
-      mapped.details,
-      mapped.detail,
+    return applyRateLimitResponseHeaders(
+      apiError(
+        mapped.code,
+        mapped.message,
+        mapped.status ?? 500,
+        mapped.details,
+        mapped.detail,
+      ),
+      rateLimit,
     );
   }
 }
