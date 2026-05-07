@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as listAuditLogsRoute } from "../app/api/admin/audit-logs/route.ts";
+import { clearAuditLogsReadCache } from "../lib/admin/audit-log-service.ts";
 
 function setAdminEnv(): () => void {
+  clearAuditLogsReadCache();
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -34,12 +36,33 @@ function setAdminEnv(): () => void {
 
 function createFetchMock(
   calls: string[],
-  options?: { role?: "admin" | "agent" },
+  options?: { role?: "admin" | "agent"; auditLogs?: unknown[] },
 ): typeof fetch {
   const role = options?.role ?? "admin";
   const actorId = role === "admin"
     ? "00000000-0000-4000-8000-000000000111"
     : "00000000-0000-4000-8000-000000000112";
+  const auditLogs = options?.auditLogs ?? [
+    {
+      id: "00000000-0000-4000-8000-000000000301",
+      admin_user_id: actorId,
+      user_role: "admin",
+      entity_type: "vendor",
+      entity_id: "00000000-0000-4000-8000-000000000401",
+      action: "CREATE_VENDOR",
+      metadata: {
+        actor_label: "Admin User",
+        target_name: "Mama Put Rice",
+      },
+      created_at: "2026-04-28T12:00:00.000Z",
+      admin_user: {
+        id: actorId,
+        email: "admin@example.com",
+        full_name: "Admin User",
+        role: "admin",
+      },
+    },
+  ];
 
   return (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = input instanceof URL ? input : new URL(String(input));
@@ -66,27 +89,7 @@ function createFetchMock(
     }
 
     if (url.pathname === "/rest/v1/audit_logs") {
-      return Response.json([
-        {
-          id: "00000000-0000-4000-8000-000000000301",
-          admin_user_id: actorId,
-          user_role: "admin",
-          entity_type: "vendor",
-          entity_id: "00000000-0000-4000-8000-000000000401",
-          action: "CREATE_VENDOR",
-          metadata: {
-            actor_label: "Admin User",
-            target_name: "Mama Put Rice",
-          },
-          created_at: "2026-04-28T12:00:00.000Z",
-          admin_user: {
-            id: actorId,
-            email: "admin@example.com",
-            full_name: "Admin User",
-            role: "admin",
-          },
-        },
-      ]);
+      return Response.json(auditLogs);
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -127,6 +130,7 @@ test("admin can list audit logs with filters", async () => {
     assert.equal(body.success, true);
     assert.equal(body.data.auditLogs.length, 1);
     assert.equal(body.data.pagination.has_more, false);
+    assert.equal(body.data.pagination.next_cursor, null);
     assert.equal(auditUrl?.searchParams.get("user_role"), "eq.agent");
     assert.equal(auditUrl?.searchParams.get("action"), "in.(CREATE_VENDOR,vendor.created)");
     assert.deepEqual(calls, [
@@ -162,6 +166,7 @@ test("admin can list audit logs without filters and pagination is forwarded", as
     assert.equal(body.success, true);
     assert.equal(auditUrl?.searchParams.get("limit"), "21");
     assert.equal(auditUrl?.searchParams.get("offset"), "30");
+    assert.equal(body.data.pagination.next_cursor, null);
     assert.equal(auditUrl?.searchParams.get("user_role"), null);
     assert.equal(auditUrl?.searchParams.get("action"), null);
     assert.equal(
@@ -318,6 +323,64 @@ test("legacy audit log action rows are normalized into canonical actions", async
       actor_label: "Admin User",
       target_slug: "test-vendor",
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("audit log route returns next_cursor when more pages are available", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const auditLogs = Array.from({ length: 11 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(301 + index).padStart(12, "0")}`,
+    admin_user_id: "00000000-0000-4000-8000-000000000111",
+    user_role: "admin",
+    entity_type: "vendor",
+    entity_id: "00000000-0000-4000-8000-000000000401",
+    action: "CREATE_VENDOR",
+    metadata: {
+      actor_label: "Admin User",
+    },
+    created_at: "2026-04-28T12:00:00.000Z",
+  }));
+  globalThis.fetch = createFetchMock(calls, { auditLogs });
+
+  try {
+    const response = await listAuditLogsRoute(
+      createNextRequest("http://localhost/api/admin/audit-logs?limit=10&offset=0"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.auditLogs.length, 10);
+    assert.equal(body.data.pagination.has_more, true);
+    assert.equal(body.data.pagination.next_cursor, "10");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("empty audit log results stay successful and serializable", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { auditLogs: [] });
+
+  try {
+    const response = await listAuditLogsRoute(
+      createNextRequest("http://localhost/api/admin/audit-logs?limit=10&offset=0"),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(body.data.auditLogs, []);
+    assert.equal(body.data.pagination.has_more, false);
+    assert.equal(body.data.pagination.next_cursor, null);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

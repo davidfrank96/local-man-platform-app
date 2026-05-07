@@ -55,14 +55,22 @@ Audit writes are best-effort and non-blocking:
 
 Audit-log reads are admin-only.
 
-The production admin dashboard reads audit logs directly from Supabase using:
+The production admin dashboard reads audit logs through the protected backend route:
 
-- authenticated admin role
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- the current session access token
+- `GET /api/admin/audit-logs`
+- backend admin auth and RBAC enforcement
+- server-side `SUPABASE_SERVICE_ROLE_KEY` reads against `audit_logs`
 
-`SUPABASE_SERVICE_ROLE_KEY` is still required for the backend fallback route used in development and in route-level tests.
+The route currently returns:
+
+- `auditLogs`
+- pagination metadata:
+  - `limit`
+  - `offset`
+  - `has_more`
+  - `next_cursor`
+
+`next_cursor` is a stringified next-offset token for the current "View more activity" pagination flow.
 
 ## UI surface
 

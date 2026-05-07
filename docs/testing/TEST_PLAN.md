@@ -156,6 +156,8 @@ Test:
 - admin analytics route requires admin auth
 - admin analytics route aggregates summary counts correctly
 - admin analytics route tolerates empty `user_events`
+- admin audit-log route returns the recent-team-activity pagination contract expected by the analytics dashboard
+- admin audit-log route treats empty audit-log results as a valid success state
 - admin analytics helper logic handles empty vendor performance and recent activity safely
 - usage-signal vendor ranking helper aggregates weighted vendor event counts safely
 
@@ -164,6 +166,7 @@ Current automated coverage:
 - `tests/admin-session-client.test.ts`
 - `tests/admin-analytics-route.test.ts`
 - `tests/admin-analytics-view.test.ts`
+- `tests/admin-audit-logs-route.test.ts`
 - `tests/admin-vendor-routes.test.ts`
 - `tests/admin-vendor-subresources.test.ts`
 - `tests/admin-api-client.test.ts`

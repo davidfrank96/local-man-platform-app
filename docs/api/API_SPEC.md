@@ -589,6 +589,32 @@ Fetch audit log entries
 Route file:
 - `app/api/admin/audit-logs/route.ts`
 
+Behavior:
+- requires `audit_logs:read`
+- returns canonical audit-log actions after backend normalization
+- returns paginated recent-team-activity data for the admin analytics dashboard
+
+Success payload:
+```json
+{
+  "success": true,
+  "data": {
+    "auditLogs": [],
+    "pagination": {
+      "limit": 10,
+      "offset": 0,
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  "error": null
+}
+```
+
+Notes:
+- `next_cursor` is a stringified next-offset token for the current dashboard pagination flow
+- empty `auditLogs` is a valid success case, not a backend failure
+
 ## Response Shape
 ```json
 {
