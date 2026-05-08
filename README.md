@@ -255,9 +255,10 @@ Phase 6 currently covers:
   - `call_clicked`
   - `directions_clicked`
   - `search_used`
-  - `filter_applied`
+- `filter_applied`
 - admin-only analytics route at `/admin/analytics`
-- summary cards, vendor performance, drop-off signals, and recent activity
+- admin-only activity route at `/admin/activity`
+- summary cards, vendor performance, drop-off signals, recent user events, and dedicated recent team activity review
 - non-blocking tracking writes that must never interfere with public discovery
 - backend-only analytics reads in production, with the admin analytics route handling RPC and query fallback server-side
 

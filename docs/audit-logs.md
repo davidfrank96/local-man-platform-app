@@ -74,9 +74,10 @@ The route currently returns:
 
 ## UI surface
 
-Audit-log visibility currently appears inside the admin analytics area as:
+Audit-log visibility currently appears on the dedicated admin activity route as:
 
 - Recent team activity
+- `/admin/activity`
 - role filter
 - action filter
 - paginated `View more activity`

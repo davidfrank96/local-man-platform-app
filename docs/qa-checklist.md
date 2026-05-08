@@ -91,6 +91,7 @@ Use this checklist before pushing or releasing UI work.
 
 - [ ] public event tracking still records events
 - [ ] admin analytics page loads summary data
+- [ ] admin activity page loads recent team activity
 - [ ] recent user events render correctly
 - [ ] recent team activity renders correctly
 - [ ] production analytics reads use Supabase direct with anon key + session token

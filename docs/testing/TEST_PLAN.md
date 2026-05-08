@@ -156,9 +156,9 @@ Test:
 - admin analytics route requires admin auth
 - admin analytics route aggregates summary counts correctly
 - admin analytics route tolerates empty `user_events`
-- admin audit-log route returns the recent-team-activity pagination contract expected by the analytics dashboard
+- admin audit-log route returns the recent-team-activity pagination contract expected by the admin activity page
 - admin audit-log route treats empty audit-log results as a valid success state
-- admin analytics helper logic handles empty vendor performance and recent activity safely
+- admin analytics helper logic handles empty vendor performance and recent user events safely
 - usage-signal vendor ranking helper aggregates weighted vendor event counts safely
 
 Current automated coverage:
@@ -177,6 +177,7 @@ Manual admin UI smoke coverage:
 - open `/admin` and confirm redirect to `/admin/login`
 - open `/admin/vendors` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/analytics` and confirm the protected route still resolves to the admin login gate when signed out
+- open `/admin/activity` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/new` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/[id]` and confirm the protected route still resolves to the admin login gate when signed out
 - sign in with an email/password account that exists in `admin_users`

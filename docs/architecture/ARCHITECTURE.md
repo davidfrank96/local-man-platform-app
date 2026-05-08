@@ -286,7 +286,8 @@ Public usage signals use this path:
 4. server writes to `public.user_events`
 5. nearby discovery can derive a simple vendor `ranking_score` from those rows through a small SQL aggregation function keyed by candidate vendor ids
 6. the admin analytics surface reads those rows directly from Supabase in production and can fall back to backend routes in development
-7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
+7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent user events
+8. `/admin/activity` renders recent team activity from the protected audit-log route
 
 Tracked event types:
 - `session_started`

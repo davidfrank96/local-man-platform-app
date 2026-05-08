@@ -115,6 +115,7 @@ The Local Man — UI Rules
 - admin workspace should be split cleanly across:
   - `/admin` for overview
   - `/admin/analytics` for usage signals
+  - `/admin/activity` for audit-log activity review
   - `/admin/vendors` for registry management
   - `/admin/vendors/new` for creation
   - `/admin/vendors/[id]` for focused editing
@@ -124,8 +125,12 @@ The Local Man — UI Rules
   - summary cards
   - vendor performance tables
   - drop-off panels
-  - recent activity
+  - recent user events
   - clear empty states when usage data is not available yet
+- the activity view should stay read-only and show:
+  - recent team activity
+  - role and action filters
+  - clear empty, error, and pagination states
 - the vendor registry should support search and filtering, then move into a dedicated edit workspace
 - the create vendor page should be a full onboarding page with clearly separated sections for:
   - basic details

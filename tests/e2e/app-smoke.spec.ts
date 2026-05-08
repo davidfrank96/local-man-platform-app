@@ -345,6 +345,153 @@ async function mockReverseGeocode(page: Page, label: string | null, status = 200
   });
 }
 
+async function mockAuthenticatedAdminWorkspace(
+  page: Page,
+  auditLogRequests: Array<{ userRole: string; action: string }>,
+) {
+  await page.context().addCookies([
+    {
+      name: "localman_admin_access",
+      value: "test-access-token",
+      url: "http://127.0.0.1:3001",
+    },
+    {
+      name: "localman_admin_refresh",
+      value: "test-refresh-token",
+      url: "http://127.0.0.1:3001",
+    },
+  ]);
+
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          user: {
+            id: "00000000-0000-4000-8000-000000000111",
+            email: "admin@example.com",
+          },
+          adminUser: {
+            id: "10000000-0000-4000-8000-000000000111",
+            email: "admin@example.com",
+            full_name: "Admin User",
+            role: "admin",
+          },
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/analytics**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          range: "7d",
+          summary: {
+            total_sessions: 12,
+            total_events: 18,
+            vendor_selections: 5,
+            vendor_detail_opens: 4,
+            call_clicks: 3,
+            directions_clicks: 2,
+            searches_used: 2,
+            filters_applied: 1,
+          },
+          vendor_performance: {
+            most_selected_vendors: [],
+            most_viewed_vendor_details: [],
+            most_call_clicks: [],
+            most_directions_clicks: [],
+          },
+          dropoff: {
+            session_metrics_available: false,
+            sessions_without_meaningful_interaction: null,
+            sessions_with_search_without_vendor_click: null,
+            sessions_with_detail_without_action: null,
+          },
+          recent_events: [
+            {
+              id: "20000000-0000-4000-8000-000000000001",
+              event_type: "vendor_selected",
+              vendor_id: "30000000-0000-4000-8000-000000000001",
+              vendor_name: "Mock Vendor",
+              vendor_slug: "mock-vendor",
+              device_type: "desktop",
+              location_source: "precise",
+              timestamp: "2026-05-08T10:00:00.000Z",
+            },
+          ],
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/audit-logs**", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    const requestedRole = requestUrl.searchParams.get("user_role") ?? "all";
+    const requestedAction = requestUrl.searchParams.get("action") ?? "all";
+    auditLogRequests.push({
+      userRole: requestedRole,
+      action: requestedAction,
+    });
+
+    const action = requestedAction === "all" ? "CREATE_VENDOR" : requestedAction;
+    const userRole = requestedRole === "all" ? "admin" : requestedRole;
+    const isAdminUserAction = action.includes("ADMIN_USER");
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          auditLogs: [
+            {
+              id: "40000000-0000-4000-8000-000000000001",
+              admin_user_id: "10000000-0000-4000-8000-000000000111",
+              user_role: userRole,
+              entity_type: isAdminUserAction ? "admin_user" : "vendor",
+              entity_id: isAdminUserAction
+                ? "50000000-0000-4000-8000-000000000001"
+                : "30000000-0000-4000-8000-000000000001",
+              action,
+              metadata: isAdminUserAction
+                ? {
+                    target_name: "Scoped Agent",
+                    target_role: "agent",
+                  }
+                : {
+                    target_name: "Mock Vendor",
+                    target_slug: "mock-vendor",
+                  },
+              created_at: "2026-05-08T10:00:00.000Z",
+              admin_user: {
+                id: "10000000-0000-4000-8000-000000000111",
+                email: "admin@example.com",
+                full_name: "Admin User",
+                role: "admin",
+              },
+            },
+          ],
+          pagination: {
+            limit: 10,
+            has_more: false,
+            next_cursor: null,
+          },
+        },
+        error: null,
+      }),
+    });
+  });
+}
+
 test.describe("Phase 3 browser smoke", () => {
   test.beforeEach(async ({ page }) => {
     await installLocalmanBrowserStateIsolation(page.context());
@@ -1129,6 +1276,64 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
 
     await page.goto("/admin/analytics");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("recent team activity lives on /admin/activity and analytics no longer duplicates it", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests);
+
+    await page.goto("/admin/activity");
+    await expect(page.getByRole("heading", { name: "Activity", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent team activity" })).toBeVisible();
+    await expect(page.locator(".admin-nav-link.active")).toContainText("Activity");
+    await expect(page.locator(".analytics-table")).toContainText("Admin User");
+    await expect(page.locator(".analytics-table")).toContainText("Mock Vendor");
+    await expect
+      .poll(() => auditLogRequests.length)
+      .toBeGreaterThan(0);
+    expect(auditLogRequests[0]).toEqual({
+      userRole: "all",
+      action: "all",
+    });
+
+    const auditFilterSelects = page.locator(".analytics-audit-filter-bar .analytics-filter-field select");
+    await auditFilterSelects.first().selectOption("agent");
+    await expect
+      .poll(() => auditLogRequests.at(-1)?.userRole)
+      .toBe("agent");
+    await expect(page.locator(".analytics-table")).toContainText("agent");
+
+    await auditFilterSelects.nth(1).selectOption("CREATE_ADMIN_USER");
+    await expect
+      .poll(() => auditLogRequests.at(-1)?.action)
+      .toBe("CREATE_ADMIN_USER");
+    await expect(page.locator(".analytics-table")).toContainText("created agent");
+    await expect(page.locator(".analytics-table")).toContainText("Scoped Agent");
+
+    await page.getByRole("link", { name: "Analytics" }).click();
+    await expect(page).toHaveURL(/\/admin\/analytics$/);
+    await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent user events" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent team activity" })).toHaveCount(0);
+    await expect(page.locator(".admin-nav-link.active")).toContainText("Analytics");
+
+    await page.getByRole("link", { name: "Activity" }).click();
+    await expect(page).toHaveURL(/\/admin\/activity$/);
+    await expect(page.getByRole("heading", { name: "Recent team activity" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin activity route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/activity");
     await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
 

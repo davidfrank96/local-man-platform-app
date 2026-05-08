@@ -37,7 +37,8 @@ Phase 6 signal visibility is ready when:
 - docs describe the current analytics behavior accurately
 - public tracking remains fire-and-forget and non-blocking
 - `/admin/analytics` is protected by admin auth
-- analytics summaries, vendor performance, drop-off panels, and recent activity load without breaking when data is sparse
+- `/admin/activity` is protected by admin auth
+- analytics summaries, vendor performance, drop-off panels, recent user events, and recent team activity load without breaking when data is sparse
 - discovery ordering remains open-now-first, relevance-aware, and usage-ranked without regressing location or selection behavior
 - local retention helpers stay non-blocking and device-local only
 - simple ratings update vendor aggregate score display without introducing comments or account requirements
@@ -63,7 +64,8 @@ Phase 6 signal visibility is ready when:
 - Create vendor now supports a fuller onboarding flow with basic details, hours, featured dishes, image selection, acknowledgements, and review before create.
 - Admin team access now refreshes from `admin_users` after mutation and treats existing auth users as a recoverable success path.
 - Public event tracking records session, selection, detail, call, directions, search, and filter signals in `user_events`.
-- Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent activity.
+- Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent user events.
+- Admin now includes a dedicated activity page for recent team activity from the protected audit-log route.
 - Nearby discovery now uses a simple weighted `ranking_score` from usage signals and keeps distance as a tie-breaker rather than the only sort rule.
 - Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and applies a clearer search ordering.
 - Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.

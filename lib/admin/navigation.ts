@@ -3,6 +3,7 @@ import type { AdminRole } from "../../types/index.ts";
 const agentRestrictedPaths = new Set([
   "/admin/dashboard",
   "/admin/analytics",
+  "/admin/activity",
   "/admin/team",
 ]);
 
