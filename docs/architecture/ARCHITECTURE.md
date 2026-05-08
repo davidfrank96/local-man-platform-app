@@ -123,7 +123,8 @@ Public rendering rules:
 - selected vendor preview stays compact so the map retains usable space
 - the public map must degrade quietly to the coordinate fallback when style loading, WebGL, or network conditions prevent MapLibre from loading
 - the current real map uses one marker system only:
-  - deep red vendor markers
+  - oxblood storefront vendor markers
+  - green storefront marker state for the selected vendor
   - blue user-location marker
   - no clustering
 - vendor detail uses a shorter hero and compact summary blocks to reduce scrolling
@@ -286,7 +287,8 @@ Public usage signals use this path:
 4. server writes to `public.user_events`
 5. nearby discovery can derive a simple vendor `ranking_score` from those rows through a small SQL aggregation function keyed by candidate vendor ids
 6. the admin analytics surface reads those rows directly from Supabase in production and can fall back to backend routes in development
-7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent activity
+7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent user events
+8. `/admin/activity` renders recent team activity from the protected audit-log route
 
 Tracked event types:
 - `session_started`

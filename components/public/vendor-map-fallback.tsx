@@ -3,6 +3,7 @@ import {
   DEFAULT_VENDOR_MAP_CENTER,
   type VendorMapProps,
 } from "./vendor-map-types.ts";
+import { StoreMarkerIcon } from "./vendor-marker-icon.tsx";
 
 type VendorMapFallbackProps = VendorMapProps & {
   notice?: string | null;
@@ -58,7 +59,7 @@ export function VendorMapFallback({
           style={getMarkerStyle(resolvedUserLocation, bounds)}
           title="Search location"
         />
-        {vendors.map((vendor, index) => (
+        {vendors.map((vendor) => (
           <button
             aria-label={`Select ${vendor.name}`}
             className={
@@ -75,7 +76,7 @@ export function VendorMapFallback({
             type="button"
             onClick={() => onSelectVendor(vendor.vendor_id, "map")}
           >
-            {index + 1}
+            <StoreMarkerIcon className="vendor-marker__icon" />
           </button>
         ))}
       </div>

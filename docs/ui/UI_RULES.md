@@ -14,7 +14,8 @@ The Local Man — UI Rules
 - The public discovery map may render as MapLibre using the browser-safe MapTiler style URL or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
 - The map should mount immediately on page load; nearby vendors may hydrate asynchronously from default-city data first and then upgrade to precise results when location resolves.
 - When MapLibre is active, the map must use one marker system only:
-  - deep red vendor markers
+  - oxblood storefront vendor markers
+  - green storefront marker state for the selected vendor
   - blue user-location marker
   - no clustering
 - Marker click selects a vendor and updates the selected preview, but must not move the camera.
@@ -115,6 +116,7 @@ The Local Man — UI Rules
 - admin workspace should be split cleanly across:
   - `/admin` for overview
   - `/admin/analytics` for usage signals
+  - `/admin/activity` for audit-log activity review
   - `/admin/vendors` for registry management
   - `/admin/vendors/new` for creation
   - `/admin/vendors/[id]` for focused editing
@@ -124,8 +126,12 @@ The Local Man — UI Rules
   - summary cards
   - vendor performance tables
   - drop-off panels
-  - recent activity
+  - recent user events
   - clear empty states when usage data is not available yet
+- the activity view should stay read-only and show:
+  - recent team activity
+  - role and action filters
+  - clear empty, error, and pagination states
 - the vendor registry should support search and filtering, then move into a dedicated edit workspace
 - the create vendor page should be a full onboarding page with clearly separated sections for:
   - basic details

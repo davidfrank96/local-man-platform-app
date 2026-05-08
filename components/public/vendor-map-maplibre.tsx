@@ -13,6 +13,7 @@ import {
   type NearbyVendor,
   type VendorMapProps,
 } from "./vendor-map-types.ts";
+import { createStoreMarkerIconElement } from "./vendor-marker-icon.tsx";
 
 type MapLibreVendorMapProps = VendorMapProps & {
   onMapError: () => void;
@@ -27,7 +28,6 @@ type MarkerInstance = InstanceType<MapLibreModule["Marker"]>;
 
 type VendorMarkerEntry = {
   element: HTMLButtonElement;
-  label: HTMLSpanElement;
   marker: MarkerInstance;
 };
 
@@ -266,10 +266,7 @@ function createVendorMarkerEntry(
   pin.className = "maplibre-vendor-marker__pin";
   pin.setAttribute("aria-hidden", "true");
 
-  const label = document.createElement("span");
-  label.className = "maplibre-vendor-marker__label";
-  label.setAttribute("aria-hidden", "true");
-  pin.append(label);
+  pin.append(createStoreMarkerIconElement(document, "maplibre-vendor-marker__icon"));
   element.append(pin);
 
   element.addEventListener("click", () => {
@@ -285,7 +282,6 @@ function createVendorMarkerEntry(
 
   return {
     element,
-    label,
     marker,
   };
 }
@@ -309,7 +305,7 @@ function syncVendorMarkers(
     delete markersRef.current[vendorId];
   }
 
-  vendors.forEach((vendor, index) => {
+  vendors.forEach((vendor) => {
     const existingEntry = markersRef.current[vendor.vendor_id];
     const entry =
       existingEntry ??
@@ -320,7 +316,6 @@ function syncVendorMarkers(
     }
 
     entry.marker.setLngLat([vendor.longitude, vendor.latitude]);
-    entry.label.textContent = String(index + 1);
     entry.element.classList.toggle("selected", vendor.vendor_id === selectedVendorId);
     entry.element.setAttribute("aria-pressed", vendor.vendor_id === selectedVendorId ? "true" : "false");
     entry.element.style.zIndex = vendor.vendor_id === selectedVendorId ? "2" : "1";

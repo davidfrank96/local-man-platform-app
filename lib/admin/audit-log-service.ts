@@ -40,12 +40,17 @@ type CachedAuditLogResult = {
 
 const auditLogsReadCache = new Map<string, CachedAuditLogResult>();
 
+export function clearAuditLogsReadCache(): void {
+  auditLogsReadCache.clear();
+}
+
 export type AuditLogListResult = {
   auditLogs: AuditLog[];
   pagination: {
     limit: number;
     offset: number;
     has_more: boolean;
+    next_cursor: string | null;
   };
 };
 
@@ -428,6 +433,7 @@ export async function listAuditLogs(
       limit: pageSize,
       offset,
       has_more: rows.length > pageSize,
+      next_cursor: rows.length > pageSize ? String(offset + pageSize) : null,
     },
   };
 

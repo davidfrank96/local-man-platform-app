@@ -73,6 +73,7 @@ Status: completed
 - usage signals and real behavior tracking
 - lightweight first-party event tracking in `user_events`
 - admin-only analytics dashboard at `/admin/analytics`
+- admin-only activity page at `/admin/activity`
 - vendor performance ranking and recent activity review
 - drop-off signal visibility for search, selection, and detail-action gaps
 - discovery ordering informed by usage signals:

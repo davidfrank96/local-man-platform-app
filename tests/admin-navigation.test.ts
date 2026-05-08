@@ -50,6 +50,10 @@ test("resolveAdminNextPath redirects agents away from /admin/analytics", () => {
   assert.equal(resolveAdminNextPath("agent", "/admin/analytics"), "/admin/agent");
 });
 
+test("resolveAdminNextPath redirects agents away from /admin/activity", () => {
+  assert.equal(resolveAdminNextPath("agent", "/admin/activity"), "/admin/agent");
+});
+
 test("resolveAdminNextPath redirects agents away from /admin/team", () => {
   assert.equal(resolveAdminNextPath("agent", "/admin/team"), "/admin/agent");
 });

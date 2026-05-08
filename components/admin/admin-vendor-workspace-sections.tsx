@@ -31,6 +31,7 @@ import {
   slugifyVendorName,
 } from "../../lib/admin/slug.ts";
 import { slugPattern } from "../../lib/validation/common.ts";
+import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
 import type {
   CreateManagedVendorRequest,
   CreateVendorDishesRequest,
@@ -41,8 +42,6 @@ import type {
   VendorImage,
 } from "../../types/index.ts";
 import type { PublicCategory } from "../../lib/vendors/public-api-client.ts";
-
-const vendorRegistryPreviewCount = 6;
 
 type AdminCreateVendorOptions = {
   hoursData: ReplaceVendorHoursRequest | null;
@@ -84,12 +83,6 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
   onSelectVendor: (vendorId: string) => void;
   onSubmitFilters: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  const [showAllRegistryVendors, setShowAllRegistryVendors] = useState(false);
-  const visibleRegistryVendors = useMemo(
-    () => (showAllRegistryVendors ? vendors : vendors.slice(0, vendorRegistryPreviewCount)),
-    [showAllRegistryVendors, vendors],
-  );
-
   return (
     <section className="admin-panel admin-registry-panel" aria-labelledby="vendor-registry">
       <div className="admin-section-header">
@@ -137,27 +130,14 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
         </div>
       </form>
 
-      <VendorRegistryList
-        vendors={visibleRegistryVendors}
-        selectedVendorId={selectedVendorId}
-        onSelectVendor={onSelectVendor}
-        emptyMessage="No vendors matched the current filters."
-      />
-      {vendors.length > vendorRegistryPreviewCount ? (
-        <div className="admin-list-toggle-row">
-          <button
-            className="button-secondary"
-            type="button"
-            aria-expanded={showAllRegistryVendors}
-            onClick={() => setShowAllRegistryVendors((current) => !current)}
-          >
-            {showAllRegistryVendors ? "Read less" : "Read more"}
-          </button>
-          <span>
-            Showing {visibleRegistryVendors.length} of {vendors.length}
-          </span>
-        </div>
-      ) : null}
+      <AdminScrollPanel className="admin-scroll-panel-vendors" ariaLabelledBy="vendor-registry">
+        <VendorRegistryList
+          vendors={vendors}
+          selectedVendorId={selectedVendorId}
+          onSelectVendor={onSelectVendor}
+          emptyMessage="No vendors matched the current filters."
+        />
+      </AdminScrollPanel>
     </section>
   );
 });

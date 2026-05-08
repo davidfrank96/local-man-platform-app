@@ -72,7 +72,7 @@ Test:
 - vendor card metadata row keeps distance and open/closed state visible together
 - the real map uses one vendor-marker system only with no clustering
 - marker taps update the selected vendor preview without moving the camera
-- visible marker numbers remain tappable and update the selected vendor preview
+- storefront icon markers remain tappable and update the selected vendor preview
 - card selection may gently focus the map without causing page scroll drift
 - browser back restores discovery state
 - `Back to map` restores discovery state
@@ -156,7 +156,11 @@ Test:
 - admin analytics route requires admin auth
 - admin analytics route aggregates summary counts correctly
 - admin analytics route tolerates empty `user_events`
-- admin analytics helper logic handles empty vendor performance and recent activity safely
+- admin audit-log route returns the recent-team-activity pagination contract expected by the admin activity page
+- admin audit-log route treats empty audit-log results as a valid success state
+- admin analytics helper logic handles empty vendor performance and recent user events safely
+- admin analytics recent-events and ranking lists remain internally scrollable without reintroducing page-height expansion controls
+- admin activity and vendor-registry list panels stay internally scrollable for admin and agent workspaces
 - usage-signal vendor ranking helper aggregates weighted vendor event counts safely
 
 Current automated coverage:
@@ -164,6 +168,7 @@ Current automated coverage:
 - `tests/admin-session-client.test.ts`
 - `tests/admin-analytics-route.test.ts`
 - `tests/admin-analytics-view.test.ts`
+- `tests/admin-audit-logs-route.test.ts`
 - `tests/admin-vendor-routes.test.ts`
 - `tests/admin-vendor-subresources.test.ts`
 - `tests/admin-api-client.test.ts`
@@ -174,6 +179,7 @@ Manual admin UI smoke coverage:
 - open `/admin` and confirm redirect to `/admin/login`
 - open `/admin/vendors` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/analytics` and confirm the protected route still resolves to the admin login gate when signed out
+- open `/admin/activity` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/new` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/[id]` and confirm the protected route still resolves to the admin login gate when signed out
 - sign in with an email/password account that exists in `admin_users`
@@ -182,6 +188,7 @@ Manual admin UI smoke coverage:
 - open `/admin/vendors/[id]` with a valid vendor id
 - load vendors
 - confirm the dashboard overview cards show vendor totals and missing-data counts
+- confirm high-volume analytics, activity, and vendor-registry lists scroll inside their cards instead of expanding the full page
 - confirm the registry shows completeness badges for missing hours, images, and featured dishes
 - confirm the create vendor page shows:
   - basic details
@@ -254,7 +261,7 @@ Manual UI checks:
 - vendor detail hero remains compact and readable
 - map controls stay visible
 - MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
-- the real map should show deep red vendor markers, a blue user-location marker, and no cluster bubbles
+- the real map should show oxblood storefront markers by default, a green storefront marker when selected, a blue user-location marker, and no cluster bubbles
 - mobile discovery should keep the order: header, filters, map, selected vendor preview, vendor list
 - mobile marker taps should update the selected preview without drifting the map or scrolling the page down
 - mobile pinch zoom and drag-pan should be checked on a real device before final release confidence

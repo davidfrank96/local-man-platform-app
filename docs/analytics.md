@@ -31,7 +31,11 @@ The current admin analytics page shows:
 - vendor performance
 - drop-off metrics when session data is available
 - recent user events
-- recent team activity from audit logs
+
+Recent team activity now lives on the dedicated admin activity page:
+
+- `/admin/activity`
+- backed by the protected `/api/admin/audit-logs` route
 
 Default range:
 
@@ -63,7 +67,7 @@ That route:
 
 - `/api/events` writes
 - backend analytics reads
-- backend audit-log fallback route reads in development and tests
+- backend audit-log reads for recent team activity
 
 ## Production-read notes
 
