@@ -182,6 +182,43 @@ export const auditLogSchema = z.object({
   admin_user: auditLogActorSchema.optional(),
 });
 
+export const operationalEventLevelSchema = z.enum([
+  "debug",
+  "info",
+  "warn",
+  "error",
+]);
+
+export const operationalEventAreaSchema = z.string().trim().min(1).max(80);
+
+export const operationalEventTimeWindowSchema = z.enum([
+  "1h",
+  "24h",
+  "7d",
+  "30d",
+  "all",
+]);
+
+export const operationalEventSchema = z.object({
+  id: uuidSchema,
+  created_at: timestampSchema,
+  level: operationalEventLevelSchema,
+  area: operationalEventAreaSchema,
+  event: nonEmptyTextSchema,
+  message: z.string().nullable(),
+  route: z.string().nullable(),
+  method: z.string().nullable(),
+  status: z.coerce.number().int().min(100).max(599).nullable(),
+  duration_ms: z.coerce.number().int().min(0).nullable(),
+  request_id: z.string().nullable(),
+  actor_role: z.string().nullable(),
+  actor_id: z.string().nullable(),
+  vendor_id: z.string().nullable(),
+  vendor_slug: z.string().nullable(),
+  environment: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+
 export const userActionEventNameSchema = z.enum([
   "session_started",
   "first_interaction",
@@ -489,6 +526,17 @@ export const auditLogsQuerySchema = paginationQuerySchema.extend({
   entity_type: auditEntityTypeSchema.optional(),
   entity_id: uuidSchema.optional(),
   since: timestampSchema.optional(),
+});
+
+export const adminOperationalLogsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(25).default(25),
+  offset: z.coerce.number().int().min(0).default(0),
+  level: operationalEventLevelSchema.optional(),
+  area: operationalEventAreaSchema.optional(),
+  event: z.string().trim().min(1).max(120).optional(),
+  route: z.string().trim().min(1).max(160).optional(),
+  since: timestampSchema.optional(),
+  time_window: operationalEventTimeWindowSchema.optional(),
 });
 
 export const vendorDetailResponseDataSchema = vendorSchema.extend({

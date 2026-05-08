@@ -366,6 +366,8 @@ type MockAdminWorkspaceOptions = {
   analyticsRankingRowCount?: number;
   auditLogCount?: number;
   auditHasMore?: boolean;
+  operationalLogCount?: number;
+  operationalLogsHasMore?: boolean;
   vendorCount?: number;
 };
 
@@ -449,16 +451,66 @@ function buildMockAdminVendors(count: number) {
   }));
 }
 
+function buildMockOperationalLogs(
+  count: number,
+  requestedLevel: string,
+  requestedArea: string,
+  requestedEvent: string,
+  requestedRoute: string,
+) {
+  const level = requestedLevel === "all" ? "error" : requestedLevel;
+  const area = requestedArea === "all" ? "public_discovery" : requestedArea;
+  const event = requestedEvent || "PUBLIC_NEARBY_ROUTE_FAILED";
+  const route = requestedRoute || "/api/vendors/nearby";
+
+  return Array.from({ length: count }, (_, index) => ({
+    id: `71000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    created_at: new Date(Date.UTC(2026, 4, 8, 11, index, 0)).toISOString(),
+    level,
+    area,
+    event,
+    message: index === 0
+      ? "Nearby discovery degraded after an upstream failure."
+      : `${event} sample ${index + 1}`,
+    route,
+    method: route.startsWith("/api/vendors") ? "GET" : "POST",
+    status: level === "error" ? 502 : 429,
+    duration_ms: 120 + index,
+    request_id: `req_mock_logs_${index + 1}`,
+    actor_role: null,
+    actor_id: null,
+    vendor_id: null,
+    vendor_slug: route.includes("/ratings") ? "mock-vendor-1" : null,
+    environment: "staging",
+    metadata: {
+      degraded: route === "/api/vendors/nearby",
+      html: "<img src=x onerror=alert(1)>",
+      nested: {
+        retry_after: level === "warn" ? 120 : null,
+      },
+    },
+  }));
+}
+
 async function mockAuthenticatedAdminWorkspace(
   page: Page,
   auditLogRequests: Array<{ userRole: string; action: string }>,
   options: MockAdminWorkspaceOptions = {},
+  operationalLogRequests: Array<{
+    level: string;
+    area: string;
+    event: string;
+    route: string;
+    timeWindow: string;
+  }> = [],
 ) {
   const role = options.role ?? "admin";
   const analyticsRecentEventCount = options.analyticsRecentEventCount ?? 1;
   const analyticsRankingRowCount = options.analyticsRankingRowCount ?? 0;
   const auditLogCount = options.auditLogCount ?? 1;
   const auditHasMore = options.auditHasMore ?? false;
+  const operationalLogCount = options.operationalLogCount ?? 1;
+  const operationalLogsHasMore = options.operationalLogsHasMore ?? false;
   const vendorCount = options.vendorCount ?? 0;
   const mockVendors = buildMockAdminVendors(vendorCount);
 
@@ -565,6 +617,66 @@ async function mockAuthenticatedAdminWorkspace(
             limit: 10,
             has_more: auditHasMore,
             next_cursor: auditHasMore ? String(auditLogCount) : null,
+          },
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/logs**", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    const requestedLevel = requestUrl.searchParams.get("level") ?? "all";
+    const requestedArea = requestUrl.searchParams.get("area") ?? "all";
+    const requestedEvent = requestUrl.searchParams.get("event") ?? "";
+    const requestedRoute = requestUrl.searchParams.get("route") ?? "";
+    const requestedTimeWindow = requestUrl.searchParams.get("time_window") ?? "24h";
+    operationalLogRequests.push({
+      level: requestedLevel,
+      area: requestedArea,
+      event: requestedEvent,
+      route: requestedRoute,
+      timeWindow: requestedTimeWindow,
+    });
+
+    if (requestedEvent === "FAIL_REQUEST") {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          data: null,
+          error: {
+            code: "UPSTREAM_ERROR",
+            message: "Unable to load logs.",
+            detail: "Logs are temporarily unavailable.",
+          },
+        }),
+      });
+      return;
+    }
+
+    const operationalEvents = requestedEvent === "NO_MATCH"
+      ? []
+      : buildMockOperationalLogs(
+        operationalLogCount,
+        requestedLevel,
+        requestedArea,
+        requestedEvent,
+        requestedRoute,
+      );
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          operationalEvents,
+          pagination: {
+            limit: 25,
+            has_more: operationalLogsHasMore,
+            next_cursor: operationalLogsHasMore ? String(operationalLogCount) : null,
           },
         },
         error: null,
@@ -1488,6 +1600,16 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("admin logs route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/logs");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
   test("recent team activity lives on /admin/activity and analytics no longer duplicates it", async ({ page }) => {
     const errors = trackClientErrors(page);
     const auditLogRequests: Array<{ userRole: string; action: string }> = [];
@@ -1539,14 +1661,23 @@ test.describe("Phase 3 browser smoke", () => {
   test("admin analytics, activity, and vendor registry lists scroll internally instead of expanding the page", async ({ page }) => {
     const errors = trackClientErrors(page);
     const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const operationalLogRequests: Array<{
+      level: string;
+      area: string;
+      event: string;
+      route: string;
+      timeWindow: string;
+    }> = [];
 
     await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
       analyticsRecentEventCount: 14,
       analyticsRankingRowCount: 12,
       auditLogCount: 16,
       auditHasMore: true,
+      operationalLogCount: 14,
+      operationalLogsHasMore: true,
       vendorCount: 18,
-    });
+    }, operationalLogRequests);
 
     await page.goto("/admin/analytics");
     await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
@@ -1570,6 +1701,16 @@ test.describe("Phase 3 browser smoke", () => {
       .poll(() => auditLogRequests.at(-1)?.userRole)
       .toBe("agent");
 
+    await page.getByRole("link", { name: "Logs" }).click();
+    await expect(page).toHaveURL(/\/admin\/logs$/);
+    await expect(page.getByRole("heading", { name: "Recent platform logs" })).toBeVisible();
+    await expect(page.locator(".admin-scroll-panel-logs")).toBeVisible();
+    await expectInnerScroll(page.locator(".admin-scroll-panel-logs"));
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect
+      .poll(() => operationalLogRequests.at(-1)?.timeWindow)
+      .toBe("24h");
+
     await page.getByRole("link", { name: "Manage vendors" }).click();
     await expect(page).toHaveURL(/\/admin\/vendors$/);
     await expect(page.getByRole("heading", { name: "Manage vendors", level: 1 })).toBeVisible();
@@ -1577,6 +1718,78 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("button", { name: "Read less" })).toHaveCount(0);
     await expect(page.locator(".admin-scroll-panel-vendors")).toBeVisible();
     await expectInnerScroll(page.locator(".admin-scroll-panel-vendors"));
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin logs page loads, filters work, and sanitized metadata stays inert", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const operationalLogRequests: Array<{
+      level: string;
+      area: string;
+      event: string;
+      route: string;
+      timeWindow: string;
+    }> = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      operationalLogCount: 2,
+    }, operationalLogRequests);
+
+    await page.goto("/admin/logs");
+    await expect(page.getByRole("heading", { name: "Logs", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent platform logs" })).toBeVisible();
+    await expect(page.locator(".admin-nav-link.active")).toContainText("Logs");
+    await expect(page.locator(".admin-log-item").first()).toContainText("PUBLIC_NEARBY_ROUTE_FAILED");
+
+    await page.locator(".admin-log-details summary").first().click();
+    await expect(page.locator(".admin-log-details pre").first()).toContainText("<img src=x onerror=alert(1)>");
+    await expect(page.locator(".admin-log-details img")).toHaveCount(0);
+
+    await page.getByLabel("Level").selectOption("warn");
+    await page.getByLabel("Area").selectOption("abuse");
+    await page.getByLabel("Route").fill("/api/admin/login");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect.poll(() => operationalLogRequests.at(-1)?.level).toBe("warn");
+    await expect.poll(() => operationalLogRequests.at(-1)?.area).toBe("abuse");
+    await expect.poll(() => operationalLogRequests.at(-1)?.route).toBe("/api/admin/login");
+
+    await page.getByLabel("Event").fill("NO_MATCH");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByText("No operational events matched the current filters.")).toBeVisible();
+
+    await page.getByLabel("Event").fill("FAIL_REQUEST");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.locator(".analytics-empty-state strong")).toContainText("Unable to load logs right now");
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.locator(".admin-log-item")).toHaveCount(2);
+
+    expect(errors.some((message) => message.includes("status of 502"))).toBe(true);
+    expect(errors.some((message) => message.includes("context: admin_logs"))).toBe(true);
+    await expectNoClientErrors(
+      errors.filter(
+        (message) =>
+          !message.includes("status of 502") &&
+          !message.includes("context: admin_logs"),
+      ),
+    );
+  });
+
+  test("agent is redirected away from admin logs", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      role: "agent",
+      vendorCount: 4,
+    });
+
+    await page.goto("/admin/logs");
+    await expect(page).toHaveURL(/\/admin\/agent$/);
+    await expect(page.getByRole("heading", { name: "Agent dashboard", level: 1 })).toBeVisible();
 
     await expectNoClientErrors(errors);
   });

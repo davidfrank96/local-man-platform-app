@@ -30,14 +30,15 @@ export function handleAdminServiceError(
     });
 
   logStructuredEvent("error", {
-    type: "ERROR",
-    code: appError.code,
+    event: "ADMIN_SERVICE_ERROR",
+    area: "admin",
+    errorCode: appError.code,
     status: appError.status ?? 502,
     message: appError.message,
     detail: appError.detail ?? null,
     requestId: appError.requestId ?? null,
     context: "admin_service",
-    error: error instanceof Error ? error.message : "Unknown error",
+    error,
     details: appError.details,
   });
 

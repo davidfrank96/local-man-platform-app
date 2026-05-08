@@ -8,6 +8,11 @@ import {
 } from "../../../../lib/api/abuse-protection.ts";
 import { validateSearchParams } from "../../../../lib/api/validation.ts";
 import { resolveNearbySearchLocation } from "../../../../lib/location/user-location.ts";
+import {
+  attachRequestIdHeader,
+  createRouteLogContext,
+  logRouteEvent,
+} from "../../../../lib/observability.ts";
 import { nearbyVendorsQuerySchema } from "../../../../lib/validation/index.ts";
 import { findNearbyVendors } from "../../../../lib/vendors/nearby.ts";
 import {
@@ -23,7 +28,13 @@ function sanitizeNearbySearchInput(search: string | null | undefined): string {
     .trim();
 }
 
+const nearbySlowRequestThresholdMs = 750;
+
 export async function GET(request: NextRequest) {
+  const routeLog = createRouteLogContext(request, {
+    route: "/api/vendors/nearby",
+    area: "public_discovery",
+  });
   const sanitizedSearchParams = new URLSearchParams(request.nextUrl.searchParams);
   const safeSearch = sanitizeNearbySearchInput(
     request.nextUrl.searchParams.get("search"),
@@ -41,7 +52,12 @@ export async function GET(request: NextRequest) {
   );
 
   if (!query.success) {
-    return query.response;
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_NEARBY_REQUEST_INVALID",
+      status: query.response.status,
+      message: "Nearby request validation failed.",
+    });
+    return attachRequestIdHeader(query.response, routeLog.requestId);
   }
 
   const resolvedSearch = resolveNearbySearchLocation(query.data);
@@ -53,26 +69,46 @@ export async function GET(request: NextRequest) {
     : null;
 
   if (activeSearchRateLimit && !activeSearchRateLimit.allowed) {
-    return applyRateLimitResponseHeaders(
-      apiError(
-        "TOO_MANY_REQUESTS",
-        "Too many search requests. Please wait before trying again.",
-        429,
-        {
-          retry_after_seconds: activeSearchRateLimit.retryAfterSeconds,
-        },
-        "Search is temporarily rate limited to protect Local Man.",
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_NEARBY_RATE_LIMITED",
+      status: 429,
+      message: "Nearby search request was rate limited.",
+      metadata: {
+        searchPresent: Boolean(query.data.search),
+        retryAfterSeconds: activeSearchRateLimit.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "TOO_MANY_REQUESTS",
+          "Too many search requests. Please wait before trying again.",
+          429,
+          {
+            retry_after_seconds: activeSearchRateLimit.retryAfterSeconds,
+          },
+          "Search is temporarily rate limited to protect Local Man.",
+        ),
+        activeSearchRateLimit,
       ),
-      activeSearchRateLimit,
+      routeLog.requestId,
     );
   }
   const config = getSupabaseRestConfig();
 
   if (!config) {
-    return apiError(
-      "CONFIGURATION_ERROR",
-      "Supabase public environment variables are required for nearby vendor search.",
-      503,
+    logRouteEvent("error", routeLog, {
+      event: "PUBLIC_NEARBY_CONFIGURATION_ERROR",
+      status: 503,
+      message: "Nearby search is unavailable because public Supabase config is missing.",
+    });
+    return attachRequestIdHeader(
+      apiError(
+        "CONFIGURATION_ERROR",
+        "Supabase public environment variables are required for nearby vendor search.",
+        503,
+      ),
+      routeLog.requestId,
     );
   }
 
@@ -96,20 +132,66 @@ export async function GET(request: NextRequest) {
       location: resolvedSearch.location,
       vendors,
     });
+    const durationMs = Date.now() - routeLog.startedAt;
 
-    return activeSearchRateLimit
-      ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
-      : response;
+    if (vendors.length === 0) {
+      logRouteEvent("info", routeLog, {
+        event: "PUBLIC_NEARBY_EMPTY_RESULT",
+        status: 200,
+        durationMs,
+        message: "Nearby request completed with no matching vendors.",
+        metadata: {
+          degraded: false,
+          locationSource: resolvedSearch.location.source,
+          searchPresent: Boolean(query.data.search),
+          radiusKm: query.data.radius_km,
+        },
+      });
+    } else if (durationMs >= nearbySlowRequestThresholdMs) {
+      logRouteEvent("warn", routeLog, {
+        event: "PUBLIC_NEARBY_SLOW",
+        status: 200,
+        durationMs,
+        message: "Nearby request completed slowly.",
+        metadata: {
+          resultCount: vendors.length,
+          locationSource: resolvedSearch.location.source,
+          searchPresent: Boolean(query.data.search),
+          radiusKm: query.data.radius_km,
+        },
+      });
+    }
+
+    return attachRequestIdHeader(
+      activeSearchRateLimit
+        ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
+        : response,
+      routeLog.requestId,
+    );
   } catch (error) {
-    console.error("NEARBY_ROUTE_ERROR:", error);
+    logRouteEvent("error", routeLog, {
+      event: "PUBLIC_NEARBY_ROUTE_FAILED",
+      status: 200,
+      message: "Nearby request degraded to an empty response after an upstream failure.",
+      error,
+      metadata: {
+        degraded: true,
+        locationSource: resolvedSearch.location.source,
+        searchPresent: Boolean(query.data.search),
+        radiusKm: query.data.radius_km,
+      },
+    });
 
     const response = apiSuccess({
       location: resolvedSearch.location,
       vendors: [],
     });
 
-    return activeSearchRateLimit
-      ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
-      : response;
+    return attachRequestIdHeader(
+      activeSearchRateLimit
+        ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
+        : response,
+      routeLog.requestId,
+    );
   }
 }

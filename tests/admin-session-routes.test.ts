@@ -7,6 +7,10 @@ import {
   ADMIN_LOGIN_RATE_LIMIT,
   resetAbuseProtectionStateForTests,
 } from "../lib/api/abuse-protection.ts";
+import {
+  flushOperationalEventWritesForTests,
+  resetOperationalEventPersistenceForTests,
+} from "../lib/observability.ts";
 
 const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -18,6 +22,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
 test.beforeEach(() => {
   resetAbuseProtectionStateForTests();
+  resetOperationalEventPersistenceForTests();
 });
 
 test.after(() => {
@@ -224,6 +229,89 @@ test("admin login route rate limits repeated invalid credential attempts", async
     assert.equal(payload.error.code, "TOO_MANY_REQUESTS");
     assert.equal(tokenAttempts, ADMIN_LOGIN_RATE_LIMIT.maxRequests);
   } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+    });
+  }
+});
+
+test("admin session route logs validation failures without exposing sensitive state", async () => {
+  const warnCalls: Array<Record<string, unknown>> = [];
+  const originalWarn = console.warn;
+
+  console.warn = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      warnCalls.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.warn;
+
+  try {
+    const response = await getAdminSession(
+      new Request("http://localhost/api/admin/session"),
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 401);
+    assert.equal(payload.error.code, "UNAUTHORIZED");
+
+    const failureLog = warnCalls.find((record) => record.event === "ADMIN_SESSION_VALIDATION_FAILED");
+
+    assert.ok(failureLog);
+    assert.equal(failureLog?.route, "/api/admin/session");
+    assert.equal(failureLog?.status, 401);
+    assert.equal("cookie" in (failureLog ?? {}), false);
+    assert.equal("authorization" in (failureLog ?? {}), false);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("admin session route still responds when operational event persistence fails", async () => {
+  const previousEnabled = process.env.LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE;
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const errorCalls: Array<Record<string, unknown>> = [];
+
+  process.env.LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE = "true";
+  console.error = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      errorCalls.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.error;
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: (async (input: URL | RequestInfo) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname === "/rest/v1/operational_events") {
+        return Response.json({ message: "insert failed" }, { status: 500 });
+      }
+
+      throw new Error(`Unexpected fetch: ${url.pathname}`);
+    }) as typeof fetch,
+  });
+
+  try {
+    const response = await getAdminSession(
+      new Request("http://localhost/api/admin/session"),
+    );
+    const payload = await response.json();
+
+    await flushOperationalEventWritesForTests();
+
+    assert.equal(response.status, 401);
+    assert.equal(payload.error.code, "UNAUTHORIZED");
+    assert.ok(
+      errorCalls.some((record) => record.event === "OPERATIONAL_EVENT_PERSIST_FAILED"),
+    );
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE;
+    } else {
+      process.env.LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE = previousEnabled;
+    }
+    console.error = originalError;
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
       value: originalFetch,

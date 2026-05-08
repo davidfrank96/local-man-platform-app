@@ -1,5 +1,6 @@
 import { AdminServiceError } from "./errors.ts";
 import type { AdminAuthConfig, AdminSession } from "./auth.ts";
+import { logStructuredEvent } from "../observability.ts";
 
 export const VENDOR_IMAGE_BUCKET = "vendor-images";
 export const MAX_VENDOR_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -139,6 +140,7 @@ function getStorageErrorDetails(payload: unknown): {
 export async function uploadVendorImageObject(
   {
     config,
+    session,
     storageObjectPath,
     file,
     fileBytes,
@@ -154,13 +156,20 @@ export async function uploadVendorImageObject(
 ): Promise<void> {
   const storageConfig = requireAdminStorageConfig(config);
 
-  console.info("[admin][vendor-image] storage upload request", {
-    bucket: VENDOR_IMAGE_BUCKET,
-    fileName: file.name,
-    fileType: file.type,
-    fileSize: file.size,
-    hasBuffer: fileBytes.byteLength > 0,
-    storageObjectPath,
+  logStructuredEvent("info", {
+    event: "ADMIN_VENDOR_IMAGE_STORAGE_UPLOAD_STARTED",
+    area: "storage",
+    requestId: session.requestId,
+    adminUserId: session.adminUser.id,
+    userRole: session.adminUser.role,
+    metadata: {
+      bucket: VENDOR_IMAGE_BUCKET,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      hasBuffer: fileBytes.byteLength > 0,
+      storageObjectPath,
+    },
   });
 
   const response = await fetchImpl(
@@ -184,13 +193,20 @@ export async function uploadVendorImageObject(
     const payload = await readStorageResponse(response);
     const { upstreamCode, upstreamMessage } = getStorageErrorDetails(payload);
 
-    console.error("[admin][vendor-image] storage upload failed", {
-      bucket: VENDOR_IMAGE_BUCKET,
-      httpStatus: response.status,
-      storageObjectPath,
-      upstreamCode,
-      upstreamMessage,
-      payload,
+    logStructuredEvent("error", {
+      event: "ADMIN_VENDOR_IMAGE_STORAGE_UPLOAD_FAILED",
+      area: "storage",
+      requestId: session.requestId,
+      adminUserId: session.adminUser.id,
+      userRole: session.adminUser.role,
+      status: response.status,
+      errorCode: upstreamCode ?? undefined,
+      errorMessage: upstreamMessage ?? undefined,
+      metadata: {
+        bucket: VENDOR_IMAGE_BUCKET,
+        storageObjectPath,
+        payload,
+      },
     });
 
     throw new AdminServiceError(

@@ -70,6 +70,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - admin dashboard overview cards and quick actions
 - admin analytics dashboard for lightweight usage signals
 - dedicated admin activity page for recent team activity
+- dedicated admin logs page for recent operational warnings, failures, degraded responses, and slow requests
 - admin team access page at `/admin/team`
 - vendor registry with completeness badges
 - full Create Vendor page for both admins and agents
@@ -174,6 +175,9 @@ Optional bootstrap and ops variables:
 ADMIN_SEED_EMAIL=<initial-admin-email>
 ADMIN_SEED_PASSWORD=<initial-admin-password>
 DATABASE_URL=<postgres-connection-string-for-migrations-and-seeds>
+LOCALMAN_LOG_LEVEL=<debug|info|warn|error>
+LOCALMAN_ENABLE_DEBUG_LOGS=<true|false>
+LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=<true|false>
 ```
 
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional for overall app startup, but required if you want the real tiled MapLibre map instead of the fallback coordinate map.
@@ -190,6 +194,16 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 
 Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
 Authentication alone is not enough for workspace access: the authenticated user must already exist in `admin_users`.
+
+Server-side runtime logging is standardized through `lib/observability.ts`:
+- logs are structured and include stable event names plus request ids where available
+- logger metadata is redacted for secrets, tokens, cookies, raw request bodies, and database URLs
+- `LOCALMAN_LOG_LEVEL` defaults to `info`
+- debug output stays off unless `LOCALMAN_ENABLE_DEBUG_LOGS=true` or `LOCALMAN_LOG_LEVEL=debug`
+- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` enables bounded storage of selected warn/error/slow/rate-limited events and selected admin mutation events in `public.operational_events`
+- operational event storage is separate from `audit_logs` and does not store secrets, cookies, auth headers, passwords, raw request bodies, or stack traces
+- admins can review recent persisted operational events at `/admin/logs` when storage is enabled
+- recent operational events are retained through DB cleanup discipline rather than a full external monitoring platform in this phase
 
 Public abuse protection is centralized server-side in the API layer:
 - `/api/admin/login`: `5` attempts per `10` minutes per IP/email with a `15` minute block window
@@ -260,7 +274,9 @@ Phase 6 currently covers:
 - `filter_applied`
 - admin-only analytics route at `/admin/analytics`
 - admin-only activity route at `/admin/activity`
+- admin-only logs route at `/admin/logs`
 - summary cards, vendor performance, drop-off signals, recent user events, and dedicated recent team activity review
+- operational warning and failure review from persisted structured logs
 - non-blocking tracking writes that must never interfere with public discovery
 - backend-only analytics reads in production, with the admin analytics route handling RPC and query fallback server-side
 
@@ -273,6 +289,7 @@ Current admin workspace behavior:
   - analytics
   - team management
   - audit-log visibility
+  - operational-log visibility
   - vendor create/edit/delete
 - `agent`
   - redirected to `/admin/agent`
@@ -280,7 +297,7 @@ Current admin workspace behavior:
   - vendor list
   - vendor edit workspace
   - CSV vendor intake
-  - no analytics, no team management, no audit-log access
+  - no analytics, no team management, no audit-log access, and no operational-log access
 
 Current CSV intake behavior:
 

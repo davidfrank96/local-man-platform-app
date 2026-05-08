@@ -10,6 +10,11 @@ import {
   validateJsonBody,
 } from "../../../../../lib/api/validation.ts";
 import {
+  attachRequestIdHeader,
+  createRouteLogContext,
+  logRouteEvent,
+} from "../../../../../lib/observability.ts";
+import {
   createVendorRatingRequestSchema,
   vendorSlugParamsSchema,
 } from "../../../../../lib/validation/index.ts";
@@ -157,25 +162,49 @@ async function submitPublicVendorRating(
 }
 
 export async function POST(request: Request, { params }: VendorRatingsRouteContext) {
+  const routeLog = createRouteLogContext(request, {
+    route: "/api/vendors/[slug]/ratings",
+    area: "ratings",
+  });
   const routeParams = validateInput(vendorSlugParamsSchema, await params);
 
   if (!routeParams.success) {
-    return routeParams.response;
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_REQUEST_INVALID",
+      status: routeParams.response.status,
+      message: "Vendor rating route params failed validation.",
+    });
+    return attachRequestIdHeader(routeParams.response, routeLog.requestId);
   }
 
   const body = await validateJsonBody(request, createVendorRatingRequestSchema);
 
   if (!body.success) {
-    return body.response;
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_REJECTED",
+      status: body.response.status,
+      message: "Vendor rating payload failed validation.",
+      vendorSlug: routeParams.data.slug,
+    });
+    return attachRequestIdHeader(body.response, routeLog.requestId);
   }
 
   const config = getRatingWriteConfig();
 
   if (!config) {
-    return apiError(
-      "CONFIGURATION_ERROR",
-      "Supabase environment variables are required for vendor ratings.",
-      503,
+    logRouteEvent("error", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_CONFIGURATION_ERROR",
+      status: 503,
+      message: "Vendor ratings are unavailable because write config is missing.",
+      vendorSlug: routeParams.data.slug,
+    });
+    return attachRequestIdHeader(
+      apiError(
+        "CONFIGURATION_ERROR",
+        "Supabase environment variables are required for vendor ratings.",
+        503,
+      ),
+      routeLog.requestId,
     );
   }
 
@@ -184,17 +213,29 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
   });
 
   if (!rateLimit.allowed) {
-    return applyRateLimitResponseHeaders(
-      apiError(
-        "TOO_MANY_REQUESTS",
-        "Too many rating submissions. Please wait before trying again.",
-        429,
-        {
-          retry_after_seconds: rateLimit.retryAfterSeconds,
-        },
-        "Rating is temporarily rate limited to protect Local Man.",
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_RATE_LIMITED",
+      status: 429,
+      message: "Vendor rating submission was rate limited.",
+      vendorSlug: routeParams.data.slug,
+      metadata: {
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "TOO_MANY_REQUESTS",
+          "Too many rating submissions. Please wait before trying again.",
+          429,
+          {
+            retry_after_seconds: rateLimit.retryAfterSeconds,
+          },
+          "Rating is temporarily rate limited to protect Local Man.",
+        ),
+        rateLimit,
       ),
-      rateLimit,
+      routeLog.requestId,
     );
   }
 
@@ -215,9 +256,18 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     const vendor = await fetchVendorTarget(routeParams.data.slug, config);
 
     if (!vendor) {
-      return applyRateLimitResponseHeaders(
-        apiError("NOT_FOUND", "Vendor was not found.", 404),
-        rateLimit,
+      logRouteEvent("info", routeLog, {
+        event: "PUBLIC_VENDOR_RATING_NOT_FOUND",
+        status: 404,
+        message: "Vendor rating submission targeted an unknown vendor.",
+        vendorSlug: routeParams.data.slug,
+      });
+      return attachRequestIdHeader(
+        applyRateLimitResponseHeaders(
+          apiError("NOT_FOUND", "Vendor was not found.", 404),
+          rateLimit,
+        ),
+        routeLog.requestId,
       );
     }
 
@@ -243,16 +293,40 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       try {
         const payload = await dedupeGuard.promise;
 
-        return applyRateLimitResponseHeaders(apiSuccess(payload, 200), rateLimit);
+        logRouteEvent("info", routeLog, {
+          event: "PUBLIC_VENDOR_RATING_DUPLICATE_COLLAPSED",
+          status: 200,
+          message: "Vendor rating duplicate submission reused an in-flight result.",
+          vendorId: payload.vendor_id,
+          vendorSlug: routeParams.data.slug,
+          metadata: {
+            score: body.data.score,
+          },
+        });
+
+        return attachRequestIdHeader(
+          applyRateLimitResponseHeaders(apiSuccess(payload, 200), rateLimit),
+          routeLog.requestId,
+        );
       } catch (error) {
-        return applyRateLimitResponseHeaders(
-          apiError(
-            "UPSTREAM_ERROR",
-            "Unable to save vendor rating.",
-            502,
-            error instanceof Error ? { message: error.message } : undefined,
+        logRouteEvent("error", routeLog, {
+          event: "PUBLIC_VENDOR_RATING_DUPLICATE_FAILED",
+          status: 502,
+          message: "Vendor rating duplicate submission failed while awaiting the shared result.",
+          vendorSlug: routeParams.data.slug,
+          error,
+        });
+        return attachRequestIdHeader(
+          applyRateLimitResponseHeaders(
+            apiError(
+              "UPSTREAM_ERROR",
+              "Unable to save vendor rating.",
+              502,
+              error instanceof Error ? { message: error.message } : undefined,
+            ),
+            rateLimit,
           ),
-          rateLimit,
+          routeLog.requestId,
         );
       }
     }
@@ -261,9 +335,19 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
 
     if (!ratingSummary) {
       dedupeGuard.reject(new Error("Vendor was not found."));
-      return applyRateLimitResponseHeaders(
-        apiError("NOT_FOUND", "Vendor was not found.", 404),
-        rateLimit,
+      logRouteEvent("warn", routeLog, {
+        event: "PUBLIC_VENDOR_RATING_RPC_RETURNED_EMPTY",
+        status: 404,
+        message: "Vendor rating RPC returned no summary payload.",
+        vendorId: vendor.id,
+        vendorSlug: routeParams.data.slug,
+      });
+      return attachRequestIdHeader(
+        applyRateLimitResponseHeaders(
+          apiError("NOT_FOUND", "Vendor was not found.", 404),
+          rateLimit,
+        ),
+        routeLog.requestId,
       );
     }
 
@@ -276,17 +360,46 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     };
     dedupeGuard.resolve(responseData);
 
-    return applyRateLimitResponseHeaders(apiSuccess(responseData, 201), rateLimit);
+    logRouteEvent("info", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_ACCEPTED",
+      status: 201,
+      message: "Vendor rating accepted.",
+      vendorId: ratingSummary.vendor_id,
+      vendorSlug: routeParams.data.slug,
+      metadata: {
+        score: body.data.score,
+        reviewCount: ratingSummary.review_count,
+        averageRating: ratingSummary.average_rating,
+      },
+    });
+
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(apiSuccess(responseData, 201), rateLimit),
+      routeLog.requestId,
+    );
   } catch (error) {
     activeDedupeGuard?.reject(error);
-    return applyRateLimitResponseHeaders(
-      apiError(
-        "UPSTREAM_ERROR",
-        "Unable to save vendor rating.",
-        502,
-        error instanceof Error ? { message: error.message } : undefined,
+    logRouteEvent("error", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_FAILED",
+      status: 502,
+      message: "Vendor rating submission failed.",
+      vendorSlug: routeParams.data.slug,
+      metadata: {
+        score: body.data.score,
+      },
+      error,
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "UPSTREAM_ERROR",
+          "Unable to save vendor rating.",
+          502,
+          error instanceof Error ? { message: error.message } : undefined,
+        ),
+        rateLimit,
       ),
-      rateLimit,
+      routeLog.requestId,
     );
   }
 }

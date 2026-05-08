@@ -60,6 +60,7 @@ Handles:
 - admin login and session validation
 - dashboard overview
 - analytics dashboard
+- operational logs dashboard
 - team access management
 - vendor registry management
 - vendor creation
@@ -87,6 +88,7 @@ Handle:
 - admin subresource loading
 - shared vendor availability computation in `lib/vendors/hours.ts` for `is_open_now` and `today_hours`
 - centralized abuse protection for public writes, search-heavy reads, and admin login
+- structured server-side runtime logging through `lib/observability.ts`
 
 ### Database
 Stores:
@@ -99,6 +101,7 @@ Stores:
 - admin_users
 - audit_logs
 - user_events
+- operational_events
 
 ## Architecture Principles
 1. Keep the public app read-heavy and simple.
@@ -227,6 +230,44 @@ Current thresholds:
 - public ratings: `8` requests per `10` minutes, `10` minute block, `60` second duplicate collapse
 - public nearby search: `45` search requests per `60` seconds, `2` minute block
 
+## Runtime Observability
+
+Structured server logging lives in `lib/observability.ts`.
+
+Current rules:
+- server logs use stable event names, levels, and safe metadata objects
+- incoming `x-request-id` or `x-correlation-id` values are reused only when they match the request-id safety rules; otherwise the server generates a short internal request id
+- touched public/admin routes may echo the safe request id back in the `x-request-id` response header
+- current route-level timing and failure instrumentation covers:
+  - `/api/admin/login`
+  - `/api/admin/session`
+  - `/api/admin/logout`
+  - `/api/admin/analytics`
+  - `/api/admin/audit-logs`
+  - admin vendor mutation routes, including image and featured-dish writes
+  - `/api/vendors/nearby`
+  - `/api/vendors/[slug]/ratings`
+- `/api/events`
+- error serialization includes safe `errorName`, `errorMessage`, and optional `errorCode` fields
+- logger redaction removes secrets, tokens, cookies, raw request bodies, and database URLs from emitted metadata
+- debug logs are env-gated and disabled by default
+- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` enables bounded persistence of selected structured operational events into `public.operational_events`
+- persisted events are intentionally limited to:
+  - errors
+  - degraded responses
+  - rate-limit blocks
+  - selected warn-level failures and slow requests
+  - selected important admin mutation events
+- persisted operational events are separate from `audit_logs` and are sanitized before insert
+- `/admin/logs` reads those persisted operational events through the protected `/api/admin/logs` route
+
+Current limitation:
+- console logging remains the primary output path, and operational-event storage is only a lightweight internal persistence layer rather than a centralized trace store
+- retention is managed through an explicit prune step rather than a background log pipeline
+- public discovery still prefers graceful degraded nearby responses over hard API failures, but the logs now distinguish:
+  - true empty search results through `PUBLIC_NEARBY_EMPTY_RESULT`
+  - degraded upstream-failure fallbacks through `PUBLIC_NEARBY_ROUTE_FAILED`
+
 ## Vendor Image Pipeline
 
 Vendor profile images use this path:
@@ -289,6 +330,7 @@ Public usage signals use this path:
 6. the admin analytics surface reads those rows directly from Supabase in production and can fall back to backend routes in development
 7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent user events
 8. `/admin/activity` renders recent team activity from the protected audit-log route
+9. `/admin/logs` renders recent persisted operational warnings, failures, degraded responses, and slow requests from `public.operational_events`
 
 Tracked event types:
 - `session_started`
@@ -334,7 +376,7 @@ The public app keeps a small amount of client-only memory:
 
 ## Operational Caveats
 
-- structured logs exist for auth, abuse protection, analytics, and audit-log flows, but the repo does not yet provide distributed tracing or a centralized observability backend
+- structured logs exist for auth, abuse protection, analytics, audit-log flows, and the admin logs surface, but the repo does not yet provide distributed tracing or a centralized observability backend
 - public discovery prefers graceful degraded responses over hard crashes, so some upstream nearby failures may surface as unexpectedly empty vendor results until logs or smoke checks are reviewed
 - the current real map intentionally ships without clustering; revisit clustering only if pilot density makes marker usability worse than the current single-marker interaction model
 

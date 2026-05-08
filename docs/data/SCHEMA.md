@@ -150,6 +150,31 @@ Notes:
 - metadata: jsonb
 - created_at: timestamp
 
+## Table: operational_events
+- id: uuid, primary key
+- created_at: timestamp
+- level: text
+- area: text
+- event: text
+- message: text nullable
+- route: text nullable
+- method: text nullable
+- status: integer nullable
+- duration_ms: integer nullable
+- request_id: text nullable
+- actor_role: text nullable
+- actor_id: text nullable
+- vendor_id: text nullable
+- vendor_slug: text nullable
+- environment: text nullable
+- metadata: jsonb
+
+Notes:
+- `operational_events` stores bounded sanitized operational logs, not security audit trails.
+- It is separate from `audit_logs`.
+- Metadata must not contain secrets, tokens, cookies, raw request bodies, or raw stack traces.
+- Current read access is admin-only through row-level security.
+
 ## Suggested Indexes
 - vendors.slug
 - vendors.city
@@ -172,6 +197,11 @@ Notes:
 - admin_users.id
 - audit_logs.admin_user_id
 - audit_logs.entity_type and entity_id
+- operational_events.created_at
+- operational_events.level
+- operational_events.area
+- operational_events.event
+- operational_events.route
 
 Current notes:
 - `vendors.is_open_now` is not a persisted column in this schema; open status is derived from `vendor_hours` and `is_open_override`, so there is no direct database index for `is_open_now`.
@@ -198,6 +228,7 @@ Admin users can:
 - manage ratings
 - read admin users
 - read and create audit logs
+- read operational events
 
 ## Future Extension Notes
 Potential future additions:

@@ -12,6 +12,7 @@ import {
   deleteAdminVendorImage,
   fetchAdminAnalytics,
   fetchAdminAuditLogs,
+  fetchAdminOperationalLogs,
   listAdminUsers,
   listAdminVendorDishes,
   listAdminVendorHours,
@@ -733,6 +734,41 @@ test("admin API client uses backend analytics and audit-log routes only", async 
       });
     }
 
+    if (url.pathname === "/api/admin/logs") {
+      return Response.json({
+        success: true,
+        data: {
+          operationalEvents: [
+            {
+              id: "71000000-0000-4000-8000-000000000001",
+              created_at: "2026-05-08T10:00:00.000Z",
+              level: "error",
+              area: "db",
+              event: "OPERATIONAL_EVENT_PERSIST_FAILED",
+              message: "Operational event persistence failed.",
+              route: "/api/admin/session",
+              method: "GET",
+              status: 500,
+              duration_ms: 12,
+              request_id: "req_logs_1",
+              actor_role: null,
+              actor_id: null,
+              vendor_id: null,
+              vendor_slug: null,
+              environment: "staging",
+              metadata: {},
+            },
+          ],
+          pagination: {
+            limit: 25,
+            has_more: false,
+            next_cursor: null,
+          },
+        },
+        error: null,
+      });
+    }
+
     return Response.json({
       success: true,
       data: {
@@ -760,11 +796,14 @@ test("admin API client uses backend analytics and audit-log routes only", async 
 
   const analytics = await fetchAdminAnalytics({ range: "30d" }, { fetchImpl });
   const auditLogs = await fetchAdminAuditLogs({ limit: 10 }, { fetchImpl });
+  const operationalLogs = await fetchAdminOperationalLogs({ limit: 25 }, { fetchImpl });
 
   assert.equal(analytics.error, null);
   assert.equal(auditLogs.error, null);
+  assert.equal(operationalLogs.error, null);
   assert.equal(new URL(requestedUrls[0], "http://localhost").pathname, "/api/admin/analytics");
   assert.equal(new URL(requestedUrls[1], "http://localhost").pathname, "/api/admin/audit-logs");
+  assert.equal(new URL(requestedUrls[2], "http://localhost").pathname, "/api/admin/logs");
   assert.equal(requestedUrls.some((value) => value.includes("/rest/v1/")), false);
 });
 
@@ -804,11 +843,30 @@ test("admin API client returns safe analytics and audit-log errors", async () =>
         )) as typeof fetch,
     },
   );
+  const logsResult = await fetchAdminOperationalLogs(
+    { limit: 25 },
+    {
+      fetchImpl: (async () =>
+        Response.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: "FORBIDDEN",
+              message: "You do not have access to logs",
+            },
+          },
+          { status: 403 },
+        )) as typeof fetch,
+    },
+  );
 
   assert.equal(analyticsResult.data, null);
   assert.equal(analyticsResult.error?.code, "FORBIDDEN");
   assert.equal(auditResult.data, null);
   assert.equal(auditResult.error?.code, "FORBIDDEN");
+  assert.equal(logsResult.data, null);
+  assert.equal(logsResult.error?.code, "FORBIDDEN");
 });
 
 test("admin API client can list vendor subresources", async () => {

@@ -752,7 +752,13 @@ test("admin creation returns a retryable timeout when auth user creation stalls"
           return false;
         }
 
-        return entry[0] === "AUTH CREATE ERROR:";
+        const record = entry[0] as { event?: unknown; level?: unknown; errorCode?: unknown } | undefined;
+
+        return (
+          record?.event === "ADMIN_AUTH_USER_CREATE_FAILED" &&
+          record?.level === "error" &&
+          record?.errorCode === "NETWORK_ERROR"
+        );
       }),
       true,
     );

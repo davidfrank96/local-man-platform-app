@@ -6,7 +6,11 @@ import {
   stableStringify,
   startSingleFlightGuard,
 } from "../../../lib/api/abuse-protection.ts";
-import { getOrCreateRequestId, logStructuredEvent } from "../../../lib/observability.ts";
+import {
+  attachRequestIdHeader,
+  createRouteLogContext,
+  logRouteEvent,
+} from "../../../lib/observability.ts";
 import { userActionEventSchema } from "../../../lib/validation/index.ts";
 
 type EventWriteConfig = {
@@ -42,17 +46,25 @@ async function readUpstreamError(response: Response): Promise<unknown> {
 }
 
 export async function POST(request: Request) {
-  const requestId = getOrCreateRequestId(request);
+  const routeLog = createRouteLogContext(request, {
+    route: "/api/events",
+    area: "api",
+  });
   const config = getEventWriteConfig();
 
   if (!config) {
-    logStructuredEvent("warn", {
-      type: "PUBLIC_EVENT_TRACKING_SKIPPED",
-      requestId,
-      reason: "tracking_unconfigured",
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_EVENT_TRACKING_SKIPPED",
       message: "Tracking skipped because write config is missing.",
+      status: 202,
+      metadata: {
+        reason: "tracking_unconfigured",
+      },
     });
-    return apiSuccess({ accepted: false, reason: "tracking_unconfigured" }, 202);
+    return attachRequestIdHeader(
+      apiSuccess({ accepted: false, reason: "tracking_unconfigured" }, 202),
+      routeLog.requestId,
+    );
   }
 
   let payload: unknown;
@@ -62,27 +74,38 @@ export async function POST(request: Request) {
     rawBody = await request.text();
     payload = JSON.parse(rawBody);
   } catch {
-    logStructuredEvent("warn", {
-      type: "PUBLIC_EVENT_TRACKING_SKIPPED",
-      requestId,
-      reason: "invalid_payload",
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_EVENT_TRACKING_SKIPPED",
       message: "Tracking skipped because request JSON was invalid.",
-      rawBody,
+      status: 400,
+      metadata: {
+        reason: "invalid_payload",
+        contentType: request.headers.get("content-type"),
+        bodyBytes: rawBody.length,
+      },
     });
-    return new Response("Bad Request", { status: 400 });
+    return attachRequestIdHeader(
+      new Response("Bad Request", { status: 400 }),
+      routeLog.requestId,
+    );
   }
 
   const parsedEvent = userActionEventSchema.safeParse(payload);
 
   if (!parsedEvent.success) {
-    logStructuredEvent("warn", {
-      type: "PUBLIC_EVENT_TRACKING_SKIPPED",
-      requestId,
-      reason: "invalid_payload",
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_EVENT_TRACKING_SKIPPED",
       message: "Tracking skipped because payload validation failed.",
-      issues: parsedEvent.error.issues,
+      status: 202,
+      metadata: {
+        reason: "invalid_payload",
+        issues: parsedEvent.error.issues,
+      },
     });
-    return apiSuccess({ accepted: false, reason: "invalid_payload" }, 202);
+    return attachRequestIdHeader(
+      apiSuccess({ accepted: false, reason: "invalid_payload" }, 202),
+      routeLog.requestId,
+    );
   }
 
   const event = parsedEvent.data;
@@ -92,9 +115,23 @@ export async function POST(request: Request) {
   });
 
   if (!rateLimit.allowed) {
-    return applyRateLimitResponseHeaders(
-      apiSuccess({ accepted: false, reason: "rate_limited" }, 202),
-      rateLimit,
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_EVENT_RATE_LIMITED",
+      message: "Public event tracking request was rate limited.",
+      status: 202,
+      metadata: {
+        eventType: event.event_type,
+        sessionIdPresent: Boolean(event.session_id),
+        vendorId: event.vendor_id ?? null,
+        vendorSlug: event.vendor_slug ?? null,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: false, reason: "rate_limited" }, 202),
+        rateLimit,
+      ),
+      routeLog.requestId,
     );
   }
 
@@ -122,15 +159,43 @@ export async function POST(request: Request) {
     try {
       await dedupeGuard.promise;
     } catch {
-      return applyRateLimitResponseHeaders(
-        apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
-        rateLimit,
+      logRouteEvent("warn", routeLog, {
+        event: "PUBLIC_EVENT_DUPLICATE_FAILED",
+        message: "Public event retry collapsed into a failed upstream write.",
+        status: 202,
+        metadata: {
+          eventType: event.event_type,
+          sessionIdPresent: Boolean(event.session_id),
+          vendorId: event.vendor_id ?? null,
+          vendorSlug: event.vendor_slug ?? null,
+        },
+      });
+      return attachRequestIdHeader(
+        applyRateLimitResponseHeaders(
+          apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+          rateLimit,
+        ),
+        routeLog.requestId,
       );
     }
 
-    return applyRateLimitResponseHeaders(
-      apiSuccess({ accepted: true, deduplicated: true }, 202),
-      rateLimit,
+    logRouteEvent("debug", routeLog, {
+      event: "PUBLIC_EVENT_DUPLICATE_COLLAPSED",
+      message: "Public event retry re-used an in-flight write.",
+      status: 202,
+      metadata: {
+        eventType: event.event_type,
+        sessionIdPresent: Boolean(event.session_id),
+        vendorId: event.vendor_id ?? null,
+        vendorSlug: event.vendor_slug ?? null,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: true, deduplicated: true }, 202),
+        rateLimit,
+      ),
+      routeLog.requestId,
     );
   }
 
@@ -156,7 +221,7 @@ export async function POST(request: Request) {
         filters: event.filters ?? {},
         metadata: {
           ...(event.metadata ?? {}),
-          request_id: requestId,
+          request_id: routeLog.requestId,
         },
       }),
     });
@@ -164,36 +229,66 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const details = await readUpstreamError(response);
 
-      logStructuredEvent("error", {
-        type: "PUBLIC_EVENT_TRACKING_FAILED",
-        requestId,
-        eventType: event.event_type,
+      logRouteEvent("error", routeLog, {
+        event: "PUBLIC_EVENT_TRACKING_FAILED",
         status: response.status,
-        details: details ?? { status: response.status },
+        message: "Public event tracking failed upstream.",
+        metadata: {
+          eventType: event.event_type,
+          sessionIdPresent: Boolean(event.session_id),
+          vendorId: event.vendor_id ?? null,
+          vendorSlug: event.vendor_slug ?? null,
+          details: details ?? { status: response.status },
+        },
       });
       dedupeGuard.reject(new Error("tracking_unavailable"));
-      return applyRateLimitResponseHeaders(
-        apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
-        rateLimit,
+      return attachRequestIdHeader(
+        applyRateLimitResponseHeaders(
+          apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+          rateLimit,
+        ),
+        routeLog.requestId,
       );
     }
 
     dedupeGuard.resolve({ accepted: true });
-    return applyRateLimitResponseHeaders(
-      apiSuccess({ accepted: true }, 201),
-      rateLimit,
+    logRouteEvent("debug", routeLog, {
+      event: "PUBLIC_EVENT_TRACKED",
+      message: "Public event was accepted for storage.",
+      status: 201,
+      metadata: {
+        eventType: event.event_type,
+        sessionIdPresent: Boolean(event.session_id),
+        vendorId: event.vendor_id ?? null,
+        vendorSlug: event.vendor_slug ?? null,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: true }, 201),
+        rateLimit,
+      ),
+      routeLog.requestId,
     );
   } catch (error) {
-    logStructuredEvent("error", {
-      type: "PUBLIC_EVENT_TRACKING_FAILED",
-      requestId,
-      eventType: event.event_type,
-      error: error instanceof Error ? error.message : "Unknown error",
+    logRouteEvent("error", routeLog, {
+      event: "PUBLIC_EVENT_TRACKING_FAILED",
+      error,
+      message: "Public event tracking failed before completion.",
+      metadata: {
+        eventType: event.event_type,
+        sessionIdPresent: Boolean(event.session_id),
+        vendorId: event.vendor_id ?? null,
+        vendorSlug: event.vendor_slug ?? null,
+      },
     });
     dedupeGuard.reject(error);
-    return applyRateLimitResponseHeaders(
-      apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
-      rateLimit,
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+        rateLimit,
+      ),
+      routeLog.requestId,
     );
   }
 }

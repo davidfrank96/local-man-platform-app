@@ -250,4 +250,20 @@ export const apiEndpoints = {
       "entity filters must be sanitized",
     ],
   },
+  getAdminLogs: {
+    access: "admin",
+    method: "GET",
+    path: "/api/admin/logs",
+    requestShape:
+      "Optional pagination plus level, area, event, route, since, and time_window filters.",
+    responseShape:
+      "Paginated sanitized operational events for warnings, failures, degraded responses, slow requests, and selected admin mutations.",
+    validationBoundary: [
+      "admin authentication required",
+      "platform log access must remain admin-only",
+      "pagination values must be bounded",
+      "event and route filters must be sanitized text only",
+      "logs must stay operational and separate from audit activity",
+    ],
+  },
 } as const satisfies Record<string, ApiEndpointContract>;

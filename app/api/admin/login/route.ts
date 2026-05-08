@@ -16,6 +16,12 @@ import {
   signInAdminCookieSession,
 } from "../../../../lib/admin/session-cookies.ts";
 import { AppError, mapExternalError } from "../../../../lib/errors/app-error.ts";
+import {
+  attachRequestIdHeader,
+  createRouteLogContext,
+  logRouteEvent,
+  redactEmailForLog,
+} from "../../../../lib/observability.ts";
 
 const adminLoginRequestSchema = z.object({
   email: z.email(),
@@ -23,11 +29,21 @@ const adminLoginRequestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const routeLog = createRouteLogContext(request, {
+    route: "/api/admin/login",
+    area: "auth",
+  });
   const body = await validateJsonBody(request, adminLoginRequestSchema);
 
   if (!body.success) {
-    return body.response;
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_LOGIN_REJECTED",
+      status: body.response.status,
+      message: "Admin login request validation failed.",
+    });
+    return attachRequestIdHeader(body.response, routeLog.requestId);
   }
+  const emailHint = redactEmailForLog(body.data.email);
 
   const rateLimit = consumeRateLimit(request, {
     policy: ADMIN_LOGIN_RATE_LIMIT,
@@ -36,30 +52,53 @@ export async function POST(request: Request) {
   });
 
   if (!rateLimit.allowed) {
-    return applyRateLimitResponseHeaders(
-      apiError(
-        "TOO_MANY_REQUESTS",
-        "Too many login attempts. Please wait before trying again.",
-        429,
-        {
-          retry_after_seconds: rateLimit.retryAfterSeconds,
-        },
-        "Authentication is temporarily rate limited to protect Local Man.",
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_LOGIN_RATE_LIMITED",
+      status: 429,
+      message: "Admin login request was rate limited.",
+      metadata: {
+        emailHint,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "TOO_MANY_REQUESTS",
+          "Too many login attempts. Please wait before trying again.",
+          429,
+          {
+            retry_after_seconds: rateLimit.retryAfterSeconds,
+          },
+          "Authentication is temporarily rate limited to protect Local Man.",
+        ),
+        rateLimit,
       ),
-      rateLimit,
+      routeLog.requestId,
     );
   }
 
   const config = getAdminAuthConfig();
 
   if (!config) {
-    return applyRateLimitResponseHeaders(
-      apiError(
-        "CONFIGURATION_ERROR",
-        "Supabase environment variables are required for admin authentication.",
-        503,
+    logRouteEvent("error", routeLog, {
+      event: "ADMIN_LOGIN_CONFIGURATION_ERROR",
+      status: 503,
+      message: "Admin login is unavailable because auth config is missing.",
+      metadata: {
+        emailHint,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "CONFIGURATION_ERROR",
+          "Supabase environment variables are required for admin authentication.",
+          503,
+        ),
+        rateLimit,
       ),
-      rateLimit,
+      routeLog.requestId,
     );
   }
 
@@ -72,7 +111,7 @@ export async function POST(request: Request) {
     const authRequest = new Request(request.url, {
       headers: {
         authorization: `Bearer ${cookieSession.accessToken}`,
-        "x-request-id": request.headers.get("x-request-id") ?? crypto.randomUUID(),
+        "x-request-id": routeLog.requestId,
       },
     });
     const admin = await requireAdmin(authRequest, {
@@ -81,7 +120,18 @@ export async function POST(request: Request) {
     });
 
     if (!admin.success) {
-      return applyRateLimitResponseHeaders(admin.response, rateLimit);
+      logRouteEvent("warn", routeLog, {
+        event: "ADMIN_LOGIN_DENIED",
+        status: admin.response.status,
+        message: "Authenticated user failed admin workspace authorization.",
+        metadata: {
+          emailHint,
+        },
+      });
+      return attachRequestIdHeader(
+        applyRateLimitResponseHeaders(admin.response, rateLimit),
+        routeLog.requestId,
+      );
     }
 
     const response = apiSuccess({
@@ -90,9 +140,23 @@ export async function POST(request: Request) {
     });
 
     appendAdminSessionCookies(response.headers, cookieSession);
-    return applyRateLimitResponseHeaders(
-      applyAdminSessionResponseHeaders(response, admin.responseHeaders),
-      rateLimit,
+    logRouteEvent("info", routeLog, {
+      event: "ADMIN_LOGIN_SUCCEEDED",
+      status: 200,
+      message: "Admin login succeeded.",
+      userId: admin.session.user.id,
+      adminUserId: admin.session.adminUser.id,
+      userRole: admin.session.adminUser.role,
+      metadata: {
+        emailHint,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        applyAdminSessionResponseHeaders(response, admin.responseHeaders),
+        rateLimit,
+      ),
+      routeLog.requestId,
     );
   } catch (error) {
     const mapped = error instanceof AppError
@@ -104,15 +168,29 @@ export async function POST(request: Request) {
         detail: "The login flow failed unexpectedly.",
       });
 
-    return applyRateLimitResponseHeaders(
-      apiError(
-        mapped.code,
-        mapped.message,
-        mapped.status ?? 500,
-        mapped.details,
-        mapped.detail,
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_LOGIN_FAILED",
+      status: mapped.status ?? 500,
+      message: mapped.message,
+      error,
+      errorCode: mapped.code,
+      metadata: {
+        emailHint,
+      },
+    });
+
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          mapped.code,
+          mapped.message,
+          mapped.status ?? 500,
+          mapped.details,
+          mapped.detail,
+        ),
+        rateLimit,
       ),
-      rateLimit,
+      routeLog.requestId,
     );
   }
 }

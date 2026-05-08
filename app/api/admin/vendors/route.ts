@@ -7,6 +7,11 @@ import {
 import { requireAdmin } from "../../../../lib/admin/auth.ts";
 import { handleAdminServiceError } from "../../../../lib/admin/errors.ts";
 import {
+  attachRequestIdHeader,
+  createRouteLogContext,
+  logRouteEvent,
+} from "../../../../lib/observability.ts";
+import {
   attachVendorCategory,
   createVendor,
   hardDeleteVendor,
@@ -19,10 +24,14 @@ import {
 } from "../../../../lib/validation/index.ts";
 
 export async function GET(request: NextRequest) {
+  const routeLog = createRouteLogContext(request, {
+    route: "/api/admin/vendors",
+    area: "admin",
+  });
   const admin = await requireAdmin(request);
 
   if (!admin.success) {
-    return admin.response;
+    return attachRequestIdHeader(admin.response, routeLog.requestId);
   }
 
   const query = validateSearchParams(
@@ -31,29 +40,48 @@ export async function GET(request: NextRequest) {
   );
 
   if (!query.success) {
-    return query.response;
+    return attachRequestIdHeader(query.response, admin.session.requestId);
   }
 
   try {
     const result = await listVendors(query.data, { session: admin.session });
 
-    return apiSuccess(result);
+    return attachRequestIdHeader(apiSuccess(result), admin.session.requestId);
   } catch (error) {
-    return handleAdminServiceError(error, "Unable to list vendors.");
+    return attachRequestIdHeader(
+      handleAdminServiceError(error, "Unable to list vendors."),
+      admin.session.requestId,
+    );
   }
 }
 
 export async function POST(request: Request) {
+  const routeLog = createRouteLogContext(request, {
+    route: "/api/admin/vendors",
+    area: "admin",
+  });
   const admin = await requireAdmin(request);
 
   if (!admin.success) {
-    return admin.response;
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_VENDOR_CREATE_DENIED",
+      message: "Unauthorized vendor creation attempt was blocked.",
+      status: admin.response.status,
+    });
+    return attachRequestIdHeader(admin.response, routeLog.requestId);
   }
 
   const body = await validateJsonBody(request, createManagedVendorRequestSchema);
 
   if (!body.success) {
-    return body.response;
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_VENDOR_CREATE_REJECTED",
+      message: "Vendor creation request validation failed.",
+      status: body.response.status,
+      adminUserId: admin.session.adminUser.id,
+      userRole: admin.session.adminUser.role,
+    });
+    return attachRequestIdHeader(body.response, admin.session.requestId);
   }
 
   try {
@@ -62,7 +90,17 @@ export async function POST(request: Request) {
     const category = categories.find((entry) => entry.slug === category_slug);
 
     if (!category) {
-      return Response.json(
+      logRouteEvent("warn", routeLog, {
+        event: "ADMIN_VENDOR_CREATE_REJECTED",
+        message: "Vendor creation request used an invalid category slug.",
+        status: 400,
+        adminUserId: admin.session.adminUser.id,
+        userRole: admin.session.adminUser.role,
+        metadata: {
+          categorySlug: category_slug,
+        },
+      });
+      return attachRequestIdHeader(Response.json(
         {
           success: false,
           data: null,
@@ -80,7 +118,7 @@ export async function POST(request: Request) {
           },
         },
         { status: 400 },
-      );
+      ), admin.session.requestId);
     }
 
     const vendor = await createVendor(vendorData, { session: admin.session });
@@ -92,8 +130,32 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return apiSuccess({ vendor }, 201);
+    logRouteEvent("info", routeLog, {
+      event: "ADMIN_VENDOR_CREATED",
+      message: "Vendor created successfully.",
+      status: 201,
+      adminUserId: admin.session.adminUser.id,
+      userRole: admin.session.adminUser.role,
+      vendorId: vendor.id,
+      vendorSlug: vendor.slug,
+      metadata: {
+        categorySlug: category.slug,
+        isActive: vendor.is_active,
+      },
+    });
+    return attachRequestIdHeader(apiSuccess({ vendor }, 201), admin.session.requestId);
   } catch (error) {
-    return handleAdminServiceError(error, "Unable to create vendor.");
+    logRouteEvent("error", routeLog, {
+      event: "ADMIN_VENDOR_CREATE_FAILED",
+      message: "Vendor creation failed.",
+      status: 502,
+      adminUserId: admin.session.adminUser.id,
+      userRole: admin.session.adminUser.role,
+      error,
+    });
+    return attachRequestIdHeader(
+      handleAdminServiceError(error, "Unable to create vendor."),
+      admin.session.requestId,
+    );
   }
 }

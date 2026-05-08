@@ -127,6 +127,26 @@ Current automated coverage:
 - `tests/public-nearby-route.test.ts`
 - `tests/public-rating-route.test.ts`
 
+### Observability Logic
+Test:
+- structured server logger serializes safe error fields
+- structured server logger redacts secrets, cookies, tokens, raw request-body fields, and database URLs
+- safe incoming request ids are preserved
+- unsafe request ids are replaced with generated internal ids
+- debug logs stay disabled unless explicitly enabled
+- only selected warn/error/degraded/rate-limited/slow events and selected admin mutation events are persisted when operational-event storage is enabled
+- persisted operational-event payloads stay sanitized and environment-tagged
+- operational-event persistence failures never break the original request flow
+- nearby degraded empty responses emit a distinct failure log instead of looking like true empty search results
+- ratings RPC failures emit structured route-failure logs without leaking sensitive config
+- admin session validation failures emit structured auth logs without leaking cookies or auth headers
+
+Current automated coverage:
+- `tests/observability.test.ts`
+- `tests/public-nearby-route.test.ts`
+- `tests/public-rating-route.test.ts`
+- `tests/admin-session-routes.test.ts`
+
 ### Admin Foundation Logic
 Test:
 - missing admin session returns `UNAUTHORIZED`
@@ -158,9 +178,13 @@ Test:
 - admin analytics route tolerates empty `user_events`
 - admin audit-log route returns the recent-team-activity pagination contract expected by the admin activity page
 - admin audit-log route treats empty audit-log results as a valid success state
+- admin logs route requires strict admin-only auth
+- admin logs route sanitizes metadata before returning it
+- admin logs route treats empty operational-event results as a valid success state
 - admin analytics helper logic handles empty vendor performance and recent user events safely
 - admin analytics recent-events and ranking lists remain internally scrollable without reintroducing page-height expansion controls
 - admin activity and vendor-registry list panels stay internally scrollable for admin and agent workspaces
+- admin logs list stays internally scrollable and does not render metadata as HTML
 - usage-signal vendor ranking helper aggregates weighted vendor event counts safely
 
 Current automated coverage:
@@ -169,6 +193,7 @@ Current automated coverage:
 - `tests/admin-analytics-route.test.ts`
 - `tests/admin-analytics-view.test.ts`
 - `tests/admin-audit-logs-route.test.ts`
+- `tests/admin-logs-route.test.ts`
 - `tests/admin-vendor-routes.test.ts`
 - `tests/admin-vendor-subresources.test.ts`
 - `tests/admin-api-client.test.ts`
@@ -180,6 +205,7 @@ Manual admin UI smoke coverage:
 - open `/admin/vendors` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/analytics` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/activity` and confirm the protected route still resolves to the admin login gate when signed out
+- open `/admin/logs` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/new` and confirm the protected route still resolves to the admin login gate when signed out
 - open `/admin/vendors/[id]` and confirm the protected route still resolves to the admin login gate when signed out
 - sign in with an email/password account that exists in `admin_users`
@@ -189,6 +215,7 @@ Manual admin UI smoke coverage:
 - load vendors
 - confirm the dashboard overview cards show vendor totals and missing-data counts
 - confirm high-volume analytics, activity, and vendor-registry lists scroll inside their cards instead of expanding the full page
+- confirm the Logs page filters and metadata details render safely without horizontal overflow
 - confirm the registry shows completeness badges for missing hours, images, and featured dishes
 - confirm the create vendor page shows:
   - basic details
