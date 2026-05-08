@@ -37,6 +37,7 @@ import {
   VendorRegistryPanel,
   VendorRegistryList,
 } from "./admin-vendor-workspace-sections.tsx";
+import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
 import {
   fetchPublicCategories,
   type PublicCategory,
@@ -66,8 +67,6 @@ import {
   readText,
 } from "../../lib/admin/vendor-form-data.ts";
 
-const dashboardFollowUpPreviewCount = 5;
-const agentVendorPreviewCount = 6;
 function formatAdminErrorStatus(error: unknown, fallbackMessage: string): string {
   const visibleError = handleAppError(error, {
     fallbackMessage,
@@ -143,8 +142,6 @@ export function AdminConsole({
       ? (readVendorArtifactCache(workspaceCacheScope, initialCachedVendorId, "dishes") as VendorFeaturedDish[] | null) ?? []
       : [],
   );
-  const [showAllFollowUpVendors, setShowAllFollowUpVendors] = useState(false);
-  const [showAllAgentVendors, setShowAllAgentVendors] = useState(false);
   const [vendorCategories, setVendorCategories] = useState<PublicCategory[]>([]);
   const vendorImagesRequestId = useRef(0);
   const vendorHoursRequestId = useRef(0);
@@ -206,17 +203,6 @@ export function AdminConsole({
       incompleteVendors: incomplete,
     };
   }, [vendors]);
-  const visibleIncompleteVendors = useMemo(
-    () =>
-      showAllFollowUpVendors
-        ? incompleteVendors
-        : incompleteVendors.slice(0, dashboardFollowUpPreviewCount),
-    [incompleteVendors, showAllFollowUpVendors],
-  );
-  const visibleAgentVendors = useMemo(
-    () => (showAllAgentVendors ? vendors : vendors.slice(0, agentVendorPreviewCount)),
-    [showAllAgentVendors, vendors],
-  );
   const statusTone = getAdminStatusTone(status, isLoading);
 
   useEffect(() => {
@@ -811,30 +797,15 @@ export function AdminConsole({
                 </div>
                 <span>{incompleteVendors.length} vendors</span>
               </div>
-              <VendorRegistryList
-                vendors={visibleIncompleteVendors}
-                selectedVendorId={selectedVendorId}
-                onSelectVendor={setSelectedVendorId}
-                emptyMessage="All loaded vendors have hours, images, and featured dishes."
-                compact
-              />
-              {incompleteVendors.length > dashboardFollowUpPreviewCount ? (
-                <div className="admin-list-toggle-row">
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    aria-expanded={showAllFollowUpVendors}
-                    onClick={() => {
-                      setShowAllFollowUpVendors((current) => !current);
-                    }}
-                  >
-                    {showAllFollowUpVendors ? "Read less" : "Read more"}
-                  </button>
-                  <span>
-                    Showing {visibleIncompleteVendors.length} of {incompleteVendors.length}
-                  </span>
-                </div>
-              ) : null}
+              <AdminScrollPanel className="admin-scroll-panel-vendors-compact" ariaLabelledBy="admin-dashboard-incomplete">
+                <VendorRegistryList
+                  vendors={incompleteVendors}
+                  selectedVendorId={selectedVendorId}
+                  onSelectVendor={setSelectedVendorId}
+                  emptyMessage="All loaded vendors have hours, images, and featured dishes."
+                  compact
+                />
+              </AdminScrollPanel>
             </section>
           </section>
         </>
@@ -908,24 +879,15 @@ export function AdminConsole({
               </div>
               <span>{vendors.length} vendors</span>
             </div>
-            <VendorRegistryList
-              vendors={visibleAgentVendors}
-              selectedVendorId={selectedVendorId}
-              onSelectVendor={setSelectedVendorId}
-              emptyMessage="No vendors are loaded yet. Refresh or create a vendor to begin."
-              compact
-            />
-            {vendors.length > agentVendorPreviewCount ? (
-              <div className="action-row">
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() => setShowAllAgentVendors((current) => !current)}
-                >
-                  {showAllAgentVendors ? "Read less" : "Read more"}
-                </button>
-              </div>
-            ) : null}
+            <AdminScrollPanel className="admin-scroll-panel-vendors-compact" ariaLabelledBy="agent-dashboard-vendors">
+              <VendorRegistryList
+                vendors={vendors}
+                selectedVendorId={selectedVendorId}
+                onSelectVendor={setSelectedVendorId}
+                emptyMessage="No vendors are loaded yet. Refresh or create a vendor to begin."
+                compact
+              />
+            </AdminScrollPanel>
           </section>
         </section>
       ) : null}

@@ -10,14 +10,13 @@ import {
   buildAnalyticsMetricCards,
   formatAnalyticsEventLabel,
   formatAnalyticsMetricValue,
-  getNextRecentAnalyticsEventCount,
-  getVisibleRecentAnalyticsEvents,
 } from "../../lib/admin/analytics-view.ts";
 import { useAdminSession } from "./admin-session-provider.tsx";
 import {
   readAnalyticsCache,
   writeAnalyticsCache,
 } from "../../lib/admin/workspace-cache.ts";
+import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
 import type {
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
@@ -29,7 +28,6 @@ const analyticsRanges: Array<{ value: AdminAnalyticsRange; label: string }> = [
   { value: "30d", label: "Last 30 days" },
   { value: "all", label: "All time" },
 ];
-const recentEventsPageSize = 8;
 
 type AdminAnalyticsProps = {
   initialData?: AdminAnalyticsResponseData | null;
@@ -114,28 +112,30 @@ function AnalyticsRankingTable({
           <p>{emptyCopy}</p>
         </div>
       ) : (
-        <div className="analytics-table-wrap">
-          <table className="analytics-table">
-            <thead>
-              <tr>
-                <th scope="col">Vendor</th>
-                <th scope="col">Slug</th>
-                <th scope="col">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={`${title}-${row.vendor_id ?? row.vendor_slug ?? row.vendor_name ?? "unknown"}`}>
-                  <td>{row.vendor_name ?? "Unknown vendor"}</td>
-                  <td>
-                    <span className="analytics-badge">{row.vendor_slug ?? "n/a"}</span>
-                  </td>
-                  <td>{formatAnalyticsMetricValue(row.count)}</td>
+        <AdminScrollPanel className="admin-scroll-panel-ranking" ariaLabelledBy={title}>
+          <div className="analytics-table-wrap">
+            <table className="analytics-table">
+              <thead>
+                <tr>
+                  <th scope="col">Vendor</th>
+                  <th scope="col">Slug</th>
+                  <th scope="col">Count</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={`${title}-${row.vendor_id ?? row.vendor_slug ?? row.vendor_name ?? "unknown"}`}>
+                    <td>{row.vendor_name ?? "Unknown vendor"}</td>
+                    <td>
+                      <span className="analytics-badge">{row.vendor_slug ?? "n/a"}</span>
+                    </td>
+                    <td>{formatAnalyticsMetricValue(row.count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AdminScrollPanel>
       )}
     </section>
   );
@@ -153,12 +153,7 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
     () => (analytics ? buildAnalyticsMetricCards(analytics.summary) : []),
     [analytics],
   );
-  const [visibleRecentEventsCount, setVisibleRecentEventsCount] = useState(recentEventsPageSize);
   const recentEvents = analytics?.recent_events;
-  const visibleRecentEvents = useMemo(
-    () => getVisibleRecentAnalyticsEvents(recentEvents ?? [], visibleRecentEventsCount),
-    [recentEvents, visibleRecentEventsCount],
-  );
   const dropoff = analytics?.dropoff ?? null;
 
   return (
@@ -267,7 +262,7 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
                   <p>{getAnalyticsEmptyStateDescription(range)}</p>
                 </div>
               ) : (
-                <>
+                <AdminScrollPanel className="admin-scroll-panel-events" ariaLabelledBy="recent-activity">
                   <div className="analytics-table-wrap">
                     <table className="analytics-table">
                       <thead>
@@ -280,7 +275,7 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
                         </tr>
                       </thead>
                       <tbody>
-                        {visibleRecentEvents.map((event) => (
+                        {recentEvents?.map((event) => (
                           <tr key={event.id}>
                             <td>{formatAnalyticsEventLabel(event.event_type)}</td>
                             <td>{event.vendor_name ?? event.vendor_slug ?? "—"}</td>
@@ -298,29 +293,7 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
                       </tbody>
                     </table>
                   </div>
-                  {visibleRecentEvents.length < (recentEvents?.length ?? 0) ? (
-                    <div className="analytics-load-more">
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() =>
-                          setVisibleRecentEventsCount((current) =>
-                            getNextRecentAnalyticsEventCount(
-                              current,
-                              recentEvents?.length ?? 0,
-                              recentEventsPageSize,
-                            ),
-                          )
-                        }
-                      >
-                        View more activity
-                      </button>
-                      <span>
-                        Showing {visibleRecentEvents.length} of {recentEvents?.length ?? 0}
-                      </span>
-                    </div>
-                  ) : null}
-                </>
+                </AdminScrollPanel>
               )}
             </section>
           </div>

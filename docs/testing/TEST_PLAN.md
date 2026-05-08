@@ -159,6 +159,8 @@ Test:
 - admin audit-log route returns the recent-team-activity pagination contract expected by the admin activity page
 - admin audit-log route treats empty audit-log results as a valid success state
 - admin analytics helper logic handles empty vendor performance and recent user events safely
+- admin analytics recent-events and ranking lists remain internally scrollable without reintroducing page-height expansion controls
+- admin activity and vendor-registry list panels stay internally scrollable for admin and agent workspaces
 - usage-signal vendor ranking helper aggregates weighted vendor event counts safely
 
 Current automated coverage:
@@ -186,6 +188,7 @@ Manual admin UI smoke coverage:
 - open `/admin/vendors/[id]` with a valid vendor id
 - load vendors
 - confirm the dashboard overview cards show vendor totals and missing-data counts
+- confirm high-volume analytics, activity, and vendor-registry lists scroll inside their cards instead of expanding the full page
 - confirm the registry shows completeness badges for missing hours, images, and featured dishes
 - confirm the create vendor page shows:
   - basic details

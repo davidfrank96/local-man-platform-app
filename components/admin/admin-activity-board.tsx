@@ -12,6 +12,7 @@ import {
   readAuditLogCache,
   writeAuditLogCache,
 } from "../../lib/admin/workspace-cache.ts";
+import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
 import type {
   AdminRole,
   AuditActionType,
@@ -259,32 +260,34 @@ const AdminActivityBoardView = memo(function AdminActivityBoardView({
         </div>
       ) : (
         <>
-          <div className="analytics-table-wrap">
-            <table className="analytics-table">
-              <thead>
-                <tr>
-                  <th scope="col">User</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">Action</th>
-                  <th scope="col">Target</th>
-                  <th scope="col">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td>{getAuditActorLabel(log)}</td>
-                    <td>
-                      <span className="analytics-badge">{log.user_role}</span>
-                    </td>
-                    <td>{formatAuditActionLabel(log)}</td>
-                    <td>{getAuditTargetLabel(log)}</td>
-                    <td>{formatTimestamp(log.created_at)}</td>
+          <AdminScrollPanel className="admin-scroll-panel-activity" ariaLabelledBy={headingId}>
+            <div className="analytics-table-wrap">
+              <table className="analytics-table">
+                <thead>
+                  <tr>
+                    <th scope="col">User</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {auditLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td>{getAuditActorLabel(log)}</td>
+                      <td>
+                        <span className="analytics-badge">{log.user_role}</span>
+                      </td>
+                      <td>{formatAuditActionLabel(log)}</td>
+                      <td>{getAuditTargetLabel(log)}</td>
+                      <td>{formatTimestamp(log.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </AdminScrollPanel>
 
           {auditHasMore ? (
             <div className="analytics-load-more">

@@ -31,6 +31,21 @@ async function expectNoClientErrors(errors: string[]) {
   expect(errors, errors.join("\n")).toEqual([]);
 }
 
+async function expectInnerScroll(locator: Locator) {
+  const metrics = await locator.evaluate((element) => {
+    const styles = window.getComputedStyle(element);
+
+    return {
+      clientHeight: element.clientHeight,
+      overflowY: styles.overflowY,
+      scrollHeight: element.scrollHeight,
+    };
+  });
+
+  expect(["auto", "scroll"]).toContain(metrics.overflowY);
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+}
+
 async function openDiscoveryFilters(page: Page) {
   const visibleRadiusSelect = page.locator('select[name="radiusKm"]:visible');
   if ((await visibleRadiusSelect.count()) > 0) {
@@ -345,11 +360,119 @@ async function mockReverseGeocode(page: Page, label: string | null, status = 200
   });
 }
 
+type MockAdminWorkspaceOptions = {
+  role?: "admin" | "agent";
+  analyticsRecentEventCount?: number;
+  analyticsRankingRowCount?: number;
+  auditLogCount?: number;
+  auditHasMore?: boolean;
+  vendorCount?: number;
+};
+
+function buildMockAnalyticsRecentEvents(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    event_type: index % 2 === 0 ? "vendor_selected" : "vendor_detail_opened",
+    vendor_id: `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    vendor_name: `Mock Vendor ${index + 1}`,
+    vendor_slug: `mock-vendor-${index + 1}`,
+    device_type: index % 3 === 0 ? "desktop" : "mobile",
+    location_source: index % 2 === 0 ? "precise" : "default_city",
+    timestamp: new Date(Date.UTC(2026, 4, 8, 10, index, 0)).toISOString(),
+  }));
+}
+
+function buildMockAnalyticsRankingRows(count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => ({
+    vendor_id: `31000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    vendor_name: `${prefix} Vendor ${index + 1}`,
+    vendor_slug: `${prefix.toLowerCase().replaceAll(/\s+/g, "-")}-vendor-${index + 1}`,
+    count: count - index,
+  }));
+}
+
+function buildMockAuditLogs(
+  count: number,
+  requestedRole: string,
+  requestedAction: string,
+) {
+  const action = requestedAction === "all" ? "CREATE_VENDOR" : requestedAction;
+  const userRole = requestedRole === "all" ? "admin" : requestedRole;
+  const isAdminUserAction = action.includes("ADMIN_USER");
+
+  return Array.from({ length: count }, (_, index) => ({
+    id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    admin_user_id: "10000000-0000-4000-8000-000000000111",
+    user_role: userRole,
+    entity_type: isAdminUserAction ? "admin_user" : "vendor",
+    entity_id: isAdminUserAction
+      ? `50000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
+      : `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    action,
+    metadata: isAdminUserAction
+      ? {
+          target_name: `Scoped Agent ${index + 1}`,
+          target_role: "agent",
+        }
+      : {
+          target_name: `Mock Vendor ${index + 1}`,
+          target_slug: `mock-vendor-${index + 1}`,
+        },
+    created_at: new Date(Date.UTC(2026, 4, 8, 10, index, 0)).toISOString(),
+    admin_user: {
+      id: "10000000-0000-4000-8000-000000000111",
+      email: "admin@example.com",
+      full_name: "Admin User",
+      role: "admin",
+    },
+  }));
+}
+
+function buildMockAdminVendors(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `60000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    name: `Mock Vendor ${index + 1}`,
+    slug: `mock-vendor-${index + 1}`,
+    short_description: `Mock description ${index + 1}`,
+    phone_number: `+234800000${String(index + 1).padStart(4, "0")}`,
+    area: index % 2 === 0 ? "Wuse II" : "Garki",
+    latitude: 9.07 + index * 0.001,
+    longitude: 7.49 + index * 0.001,
+    price_band: index % 3 === 0 ? "$$$" : "$$",
+    average_rating: 4.2,
+    review_count: 8 + index,
+    is_active: index % 5 !== 0,
+    is_open_override: null,
+    hours_count: index % 4 === 0 ? 4 : 7,
+    images_count: index % 3 === 0 ? 0 : 2,
+    featured_dishes_count: index % 2 === 0 ? 1 : 0,
+  }));
+}
+
 async function mockAuthenticatedAdminWorkspace(
   page: Page,
   auditLogRequests: Array<{ userRole: string; action: string }>,
+  options: MockAdminWorkspaceOptions = {},
 ) {
+  const role = options.role ?? "admin";
+  const analyticsRecentEventCount = options.analyticsRecentEventCount ?? 1;
+  const analyticsRankingRowCount = options.analyticsRankingRowCount ?? 0;
+  const auditLogCount = options.auditLogCount ?? 1;
+  const auditHasMore = options.auditHasMore ?? false;
+  const vendorCount = options.vendorCount ?? 0;
+  const mockVendors = buildMockAdminVendors(vendorCount);
+
   await page.context().addCookies([
+    {
+      name: "localman_admin_access",
+      value: "test-access-token",
+      url: "http://localhost:3000",
+    },
+    {
+      name: "localman_admin_refresh",
+      value: "test-refresh-token",
+      url: "http://localhost:3000",
+    },
     {
       name: "localman_admin_access",
       value: "test-access-token",
@@ -377,7 +500,7 @@ async function mockAuthenticatedAdminWorkspace(
             id: "10000000-0000-4000-8000-000000000111",
             email: "admin@example.com",
             full_name: "Admin User",
-            role: "admin",
+            role,
           },
         },
         error: null,
@@ -404,10 +527,10 @@ async function mockAuthenticatedAdminWorkspace(
             filters_applied: 1,
           },
           vendor_performance: {
-            most_selected_vendors: [],
-            most_viewed_vendor_details: [],
-            most_call_clicks: [],
-            most_directions_clicks: [],
+            most_selected_vendors: buildMockAnalyticsRankingRows(analyticsRankingRowCount, "Selected"),
+            most_viewed_vendor_details: buildMockAnalyticsRankingRows(analyticsRankingRowCount, "Viewed"),
+            most_call_clicks: buildMockAnalyticsRankingRows(analyticsRankingRowCount, "Calls"),
+            most_directions_clicks: buildMockAnalyticsRankingRows(analyticsRankingRowCount, "Directions"),
           },
           dropoff: {
             session_metrics_available: false,
@@ -415,18 +538,7 @@ async function mockAuthenticatedAdminWorkspace(
             sessions_with_search_without_vendor_click: null,
             sessions_with_detail_without_action: null,
           },
-          recent_events: [
-            {
-              id: "20000000-0000-4000-8000-000000000001",
-              event_type: "vendor_selected",
-              vendor_id: "30000000-0000-4000-8000-000000000001",
-              vendor_name: "Mock Vendor",
-              vendor_slug: "mock-vendor",
-              device_type: "desktop",
-              location_source: "precise",
-              timestamp: "2026-05-08T10:00:00.000Z",
-            },
-          ],
+          recent_events: buildMockAnalyticsRecentEvents(analyticsRecentEventCount),
         },
         error: null,
       }),
@@ -442,48 +554,99 @@ async function mockAuthenticatedAdminWorkspace(
       action: requestedAction,
     });
 
-    const action = requestedAction === "all" ? "CREATE_VENDOR" : requestedAction;
-    const userRole = requestedRole === "all" ? "admin" : requestedRole;
-    const isAdminUserAction = action.includes("ADMIN_USER");
-
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         success: true,
         data: {
-          auditLogs: [
-            {
-              id: "40000000-0000-4000-8000-000000000001",
-              admin_user_id: "10000000-0000-4000-8000-000000000111",
-              user_role: userRole,
-              entity_type: isAdminUserAction ? "admin_user" : "vendor",
-              entity_id: isAdminUserAction
-                ? "50000000-0000-4000-8000-000000000001"
-                : "30000000-0000-4000-8000-000000000001",
-              action,
-              metadata: isAdminUserAction
-                ? {
-                    target_name: "Scoped Agent",
-                    target_role: "agent",
-                  }
-                : {
-                    target_name: "Mock Vendor",
-                    target_slug: "mock-vendor",
-                  },
-              created_at: "2026-05-08T10:00:00.000Z",
-              admin_user: {
-                id: "10000000-0000-4000-8000-000000000111",
-                email: "admin@example.com",
-                full_name: "Admin User",
-                role: "admin",
-              },
-            },
-          ],
+          auditLogs: buildMockAuditLogs(auditLogCount, requestedRole, requestedAction),
           pagination: {
             limit: 10,
-            has_more: false,
-            next_cursor: null,
+            has_more: auditHasMore,
+            next_cursor: auditHasMore ? String(auditLogCount) : null,
+          },
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/categories(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          categories: [
+            {
+              id: "70000000-0000-4000-8000-000000000001",
+              name: "Suya",
+              slug: "suya",
+              description: "Mock category",
+            },
+          ],
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/admin\/vendors\/[^/]+\/hours(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          hours: [],
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/admin\/vendors\/[^/]+\/images(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          images: [],
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/admin\/vendors\/[^/]+\/dishes(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          dishes: [],
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/admin\/vendors(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          vendors: mockVendors,
+          pagination: {
+            limit: 100,
+            offset: 0,
+            count: mockVendors.length,
           },
         },
         error: null,
@@ -1326,6 +1489,76 @@ test.describe("Phase 3 browser smoke", () => {
     await page.getByRole("link", { name: "Activity" }).click();
     await expect(page).toHaveURL(/\/admin\/activity$/);
     await expect(page.getByRole("heading", { name: "Recent team activity" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin analytics, activity, and vendor registry lists scroll internally instead of expanding the page", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      analyticsRecentEventCount: 14,
+      analyticsRankingRowCount: 12,
+      auditLogCount: 16,
+      auditHasMore: true,
+      vendorCount: 18,
+    });
+
+    await page.goto("/admin/analytics");
+    await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent user events" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View more activity" })).toHaveCount(0);
+    await expect(page.locator(".admin-scroll-panel-events")).toBeVisible();
+    await expectInnerScroll(page.locator(".admin-scroll-panel-events"));
+    await expect(page.locator(".admin-scroll-panel-ranking")).toHaveCount(4);
+    await expectInnerScroll(page.locator(".admin-scroll-panel-ranking").first());
+
+    await page.getByRole("link", { name: "Activity" }).click();
+    await expect(page).toHaveURL(/\/admin\/activity$/);
+    await expect(page.getByRole("heading", { name: "Recent team activity" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View more activity" })).toBeVisible();
+    await expect(page.locator(".admin-scroll-panel-activity")).toBeVisible();
+    await expectInnerScroll(page.locator(".admin-scroll-panel-activity"));
+
+    const auditFilterSelects = page.locator(".analytics-audit-filter-bar .analytics-filter-field select");
+    await auditFilterSelects.first().selectOption("agent");
+    await expect
+      .poll(() => auditLogRequests.at(-1)?.userRole)
+      .toBe("agent");
+
+    await page.getByRole("link", { name: "Manage vendors" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors$/);
+    await expect(page.getByRole("heading", { name: "Manage vendors", level: 1 })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Read more" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Read less" })).toHaveCount(0);
+    await expect(page.locator(".admin-scroll-panel-vendors")).toBeVisible();
+    await expectInnerScroll(page.locator(".admin-scroll-panel-vendors"));
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("agent workspace vendor lists stay scrollable and contained at 320px", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await page.setViewportSize({ width: 320, height: 900 });
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      role: "agent",
+      vendorCount: 16,
+    });
+
+    await page.goto("/admin/agent");
+    await expect(page.getByRole("heading", { name: "Agent dashboard" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Loaded vendors" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Read more" })).toHaveCount(0);
+    await expect(page.locator(".admin-scroll-panel-vendors-compact")).toHaveCount(1);
+    await expectInnerScroll(page.locator(".admin-scroll-panel-vendors-compact"));
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
 
     await expectNoClientErrors(errors);
   });
