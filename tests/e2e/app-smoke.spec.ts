@@ -751,7 +751,43 @@ test.describe("Phase 3 browser smoke", () => {
       await expect(mapLibreSurface.locator(".maplibre-vendor-marker")).toHaveCount(
         await page.locator(".vendor-card").count(),
       );
+      await expect(mapLibreSurface.locator(".maplibre-vendor-marker__icon")).toHaveCount(
+        await page.locator(".vendor-card").count(),
+      );
       await expect(mapLibreSurface.locator(".vendor-marker")).toHaveCount(0);
+      const selectedMarkerVisual = await mapLibreSurface
+        .locator(`.maplibre-vendor-marker[data-vendor-id="${vendorId}"]`)
+        .evaluate((element) => {
+          const pin = element.querySelector(".maplibre-vendor-marker__pin");
+          const styles = pin instanceof HTMLElement ? getComputedStyle(pin) : null;
+
+          return {
+            backgroundColor: styles?.backgroundColor ?? "",
+            text: element.textContent?.trim() ?? "",
+          };
+        });
+      expect(selectedMarkerVisual.text).toBe("");
+      expect(selectedMarkerVisual.backgroundColor).toBe("rgb(36, 97, 79)");
+
+      const unselectedMarkerCount = await mapLibreSurface
+        .locator(".maplibre-vendor-marker:not(.selected)")
+        .count();
+      if (unselectedMarkerCount > 0) {
+        const defaultMarkerVisual = await mapLibreSurface
+          .locator(".maplibre-vendor-marker:not(.selected)")
+          .first()
+          .evaluate((element) => {
+            const pin = element.querySelector(".maplibre-vendor-marker__pin");
+            const styles = pin instanceof HTMLElement ? getComputedStyle(pin) : null;
+
+            return {
+              backgroundColor: styles?.backgroundColor ?? "",
+              text: element.textContent?.trim() ?? "",
+            };
+          });
+        expect(defaultMarkerVisual.text).toBe("");
+        expect(defaultMarkerVisual.backgroundColor).toBe("rgb(178, 58, 48)");
+      }
       const interactionState = await readMapInteractionState(page);
       expect(interactionState).not.toBeNull();
       expect(interactionState).toMatchObject({
@@ -889,7 +925,14 @@ test.describe("Phase 3 browser smoke", () => {
 
     const fallbackMarker = page.locator('.discovery-map[data-map-mode="fallback"] button[aria-label^="Select "]').first();
     await expect(fallbackMarker).toBeVisible();
+    await expect(fallbackMarker.locator(".vendor-marker__icon")).toBeVisible();
+    await expect(fallbackMarker).toHaveText("");
     await fallbackMarker.click();
+    await expect(fallbackMarker).toHaveClass(/selected/);
+    const fallbackMarkerBackground = await fallbackMarker.evaluate((element) =>
+      getComputedStyle(element).backgroundColor,
+    );
+    expect(fallbackMarkerBackground).toBe("rgb(36, 97, 79)");
     await expect(page.locator(".selected-vendor-panel h2")).not.toHaveText("No vendor selected");
 
     await page.locator(".vendor-card").first().getByRole("button", { name: /Preview .* on map/ }).click();
@@ -1671,7 +1714,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(selectedPanel).toBeInViewport();
     await expect(selectedPanel.locator("h2")).toContainText(firstVendorName ?? "");
     await expect(selectedPanel).toContainText("Active hours:");
-    await expect(selectedPanel).toContainText("Slug:");
+    await expect(selectedPanel).toContainText("Area:");
     await expect(selectedPanel).toContainText(/Open|Closed|Hours unavailable/);
     await expect(selectedPanel.getByRole("link", { name: "View details" })).toBeVisible();
     await expect(selectedPanel.getByRole("link", { name: "Call" })).toBeVisible();

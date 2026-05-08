@@ -14,7 +14,8 @@ The Local Man — UI Rules
 - The public discovery map may render as MapLibre using the browser-safe MapTiler style URL or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
 - The map should mount immediately on page load; nearby vendors may hydrate asynchronously from default-city data first and then upgrade to precise results when location resolves.
 - When MapLibre is active, the map must use one marker system only:
-  - deep red vendor markers
+  - oxblood storefront vendor markers
+  - green storefront marker state for the selected vendor
   - blue user-location marker
   - no clustering
 - Marker click selects a vendor and updates the selected preview, but must not move the camera.

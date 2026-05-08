@@ -72,7 +72,7 @@ Test:
 - vendor card metadata row keeps distance and open/closed state visible together
 - the real map uses one vendor-marker system only with no clustering
 - marker taps update the selected vendor preview without moving the camera
-- visible marker numbers remain tappable and update the selected vendor preview
+- storefront icon markers remain tappable and update the selected vendor preview
 - card selection may gently focus the map without causing page scroll drift
 - browser back restores discovery state
 - `Back to map` restores discovery state
@@ -261,7 +261,7 @@ Manual UI checks:
 - vendor detail hero remains compact and readable
 - map controls stay visible
 - MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
-- the real map should show deep red vendor markers, a blue user-location marker, and no cluster bubbles
+- the real map should show oxblood storefront markers by default, a green storefront marker when selected, a blue user-location marker, and no cluster bubbles
 - mobile discovery should keep the order: header, filters, map, selected vendor preview, vendor list
 - mobile marker taps should update the selected preview without drifting the map or scrolling the page down
 - mobile pinch zoom and drag-pan should be checked on a real device before final release confidence

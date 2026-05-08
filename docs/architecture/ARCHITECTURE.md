@@ -123,7 +123,8 @@ Public rendering rules:
 - selected vendor preview stays compact so the map retains usable space
 - the public map must degrade quietly to the coordinate fallback when style loading, WebGL, or network conditions prevent MapLibre from loading
 - the current real map uses one marker system only:
-  - deep red vendor markers
+  - oxblood storefront vendor markers
+  - green storefront marker state for the selected vendor
   - blue user-location marker
   - no clustering
 - vendor detail uses a shorter hero and compact summary blocks to reduce scrolling

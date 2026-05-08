@@ -33,7 +33,8 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - area
   - call, directions, and detail actions
 - MapLibre rendered with a single vendor-marker system:
-  - deep red vendor markers
+  - oxblood storefront vendor markers
+  - green storefront marker state for the selected vendor
   - blue user-location marker
   - marker tap selects a vendor without moving the map
   - vendor-card selection may gently focus the map
@@ -67,7 +68,8 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - `/admin/dashboard` for admins
   - `/admin/agent` for agents
 - admin dashboard overview cards and quick actions
-- admin analytics dashboard for lightweight usage signals and team activity
+- admin analytics dashboard for lightweight usage signals
+- dedicated admin activity page for recent team activity
 - admin team access page at `/admin/team`
 - vendor registry with completeness badges
 - full Create Vendor page for both admins and agents
