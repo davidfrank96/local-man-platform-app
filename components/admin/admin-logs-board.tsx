@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   fetchAdminOperationalLogs,
 } from "../../lib/admin/api-client.ts";
@@ -134,6 +142,44 @@ function getLogMessage(log: OperationalEvent): string {
   return "No additional summary provided.";
 }
 
+function truncateText(value: string, limit: number): string {
+  if (value.length <= limit) {
+    return value;
+  }
+
+  return `${value.slice(0, limit - 1).trimEnd()}…`;
+}
+
+function getLogSummaryMessage(log: OperationalEvent): string {
+  return truncateText(getLogMessage(log), 132);
+}
+
+function formatRequestId(value: string | null): string {
+  if (!value) {
+    return "Unavailable";
+  }
+
+  return value.length > 22 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value;
+}
+
+function formatOptionalValue(value: string | null): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return "—";
+  }
+
+  return value;
+}
+
+function getExpandedLogFieldCount(log: OperationalEvent): number {
+  return [
+    typeof log.method === "string" && log.method.trim().length > 0,
+    typeof log.actor_role === "string" && log.actor_role.trim().length > 0,
+    typeof log.actor_id === "string" && log.actor_id.trim().length > 0,
+    typeof log.vendor_slug === "string" && log.vendor_slug.trim().length > 0,
+    typeof log.vendor_id === "string" && log.vendor_id.trim().length > 0,
+  ].filter(Boolean).length;
+}
+
 function mergeOperationalEvents(
   current: OperationalEvent[],
   next: OperationalEvent[],
@@ -166,6 +212,8 @@ const AdminLogsBoardView = memo(function AdminLogsBoardView({
   onClearFilters,
   onLoadMore,
   onRetry,
+  expandedLogIds,
+  onToggleLog,
 }: {
   logs: OperationalEvent[];
   draftFilters: AdminLogFilterState;
@@ -181,6 +229,8 @@ const AdminLogsBoardView = memo(function AdminLogsBoardView({
   onClearFilters: () => void;
   onLoadMore: () => void;
   onRetry: () => void;
+  expandedLogIds: ReadonlySet<string>;
+  onToggleLog: (logId: string) => void;
 }) {
   return (
     <section className="admin-panel analytics-panel" aria-labelledby={headingId}>
@@ -316,46 +366,12 @@ const AdminLogsBoardView = memo(function AdminLogsBoardView({
           <AdminScrollPanel className="admin-scroll-panel-logs" ariaLabelledBy={headingId}>
             <div className="admin-log-list">
               {logs.map((log) => (
-                <article className="admin-log-item" key={log.id} data-log-level={log.level}>
-                  <div className="admin-log-item-header">
-                    <div className="admin-log-item-badges">
-                      <span className={`admin-log-level-badge admin-log-level-badge-${log.level}`}>
-                        {log.level}
-                      </span>
-                      <span className="analytics-badge">{log.area}</span>
-                      <span className="analytics-badge">{log.event}</span>
-                    </div>
-                    <time dateTime={log.created_at}>{formatTimestamp(log.created_at)}</time>
-                  </div>
-
-                  <p className="admin-log-item-message">{getLogMessage(log)}</p>
-
-                  <div className="admin-log-field-grid">
-                    <div>
-                      <span>Route</span>
-                      <strong>{log.route ?? "—"}</strong>
-                    </div>
-                    <div>
-                      <span>Status</span>
-                      <strong>{typeof log.status === "number" ? `HTTP ${log.status}` : "—"}</strong>
-                    </div>
-                    <div>
-                      <span>Duration</span>
-                      <strong>{formatDuration(log.duration_ms)}</strong>
-                    </div>
-                    <div>
-                      <span>Request ID</span>
-                      <strong>{log.request_id ?? "Unavailable"}</strong>
-                    </div>
-                  </div>
-
-                  {Object.keys(log.metadata ?? {}).length > 0 ? (
-                    <details className="admin-log-details">
-                      <summary>View sanitized metadata</summary>
-                      <pre>{formatLogDetails(log)}</pre>
-                    </details>
-                  ) : null}
-                </article>
+                <AdminLogRow
+                  key={log.id}
+                  log={log}
+                  expanded={expandedLogIds.has(log.id)}
+                  onToggle={onToggleLog}
+                />
               ))}
             </div>
           </AdminScrollPanel>
@@ -379,6 +395,139 @@ const AdminLogsBoardView = memo(function AdminLogsBoardView({
   );
 });
 
+function AdminLogRow({
+  log,
+  expanded,
+  onToggle,
+}: {
+  log: OperationalEvent;
+  expanded: boolean;
+  onToggle: (logId: string) => void;
+}) {
+  const detailId = useId();
+  const hasMetadata = Object.keys(log.metadata ?? {}).length > 0;
+  const expandedFieldCount = getExpandedLogFieldCount(log);
+  const summaryMessage = getLogSummaryMessage(log);
+
+  return (
+    <article
+      className="admin-log-item"
+      key={log.id}
+      data-log-level={log.level}
+      data-expanded={expanded ? "true" : "false"}
+    >
+      <button
+        className="admin-log-toggle"
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={detailId}
+        aria-describedby={`${detailId}-summary`}
+        onClick={() => onToggle(log.id)}
+      >
+        <div className="admin-log-item-header">
+          <div className="admin-log-item-badges">
+            <span className={`admin-log-level-badge admin-log-level-badge-${log.level}`}>
+              {log.level}
+            </span>
+            <span className="analytics-badge">{log.area}</span>
+            <span className="analytics-badge">{log.event}</span>
+          </div>
+          <div className="admin-log-item-header-meta">
+            <time dateTime={log.created_at}>{formatTimestamp(log.created_at)}</time>
+            <span className="admin-log-toggle-indicator">
+              {expanded ? "Collapse" : "Expand"}
+            </span>
+          </div>
+        </div>
+
+        <p className="admin-log-item-message" id={`${detailId}-summary`}>
+          {summaryMessage}
+        </p>
+
+        <div className="admin-log-summary-grid" aria-label={`Summary for ${log.event}`}>
+          <div>
+            <span>Route</span>
+            <strong>{formatOptionalValue(log.route)}</strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <strong>{typeof log.status === "number" ? `HTTP ${log.status}` : "—"}</strong>
+          </div>
+          <div>
+            <span>Duration</span>
+            <strong>{formatDuration(log.duration_ms)}</strong>
+          </div>
+          <div>
+            <span>Request ID</span>
+            <strong title={log.request_id ?? "Unavailable"}>{formatRequestId(log.request_id)}</strong>
+          </div>
+        </div>
+      </button>
+
+      {expanded ? (
+        <div className="admin-log-expanded" id={detailId} aria-labelledby={`${detailId}-summary`}>
+          <div className="admin-log-expanded-block">
+            <span>Full message</span>
+            <p className="admin-log-item-message">{getLogMessage(log)}</p>
+          </div>
+
+          <div
+            className={
+              expandedFieldCount > 0
+                ? "admin-log-field-grid admin-log-field-grid-expanded"
+                : "admin-log-field-grid"
+            }
+          >
+            <div>
+              <span>Route</span>
+              <strong>{formatOptionalValue(log.route)}</strong>
+            </div>
+            <div>
+              <span>Method</span>
+              <strong>{formatOptionalValue(log.method)}</strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong>{typeof log.status === "number" ? `HTTP ${log.status}` : "—"}</strong>
+            </div>
+            <div>
+              <span>Duration</span>
+              <strong>{formatDuration(log.duration_ms)}</strong>
+            </div>
+            <div>
+              <span>Request ID</span>
+              <strong>{log.request_id ?? "Unavailable"}</strong>
+            </div>
+            <div>
+              <span>Actor role</span>
+              <strong>{formatOptionalValue(log.actor_role)}</strong>
+            </div>
+            <div>
+              <span>Actor ID</span>
+              <strong>{formatOptionalValue(log.actor_id)}</strong>
+            </div>
+            <div>
+              <span>Vendor slug</span>
+              <strong>{formatOptionalValue(log.vendor_slug)}</strong>
+            </div>
+            <div>
+              <span>Vendor ID</span>
+              <strong>{formatOptionalValue(log.vendor_id)}</strong>
+            </div>
+          </div>
+
+          {hasMetadata ? (
+            <details className="admin-log-details">
+              <summary>View sanitized metadata</summary>
+              <pre>{formatLogDetails(log)}</pre>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 export function AdminLogsBoard({
   headingId = "admin-logs",
   title = "Recent platform logs",
@@ -394,6 +543,7 @@ export function AdminLogsBoard({
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(() => new Set());
 
   const loadLogs = useCallback(async ({
     nextCursorValue = null,
@@ -443,6 +593,7 @@ export function AdminLogsBoard({
       if (!merge) {
         logsRef.current = [];
         setLogs([]);
+        setExpandedLogIds(new Set());
       }
 
       setIsLoading(false);
@@ -455,6 +606,15 @@ export function AdminLogsBoard({
 
     logsRef.current = nextLogs;
     setLogs(nextLogs);
+    setExpandedLogIds((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+
+      const visibleIds = new Set(nextLogs.map((entry) => entry.id));
+      const nextExpanded = new Set([...current].filter((logId) => visibleIds.has(logId)));
+      return nextExpanded.size === current.size ? current : nextExpanded;
+    });
     setHasMore(result.data.pagination.has_more);
     setNextCursor(result.data.pagination.next_cursor);
     setErrorMessage(null);
@@ -520,6 +680,20 @@ export function AdminLogsBoard({
     });
   }, [filters, loadLogs]);
 
+  const handleToggleLog = useCallback((logId: string) => {
+    setExpandedLogIds((current) => {
+      const nextExpanded = new Set(current);
+
+      if (nextExpanded.has(logId)) {
+        nextExpanded.delete(logId);
+      } else {
+        nextExpanded.add(logId);
+      }
+
+      return nextExpanded;
+    });
+  }, []);
+
   return (
     <AdminLogsBoardView
       logs={logs}
@@ -536,6 +710,8 @@ export function AdminLogsBoard({
       onClearFilters={handleClearFilters}
       onLoadMore={handleLoadMore}
       onRetry={handleRetry}
+      expandedLogIds={expandedLogIds}
+      onToggleLog={handleToggleLog}
     />
   );
 }

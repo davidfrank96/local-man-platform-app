@@ -1742,14 +1742,19 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("heading", { name: "Recent platform logs" })).toBeVisible();
     await expect(page.locator(".admin-nav-link.active")).toContainText("Logs");
     await expect(page.locator(".admin-log-item").first()).toContainText("PUBLIC_NEARBY_ROUTE_FAILED");
+    await expect(page.locator(".admin-log-expanded")).toHaveCount(0);
 
+    await page.locator(".admin-log-toggle").first().click();
+    await expect(page.locator(".admin-log-expanded")).toHaveCount(1);
     await page.locator(".admin-log-details summary").first().click();
     await expect(page.locator(".admin-log-details pre").first()).toContainText("<img src=x onerror=alert(1)>");
     await expect(page.locator(".admin-log-details img")).toHaveCount(0);
+    await page.locator(".admin-log-toggle").first().click();
+    await expect(page.locator(".admin-log-expanded")).toHaveCount(0);
 
     await page.getByLabel("Level").selectOption("warn");
     await page.getByLabel("Area").selectOption("abuse");
-    await page.getByLabel("Route").fill("/api/admin/login");
+    await page.locator(".admin-logs-filter-bar").getByRole("textbox", { name: "Route" }).fill("/api/admin/login");
     await page.getByRole("button", { name: "Apply filters" }).click();
     await expect.poll(() => operationalLogRequests.at(-1)?.level).toBe("warn");
     await expect.poll(() => operationalLogRequests.at(-1)?.area).toBe("abuse");
@@ -1766,6 +1771,11 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.getByRole("button", { name: "Clear" }).click();
     await expect(page.locator(".admin-log-item")).toHaveCount(2);
+    await page.setViewportSize({ width: 320, height: 780 });
+    await expect(page.locator(".admin-scroll-panel-logs")).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+      .toBe(true);
 
     expect(errors.some((message) => message.includes("status of 502"))).toBe(true);
     expect(errors.some((message) => message.includes("context: admin_logs"))).toBe(true);
