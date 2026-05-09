@@ -8,6 +8,7 @@ import type {
   adminAnalyticsSummarySchema,
   adminAnalyticsVendorMetricSchema,
   adminAnalyticsDropoffSchema,
+  adminOperationalLogsQuerySchema,
   auditActionTypeSchema,
   auditEntityTypeSchema,
   adminVendorsQuerySchema,
@@ -26,6 +27,10 @@ import type {
   updateVendorRequestSchema,
   userActionEventNameSchema,
   userActionEventSchema,
+  operationalEventAreaSchema,
+  operationalEventLevelSchema,
+  operationalEventSchema,
+  operationalEventTimeWindowSchema,
   vendorCategorySchema,
   vendorCategoryMapSchema,
   vendorDetailResponseDataSchema,
@@ -57,10 +62,15 @@ export type AdminRole = AdminUser["role"];
 export type AuditActionType = z.infer<typeof auditActionTypeSchema>;
 export type AuditEntityType = z.infer<typeof auditEntityTypeSchema>;
 export type AuditLog = z.infer<typeof auditLogSchema>;
+export type OperationalEventLevel = z.infer<typeof operationalEventLevelSchema>;
+export type OperationalEventArea = z.infer<typeof operationalEventAreaSchema>;
+export type OperationalEventTimeWindow = z.infer<typeof operationalEventTimeWindowSchema>;
+export type OperationalEvent = z.infer<typeof operationalEventSchema>;
 export type UserActionEventName = z.infer<typeof userActionEventNameSchema>;
 export type UserActionEvent = z.infer<typeof userActionEventSchema>;
 export type AdminAnalyticsRange = z.infer<typeof adminAnalyticsRangeSchema>;
 export type AdminAnalyticsQuery = z.infer<typeof adminAnalyticsQuerySchema>;
+export type AdminOperationalLogsQuery = z.infer<typeof adminOperationalLogsQuerySchema>;
 export type AdminAnalyticsSummary = z.infer<typeof adminAnalyticsSummarySchema>;
 export type AdminAnalyticsVendorMetric = z.infer<typeof adminAnalyticsVendorMetricSchema>;
 export type AdminAnalyticsDropoff = z.infer<typeof adminAnalyticsDropoffSchema>;

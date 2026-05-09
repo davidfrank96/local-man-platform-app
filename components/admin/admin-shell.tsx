@@ -28,6 +28,7 @@ export function AdminShell({ title, intro, children }: AdminShellProps) {
     { href: "/admin/vendors/new", label: "Create vendor" },
     { href: "/admin/team", label: "Team access", permission: "admin_users:manage" as const },
     { href: "/admin/activity", label: "Activity", permission: "audit_logs:read" as const },
+    { href: "/admin/logs", label: "Logs", permission: "platform_logs:read" as const },
   ];
   // Hiding restricted navigation keeps the workspace honest and uncluttered,
   // but the backend remains authoritative for access control.

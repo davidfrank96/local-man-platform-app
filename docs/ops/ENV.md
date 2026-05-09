@@ -12,6 +12,11 @@ The Local Man — Environment Variables
 - `DATABASE_URL`: direct database connection string for migrations or server-only maintenance tasks.
 - `ADMIN_SEED_EMAIL`: optional initial admin account email for seed/setup workflows.
 - `ADMIN_SEED_PASSWORD`: optional initial admin account password for seed/setup workflows.
+- `LOCALMAN_LOG_LEVEL`: optional minimum structured server log level. Supported values: `debug`, `info`, `warn`, `error`. Defaults to `info`.
+- `LOCALMAN_ENABLE_DEBUG_LOGS`: optional explicit debug toggle for structured server logs. Leave unset or `false` for normal production behavior.
+- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE`: optional explicit toggle for safe internal persistence of selected structured operational events. Defaults to `false`.
+- `LOCALMAN_RUNTIME_ENVIRONMENT`: optional label stored with persisted operational events, such as `local`, `staging`, or `production`.
+- `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`: optional retention window used by `npm run db:prune:operational-events`. Defaults to `30`.
 
 ## Runtime Requirements
 - Local static checks and unit tests do not require environment variables.
@@ -24,6 +29,12 @@ The Local Man — Environment Variables
 - Server-side admin route authorization still supports bearer tokens for compatibility and targeted tests, but the primary browser flow is cookie-backed.
 - Current public map rendering uses MapLibre only when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. Otherwise it falls back to the local coordinate map.
 - Google Maps remains a deep-link target for directions only. No Google Maps API key is required for the current embedded map or the current server runtime.
+- Structured server logging uses `lib/observability.ts`, includes safe request ids where available, and redacts secrets, cookies, tokens, raw request bodies, and database URLs before emission.
+- `LOCALMAN_LOG_LEVEL` and `LOCALMAN_ENABLE_DEBUG_LOGS` affect server-side route timing, failure, degraded-state, and abuse-protection logs only. They do not enable browser-side logging.
+- Touched high-value routes may echo a safe `x-request-id` response header so operators can correlate client-visible failures with server logs.
+- When `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true`, selected warn/error/degraded/rate-limited/slow events and selected admin mutation events are also persisted into `public.operational_events`.
+- Persisted operational events remain separate from `audit_logs` and never store secrets, cookies, auth headers, passwords, raw request bodies, service-role keys, or raw stack traces.
+- Admins can review recent persisted operational events through `/admin/logs`. Operators can still inspect the same data directly in Supabase when needed.
 
 ## Runtime Smoke Test
 - `SMOKE_NEARBY_LAT`: optional latitude override for `npm run smoke:nearby`.
@@ -38,6 +49,7 @@ Exact migration, seed, and nearby smoke test steps are documented in `docs/ops/R
 - `npm run runtime:check-db-env` also verifies `DATABASE_URL` for local `psql` migration and seed commands.
 - `npm run db:migrate` applies every SQL file in `supabase/migrations` in filename order.
 - `npm run db:seed:abuja` loads `.env.local` before invoking `psql`.
+- `npm run db:prune:operational-events` deletes persisted operational events older than the configured retention window.
 
 ## Rules
 - Never expose server secrets to client code.

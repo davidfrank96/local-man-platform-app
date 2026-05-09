@@ -10,6 +10,9 @@ import type {
   AuditLog,
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
+  OperationalEvent,
+  OperationalEventLevel,
+  OperationalEventTimeWindow,
   CreateManagedVendorRequest,
   CreateVendorDishesRequest,
   PriceBand,
@@ -75,6 +78,27 @@ export type AdminAuditLogFilters = {
 
 export type AdminAuditLogListResult = {
   auditLogs: AuditLog[];
+  pagination: {
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  };
+};
+
+export type AdminOperationalLogFilters = {
+  limit?: number;
+  cursor?: string;
+  offset?: number;
+  level?: OperationalEventLevel;
+  area?: string;
+  event?: string;
+  route?: string;
+  since?: string;
+  time_window?: OperationalEventTimeWindow;
+};
+
+export type AdminOperationalLogListResult = {
+  operationalEvents: OperationalEvent[];
   pagination: {
     limit: number;
     has_more: boolean;
@@ -215,6 +239,14 @@ export type AdminApiSafeResult<T> =
 
 const adminAuditRoles = new Set<AdminRole>(["admin", "agent"]);
 const adminAnalyticsRanges = new Set<AdminAnalyticsRange>(["24h", "7d", "30d", "all"]);
+const adminOperationalLogLevels = new Set<OperationalEventLevel>(["debug", "info", "warn", "error"]);
+const adminOperationalLogWindows = new Set<OperationalEventTimeWindow>([
+  "1h",
+  "24h",
+  "7d",
+  "30d",
+  "all",
+]);
 const adminAuditActions = new Set<AuditActionType>([
   "CREATE_VENDOR",
   "UPDATE_VENDOR",
@@ -317,6 +349,109 @@ function normalizeAuditLogFilters(filters: AdminAuditLogFilters): AdminAuditLogF
   };
 }
 
+function normalizeOperationalLogFilters(
+  filters: AdminOperationalLogFilters,
+): AdminOperationalLogFilters {
+  const normalizedLimit = filters.limit ?? 25;
+  const normalizedOffset = filters.offset ?? 0;
+
+  if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1 || normalizedLimit > 25) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "limit", value: filters.limit ?? null },
+      "limit must be an integer between 1 and 25.",
+    );
+  }
+
+  if (!Number.isInteger(normalizedOffset) || normalizedOffset < 0) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "offset", value: filters.offset ?? null },
+      "offset must be a non-negative integer.",
+    );
+  }
+
+  if (filters.level && !adminOperationalLogLevels.has(filters.level)) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "level", value: filters.level },
+      "level must be one of debug, info, warn, or error.",
+    );
+  }
+
+  if (filters.time_window && !adminOperationalLogWindows.has(filters.time_window)) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "time_window", value: filters.time_window },
+      "time_window must be one of 1h, 24h, 7d, 30d, or all.",
+    );
+  }
+
+  const normalizedArea = typeof filters.area === "string" && filters.area.trim()
+    ? filters.area.trim()
+    : undefined;
+  const normalizedEvent = typeof filters.event === "string" && filters.event.trim()
+    ? filters.event.trim()
+    : undefined;
+  const normalizedRoute = typeof filters.route === "string" && filters.route.trim()
+    ? filters.route.trim()
+    : undefined;
+
+  if (normalizedArea && normalizedArea.length > 80) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "area", value: filters.area },
+      "area must be 80 characters or fewer.",
+    );
+  }
+
+  if (normalizedEvent && normalizedEvent.length > 120) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "event", value: filters.event },
+      "event must be 120 characters or fewer.",
+    );
+  }
+
+  if (normalizedRoute && normalizedRoute.length > 160) {
+    throw new AdminApiError(
+      "VALIDATION_ERROR",
+      "Invalid operational log filters.",
+      400,
+      { field: "route", value: filters.route },
+      "route must be 160 characters or fewer.",
+    );
+  }
+
+  return {
+    limit: normalizedLimit,
+    cursor: typeof filters.cursor === "string" && filters.cursor.trim().length > 0
+      ? filters.cursor
+      : undefined,
+    offset: normalizedOffset,
+    level: filters.level,
+    area: normalizedArea,
+    event: normalizedEvent,
+    route: normalizedRoute,
+    since: typeof filters.since === "string" && filters.since.trim().length > 0
+      ? filters.since
+      : undefined,
+    time_window: filters.time_window ?? "24h",
+  };
+}
+
 function normalizeAnalyticsRange(range?: AdminAnalyticsRange): AdminAnalyticsRange {
   const normalizedRange = range ?? "7d";
 
@@ -348,6 +483,20 @@ function buildAuditLogsPath(filters: AdminAuditLogFilters): string {
   appendDefinedParam(params, "action", filters.action);
   appendDefinedParam(params, "since", filters.since);
   return `/api/admin/audit-logs?${params.toString()}`;
+}
+
+function buildOperationalLogsPath(filters: AdminOperationalLogFilters): string {
+  const params = new URLSearchParams();
+  appendDefinedParam(params, "limit", filters.limit ?? 25);
+  appendDefinedParam(params, "offset", filters.offset ?? 0);
+  appendDefinedParam(params, "cursor", filters.cursor);
+  appendDefinedParam(params, "level", filters.level);
+  appendDefinedParam(params, "area", filters.area);
+  appendDefinedParam(params, "event", filters.event);
+  appendDefinedParam(params, "route", filters.route);
+  appendDefinedParam(params, "since", filters.since);
+  appendDefinedParam(params, "time_window", filters.time_window ?? "24h");
+  return `/api/admin/logs?${params.toString()}`;
 }
 
 async function requestAdminApi<T>(
@@ -559,6 +708,42 @@ export async function fetchAdminAuditLogs(
 
   return requestAdminApiResult<AdminAuditLogListResult>(
     buildAuditLogsPath(normalizedFilters),
+    options,
+  );
+}
+
+export async function fetchAdminOperationalLogs(
+  filters: AdminOperationalLogFilters,
+  options: AdminApiClientOptions = {},
+): Promise<AdminApiSafeResult<AdminOperationalLogListResult>> {
+  let normalizedFilters: AdminOperationalLogFilters;
+
+  try {
+    normalizedFilters = normalizeOperationalLogFilters(filters);
+  } catch (error) {
+    if (error instanceof AdminApiError) {
+      return {
+        data: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          detail: error.detail ?? undefined,
+        },
+      };
+    }
+
+    return {
+      data: null,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Invalid operational log filters.",
+        detail: error instanceof Error ? error.message : undefined,
+      },
+    };
+  }
+
+  return requestAdminApiResult<AdminOperationalLogListResult>(
+    buildOperationalLogsPath(normalizedFilters),
     options,
   );
 }

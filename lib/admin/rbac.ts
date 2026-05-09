@@ -5,6 +5,7 @@ export type AdminRole = (typeof adminRoles)[number];
 export const adminPermissions = [
   "analytics:read",
   "audit_logs:read",
+  "platform_logs:read",
   "admin_users:manage",
   "vendor:delete",
 ] as const;
@@ -30,6 +31,7 @@ export function hasAdminPermission(
   switch (permission) {
     case "analytics:read":
     case "audit_logs:read":
+    case "platform_logs:read":
     case "admin_users:manage":
     case "vendor:delete":
       return false;

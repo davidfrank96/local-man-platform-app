@@ -287,7 +287,16 @@ async function createAuthUser(
       }));
 
       if (error) {
-        console.error("AUTH LOOKUP ERROR:", error);
+        logStructuredEvent("error", {
+          event: "ADMIN_AUTH_USER_LOOKUP_FAILED",
+          area: "auth",
+          error,
+          metadata: {
+            email: normalizedEmail,
+            page,
+            provider: "supabase_auth",
+          },
+        });
         return null;
       }
 
@@ -346,18 +355,19 @@ async function createAuthUser(
       name: error.name,
       message: error.message,
       cause: "cause" in error ? error.cause : null,
-      stack: error.stack,
     };
 
-    console.error("AUTH CREATE ERROR:", error);
-
     logStructuredEvent("error", {
-      type: "ERROR",
-      code: isTimeoutError(error) ? "NETWORK_ERROR" : "AUTH_PROVIDER_ERROR",
-      email: normalizedEmail,
+      event: "ADMIN_AUTH_USER_CREATE_FAILED",
+      area: "auth",
+      error,
+      errorCode: isTimeoutError(error) ? "NETWORK_ERROR" : "AUTH_PROVIDER_ERROR",
       message: error.message || "Supabase auth createUser failed.",
-      context: "admin_user_create",
-      details,
+      metadata: {
+        email: normalizedEmail,
+        context: "admin_user_create",
+        details,
+      },
     });
 
     const recoveredUser = await recoverExistingAuthUserFromEmail();
@@ -409,20 +419,23 @@ async function createAuthUser(
         : null,
     };
 
-    console.error("AUTH CREATE ERROR:", error);
-
     logStructuredEvent("error", {
-      type: "ERROR",
-      code: isDuplicateEmailError(providerMessage) ||
+      event: "ADMIN_AUTH_USER_CREATE_FAILED",
+      area: "auth",
+      errorName: error.name,
+      errorMessage: providerMessage,
+      errorCode: isDuplicateEmailError(providerMessage) ||
           (details.code === "email_exists")
         ? "USER_ALREADY_EXISTS"
         : isWeakPasswordError(providerMessage)
         ? "INVALID_PASSWORD"
         : "AUTH_PROVIDER_ERROR",
-      email: normalizedEmail,
       message: providerMessage,
-      context: "admin_user_create",
-      details,
+      metadata: {
+        email: normalizedEmail,
+        context: "admin_user_create",
+        details,
+      },
     });
 
     const recoveredUser = await recoverExistingAuthUserFromEmail();
@@ -678,11 +691,23 @@ export async function listAdminUsers(
     );
     const adminUsers = parseAdminUsers(payload);
 
-    console.warn("ADMIN_USERS_FETCH_TIME", Date.now() - start);
+    logStructuredEvent("info", {
+      event: "ADMIN_USERS_FETCH_COMPLETED",
+      area: "admin",
+      durationMs: Date.now() - start,
+      metadata: {
+        resultCount: adminUsers.length,
+      },
+    });
 
     return adminUsers;
   } catch (error) {
-    console.warn("ADMIN_USERS_FETCH_TIME", Date.now() - start);
+    logStructuredEvent("warn", {
+      event: "ADMIN_USERS_FETCH_FAILED",
+      area: "admin",
+      durationMs: Date.now() - start,
+      error,
+    });
     throw error;
   }
 }
@@ -863,7 +888,16 @@ export async function updateAdminUserRole(
           fetchImpl,
         );
       } catch (rollbackError) {
-        console.error("ADMIN USER ROLE ROLLBACK ERROR:", rollbackError);
+        logStructuredEvent("error", {
+          event: "ADMIN_USER_ROLE_ROLLBACK_FAILED",
+          area: "admin",
+          adminUserId: input.adminUserId,
+          error: rollbackError,
+          metadata: {
+            attemptedRole: input.role,
+            fallbackRole: existingAdminUser.role,
+          },
+        });
       }
 
       throw error;

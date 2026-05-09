@@ -4,6 +4,7 @@ const agentRestrictedPaths = new Set([
   "/admin/dashboard",
   "/admin/analytics",
   "/admin/activity",
+  "/admin/logs",
   "/admin/team",
 ]);
 

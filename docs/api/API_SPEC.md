@@ -615,6 +615,49 @@ Notes:
 - `next_cursor` is a stringified next-offset token for the current dashboard pagination flow
 - empty `auditLogs` is a valid success case, not a backend failure
 
+### GET /api/admin/logs
+Fetch recent operational events
+
+Route file:
+- `app/api/admin/logs/route.ts`
+
+Behavior:
+- requires `platform_logs:read`
+- remains admin-only; agents must not access this route
+- reads sanitized operational events from `public.operational_events`
+- supports bounded pagination plus:
+  - `level`
+  - `area`
+  - `event`
+  - `route`
+  - `since`
+  - `time_window`
+- returns recent warnings, failures, degraded responses, slow requests, and selected admin mutation events without mixing them with team activity
+- never returns secrets, cookies, auth headers, passwords, service-role keys, raw request bodies, or raw stack traces
+
+Success payload:
+```json
+{
+  "success": true,
+  "data": {
+    "operationalEvents": [],
+    "pagination": {
+      "limit": 25,
+      "offset": 0,
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  "error": null
+}
+```
+
+Notes:
+- `event` and `route` filters use sanitized text matching, not raw metadata queries
+- empty `operationalEvents` is a valid success case
+- `/admin/logs` is for platform health signals only
+- `/admin/activity` remains the separate who-did-what audit trail surface
+
 ## Response Shape
 ```json
 {

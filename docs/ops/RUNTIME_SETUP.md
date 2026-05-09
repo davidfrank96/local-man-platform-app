@@ -49,6 +49,11 @@ NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 DATABASE_URL=<postgres-connection-string>
+LOCALMAN_LOG_LEVEL=info
+LOCALMAN_ENABLE_DEBUG_LOGS=false
+LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=false
+LOCALMAN_RUNTIME_ENVIRONMENT=local
+LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS=30
 ```
 
 `DATABASE_URL` is only required for the `npm run db:migrate` and `npm run db:seed:abuja` scripts. Those scripts load `.env.local` before invoking `psql`. If using the Supabase Dashboard SQL Editor, `DATABASE_URL` is not required locally.
@@ -56,6 +61,23 @@ DATABASE_URL=<postgres-connection-string>
 `SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations, public analytics event writes, public vendor rating writes, admin analytics reads, and server-side admin user creation.
 
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional. Set it only if you want the public discovery page to render a real MapLibre map. If it is left empty, the discovery page will continue to use the built-in coordinate fallback map and the rest of the app will behave normally.
+
+`LOCALMAN_LOG_LEVEL` and `LOCALMAN_ENABLE_DEBUG_LOGS` are optional. They control the structured server logger only:
+- normal local and production behavior can leave both unset
+- use `LOCALMAN_LOG_LEVEL=debug` or `LOCALMAN_ENABLE_DEBUG_LOGS=true` only for deliberate troubleshooting
+- emitted server logs include stable event names and safe request ids
+- high-value route logs now include duration-aware completion and failure events for auth, admin analytics/activity, vendor mutations, nearby discovery, public ratings, and public event writes
+- nearby discovery degraded fallbacks are intentionally still user-safe `200` responses, but logs distinguish true empty results from upstream-failure degraded empties
+
+`LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE` is optional. When set to `true`, selected structured operational events are also written to `public.operational_events` through the server-side logger. The persistence path is best-effort only:
+- it is sanitized before insert
+- it never stores secrets, cookies, auth headers, passwords, raw request bodies, or raw stack traces
+- persistence failures must never break the user request
+- when enabled, admins can review recent persisted events in the workspace at `/admin/logs`
+
+`LOCALMAN_RUNTIME_ENVIRONMENT` is optional and tags persisted operational events with a stable environment label.
+
+`LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS` is optional and controls the prune command retention window. The default is `30`.
 
 Current real-map example:
 
@@ -90,6 +112,7 @@ Migration files:
 - `supabase/migrations/20260502120000_admin_analytics_snapshot.sql`
 - `supabase/migrations/20260503123000_admin_analytics_snapshot_perf.sql`
 - `supabase/migrations/20260507193000_public_rating_submission_rpc.sql`
+- `supabase/migrations/20260508143000_operational_events.sql`
 
 Preferred command when `psql` is available:
 
@@ -111,11 +134,17 @@ Dashboard fallback:
 5. Confirm `public.vendor_images` includes `storage_object_path`.
 6. Confirm `public.user_events` exists for Phase 6 analytics.
 7. Confirm `public.submit_public_vendor_rating(uuid, integer, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
+8. Confirm `public.operational_events` exists with the admin read policy before enabling operational-event persistence.
 
 Rollback note:
 - current migrations are additive and tracked in `public.app_schema_migrations`
 - if a release must be rolled back, restore the previous app deploy first
 - do not manually remove applied schema objects unless a verified migration defect requires a targeted SQL fix
+
+Operational-event retention:
+- persisted operational events are intentionally bounded and are not meant to grow forever
+- use `npm run db:prune:operational-events` on an operator cadence after migrations are in place
+- the command deletes rows older than `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS` days, defaulting to `30`
 
 ## Abuja Seed Data
 Seed file:
@@ -313,17 +342,18 @@ Use this checklist when completing runtime activation manually:
 1. Create `.env.local` from `.env.example`.
 2. Fill `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 3. Fill `SUPABASE_SERVICE_ROLE_KEY` if validating admin image upload, analytics, server-side event writes, or team access creation.
-4. Fill `NEXT_PUBLIC_MAP_STYLE_URL` if validating the real MapLibre map instead of the fallback coordinate map.
-5. Fill `DATABASE_URL` if using local `psql` commands.
-6. Run `npm run runtime:check-env`.
-7. If using local `psql`, run `npm run runtime:check-db-env`.
-8. Apply all files in `supabase/migrations` using either `npm run db:migrate` or Supabase SQL Editor in filename order.
-9. Apply `supabase/seed/20260422_abuja_pilot_seed.sql` using either `npm run db:seed:abuja` or Supabase SQL Editor.
-10. Run the seed validation queries in this document.
-11. Run `npm run dev`.
-12. In a second terminal, run `npm run smoke:nearby`.
-13. Confirm the smoke command prints `"ok": true`.
-14. Do not proceed to deployment or further feature expansion until all checks above pass.
+4. If validating the admin Logs page, enable `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` and use an admin account.
+5. Fill `NEXT_PUBLIC_MAP_STYLE_URL` if validating the real MapLibre map instead of the fallback coordinate map.
+6. Fill `DATABASE_URL` if using local `psql` commands.
+7. Run `npm run runtime:check-env`.
+8. If using local `psql`, run `npm run runtime:check-db-env`.
+9. Apply all files in `supabase/migrations` using either `npm run db:migrate` or Supabase SQL Editor in filename order.
+10. Apply `supabase/seed/20260422_abuja_pilot_seed.sql` using either `npm run db:seed:abuja` or Supabase SQL Editor.
+11. Run the seed validation queries in this document.
+12. Run `npm run dev`.
+13. In a second terminal, run `npm run smoke:nearby`.
+14. Confirm the smoke command prints `"ok": true`.
+15. Do not proceed to deployment or further feature expansion until all checks above pass.
 
 ## Runtime/Admin Boundary
 Runtime activation must stay validated before additional admin or public UX changes are shipped.

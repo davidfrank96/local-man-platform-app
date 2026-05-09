@@ -374,6 +374,14 @@ test("public vendor ratings route rate limits repeated submissions from one clie
 test("public vendor ratings route returns a controlled upstream error when the ratings RPC fails", async () => {
   const restoreEnv = setRatingEnv();
   const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const errorCalls: Array<Record<string, unknown>> = [];
+
+  console.error = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      errorCalls.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.error;
 
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = input instanceof URL ? input : new URL(String(input));
@@ -413,7 +421,17 @@ test("public vendor ratings route returns a controlled upstream error when the r
     assert.equal(response.status, 502);
     assert.equal(body.success, false);
     assert.equal(body.error.code, "UPSTREAM_ERROR");
+
+    const failureLog = errorCalls.find((record) => record.event === "PUBLIC_VENDOR_RATING_FAILED");
+
+    assert.ok(failureLog);
+    assert.equal(failureLog?.vendorSlug, "test-vendor");
+    assert.equal(
+      (failureLog?.metadata as Record<string, unknown> | undefined)?.score,
+      4,
+    );
   } finally {
+    console.error = originalError;
     globalThis.fetch = originalFetch;
     restoreEnv();
   }

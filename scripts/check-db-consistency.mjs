@@ -113,6 +113,7 @@ const missingFunctions = requiredFunctions.filter((name) => !existingFunctions.i
 const requiredPolicies = [
   { table: "admin_users", policy: "Admins can read admin users" },
   { table: "audit_logs", policy: "Admins can read audit logs" },
+  { table: "operational_events", policy: "Admins can read operational events" },
   { table: "user_events", policy: "Admins can read user events" },
 ];
 const existingPolicies = new Set(
@@ -120,7 +121,7 @@ const existingPolicies = new Set(
     select tablename, policyname
     from pg_policies
     where schemaname = 'public'
-      and tablename in ('admin_users', 'audit_logs', 'user_events');
+      and tablename in ('admin_users', 'audit_logs', 'operational_events', 'user_events');
   `).map(([table, policy]) => `${table}:${policy}`),
 );
 const missingPolicies = requiredPolicies

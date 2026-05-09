@@ -252,3 +252,46 @@ test("nearby route rate limits repeated public search abuse without blocking nor
     restoreEnv();
   }
 });
+
+test("nearby route logs degraded empty responses distinctly from true empty results", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const errorCalls: Array<Record<string, unknown>> = [];
+
+  console.error = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      errorCalls.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.error;
+
+  globalThis.fetch = (async () => {
+    throw new Error("upstream unavailable");
+  }) as typeof fetch;
+
+  try {
+    const response = await nearbyRoute(
+      createNearbyNextRequest(
+        "http://localhost/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=10",
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(body.data.vendors, []);
+
+    const degradedLog = errorCalls.find((record) => record.event === "PUBLIC_NEARBY_ROUTE_FAILED");
+
+    assert.ok(degradedLog);
+    assert.equal(degradedLog?.status, 200);
+    assert.equal(
+      (degradedLog?.metadata as Record<string, unknown> | undefined)?.degraded,
+      true,
+    );
+  } finally {
+    console.error = originalError;
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});

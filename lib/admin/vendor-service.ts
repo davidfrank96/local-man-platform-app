@@ -29,6 +29,7 @@ import { writeAuditLogSafely } from "./audit-log-service.ts";
 import {
   normalizeVendorImageRows,
 } from "../vendors/images.ts";
+import { logStructuredEvent } from "../observability.ts";
 import type {
   AdminVendorsQuery,
   CreateVendorDishesRequest,
@@ -785,9 +786,17 @@ export async function cleanupQaTestVendors(
     );
   }
 
-  console.info("[admin][vendor-cleanup] deleted QA test vendors", {
-    deletedCount: qaVendors.length,
-    vendorIds: qaVendors.map((vendor) => vendor.id),
+  logStructuredEvent("info", {
+    event: "ADMIN_VENDOR_CLEANUP_COMPLETED",
+    area: "admin",
+    requestId: session.requestId,
+    adminUserId: session.adminUser.id,
+    userRole: session.adminUser.role,
+    metadata: {
+      cleanupTarget: "qa_test_vendors",
+      deletedCount: qaVendors.length,
+      vendorIds: qaVendors.map((vendor) => vendor.id),
+    },
   });
 
   return {
@@ -832,7 +841,18 @@ export async function cleanupQaAdminVendors(
     );
   }
 
-  console.log("Deleted QA vendors:", qaAdminVendors.length);
+  logStructuredEvent("info", {
+    event: "ADMIN_VENDOR_CLEANUP_COMPLETED",
+    area: "admin",
+    requestId: session.requestId,
+    adminUserId: session.adminUser.id,
+    userRole: session.adminUser.role,
+    metadata: {
+      cleanupTarget: "qa_admin_vendors",
+      deletedCount: qaAdminVendors.length,
+      vendorIds: qaAdminVendors.map((vendor) => vendor.id),
+    },
+  });
 
   return {
     deletedCount: qaAdminVendors.length,
@@ -1007,12 +1027,19 @@ export async function uploadVendorImage(
   );
   const imageUrl = buildVendorImagePublicUrl(resolvedConfig, storageObjectPath);
 
-  console.info("[admin][vendor-image] uploading storage object", {
+  logStructuredEvent("info", {
+    event: "ADMIN_VENDOR_IMAGE_UPLOAD_STARTED",
+    area: "storage",
+    requestId: session.requestId,
+    adminUserId: session.adminUser.id,
+    userRole: session.adminUser.role,
     vendorId: params.id,
-    imageId,
-    storageObjectPath,
-    fileName: data.file.name,
-    sortOrder: data.sort_order,
+    metadata: {
+      imageId,
+      storageObjectPath,
+      fileName: data.file.name,
+      sortOrder: data.sort_order,
+    },
   });
 
   await uploadVendorImageObject({
@@ -1024,16 +1051,30 @@ export async function uploadVendorImage(
     fetchImpl,
   });
 
-  console.info("[admin][vendor-image] storage upload complete", {
+  logStructuredEvent("info", {
+    event: "ADMIN_VENDOR_IMAGE_STORAGE_UPLOAD_COMPLETED",
+    area: "storage",
+    requestId: session.requestId,
+    adminUserId: session.adminUser.id,
+    userRole: session.adminUser.role,
     vendorId: params.id,
-    storageObjectPath,
+    metadata: {
+      storageObjectPath,
+    },
   });
 
   try {
-    console.info("[admin][vendor-image] inserting vendor_images row", {
+    logStructuredEvent("info", {
+      event: "ADMIN_VENDOR_IMAGE_ROW_INSERT_STARTED",
+      area: "storage",
+      requestId: session.requestId,
+      adminUserId: session.adminUser.id,
+      userRole: session.adminUser.role,
       vendorId: params.id,
-      storageObjectPath,
-      imageUrl,
+      metadata: {
+        storageObjectPath,
+        imageUrl,
+      },
     });
     const payload = await fetchJson(
       createRestUrl(resolvedConfig, "vendor_images", { select: "*" }),
@@ -1055,11 +1096,18 @@ export async function uploadVendorImage(
       normalizeVendorImageRows(resolvedConfig.supabaseUrl, payload),
     );
 
-    console.info("[admin][vendor-image] vendor_images insert complete", {
+    logStructuredEvent("info", {
+      event: "ADMIN_VENDOR_IMAGE_ROW_INSERT_COMPLETED",
+      area: "storage",
+      requestId: session.requestId,
+      adminUserId: session.adminUser.id,
+      userRole: session.adminUser.role,
       vendorId: params.id,
-      imageCount: images.length,
-      imageId: images[0]?.id ?? null,
-      imageUrl: images[0]?.image_url ?? null,
+      metadata: {
+        imageCount: images.length,
+        imageId: images[0]?.id ?? null,
+        imageUrl: images[0]?.image_url ?? null,
+      },
     });
 
     void writeAuditLogSafely(
@@ -1077,13 +1125,17 @@ export async function uploadVendorImage(
 
     return images;
   } catch (error) {
-    console.error("[admin][vendor-image] insert failed, removing uploaded object", {
+    logStructuredEvent("error", {
+      event: "ADMIN_VENDOR_IMAGE_ROW_INSERT_FAILED",
+      area: "storage",
+      requestId: session.requestId,
+      adminUserId: session.adminUser.id,
+      userRole: session.adminUser.role,
       vendorId: params.id,
-      storageObjectPath,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unknown vendor image insert failure.",
+      error,
+      metadata: {
+        storageObjectPath,
+      },
     });
     await deleteVendorImageObject({
       config: resolvedConfig,
