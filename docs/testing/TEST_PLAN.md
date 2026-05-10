@@ -215,7 +215,7 @@ Manual admin UI smoke coverage:
 - load vendors
 - confirm the dashboard overview cards show vendor totals and missing-data counts
 - confirm high-volume analytics, activity, and vendor-registry lists scroll inside their cards instead of expanding the full page
-- confirm the Logs page filters and metadata details render safely without horizontal overflow
+- confirm the Logs page keeps operational rows inside the contained scroll panel, uses compact expandable summaries, and renders metadata details safely without horizontal overflow
 - confirm the registry shows completeness badges for missing hours, images, and featured dishes
 - confirm the create vendor page shows:
   - basic details

@@ -974,6 +974,7 @@ h2 {
 
 .admin-scroll-panel-logs {
   max-block-size: clamp(18rem, 52vh, 34rem);
+  scroll-behavior: smooth;
 }
 
 .admin-scroll-panel-vendors {
@@ -1030,13 +1031,38 @@ h2 {
 
 .admin-log-item {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   border: 1px solid rgba(37, 41, 36, 0.08);
   border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 249, 246, 0.88));
   padding: 14px;
   box-shadow: 0 10px 24px rgba(37, 41, 36, 0.05);
+  min-width: 0;
+}
+
+.admin-log-item[data-expanded="true"] {
+  border-color: rgba(36, 97, 79, 0.18);
+  box-shadow: 0 14px 32px rgba(37, 41, 36, 0.08);
+}
+
+.admin-log-toggle {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-log-toggle:focus-visible {
+  outline: 3px solid rgba(36, 97, 79, 0.58);
+  outline-offset: 4px;
 }
 
 .admin-log-item-header {
@@ -1051,6 +1077,20 @@ h2 {
   color: var(--color-muted);
   font-size: 0.84rem;
   font-weight: 700;
+}
+
+.admin-log-item-header-meta {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.admin-log-toggle-indicator {
+  color: var(--color-green);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .admin-log-item-badges {
@@ -1098,12 +1138,14 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.admin-log-summary-grid,
 .admin-log-field-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
+.admin-log-summary-grid div,
 .admin-log-field-grid div {
   display: grid;
   gap: 4px;
@@ -1114,6 +1156,7 @@ h2 {
   padding: 10px;
 }
 
+.admin-log-summary-grid span,
 .admin-log-field-grid span {
   color: var(--color-muted);
   font-size: 0.76rem;
@@ -1121,10 +1164,34 @@ h2 {
   text-transform: uppercase;
 }
 
+.admin-log-summary-grid strong,
 .admin-log-field-grid strong {
   font-size: 0.86rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.admin-log-expanded {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid rgba(37, 41, 36, 0.08);
+  padding-top: 14px;
+}
+
+.admin-log-expanded-block {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-log-expanded-block > span {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-log-field-grid-expanded {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .admin-log-details {
@@ -1150,8 +1217,7 @@ h2 {
   color: var(--color-text);
   font-size: 0.8rem;
   line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
 }
 
 .compact-form,
@@ -3533,12 +3599,18 @@ h2 {
     min-width: 100%;
   }
 
-  .admin-log-field-grid {
+  .admin-log-summary-grid,
+  .admin-log-field-grid,
+  .admin-log-field-grid-expanded {
     grid-template-columns: 1fr;
   }
 
   .admin-logs-filter-actions {
     width: 100%;
+  }
+
+  .admin-log-item-header-meta {
+    justify-items: start;
   }
 
   .admin-list-badges {
