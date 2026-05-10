@@ -23,3 +23,9 @@ Rules:
 Shared-environment cleanup safety:
 - `npm run db:cleanup:playwright` refuses remote cleanup unless `LOCALMAN_ALLOW_SHARED_ENV_TEST_CLEANUP=1` or `CI=true`
 - cleanup only targets approved Playwright/QA namespaces
+
+## Release-gate notes
+
+- pair browser tests with `npm run smoke:nearby` and the static gate (`lint`, `typecheck`, `test`, `build`) before release signoff
+- keep the worktree clean before final browser verification so the tested state matches the deployable state
+- on local macOS sandboxed runs, Chromium launch can fail before the app loads; rerun Playwright outside the sandbox when that happens

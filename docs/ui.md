@@ -74,7 +74,10 @@ The vendor list is the primary interaction surface.
 The admin workspace now has two user-facing shells:
 
 - admin dashboard:
+  - dashboard overview
   - analytics
+  - activity
+  - logs
   - team management
   - vendor registry and edit/create workflows
 - agent dashboard:
@@ -82,6 +85,23 @@ The admin workspace now has two user-facing shells:
   - vendor list
   - vendor edit workspace
   - CSV vendor intake
+
+Current admin navigation order:
+
+- `Dashboard`
+- `Analytics`
+- `Manage vendors`
+- `Create vendor`
+- `Team access`
+- `Activity`
+- `Logs`
+
+High-volume admin lists stay contained inside internal scroll panels:
+
+- analytics recent-events and ranking tables
+- activity feed
+- vendor registry
+- logs feed with compact expandable rows
 
 Restricted workspace areas are hidden before render based on resolved session role. Server-side route and API checks remain the source of truth.
 Those client-side checks are presentation-only:

@@ -82,8 +82,10 @@ Use this checklist before pushing or releasing UI work.
 - [ ] admin lands on `/admin/dashboard`
 - [ ] agent lands on `/admin/agent`
 - [ ] admin can access analytics
+- [ ] admin can access logs when operational-event storage is enabled
 - [ ] admin can access team management
 - [ ] agent cannot access analytics
+- [ ] agent cannot access logs
 - [ ] agent cannot access team management
 - [ ] agent cannot access audit logs
 
@@ -92,12 +94,16 @@ Use this checklist before pushing or releasing UI work.
 - [ ] public event tracking still records events
 - [ ] admin analytics page loads summary data
 - [ ] admin activity page loads recent team activity
+- [ ] admin logs page loads recent operational warnings or shows the correct empty state when storage is disabled
 - [ ] recent user events render correctly
 - [ ] recent team activity renders correctly
-- [ ] production analytics reads use Supabase direct with anon key + session token
-- [ ] production audit-log reads use Supabase direct with anon key + session token
-- [ ] backend analytics and audit-log fallback routes still work when `SUPABASE_SERVICE_ROLE_KEY` is configured
+- [ ] production analytics reads flow through the protected `/api/admin/analytics` route
+- [ ] production audit-log reads flow through the protected `/api/admin/audit-logs` route
+- [ ] production operational-log reads flow through the protected `/api/admin/logs` route
+- [ ] analytics, activity, vendor-registry, and logs lists stay inside contained scroll panels at high volume
+- [ ] logs metadata stays inert and never renders as HTML
 - [ ] analytics empty state is real data absence, not auth/config failure
+- [ ] logs empty state is expected when storage is disabled or no persistable events match the current filters
 
 ## CSV intake
 

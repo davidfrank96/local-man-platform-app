@@ -30,6 +30,8 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - DigitalOcean App Platform
 - Supabase managed backend
 - local runtime and smoke checks assume `http://localhost:3000`
+- `http://127.0.0.1:3000` is also supported locally through `allowedDevOrigins` so HMR and chunk requests still work during operator smoke checks
+- release candidates should come from tracked committed repo state because DigitalOcean builds from the repository tree, not local `.next` artifacts or untracked route files
 
 ## Why This Stack
 - fast MVP delivery
@@ -60,6 +62,7 @@ Handles:
 - admin login and session validation
 - dashboard overview
 - analytics dashboard
+- audit-log activity dashboard
 - operational logs dashboard
 - team access management
 - vendor registry management
@@ -183,7 +186,13 @@ Implementation ownership:
 
 ## Admin Flow
 Admin workspace routes:
-- `/admin` for overview and quick actions
+- `/admin` resolves to the role home path
+- `/admin/dashboard` for admin overview and quick actions
+- `/admin/agent` for the restricted agent home route
+- `/admin/analytics` for usage signals
+- `/admin/activity` for audit-log review
+- `/admin/logs` for operational warnings, failures, degraded responses, and slow requests
+- `/admin/team` for team access
 - `/admin/vendors` for vendor registry and completeness review
 - `/admin/vendors/new` for vendor onboarding
 - `/admin/vendors/[id]` for focused edit workflows
@@ -205,6 +214,16 @@ Admin workflow rules:
 - featured dish image URLs are dish-scoped metadata and must not be treated as vendor profile images
 - team-access reads use `admin_users` as the source of truth
 - existing auth users may be recovered and role-assigned without surfacing a false failure
+- admin sidebar order currently remains:
+  - Dashboard
+  - Analytics
+  - Manage vendors
+  - Create vendor
+  - Team access
+  - Activity
+  - Logs
+- high-volume admin surfaces use contained inner-scroll panels so analytics, activity, vendor registry, and logs stay readable without forcing the whole workspace page to grow indefinitely
+- the logs surface uses compact expandable rows so operators can scan event summaries first and inspect sanitized metadata only on demand
 
 ## Abuse Protection Model
 
@@ -247,7 +266,7 @@ Current rules:
   - admin vendor mutation routes, including image and featured-dish writes
   - `/api/vendors/nearby`
   - `/api/vendors/[slug]/ratings`
-- `/api/events`
+  - `/api/events`
 - error serialization includes safe `errorName`, `errorMessage`, and optional `errorCode` fields
 - logger redaction removes secrets, tokens, cookies, raw request bodies, and database URLs from emitted metadata
 - debug logs are env-gated and disabled by default
@@ -260,10 +279,17 @@ Current rules:
   - selected important admin mutation events
 - persisted operational events are separate from `audit_logs` and are sanitized before insert
 - `/admin/logs` reads those persisted operational events through the protected `/api/admin/logs` route
+- common operational event names include:
+  - `ADMIN_LOGIN_FAILED`
+  - `ADMIN_SESSION_VALIDATION_FAILED`
+  - `PUBLIC_NEARBY_SLOW`
+  - `PUBLIC_NEARBY_ROUTE_FAILED`
+  - `PUBLIC_VENDOR_RATING_FAILED`
 
 Current limitation:
 - console logging remains the primary output path, and operational-event storage is only a lightweight internal persistence layer rather than a centralized trace store
 - retention is managed through an explicit prune step rather than a background log pipeline
+- when `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE` stays disabled, `/admin/logs` should still load but remain empty
 - public discovery still prefers graceful degraded nearby responses over hard API failures, but the logs now distinguish:
   - true empty search results through `PUBLIC_NEARBY_EMPTY_RESULT`
   - degraded upstream-failure fallbacks through `PUBLIC_NEARBY_ROUTE_FAILED`
@@ -327,7 +353,7 @@ Public usage signals use this path:
 3. server validates the payload
 4. server writes to `public.user_events`
 5. nearby discovery can derive a simple vendor `ranking_score` from those rows through a small SQL aggregation function keyed by candidate vendor ids
-6. the admin analytics surface reads those rows directly from Supabase in production and can fall back to backend routes in development
+6. `/api/admin/analytics` reads those rows and snapshots server-side, preferring the aggregated SQL snapshot RPC and falling back safely when needed
 7. `/admin/analytics` renders summary metrics, vendor performance, drop-off signals, and recent user events
 8. `/admin/activity` renders recent team activity from the protected audit-log route
 9. `/admin/logs` renders recent persisted operational warnings, failures, degraded responses, and slow requests from `public.operational_events`

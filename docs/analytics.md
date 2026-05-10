@@ -37,6 +37,11 @@ Recent team activity now lives on the dedicated admin activity page:
 - `/admin/activity`
 - backed by the protected `/api/admin/audit-logs` route
 
+Operational warnings, failures, degraded responses, and slow requests intentionally live on the separate admin logs page:
+
+- `/admin/logs`
+- backed by the protected `/api/admin/logs` route
+
 Default range:
 
 - last 7 days

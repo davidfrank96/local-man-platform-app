@@ -28,7 +28,7 @@ Close Phase 6 `Usage Signals` with a stable analytics surface, discovery refinem
 - loyalty
 - vendor self-signup
 - complex role management
-- switching the public discovery renderer to Google Maps JavaScript
+- replacing the current MapLibre plus fallback discovery renderer with Google Maps JavaScript
 - concrete live IP approximation provider selection
 - broad product expansion beyond discovery, vendor detail, and admin maintenance
 
@@ -38,7 +38,9 @@ Phase 6 signal visibility is ready when:
 - public tracking remains fire-and-forget and non-blocking
 - `/admin/analytics` is protected by admin auth
 - `/admin/activity` is protected by admin auth
+- `/admin/logs` is protected by admin auth and strict admin-only permission
 - analytics summaries, vendor performance, drop-off panels, recent user events, and recent team activity load without breaking when data is sparse
+- structured operational events remain sanitized, bounded, and reviewable without breaking public discovery or admin writes
 - discovery ordering remains open-now-first, relevance-aware, and usage-ranked without regressing location or selection behavior
 - local retention helpers stay non-blocking and device-local only
 - simple ratings update vendor aggregate score display without introducing comments or account requirements
@@ -60,12 +62,13 @@ Phase 6 signal visibility is ready when:
 - Base vendor creation requires explicit acknowledgement for missing hours, featured dishes, and images.
 - Admin hours entry uses compact 12-hour text input and converts to the existing 24-hour storage format before save.
 - Admin media editing now distinguishes vendor profile images from optional featured dish image URLs, with remove actions for current featured dishes.
-- Admin workspace is split cleanly across dashboard, vendor registry, create vendor, and focused vendor edit routes.
+- Admin workspace is split cleanly across dashboard, analytics, activity, logs, team access, vendor registry, create vendor, and focused vendor edit routes.
 - Create vendor now supports a fuller onboarding flow with basic details, hours, featured dishes, image selection, acknowledgements, and review before create.
 - Admin team access now refreshes from `admin_users` after mutation and treats existing auth users as a recoverable success path.
 - Public event tracking records session, selection, detail, call, directions, search, and filter signals in `user_events`.
 - Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent user events.
 - Admin now includes a dedicated activity page for recent team activity from the protected audit-log route.
+- Admin now includes a dedicated logs page for persisted operational warnings, degraded responses, rate-limit blocks, and slow requests.
 - Nearby discovery now uses a simple weighted `ranking_score` from usage signals and keeps distance as a tie-breaker rather than the only sort rule.
 - Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and applies a clearer search ordering.
 - Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.
@@ -79,6 +82,7 @@ Phase 6 signal visibility is ready when:
 - Admin auth now uses secure HTTP-only cookie-backed sessions; bearer-header support remains server-side only for compatibility and targeted tests.
 - Active admin and agent browser workflows now use protected `/api/admin/**` routes for privileged reads and mutations instead of direct privileged Supabase browser access.
 - Privileged admin and agent access now requires an explicit `admin_users` assignment; authenticated users are no longer auto-provisioned into the workspace.
+- Operational-event persistence is opt-in, so an empty `/admin/logs` page is expected until storage is enabled and persistable events occur.
 - Pilot quality still depends on complete and accurate vendor data entry.
 - Historical `user_events` rows may not include `session_id`, so exact session drop-off reporting can be incomplete until newer traffic accumulates.
 - Discovery retention is browser-local only and does not sync across devices.

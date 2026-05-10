@@ -114,12 +114,23 @@ The Local Man — UI Rules
 
 ## Admin UI Rules
 - admin workspace should be split cleanly across:
-  - `/admin` for overview
+  - `/admin` for role-aware home routing
+  - `/admin/dashboard` for overview
   - `/admin/analytics` for usage signals
   - `/admin/activity` for audit-log activity review
+  - `/admin/logs` for operational warnings, failures, degraded responses, rate-limit blocks, and slow requests
+  - `/admin/team` for team access
   - `/admin/vendors` for registry management
   - `/admin/vendors/new` for creation
   - `/admin/vendors/[id]` for focused editing
+- the current admin sidebar order should remain:
+  - Dashboard
+  - Analytics
+  - Manage vendors
+  - Create vendor
+  - Team access
+  - Activity
+  - Logs
 - admin screens should use clear hierarchy, restrained cards, and obvious section boundaries instead of one long mixed form
 - the dashboard view should surface overview counts and quick actions for incomplete vendors
 - the analytics view should stay read-only and show:
@@ -131,7 +142,15 @@ The Local Man — UI Rules
 - the activity view should stay read-only and show:
   - recent team activity
   - role and action filters
+  - contained inner-scroll for the activity list
   - clear empty, error, and pagination states
+- the logs view should stay read-only and show:
+  - level, area, event, timestamp, route, status, duration, short message, and request id in the default collapsed row
+  - compact expandable rows instead of fully expanded walls of metadata
+  - contained inner-scroll for the high-volume event list
+  - safe empty, loading, and error states
+  - sanitized metadata only inside the expanded state
+- high-volume analytics, activity, vendor-registry, and logs lists should use contained scroll panels so the workspace shell stays stable on desktop, tablet, and mobile
 - the vendor registry should support search and filtering, then move into a dedicated edit workspace
 - the create vendor page should be a full onboarding page with clearly separated sections for:
   - basic details
@@ -167,6 +186,7 @@ The Local Man — UI Rules
 - when `full_name` is missing in team access, show a practical fallback such as the email prefix rather than `No name`.
 - analytics must never expose raw tracking failures in the public app
 - analytics filters should stay lightweight: last 24 hours, 7 days, 30 days, and all time
+- agents must not see or access `/admin/logs`; client-side hiding is presentation-only and backend permission checks remain authoritative
 
 ## Style Guidance
 - clean modern look
@@ -185,7 +205,7 @@ The Local Man — UI Rules
 - Selected vendor preview panels on desktop should keep `Call`, `Directions`, and `View details` on one row when space allows.
 - Selected vendor preview panels currently remain below the map on mobile and in the map column on desktop.
 - On mobile, the selected vendor preview must already sit directly under the map so marker selection does not require a page jump.
-- The full vendor marker button, including its visible number label, must be tappable.
+- The full storefront marker button must be tappable, including the storefront SVG hit area used for both default and selected marker states.
 - Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
 - Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.
 - Night background tones should feel like evening discovery with deeper blue/slate washes and readable light cards, not harsh black surfaces.

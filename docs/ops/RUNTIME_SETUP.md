@@ -27,6 +27,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run smoke:nearby
 If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that actual origin before running the smoke command.
 
 The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
+`http://127.0.0.1:3000` is also safe for local operator smoke checks because `next.config.ts` explicitly allows that development origin for HMR and chunk requests.
 
 The smoke test verifies precise coordinates, `distance_km`, ranking-aware nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
 
@@ -78,6 +79,11 @@ LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS=30
 `LOCALMAN_RUNTIME_ENVIRONMENT` is optional and tags persisted operational events with a stable environment label.
 
 `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS` is optional and controls the prune command retention window. The default is `30`.
+
+Operational-event storage expectation:
+- when `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=false`, `/admin/logs` should still render but may show `No logs stored yet`
+- even with storage enabled, a healthy environment may keep `/admin/logs` fairly sparse because normal successful requests are intentionally not persisted
+- after changing any `LOCALMAN_*` observability value locally, restart `npm run dev` or `npm run start`; after changing those values in DigitalOcean, trigger a fresh deploy before validating `/admin/logs`
 
 Current real-map example:
 
@@ -319,11 +325,13 @@ Deployment, pilot validation, or further UX iteration should proceed only after:
 - migration succeeds against the target Supabase project
 - seed validation queries pass
 - `npm run smoke:nearby` passes against the local app and real Supabase env vars
+- the release branch/worktree is clean and the intended route files are tracked in git before promotion
 - any runtime failures are documented before implementation continues
 
 ## Deployment Notes
 - DigitalOcean App Platform is the current deployment target.
 - Local development and smoke testing assume `http://localhost:3000` unless `NEXT_PUBLIC_APP_URL` is overridden.
+- `http://127.0.0.1:3000` is supported for local smoke checks, but production should still use the real deployed origin for `NEXT_PUBLIC_APP_URL`.
 - Production should use the real deployed app URL for `NEXT_PUBLIC_APP_URL`.
 - The same Supabase public env vars used locally must be present in the DigitalOcean app configuration.
 - Production runtime secrets must include `SUPABASE_SERVICE_ROLE_KEY` for:
@@ -333,6 +341,8 @@ Deployment, pilot validation, or further UX iteration should proceed only after:
 - Set `NEXT_PUBLIC_MAP_STYLE_URL` in DigitalOcean as a Build + Run variable when the production app should use the real MapLibre map. If omitted, production stays on the fallback coordinate map without breaking public discovery.
 - The `vendor-images` Storage bucket must exist and stay public for the current frontend image URL strategy.
 - After changing DigitalOcean env vars, redeploy the app so new public values are compiled into the Next.js build.
+- App Router route files such as `app/admin/**/page.tsx` and `app/api/admin/**/route.ts` must be committed and pushed before deployment; DigitalOcean cannot build local-only or ignored files.
+- Run production promotion from a clean committed worktree so the deployed source tree, route manifests, and local verification state match.
 
 For launch-day operator work and ongoing Abuja pilot checks, use [docs/ops/PILOT_CHECKLIST.md](./PILOT_CHECKLIST.md).
 
@@ -353,7 +363,8 @@ Use this checklist when completing runtime activation manually:
 12. Run `npm run dev`.
 13. In a second terminal, run `npm run smoke:nearby`.
 14. Confirm the smoke command prints `"ok": true`.
-15. Do not proceed to deployment or further feature expansion until all checks above pass.
+15. If validating admin analytics/activity/logs flows, sign in as an admin and confirm `/admin/analytics`, `/admin/activity`, `/admin/logs`, and `/admin/vendors` load without auth regression.
+16. Do not proceed to deployment or further feature expansion until all checks above pass.
 
 ## Runtime/Admin Boundary
 Runtime activation must stay validated before additional admin or public UX changes are shipped.
