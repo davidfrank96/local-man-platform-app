@@ -40,6 +40,7 @@ For each vendor before activation:
 - [ ] Confirm the admin session persists after refresh.
 - [ ] Confirm logout returns to `/admin/login`.
 - [ ] Confirm protected admin routes reject unauthenticated access.
+- [ ] If operational-event storage is enabled, confirm `/admin/logs` loads for an admin account and remains unavailable to agents.
 
 ## Vendor Creation Process
 - [ ] Open `/admin/vendors/new`.
@@ -122,4 +123,5 @@ If storage uploads are broken:
 - [ ] Confirm seed images or uploaded images still render.
 - [ ] Re-run runtime smoke tests against the current environment.
 - [ ] Review failed admin actions and audit logs.
+- [ ] If operational-event storage is enabled, review recent `/admin/logs` warnings or failures and prune old events on the normal operator cadence.
 - [ ] Revisit fallback messages if operators or users report confusion.

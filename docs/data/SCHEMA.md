@@ -174,6 +174,8 @@ Notes:
 - It is separate from `audit_logs`.
 - Metadata must not contain secrets, tokens, cookies, raw request bodies, or raw stack traces.
 - Current read access is admin-only through row-level security.
+- The admin workspace reads these rows through `/api/admin/logs` and `/admin/logs` when `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true`.
+- Retention is intentionally bounded through `npm run db:prune:operational-events`, which defaults to a 30 day window unless overridden by `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`.
 
 ## Suggested Indexes
 - vendors.slug

@@ -4,6 +4,10 @@ The Local Man — Test Plan
 ## Test Goal
 Ensure the runtime, admin operations, public discovery surface, Phase 5 UX polish, and Phase 6 usage signals remain coherent before commit, deployment, or pilot use.
 
+Release-discipline notes:
+- release candidates should come from a clean committed worktree so the tested source tree matches the deployable artifact
+- on local macOS sandboxed runs, Chromium launch may fail before Playwright can open the app; rerun those browser checks outside the sandbox and treat the in-sandbox failure as an environment limitation rather than an app regression
+
 ## Documentation Validation
 Check:
 - PRD and architecture do not conflict
@@ -216,6 +220,7 @@ Manual admin UI smoke coverage:
 - confirm the dashboard overview cards show vendor totals and missing-data counts
 - confirm high-volume analytics, activity, and vendor-registry lists scroll inside their cards instead of expanding the full page
 - confirm the Logs page keeps operational rows inside the contained scroll panel, uses compact expandable summaries, and renders metadata details safely without horizontal overflow
+- if `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=false`, confirm the Logs page can still show the correct empty state instead of treating the absence of persisted rows as an error
 - confirm the registry shows completeness badges for missing hours, images, and featured dishes
 - confirm the create vendor page shows:
   - basic details

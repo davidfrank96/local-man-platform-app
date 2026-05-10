@@ -10,6 +10,8 @@ Full workspace access:
 
 - `/admin/dashboard`
 - analytics
+- activity
+- logs
 - audit-log visibility
 - team access management
 - vendor create, edit, and deactivate flows
@@ -29,6 +31,7 @@ Restricted workspace access:
 Agent restrictions:
 
 - no analytics access
+- no operational-log access
 - no audit-log access
 - no team/admin-user management
 - no vendor deactivation
@@ -62,6 +65,7 @@ Key permission boundaries:
 
 - `analytics:read` -> admin only
 - `audit_logs:read` -> admin only
+- `platform_logs:read` -> admin only
 - `admin_users:manage` -> admin only
 - `vendor:delete` -> admin only
 

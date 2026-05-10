@@ -81,11 +81,13 @@ Audit-log visibility currently appears on the dedicated admin activity route as:
 - role filter
 - action filter
 - paginated `View more activity`
+- contained inner-scroll inside the activity list card
 
 Agents do not see this UI and cannot access the API route.
+Operational platform warnings and failures are intentionally separate and live on `/admin/logs`.
 
 ## Source ownership
 
 - [lib/admin/audit-log-service.ts](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/lib/admin/audit-log-service.ts)
 - [app/api/admin/audit-logs/route.ts](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/app/api/admin/audit-logs/route.ts)
-- [components/admin/admin-analytics.tsx](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/components/admin/admin-analytics.tsx)
+- [components/admin/admin-activity-board.tsx](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/components/admin/admin-activity-board.tsx)

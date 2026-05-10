@@ -35,6 +35,8 @@ The Local Man — Environment Variables
 - When `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true`, selected warn/error/degraded/rate-limited/slow events and selected admin mutation events are also persisted into `public.operational_events`.
 - Persisted operational events remain separate from `audit_logs` and never store secrets, cookies, auth headers, passwords, raw request bodies, service-role keys, or raw stack traces.
 - Admins can review recent persisted operational events through `/admin/logs`. Operators can still inspect the same data directly in Supabase when needed.
+- When operational-event storage stays disabled, `/admin/logs` should still load but remain empty.
+- After changing `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE`, `LOCALMAN_RUNTIME_ENVIRONMENT`, or `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`, restart the local server or trigger a new deploy before validating `/admin/logs`.
 
 ## Runtime Smoke Test
 - `SMOKE_NEARBY_LAT`: optional latitude override for `npm run smoke:nearby`.

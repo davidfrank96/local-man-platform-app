@@ -178,6 +178,8 @@ DATABASE_URL=<postgres-connection-string-for-migrations-and-seeds>
 LOCALMAN_LOG_LEVEL=<debug|info|warn|error>
 LOCALMAN_ENABLE_DEBUG_LOGS=<true|false>
 LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=<true|false>
+LOCALMAN_RUNTIME_ENVIRONMENT=<local|staging|production>
+LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS=<days>
 ```
 
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional for overall app startup, but required if you want the real tiled MapLibre map instead of the fallback coordinate map.
@@ -189,7 +191,7 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 - admin user creation
 - public analytics event writes at `/api/events`
 - public vendor rating writes at `/api/vendors/[slug]/ratings`
-- backend analytics and audit-log fallback routes
+- backend analytics and audit-log routes
 - server-side vendor image storage operations
 
 Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
@@ -203,7 +205,9 @@ Server-side runtime logging is standardized through `lib/observability.ts`:
 - `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` enables bounded storage of selected warn/error/slow/rate-limited events and selected admin mutation events in `public.operational_events`
 - operational event storage is separate from `audit_logs` and does not store secrets, cookies, auth headers, passwords, raw request bodies, or stack traces
 - admins can review recent persisted operational events at `/admin/logs` when storage is enabled
+- when storage stays disabled, the `/admin/logs` page should load but remain empty; that is expected behavior rather than a runtime failure
 - recent operational events are retained through DB cleanup discipline rather than a full external monitoring platform in this phase
+- changing `LOCALMAN_*` observability env vars requires a dev-server restart locally or a fresh DigitalOcean rebuild/redeploy in production
 
 Public abuse protection is centralized server-side in the API layer:
 - `/api/admin/login`: `5` attempts per `10` minutes per IP/email with a `15` minute block window
@@ -221,9 +225,12 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - real map provider: MapLibre using a MapTiler style URL exposed through `NEXT_PUBLIC_MAP_STYLE_URL`
 - vendor image bucket: `vendor-images`
 - local development and smoke testing use `http://localhost:3000`
+- local dev smoke and operator checks may also use `http://127.0.0.1:3000`; `next.config.ts` explicitly allows that origin so HMR and chunk requests are not blocked
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only in DigitalOcean runtime secrets
 - the MapTiler key embedded in `NEXT_PUBLIC_MAP_STYLE_URL` must be browser-safe because the value is public
 - after changing Supabase or map env vars in DigitalOcean, trigger a redeploy so Next.js rebuilds with the updated public env
+- after changing `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE`, `LOCALMAN_RUNTIME_ENVIRONMENT`, or `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`, restart the local server or trigger a new DigitalOcean deploy before validating `/admin/logs`
+- release candidates should come from a clean committed worktree; DigitalOcean builds from the tracked repository state, not local untracked route files or local `.next` output
 - schema-changing releases must apply migrations before the new app build is promoted
 - current migrations are additive; rollback should restore the previous app deploy first rather than manually removing applied schema objects unless a migration defect is confirmed
 
@@ -291,6 +298,14 @@ Current admin workspace behavior:
   - audit-log visibility
   - operational-log visibility
   - vendor create/edit/delete
+  - sidebar order:
+    - Dashboard
+    - Analytics
+    - Manage vendors
+    - Create vendor
+    - Team access
+    - Activity
+    - Logs
 - `agent`
   - redirected to `/admin/agent`
   - full Create Vendor page
@@ -317,7 +332,7 @@ Phase 5 delivered:
 - Apply button restoration after navigation
 - morning, afternoon, and night discovery theming
 - stable MapLibre marker/card synchronization without marker-tap camera drift
-- single deep-red vendor markers plus blue user-location marker
+- oxblood storefront vendor markers, green selected-marker state, and blue user-location marker
 - no clustering in the current shipped map interaction model
 - trust-first location display and retry behavior
 - admin dashboard restructuring

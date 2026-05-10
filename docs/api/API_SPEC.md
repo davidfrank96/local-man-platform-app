@@ -655,6 +655,7 @@ Success payload:
 Notes:
 - `event` and `route` filters use sanitized text matching, not raw metadata queries
 - empty `operationalEvents` is a valid success case
+- an empty result is expected when storage is disabled, no persistable events have occurred yet, or the current filters match nothing
 - `/admin/logs` is for platform health signals only
 - `/admin/activity` remains the separate who-did-what audit trail surface
 

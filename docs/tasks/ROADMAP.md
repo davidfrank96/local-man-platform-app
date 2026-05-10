@@ -55,7 +55,7 @@ The Local Man — Roadmap
 - browser-back and `Back to map` restoration
 - Apply button restoration after navigation
 - time-based morning, afternoon, and night discovery theming
-- MapLibre interactive map with fallback coordinate map, selected-preview sync, single deep-red vendor markers, and no clustering
+- MapLibre interactive map with fallback coordinate map, selected-preview sync, oxblood storefront vendor markers, green selected-marker state, and no clustering
 - trust-first precise, approximate, and default-city location messaging
 - reverse location display with human-readable area labels
 - structured admin workspace routes for dashboard, registry, create, and edit flows
@@ -74,8 +74,11 @@ Status: completed
 - lightweight first-party event tracking in `user_events`
 - admin-only analytics dashboard at `/admin/analytics`
 - admin-only activity page at `/admin/activity`
+- admin-only logs page at `/admin/logs`
 - vendor performance ranking and recent activity review
 - drop-off signal visibility for search, selection, and detail-action gaps
+- structured request-traced runtime logging for auth, discovery, ratings, admin mutations, and abuse-protection paths
+- bounded `operational_events` persistence for warnings, failures, degraded responses, rate-limit blocks, slow requests, and selected admin mutation events
 - discovery ordering informed by usage signals:
   - open-now priority
   - stronger search relevance
