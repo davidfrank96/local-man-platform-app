@@ -69,6 +69,7 @@ Test:
 - vendor detail route transforms Supabase nested rows into the documented detail shape
 - public UI shows runtime errors when Supabase data is unavailable
 - vendor cards always render required fields
+- vendor cards remain text-first, compact, image-free on the homepage, and readable without decorative assets
 - `Active hours:` stays visible before and after card selection
 - distance and open/closed state stay visible before and after card selection
 - selected vendor highlight remains readable
@@ -82,6 +83,7 @@ Test:
 - `Back to map` restores discovery state
 - restored discovery state keeps search and filter controls usable without manual reload
 - small-phone and tablet layouts remain stable
+- public mobile polish keeps useful content reachable without the map or hero dominating the first screen
 - time-based morning, afternoon, and night themes do not compromise card readability
 - public shell applies the correct browser-local theme attribute for morning, afternoon, and night
 - uploaded vendor images appear on vendor detail pages
@@ -291,6 +293,7 @@ Manual UI checks:
 - vendor cards remain compact, readable, and image-free
 - selected vendor preview keeps `Call`, `Directions`, and `View details` accessible
 - vendor detail hero remains compact and readable
+- public surfaces avoid heavy decorative assets, blur-heavy panels, and large eager images
 - map controls stay visible
 - MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
 - the real map should show oxblood storefront markers by default, a green storefront marker when selected, a blue user-location marker, and no cluster bubbles
