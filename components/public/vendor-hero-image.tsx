@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isSeedPlaceholderUrl } from "../../lib/vendors/images.ts";
 
 type VendorHeroImageProps = {
@@ -13,6 +13,7 @@ const heroImageSizes = "(max-width: 767px) 100vw, (max-width: 1200px) 50vw, 640p
 
 export function VendorHeroImage({
   imageUrl,
+  storageObjectPath = null,
   alt,
 }: VendorHeroImageProps) {
   const [hasOriginalFailed, setHasOriginalFailed] = useState(false);
@@ -20,6 +21,12 @@ export function VendorHeroImage({
     typeof imageUrl === "string" &&
     imageUrl.startsWith("http") &&
     !isSeedPlaceholderUrl(imageUrl);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("IMAGE URL:", imageUrl);
+    }
+  }, [imageUrl, storageObjectPath]);
 
   if (!isValidHttpImageUrl) {
     return <span>No image available</span>;

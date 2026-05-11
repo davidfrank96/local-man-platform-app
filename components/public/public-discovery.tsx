@@ -1012,7 +1012,7 @@ export function PublicDiscovery({
           <div className="discovery-heading">
             <p className="eyebrow">Abuja pilot</p>
             <h1 id="discovery-title">{title}</h1>
-            <p>Find food and everyday vendors near you.</p>
+            <p>Nearby local vendors. Act quickly.</p>
           </div>
 
           <div className="desktop-discovery-filters">
@@ -1311,8 +1311,26 @@ export function PublicDiscovery({
           <button
             type="button"
             aria-label="Back to top"
-            className="public-back-to-top"
             onClick={scrollToDiscoveryTop}
+            style={{
+              position: "fixed",
+              right: "14px",
+              bottom: "96px",
+              zIndex: 50,
+              display: "inline-flex",
+              width: "44px",
+              height: "44px",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid rgba(36, 97, 79, 0.16)",
+              borderRadius: "999px",
+              background: "rgba(20, 23, 20, 0.92)",
+              boxShadow: "0 12px 24px rgba(37, 41, 36, 0.18)",
+              color: "#fff",
+              fontSize: "1.2rem",
+              fontWeight: 800,
+              lineHeight: 1,
+            }}
           >
             ↑
           </button>

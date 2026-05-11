@@ -8,7 +8,6 @@ The Local Man — UI Rules
 4. Minimal clutter.
 5. Food visibility matters.
 6. Fast scanning is more important than heavy detail.
-7. Low-data polish beats decorative weight.
 
 ## Public UI Rules
 - Homepage must open into a map-first layout.
@@ -27,14 +26,12 @@ The Local Man — UI Rules
   - map
   - selected vendor card
   - vendor list
-- Mobile discovery should keep the hero compact enough that search, map context, and the first useful vendor content are reachable quickly on small Android screens.
 - Reminder toasts and location status panels must not move the map above the header or filters.
 - Web discovery currently uses:
   - left column for header, search/filter, reminder toast, location panel, vendor section navbar, and vendor content
   - right column for map and selected vendor preview
 - Vendor cards must be readable in one quick glance.
 - Use strong visual separation between vendors.
-- Vendor-card surfaces should stay text-first, lightweight, and high-contrast without relying on blur, large shadows, or decorative images.
 - Show open/closed state clearly.
 - Show distance clearly.
 - Call and directions buttons must be obvious.
@@ -194,12 +191,10 @@ The Local Man — UI Rules
 ## Style Guidance
 - clean modern look
 - no noisy gradients everywhere
-- avoid blur-heavy or image-heavy decoration on the public surface
 - avoid startup fluff
 - practical spacing
 - clear typography
 - strong contrast
-- public polish should use restrained CSS, existing tokens, and optional/lazy imagery so low-bandwidth users still get a complete experience
 - Public discovery should use a subtle client-local time theme: morning, afternoon, or night.
 - Time-based theme changes should mainly affect the page background, accent tone, map panel, and small highlights.
 - Time-based theming must not reduce readability or make vendor cards visually heavy.
