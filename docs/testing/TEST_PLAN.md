@@ -171,6 +171,7 @@ Test:
 - vendor image upload writes audit log
 - vendor image list and removal work against the same admin surface
 - vendor image list normalizes storage-path-only rows into browser-loadable public URLs
+- vendor image optimization validates real image bytes, resizes oversized uploads, writes matching content type and extension, and falls back safely when transformation fails
 - vendor hours can be loaded into the admin edit form before replacement
 - vendor featured dishes can be loaded for the selected vendor before adding more
 - vendor featured dish insertion writes audit log
@@ -179,6 +180,7 @@ Test:
 - base vendor creation requires explicit acknowledgement when hours, featured dishes, or images are still missing
 - empty image and dish arrays are rejected
 - invalid image type and oversize uploads are rejected before storage writes
+- corrupt image bytes are rejected before storage writes
 - malformed Supabase payloads return controlled `UPSTREAM_ERROR` responses
 - admin analytics route requires admin auth
 - admin analytics route aggregates summary counts correctly

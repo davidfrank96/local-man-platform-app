@@ -467,7 +467,13 @@ Behavior:
 - accepts multipart form uploads with `image` and `sort_order`
 - accepts JSON image metadata as a compatibility fallback
 - validates file type, file size, and sort order
-- uploads the file to the `vendor-images` Supabase Storage bucket
+- rejects files over `5 MB`
+- validates real image bytes before storage
+- optimizes valid JPEG, PNG, and WebP uploads server-side with `sharp`
+- resizes oversized images inside a `1200px` maximum dimension and uses moderate quality compression
+- stores optimized WebP output when smaller; otherwise stores the original safe image
+- falls back to the original safe file if transformation fails after validation
+- uploads the stored file to the `vendor-images` Supabase Storage bucket with matching extension and content type
 - inserts `vendor_images` records with `image_url` and `storage_object_path`
 - returns vendor image rows for the selected vendor id
 - writes `vendor.image_uploaded` audit log

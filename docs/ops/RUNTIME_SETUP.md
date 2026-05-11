@@ -95,6 +95,7 @@ Supabase requirements:
 - Auth must be enabled for admin login
 - Storage bucket `vendor-images` must exist
 - `vendor-images` must be public for the current vendor image URL strategy
+- vendor image uploads use the server-only `sharp` native package to validate and optimize images before Storage upload; the upload route runs on the Node.js runtime and must not be deployed as an Edge route
 
 Validate app runtime env:
 

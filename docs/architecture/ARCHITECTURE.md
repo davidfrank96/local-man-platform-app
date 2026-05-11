@@ -300,16 +300,22 @@ Vendor profile images use this path:
 
 1. admin upload route receives the file
 2. file is validated
-3. file is uploaded to Supabase Storage bucket `vendor-images`
-4. `vendor_images.storage_object_path` stores the canonical Storage path
-5. `vendor_images.image_url` stores the public URL when created
-6. admin and public APIs normalize storage-backed rows into browser-loadable URLs
-7. public vendor detail renders the returned image URL
+3. image bytes are validated with `sharp`
+4. oversized images are auto-rotated, resized inside a `1200px` box, and moderately compressed
+5. the optimized image is stored as WebP only when the result is smaller; otherwise the original safe image is stored
+6. file is uploaded to Supabase Storage bucket `vendor-images` with matching extension and content type
+7. `vendor_images.storage_object_path` stores the canonical Storage path
+8. `vendor_images.image_url` stores the public URL when created
+9. admin and public APIs normalize storage-backed rows into browser-loadable URLs
+10. public vendor detail renders the returned image URL
 
 Rules:
 - vendor profile images belong to `vendor_images`
 - featured dish image URLs are dish-scoped and separate
 - upload and delete are server-side only
+- upload input remains capped at `5 MB`
+- corrupt or unsupported image bytes are rejected cleanly
+- optimization failures after validation fall back to the original safe file so valid uploads do not fail because compression failed
 - `storage_object_path` is the Storage source of truth
 - frontend rendering uses the returned public URL
 

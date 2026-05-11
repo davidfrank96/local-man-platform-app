@@ -790,6 +790,7 @@ function VendorImagesSection({
   onCreateImages: (data: FormData) => Promise<VendorImage[] | null>;
   onDeleteImage: (imageId: string) => Promise<void>;
 }) {
+  const [pendingVendorImageFile, setPendingVendorImageFile] = useState<File | null>(null);
   const [pendingVendorImagePreviewUrl, setPendingVendorImagePreviewUrl] = useState<string | null>(null);
   const [pendingVendorImageName, setPendingVendorImageName] = useState<string | null>(null);
 
@@ -810,17 +811,32 @@ function VendorImagesSection({
       </p>
       <form
         className="admin-form"
+        noValidate
         onSubmit={async (event) => {
           event.preventDefault();
           const form = event.currentTarget;
+          const imageInput = form.elements.namedItem("image");
+          const sortOrderInput = form.elements.namedItem("sort_order");
+          const selectedImageFile =
+            pendingVendorImageFile ??
+            (imageInput instanceof HTMLInputElement ? imageInput.files?.[0] ?? null : null);
 
-          if (!form.reportValidity()) {
+          if (!selectedImageFile) {
+            form.reportValidity();
             return;
           }
 
-          const uploadedImages = await onCreateImages(new FormData(form));
+          if (sortOrderInput instanceof HTMLInputElement && !sortOrderInput.reportValidity()) {
+            return;
+          }
+
+          const formData = new FormData(form);
+          formData.set("image", selectedImageFile);
+
+          const uploadedImages = await onCreateImages(formData);
 
           if (uploadedImages) {
+            setPendingVendorImageFile(null);
             setPendingVendorImageName(null);
             setPendingVendorImagePreviewUrl((current) => {
               if (current) {
@@ -845,6 +861,7 @@ function VendorImagesSection({
             onChange={(event) => {
               const file = event.currentTarget.files?.[0] ?? null;
 
+              setPendingVendorImageFile(file);
               setPendingVendorImagePreviewUrl((current) => {
                 if (current) {
                   URL.revokeObjectURL(current);

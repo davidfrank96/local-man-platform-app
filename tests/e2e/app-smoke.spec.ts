@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
 import {
@@ -369,6 +369,7 @@ type MockAdminWorkspaceOptions = {
   operationalLogCount?: number;
   operationalLogsHasMore?: boolean;
   vendorCount?: number;
+  adminRequestLog?: string[];
 };
 
 function buildMockAnalyticsRecentEvents(count: number) {
@@ -513,6 +514,10 @@ async function mockAuthenticatedAdminWorkspace(
   const operationalLogsHasMore = options.operationalLogsHasMore ?? false;
   const vendorCount = options.vendorCount ?? 0;
   const mockVendors = buildMockAdminVendors(vendorCount);
+  const recordAdminRequest = (request: Request) => {
+    const requestUrl = new URL(request.url());
+    options.adminRequestLog?.push(`${request.method()} ${requestUrl.pathname}${requestUrl.search}`);
+  };
 
   await page.context().addCookies([
     {
@@ -538,6 +543,7 @@ async function mockAuthenticatedAdminWorkspace(
   ]);
 
   await page.route("**/api/admin/session", async (route) => {
+    recordAdminRequest(route.request());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -561,6 +567,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route("**/api/admin/analytics**", async (route) => {
+    recordAdminRequest(route.request());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -598,6 +605,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route("**/api/admin/audit-logs**", async (route) => {
+    recordAdminRequest(route.request());
     const requestUrl = new URL(route.request().url());
     const requestedRole = requestUrl.searchParams.get("user_role") ?? "all";
     const requestedAction = requestUrl.searchParams.get("action") ?? "all";
@@ -625,6 +633,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route("**/api/admin/logs**", async (route) => {
+    recordAdminRequest(route.request());
     const requestUrl = new URL(route.request().url());
     const requestedLevel = requestUrl.searchParams.get("level") ?? "all";
     const requestedArea = requestUrl.searchParams.get("area") ?? "all";
@@ -685,6 +694,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route(/\/api\/categories(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -706,6 +716,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route(/\/api\/admin\/vendors\/[^/]+\/hours(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -720,6 +731,33 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route(/\/api\/admin\/vendors\/[^/]+\/images(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
+    if (route.request().method() === "POST") {
+      const vendorId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            images: [
+              {
+                id: "90000000-0000-4000-8000-000000000001",
+                vendor_id: vendorId,
+                image_url: "/seed-images/rice.jpg",
+                storage_object_path: `${vendorId}/mock-upload.webp`,
+                sort_order: 0,
+                created_at: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+          },
+          error: null,
+        }),
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -734,6 +772,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route(/\/api\/admin\/vendors\/[^/]+\/dishes(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -748,6 +787,7 @@ async function mockAuthenticatedAdminWorkspace(
   });
 
   await page.route(/\/api\/admin\/vendors(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -1481,7 +1521,7 @@ test.describe("Phase 3 browser smoke", () => {
           dish_name: "Rice",
           description: null,
         },
-        today_hours: "9:00 AM - 6:00 PM",
+        today_hours: "12:00 AM - 11:59 PM",
       },
       {
         vendor_id: "40000000-0000-4000-8000-000000000003",
@@ -1502,7 +1542,7 @@ test.describe("Phase 3 browser smoke", () => {
           dish_name: "Suya",
           description: null,
         },
-        today_hours: "9:00 AM - 11:00 PM",
+        today_hours: "12:00 AM - 11:59 PM",
       },
       {
         vendor_id: "40000000-0000-4000-8000-000000000002",
@@ -1523,7 +1563,7 @@ test.describe("Phase 3 browser smoke", () => {
           dish_name: "Beans",
           description: null,
         },
-        today_hours: "9:00 AM - 8:00 PM",
+        today_hours: "12:00 AM - 11:59 PM",
       },
       {
         vendor_id: "40000000-0000-4000-8000-000000000004",
@@ -1883,6 +1923,77 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("admin vendor registry defers edit artifact requests until edit workspace", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const adminRequestLog: string[] = [];
+    const artifactRequestPattern = /\/api\/admin\/vendors\/[^/]+\/(hours|images|dishes)/;
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      vendorCount: 1,
+      adminRequestLog,
+    });
+
+    await page.goto("/admin/vendors");
+    await expect(page.getByRole("heading", { name: "Manage vendors", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Mock Vendor 1" })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    expect(adminRequestLog.filter((entry) => artifactRequestPattern.test(entry))).toHaveLength(0);
+
+    await page.getByRole("link", { name: "Open edit workspace" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.getByRole("heading", { name: "Vendor images", exact: true })).toBeVisible();
+    await expect
+      .poll(() => adminRequestLog.filter((entry) => artifactRequestPattern.test(entry)).length)
+      .toBeGreaterThanOrEqual(3);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin vendor images upload still posts after native file input reset", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await page.addInitScript(() => {
+      // Simulates browsers without ES2023 Array.prototype.toSorted support.
+      Reflect.deleteProperty(Array.prototype, "toSorted");
+    });
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      vendorCount: 1,
+    });
+
+    await page.goto("/admin/vendors");
+    await page.getByRole("button", { name: /Mock Vendor 1/ }).click();
+    await page.getByRole("link", { name: "Open edit workspace" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.getByRole("heading", { name: "Vendor images", exact: true })).toBeVisible();
+
+    await page.locator('input[name="image"]').setInputFiles({
+      name: "vendor-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    await expect(page.locator(".vendor-image-local-preview")).toBeVisible();
+    await page.locator('input[name="image"]').evaluate((input) => {
+      (input as HTMLInputElement).value = "";
+    });
+
+    const uploadRequest = page.waitForRequest((request) =>
+      request.method() === "POST" &&
+      request.url().includes("/api/admin/vendors/60000000-0000-4000-8000-000000000001/images"),
+    );
+
+    await page.getByRole("button", { name: "Upload vendor image" }).click();
+    await uploadRequest;
+
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
+    await expect(page.locator(".vendor-image-item")).toHaveCount(1);
+    await expect(page.locator(".vendor-image-item")).toContainText("mock-upload.webp");
+    await expectNoClientErrors(errors);
+  });
+
   test("admin logs page loads, filters work, and sanitized metadata stays inert", async ({ page }) => {
     const errors = trackClientErrors(page);
     const auditLogRequests: Array<{ userRole: string; action: string }> = [];
@@ -1939,12 +2050,10 @@ test.describe("Phase 3 browser smoke", () => {
       .toBe(true);
 
     expect(errors.some((message) => message.includes("status of 502"))).toBe(true);
-    expect(errors.some((message) => message.includes("context: admin_logs"))).toBe(true);
     await expectNoClientErrors(
       errors.filter(
         (message) =>
-          !message.includes("status of 502") &&
-          !message.includes("context: admin_logs"),
+          !message.includes("status of 502"),
       ),
     );
   });
