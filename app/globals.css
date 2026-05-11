@@ -1689,37 +1689,32 @@ h2 {
 .public-shell {
   --food-accent: #f28b1d;
   --food-accent-soft: rgba(242, 139, 29, 0.12);
-  --food-accent-wash: rgba(255, 245, 231, 0.7);
+  --food-accent-wash: rgba(255, 248, 238, 0.72);
   --food-green-soft: rgba(36, 97, 79, 0.1);
   --food-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23f28b1d' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 4v8'/%3E%3Cpath d='M10 4v8'/%3E%3Cpath d='M4 7h9'/%3E%3Cpath d='M15 4a3 3 0 1 1 0 6v10'/%3E%3C/svg%3E");
   --discovery-shell-background:
-    linear-gradient(180deg, rgba(255, 252, 245, 0.72), rgba(255, 255, 255, 0.18)),
-    linear-gradient(135deg, rgba(245, 248, 242, 0.42), rgba(255, 255, 255, 0));
-  --discovery-panel-background: rgba(255, 255, 255, 0.82);
-  --discovery-map-surface: rgba(255, 255, 255, 0.82);
+    linear-gradient(180deg, rgba(255, 252, 246, 0.95), rgba(247, 251, 246, 0.8)),
+    linear-gradient(135deg, rgba(244, 248, 241, 0.34), rgba(255, 255, 255, 0));
+  --discovery-panel-background: rgba(255, 255, 255, 0.94);
+  --discovery-map-surface: rgba(255, 255, 255, 0.9);
   --discovery-map-overlay: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.82),
-    rgba(244, 193, 87, 0.26)
+    rgba(255, 255, 255, 0.86),
+    rgba(240, 228, 207, 0.2)
   );
-  --discovery-accent-glow: rgba(36, 97, 79, 0.08);
-  --discovery-accent-glow-secondary: rgba(244, 193, 87, 0.06);
-  --discovery-map-legend-background: rgba(255, 255, 255, 0.88);
+  --discovery-accent-glow: rgba(36, 97, 79, 0.05);
+  --discovery-accent-glow-secondary: rgba(178, 58, 48, 0.035);
+  --discovery-map-legend-background: rgba(255, 255, 255, 0.94);
   --discovery-heading-title: var(--color-text);
   --discovery-heading-subtitle: rgba(37, 41, 36, 0.72);
   --discovery-heading-accent: var(--color-accent);
-  --vendor-card-surface: rgba(255, 255, 255, 0.92);
-  --vendor-card-selected-surface: rgba(247, 251, 248, 0.82);
-  --vendor-card-selected-border: rgba(36, 97, 79, 0.72);
+  --vendor-card-surface: rgba(255, 255, 255, 0.96);
+  --vendor-card-selected-surface: rgba(248, 252, 249, 0.98);
+  --vendor-card-selected-border: rgba(36, 97, 79, 0.68);
   --vendor-card-selected-shadow:
-    0 18px 40px rgba(37, 41, 36, 0.14),
-    0 0 0 1px rgba(36, 97, 79, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  --vendor-card-selected-overlay: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(36, 97, 79, 0.14)
-  );
+    0 12px 26px rgba(37, 41, 36, 0.1),
+    0 0 0 1px rgba(36, 97, 79, 0.12);
+  --vendor-card-selected-overlay: linear-gradient(90deg, rgba(36, 97, 79, 0.06), transparent);
   --vendor-card-selected-text: var(--color-text);
   --vendor-card-selected-muted: rgba(37, 41, 36, 0.82);
   --vendor-card-selected-helper: rgba(37, 41, 36, 0.76);
@@ -1728,39 +1723,34 @@ h2 {
   padding: 18px;
   background:
     radial-gradient(circle at top left, var(--discovery-accent-glow), transparent 42%),
-    radial-gradient(circle at bottom right, var(--discovery-accent-glow-secondary), transparent 38%),
+    radial-gradient(circle at bottom right, var(--discovery-accent-glow-secondary), transparent 36%),
     var(--discovery-shell-background);
 }
 
 .public-shell[data-time-theme="morning"] {
   --discovery-shell-background:
-    linear-gradient(180deg, rgba(245, 243, 231, 0.96), rgba(240, 249, 242, 0.48)),
-    linear-gradient(135deg, rgba(225, 242, 230, 0.34), rgba(255, 255, 255, 0.12));
-  --discovery-panel-background: rgba(255, 253, 247, 0.88);
-  --discovery-map-surface: rgba(244, 249, 243, 0.84);
+    linear-gradient(180deg, rgba(250, 248, 238, 0.98), rgba(242, 250, 244, 0.62)),
+    linear-gradient(135deg, rgba(225, 242, 230, 0.24), rgba(255, 255, 255, 0.12));
+  --discovery-panel-background: rgba(255, 255, 251, 0.94);
+  --discovery-map-surface: rgba(248, 251, 247, 0.9);
   --discovery-map-overlay: linear-gradient(
     135deg,
-    rgba(249, 247, 237, 0.92),
-    rgba(205, 231, 210, 0.42)
+    rgba(250, 249, 241, 0.92),
+    rgba(218, 235, 220, 0.28)
   );
-  --discovery-accent-glow: rgba(112, 158, 98, 0.18);
-  --discovery-accent-glow-secondary: rgba(194, 229, 204, 0.16);
-  --discovery-map-legend-background: rgba(255, 252, 243, 0.92);
+  --discovery-accent-glow: rgba(112, 158, 98, 0.1);
+  --discovery-accent-glow-secondary: rgba(194, 229, 204, 0.08);
+  --discovery-map-legend-background: rgba(255, 253, 246, 0.94);
   --discovery-heading-title: #1f4d2f;
   --discovery-heading-subtitle: rgba(31, 77, 47, 0.82);
   --discovery-heading-accent: #1f4d2f;
-  --vendor-card-surface: rgba(255, 255, 255, 0.94);
-  --vendor-card-selected-surface: rgba(245, 252, 247, 0.84);
-  --vendor-card-selected-border: rgba(31, 77, 47, 0.74);
+  --vendor-card-surface: rgba(255, 255, 255, 0.97);
+  --vendor-card-selected-surface: rgba(247, 253, 249, 0.98);
+  --vendor-card-selected-border: rgba(31, 77, 47, 0.68);
   --vendor-card-selected-shadow:
-    0 18px 40px rgba(31, 77, 47, 0.16),
-    0 0 0 1px rgba(31, 77, 47, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  --vendor-card-selected-overlay: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.2),
-    rgba(96, 159, 112, 0.16)
-  );
+    0 12px 26px rgba(31, 77, 47, 0.1),
+    0 0 0 1px rgba(31, 77, 47, 0.12);
+  --vendor-card-selected-overlay: linear-gradient(90deg, rgba(31, 77, 47, 0.07), transparent);
   --vendor-card-selected-text: #1f3125;
   --vendor-card-selected-muted: rgba(31, 49, 37, 0.84);
   --vendor-card-selected-helper: rgba(31, 49, 37, 0.78);
@@ -1768,33 +1758,28 @@ h2 {
 
 .public-shell[data-time-theme="afternoon"] {
   --discovery-shell-background:
-    linear-gradient(180deg, rgba(250, 242, 226, 0.96), rgba(255, 247, 234, 0.4)),
-    linear-gradient(135deg, rgba(249, 212, 138, 0.22), rgba(255, 255, 255, 0.12));
-  --discovery-panel-background: rgba(255, 250, 242, 0.88);
-  --discovery-map-surface: rgba(252, 244, 228, 0.82);
+    linear-gradient(180deg, rgba(252, 244, 231, 0.98), rgba(255, 249, 239, 0.58)),
+    linear-gradient(135deg, rgba(249, 212, 138, 0.16), rgba(255, 255, 255, 0.12));
+  --discovery-panel-background: rgba(255, 252, 247, 0.94);
+  --discovery-map-surface: rgba(253, 248, 240, 0.9);
   --discovery-map-overlay: linear-gradient(
     135deg,
-    rgba(255, 248, 233, 0.9),
-    rgba(247, 191, 102, 0.36)
+    rgba(255, 249, 238, 0.9),
+    rgba(247, 207, 145, 0.24)
   );
-  --discovery-accent-glow: rgba(221, 153, 59, 0.18);
-  --discovery-accent-glow-secondary: rgba(240, 167, 91, 0.14);
-  --discovery-map-legend-background: rgba(255, 249, 238, 0.92);
+  --discovery-accent-glow: rgba(221, 153, 59, 0.1);
+  --discovery-accent-glow-secondary: rgba(240, 167, 91, 0.08);
+  --discovery-map-legend-background: rgba(255, 251, 244, 0.94);
   --discovery-heading-title: #7a3f12;
   --discovery-heading-subtitle: rgba(122, 63, 18, 0.82);
   --discovery-heading-accent: #7a3f12;
-  --vendor-card-surface: rgba(255, 255, 255, 0.94);
-  --vendor-card-selected-surface: rgba(255, 248, 240, 0.84);
-  --vendor-card-selected-border: rgba(122, 63, 18, 0.74);
+  --vendor-card-surface: rgba(255, 255, 255, 0.97);
+  --vendor-card-selected-surface: rgba(255, 249, 242, 0.98);
+  --vendor-card-selected-border: rgba(122, 63, 18, 0.66);
   --vendor-card-selected-shadow:
-    0 18px 40px rgba(122, 63, 18, 0.16),
-    0 0 0 1px rgba(122, 63, 18, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.26);
-  --vendor-card-selected-overlay: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(219, 148, 65, 0.18)
-  );
+    0 12px 26px rgba(122, 63, 18, 0.1),
+    0 0 0 1px rgba(122, 63, 18, 0.12);
+  --vendor-card-selected-overlay: linear-gradient(90deg, rgba(122, 63, 18, 0.07), transparent);
   --vendor-card-selected-text: #49250a;
   --vendor-card-selected-muted: rgba(73, 37, 10, 0.84);
   --vendor-card-selected-helper: rgba(73, 37, 10, 0.78);
@@ -1802,33 +1787,28 @@ h2 {
 
 .public-shell[data-time-theme="night"] {
   --discovery-shell-background:
-    linear-gradient(180deg, rgba(33, 46, 68, 0.34), rgba(61, 78, 108, 0.16)),
-    linear-gradient(135deg, rgba(26, 39, 61, 0.28), rgba(76, 95, 126, 0.08));
-  --discovery-panel-background: rgba(246, 248, 252, 0.82);
-  --discovery-map-surface: rgba(53, 66, 92, 0.9);
+    linear-gradient(180deg, rgba(224, 230, 238, 0.72), rgba(244, 247, 250, 0.5)),
+    linear-gradient(135deg, rgba(70, 91, 120, 0.16), rgba(255, 255, 255, 0.08));
+  --discovery-panel-background: rgba(250, 252, 255, 0.94);
+  --discovery-map-surface: rgba(237, 242, 248, 0.9);
   --discovery-map-overlay: linear-gradient(
     135deg,
-    rgba(90, 107, 138, 0.74),
-    rgba(39, 52, 76, 0.94)
+    rgba(244, 247, 252, 0.78),
+    rgba(116, 134, 164, 0.28)
   );
-  --discovery-accent-glow: rgba(82, 121, 184, 0.18);
-  --discovery-accent-glow-secondary: rgba(104, 126, 166, 0.12);
-  --discovery-map-legend-background: rgba(245, 247, 251, 0.92);
+  --discovery-accent-glow: rgba(82, 121, 184, 0.1);
+  --discovery-accent-glow-secondary: rgba(104, 126, 166, 0.08);
+  --discovery-map-legend-background: rgba(248, 250, 253, 0.94);
   --discovery-heading-title: #20345f;
   --discovery-heading-subtitle: rgba(32, 52, 95, 0.84);
   --discovery-heading-accent: #20345f;
-  --vendor-card-surface: rgba(251, 252, 255, 0.95);
-  --vendor-card-selected-surface: rgba(245, 248, 255, 0.86);
-  --vendor-card-selected-border: rgba(32, 52, 95, 0.72);
+  --vendor-card-surface: rgba(255, 255, 255, 0.97);
+  --vendor-card-selected-surface: rgba(247, 250, 255, 0.98);
+  --vendor-card-selected-border: rgba(32, 52, 95, 0.66);
   --vendor-card-selected-shadow:
-    0 20px 44px rgba(32, 52, 95, 0.2),
-    0 0 0 1px rgba(32, 52, 95, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  --vendor-card-selected-overlay: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.18),
-    rgba(82, 105, 148, 0.24)
-  );
+    0 12px 26px rgba(32, 52, 95, 0.12),
+    0 0 0 1px rgba(32, 52, 95, 0.12);
+  --vendor-card-selected-overlay: linear-gradient(90deg, rgba(32, 52, 95, 0.07), transparent);
   --vendor-card-selected-text: #20345f;
   --vendor-card-selected-muted: rgba(32, 52, 95, 0.84);
   --vendor-card-selected-helper: rgba(32, 52, 95, 0.78);
@@ -1836,8 +1816,8 @@ h2 {
 
 .discovery-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.42fr) minmax(0, 0.58fr);
-  gap: 18px;
+  grid-template-columns: minmax(320px, 0.44fr) minmax(0, 0.56fr);
+  gap: 14px;
   min-height: calc(100vh - 36px);
 }
 
@@ -1845,7 +1825,7 @@ h2 {
 .discovery-main {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -1867,16 +1847,16 @@ h2 {
 
 .discovery-heading {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   min-width: 0;
-  padding: 6px 2px 8px 34px;
+  padding: 4px 2px 6px 30px;
   position: relative;
 }
 
 .discovery-heading::after {
   content: "";
-  width: min(148px, 42vw);
-  height: 3px;
+  width: min(96px, 32vw);
+  height: 2px;
   border-radius: 999px;
   background: linear-gradient(
     90deg,
@@ -1889,9 +1869,9 @@ h2 {
   content: "";
   position: absolute;
   left: 0;
-  top: 8px;
-  width: 22px;
-  height: 22px;
+  top: 7px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background:
     var(--food-mark) center / 15px 15px no-repeat,
@@ -1912,7 +1892,7 @@ h2 {
 }
 
 .discovery-heading h1 {
-  font-size: clamp(2.8rem, 8vw, 5.8rem);
+  font-size: clamp(2.35rem, 6.6vw, 4.9rem);
   font-weight: 900;
   color: var(--discovery-heading-title);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -1931,9 +1911,9 @@ h2 {
 }
 
 .discovery-heading > p:last-child {
-  max-width: 24rem;
+  max-width: 26rem;
   color: var(--discovery-heading-subtitle);
-  font-size: 1rem;
+  font-size: 0.96rem;
   font-weight: 700;
   line-height: 1.45;
 }
@@ -1946,11 +1926,9 @@ h2 {
 .vendor-detail-section {
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 247, 0.84), rgba(255, 255, 255, 0.78)),
-    var(--discovery-panel-background);
-  box-shadow: 0 14px 34px rgba(37, 41, 36, 0.06);
-  padding: 16px;
+  background: var(--discovery-panel-background);
+  box-shadow: 0 10px 24px rgba(37, 41, 36, 0.045);
+  padding: 14px;
   min-width: 0;
 }
 
@@ -1959,8 +1937,8 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .location-reminder-toast {
@@ -1968,7 +1946,7 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
-  padding-block: 12px;
+  padding-block: 11px;
 }
 
 .location-reminder-copy {
@@ -2139,11 +2117,11 @@ h2 {
 .discovery-filters {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(112px, 0.5fr));
-  gap: 12px;
+  gap: 10px;
   align-items: end;
   min-width: 0;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .desktop-discovery-filters {
@@ -2245,7 +2223,7 @@ h2 {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.88);
   color: var(--color-text);
   padding: 0;
@@ -2259,13 +2237,13 @@ h2 {
 
 .discovery-mobile-filter-panel {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
 .discovery-desktop-filter-panel {
   display: grid;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 9px;
+  margin-top: 9px;
 }
 
 .discovery-mobile-filter-grid {
@@ -2276,12 +2254,10 @@ h2 {
 
 .discovery-filters-desktop {
   grid-template-columns: 1fr;
-  gap: 10px;
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(255, 255, 255, 0.9)),
-    var(--discovery-panel-background);
-  box-shadow: 0 12px 28px rgba(37, 41, 36, 0.1);
+  gap: 9px;
+  border-radius: 8px;
+  background: var(--discovery-panel-background);
+  box-shadow: 0 10px 24px rgba(37, 41, 36, 0.06);
   padding: 10px;
 }
 
@@ -2306,7 +2282,7 @@ h2 {
   min-height: 40px;
   align-items: center;
   border: 1px solid rgba(37, 41, 36, 0.08);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
   padding: 0 12px;
 }
@@ -2339,17 +2315,16 @@ h2 {
 
 .vendor-results {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .retention-panel {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
 .retention-panel-muted {
-  background:
-    linear-gradient(180deg, rgba(255, 249, 241, 0.74), rgba(255, 255, 255, 0.7));
+  background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 10px 22px rgba(37, 41, 36, 0.04);
 }
 
@@ -2432,14 +2407,14 @@ h2 {
 
   .desktop-vendor-section-nav .vendor-section-tab {
     display: inline-flex;
-    min-height: 38px;
+    min-height: 36px;
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(37, 41, 36, 0.08);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.84);
-    padding: 0 14px;
+    padding: 0 12px;
     color: var(--color-muted);
     font: inherit;
     font-size: 0.86rem;
@@ -2460,18 +2435,13 @@ h2 {
 
 .vendor-card {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at top right, rgba(242, 139, 29, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 252, 246, 0.88), rgba(255, 255, 255, 0.9)),
-    var(--vendor-card-surface);
-  box-shadow:
-    0 14px 30px rgba(37, 41, 36, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  padding: 14px;
+  border-radius: 8px;
+  background: var(--vendor-card-surface);
+  box-shadow: 0 10px 24px rgba(37, 41, 36, 0.045);
+  padding: 12px;
   transition:
     border-color 140ms ease,
     box-shadow 140ms ease,
@@ -2481,7 +2451,7 @@ h2 {
 
 .vendor-card:hover {
   border-color: rgba(36, 97, 79, 0.24);
-  box-shadow: 0 18px 34px rgba(37, 41, 36, 0.08);
+  box-shadow: 0 14px 28px rgba(37, 41, 36, 0.07);
   transform: translateY(-1px);
 }
 
@@ -2495,8 +2465,8 @@ h2 {
   box-shadow: var(--vendor-card-selected-shadow);
   position: relative;
   isolation: isolate;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transform: translateY(-1px);
 }
 
@@ -2504,8 +2474,8 @@ h2 {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 4px;
-  border-radius: 16px 0 0 16px;
+  width: 3px;
+  border-radius: 8px 0 0 8px;
   background: linear-gradient(
     180deg,
     var(--vendor-card-selected-border),
@@ -2606,7 +2576,7 @@ h2 {
   width: 18px;
   height: 18px;
   background: var(--food-mark) center / 16px 16px no-repeat;
-  opacity: 0.14;
+  opacity: 0.08;
   pointer-events: none;
 }
 
@@ -2626,14 +2596,14 @@ h2 {
   border-radius: 999px;
   background: rgba(242, 139, 29, 0.1);
   color: #ad6312;
-  padding: 4px 8px;
-  font-size: 0.76rem;
+  padding: 3px 8px;
+  font-size: 0.74rem;
   font-weight: 800;
 }
 
 .vendor-card-status-badge {
   display: inline-flex;
-  min-height: 28px;
+  min-height: 26px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -2664,7 +2634,7 @@ h2 {
 
 .vendor-card h3 {
   margin: 0;
-  font-size: 1.14rem;
+  font-size: 1.08rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -2678,7 +2648,7 @@ h2 {
 .vendor-card-info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
+  gap: 6px 10px;
 }
 
 .vendor-card-status-line,
@@ -2689,7 +2659,7 @@ h2 {
   min-width: 0;
   gap: 7px;
   align-items: center;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 
 .vendor-card-status-line span:last-child,
@@ -2809,7 +2779,7 @@ h2 {
   position: relative;
   z-index: 1;
   justify-content: space-between;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid rgba(37, 41, 36, 0.08);
 }
 
@@ -3020,8 +2990,8 @@ h2 {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--discovery-map-legend-background);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   padding: 10px 12px;
   font-size: 0.9rem;
   font-weight: 800;
@@ -3053,8 +3023,8 @@ h2 {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 8px 20px rgba(37, 41, 36, 0.08);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .map-loading-overlay-ready {
@@ -3076,8 +3046,8 @@ h2 {
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.35;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .waiting-map {
@@ -3088,17 +3058,13 @@ h2 {
 .selected-vendor-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   overflow-anchor: none;
   border-color: rgba(37, 41, 36, 0.1);
-  border-radius: 16px;
-  box-shadow:
-    0 16px 36px rgba(37, 41, 36, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  background:
-    radial-gradient(circle at top right, rgba(242, 139, 29, 0.08), transparent 32%),
-    linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(247, 249, 246, 0.86));
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(37, 41, 36, 0.06);
+  background: var(--discovery-panel-background);
 }
 
 .selected-vendor-panel > *,
@@ -3135,7 +3101,7 @@ h2 {
 
 .selected-vendor-chip {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 28px;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
@@ -3238,7 +3204,7 @@ h2 {
 }
 
 .selected-vendor-panel h2 {
-  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  font-size: clamp(1.55rem, 3.4vw, 2.65rem);
   line-height: 1.06;
 }
 
@@ -3247,12 +3213,32 @@ h2 {
   color: var(--color-muted);
 }
 
+.public-back-to-top {
+  position: fixed;
+  right: 14px;
+  bottom: 96px;
+  z-index: 50;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(36, 97, 79, 0.16);
+  border-radius: 999px;
+  background: rgba(20, 23, 20, 0.92);
+  box-shadow: 0 12px 24px rgba(37, 41, 36, 0.18);
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .vendor-detail-shell {
   display: grid;
-  gap: 24px;
+  gap: 18px;
   width: min(1100px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 20px 0 28px;
+  padding: 18px 0 26px;
 }
 
 @media (min-width: 821px) {
@@ -3263,7 +3249,7 @@ h2 {
 
   .discovery-map,
   .discovery-map-grid {
-    min-height: min(70vh, 760px);
+    min-height: min(68vh, 720px);
   }
 
   .selected-vendor-panel {
@@ -3291,7 +3277,7 @@ h2 {
 
 .vendor-detail-hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(280px, 0.88fr);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.72fr);
   gap: 18px;
   align-items: start;
 }
@@ -3328,8 +3314,8 @@ h2 {
 }
 
 .vendor-detail-copy h1 {
-  font-size: clamp(2.3rem, 5vw, 4.25rem);
-  line-height: 0.96;
+  font-size: clamp(2.15rem, 4.6vw, 3.8rem);
+  line-height: 1;
 }
 
 .vendor-detail-intro {
@@ -3431,7 +3417,8 @@ h2 {
 
 .vendor-detail-image {
   display: grid;
-  min-height: 280px;
+  min-height: 240px;
+  max-height: 380px;
   aspect-ratio: 4 / 3;
   place-items: center;
   overflow: hidden;
@@ -3450,7 +3437,7 @@ h2 {
 .vendor-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .vendor-detail-section {
@@ -3466,9 +3453,8 @@ h2 {
   display: grid;
   gap: 12px;
   border: 1px solid rgba(37, 41, 36, 0.08);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 247, 243, 0.86));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
   padding: 14px;
 }
 
@@ -3650,12 +3636,10 @@ h2 {
 
   .discovery-filters-mobile {
     grid-template-columns: 1fr;
-    gap: 10px;
-    border-radius: 14px;
-    background:
-      linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(255, 255, 255, 0.9)),
-      var(--discovery-panel-background);
-    box-shadow: 0 12px 28px rgba(37, 41, 36, 0.1);
+    gap: 9px;
+    border-radius: 8px;
+    background: var(--discovery-panel-background);
+    box-shadow: 0 10px 24px rgba(37, 41, 36, 0.06);
     padding: 10px;
   }
 
@@ -3694,14 +3678,14 @@ h2 {
 
   .vendor-section-tab {
     display: inline-flex;
-    min-height: 38px;
+    min-height: 36px;
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(37, 41, 36, 0.08);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.84);
-    padding: 0 14px;
+    padding: 0 12px;
     color: var(--color-muted);
     font: inherit;
     font-size: 0.86rem;
@@ -3748,6 +3732,17 @@ h2 {
 
   .discovery-heading {
     order: 1;
+    gap: 6px;
+    padding: 2px 2px 4px 28px;
+  }
+
+  .discovery-heading h1 {
+    font-size: clamp(2.2rem, 14vw, 3.1rem);
+  }
+
+  .discovery-heading > p:last-child {
+    font-size: 0.92rem;
+    line-height: 1.38;
   }
 
   .mobile-discovery-filters {
@@ -3769,17 +3764,17 @@ h2 {
     order: 4;
     position: relative;
     top: auto;
-    min-height: 420px;
+    min-height: 360px;
     padding-top: 0;
   }
 
   .discovery-map-grid {
-    min-height: 420px;
+    min-height: 360px;
   }
 
   .maplibre-map-surface {
-    min-height: 420px;
-    height: 420px;
+    min-height: 360px;
+    height: 360px;
   }
 
   .selected-vendor-panel {
@@ -3819,9 +3814,9 @@ h2 {
   }
 
   .vendor-card {
-    border-radius: 14px;
+    border-radius: 8px;
     gap: 9px;
-    padding: 11px;
+    padding: 10px;
   }
 
   .vendor-card:hover {
@@ -3972,7 +3967,7 @@ h2 {
   }
 
   .vendor-detail-image {
-    min-height: 220px;
+    min-height: 190px;
     aspect-ratio: 16 / 11;
   }
 
@@ -4050,13 +4045,13 @@ h2 {
   }
 
   .discovery-map {
-    min-height: 480px;
+    min-height: 440px;
     padding-top: 0;
   }
 
   .maplibre-map-surface {
-    min-height: 480px;
-    height: 480px;
+    min-height: 440px;
+    height: 440px;
   }
 }
 
