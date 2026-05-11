@@ -53,6 +53,7 @@ export const apiEndpoints = {
       "category and price_band must map to supported values when provided",
       "search must be sanitized before querying",
       "usage-signal ranking must stay deterministic and server-side",
+      "nearby ordering must prioritize open status, then distance_km, with ranking_score only as a close-distance tie-breaker",
     ],
   },
   getVendorBySlug: {

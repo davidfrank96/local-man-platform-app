@@ -25,6 +25,7 @@ import {
   deleteVendorImageObject,
   uploadVendorImageObject,
 } from "./storage.ts";
+import { optimizeVendorImageUpload } from "./image-optimization.ts";
 import { writeAuditLogSafely } from "./audit-log-service.ts";
 import {
   normalizeVendorImageRows,
@@ -1020,12 +1021,74 @@ export async function uploadVendorImage(
 ): Promise<VendorImageRecord[]> {
   const resolvedConfig = requireServiceConfig(config);
   const imageId = crypto.randomUUID();
+  let optimizedUpload: Awaited<ReturnType<typeof optimizeVendorImageUpload>>;
+
+  try {
+    optimizedUpload = await optimizeVendorImageUpload({
+      fileBytes: data.fileBytes,
+      declaredMimeType: data.file.type,
+    });
+  } catch (error) {
+    logStructuredEvent("warn", {
+      event: "ADMIN_VENDOR_IMAGE_OPTIMIZATION_FAILED",
+      area: "storage",
+      requestId: session.requestId,
+      adminUserId: session.adminUser.id,
+      userRole: session.adminUser.role,
+      vendorId: params.id,
+      error,
+      metadata: {
+        imageId,
+        inputMimeType: data.file.type,
+        originalSizeBytes: data.fileBytes.byteLength,
+      },
+    });
+    throw error;
+  }
+
+  const uploadFile = {
+    name: data.file.name,
+    type: optimizedUpload.outputMimeType,
+    size: optimizedUpload.optimizedSizeBytes,
+  };
   const storageObjectPath = buildVendorImageStoragePath(
     params.id,
     imageId,
-    data.file,
+    uploadFile,
   );
   const imageUrl = buildVendorImagePublicUrl(resolvedConfig, storageObjectPath);
+  const compressionRatio =
+    optimizedUpload.originalSizeBytes > 0
+      ? Number((optimizedUpload.optimizedSizeBytes / optimizedUpload.originalSizeBytes).toFixed(4))
+      : null;
+  const optimizationEvent = optimizedUpload.fallbackUsed
+    ? "ADMIN_VENDOR_IMAGE_OPTIMIZATION_FALLBACK_USED"
+    : optimizedUpload.optimizationApplied
+      ? "ADMIN_VENDOR_IMAGE_OPTIMIZED"
+      : "ADMIN_VENDOR_IMAGE_OPTIMIZATION_SKIPPED";
+
+  logStructuredEvent(optimizedUpload.fallbackUsed ? "warn" : "info", {
+    event: optimizationEvent,
+    area: "storage",
+    requestId: session.requestId,
+    adminUserId: session.adminUser.id,
+    userRole: session.adminUser.role,
+    vendorId: params.id,
+    metadata: {
+      imageId,
+      inputMimeType: data.file.type,
+      outputMimeType: optimizedUpload.outputMimeType,
+      originalSizeBytes: optimizedUpload.originalSizeBytes,
+      storedSizeBytes: optimizedUpload.optimizedSizeBytes,
+      compressionRatio,
+      originalWidth: optimizedUpload.originalWidth,
+      originalHeight: optimizedUpload.originalHeight,
+      width: optimizedUpload.width,
+      height: optimizedUpload.height,
+      optimizationApplied: optimizedUpload.optimizationApplied,
+      fallbackUsed: optimizedUpload.fallbackUsed,
+    },
+  });
 
   logStructuredEvent("info", {
     event: "ADMIN_VENDOR_IMAGE_UPLOAD_STARTED",
@@ -1038,6 +1101,10 @@ export async function uploadVendorImage(
       imageId,
       storageObjectPath,
       fileName: data.file.name,
+      inputMimeType: data.file.type,
+      outputMimeType: uploadFile.type,
+      originalSizeBytes: optimizedUpload.originalSizeBytes,
+      storedSizeBytes: optimizedUpload.optimizedSizeBytes,
       sortOrder: data.sort_order,
     },
   });
@@ -1046,8 +1113,8 @@ export async function uploadVendorImage(
     config: resolvedConfig,
     session,
     storageObjectPath,
-    file: data.file,
-    fileBytes: data.fileBytes,
+    file: uploadFile,
+    fileBytes: optimizedUpload.bytes,
     fetchImpl,
   });
 

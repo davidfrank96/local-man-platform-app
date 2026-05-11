@@ -28,6 +28,8 @@ type VendorImagesRouteContext = {
   }>;
 };
 
+export const runtime = "nodejs";
+
 export async function GET(request: Request, { params }: VendorImagesRouteContext) {
   const routeLog = createRouteLogContext(request, {
     route: "/api/admin/vendors/[id]/images",

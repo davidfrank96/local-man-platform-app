@@ -1,6 +1,7 @@
 import { AdminServiceError } from "./errors.ts";
 import type { AdminAuthConfig, AdminSession } from "./auth.ts";
 import { logStructuredEvent } from "../observability.ts";
+import { getImageExtensionForMimeType } from "./image-optimization.ts";
 
 export const VENDOR_IMAGE_BUCKET = "vendor-images";
 export const MAX_VENDOR_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -27,18 +28,8 @@ export function validateVendorImageFile(file: File): string | null {
   return null;
 }
 
-export function getVendorImageExtension(file: File): string {
-  const extension = IMAGE_MIME_TYPES.get(file.type);
-
-  if (!extension) {
-    throw new AdminServiceError(
-      "UPSTREAM_ERROR",
-      "Unsupported vendor image file type.",
-      502,
-    );
-  }
-
-  return extension;
+export function getVendorImageExtension(file: Pick<File, "type">): string {
+  return getImageExtensionForMimeType(file.type);
 }
 
 function sanitizeVendorImageStem(fileName: string): string {
@@ -54,7 +45,7 @@ function sanitizeVendorImageStem(fileName: string): string {
 export function buildVendorImageStoragePath(
   vendorId: string,
   imageId: string,
-  file: File,
+  file: Pick<File, "name" | "type">,
 ): string {
   const extension = getVendorImageExtension(file);
   const sanitizedStem = sanitizeVendorImageStem(file.name);
@@ -149,7 +140,7 @@ export async function uploadVendorImageObject(
     config: AdminAuthConfig;
     session: AdminSession;
     storageObjectPath: string;
-    file: File;
+    file: Pick<File, "name" | "type" | "size">;
     fileBytes: Uint8Array;
     fetchImpl?: typeof fetch;
   },

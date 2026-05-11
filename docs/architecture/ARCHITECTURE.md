@@ -47,7 +47,7 @@ Handles:
 - discovery homepage
 - nearby vendor loading
 - search and filters
-- open-now and usage-signal-aware discovery ordering
+- open-now and distance-first discovery ordering with usage signals as close-distance tie-breakers
 - selected vendor state through `selectedVendorId`
 - single vendor-marker system and selected preview synchronization
 - local retention surfaces for recent and last-selected vendors
@@ -119,7 +119,7 @@ Stores:
 2. Browser geolocation is attempted
 3. The app resolves precise, approximate, or default-city browse mode
 4. `/api/vendors/nearby` returns nearby vendors
-5. Discovery ordering prioritizes open-now state, then stronger search matches, then usage ranking, then distance
+5. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
 6. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
 7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
 
@@ -300,16 +300,22 @@ Vendor profile images use this path:
 
 1. admin upload route receives the file
 2. file is validated
-3. file is uploaded to Supabase Storage bucket `vendor-images`
-4. `vendor_images.storage_object_path` stores the canonical Storage path
-5. `vendor_images.image_url` stores the public URL when created
-6. admin and public APIs normalize storage-backed rows into browser-loadable URLs
-7. public vendor detail renders the returned image URL
+3. image bytes are validated with `sharp`
+4. oversized images are auto-rotated, resized inside a `1200px` box, and moderately compressed
+5. the optimized image is stored as WebP only when the result is smaller; otherwise the original safe image is stored
+6. file is uploaded to Supabase Storage bucket `vendor-images` with matching extension and content type
+7. `vendor_images.storage_object_path` stores the canonical Storage path
+8. `vendor_images.image_url` stores the public URL when created
+9. admin and public APIs normalize storage-backed rows into browser-loadable URLs
+10. public vendor detail renders the returned image URL
 
 Rules:
 - vendor profile images belong to `vendor_images`
 - featured dish image URLs are dish-scoped and separate
 - upload and delete are server-side only
+- upload input remains capped at `5 MB`
+- corrupt or unsupported image bytes are rejected cleanly
+- optimization failures after validation fall back to the original safe file so valid uploads do not fail because compression failed
 - `storage_object_path` is the Storage source of truth
 - frontend rendering uses the returned public URL
 
@@ -438,9 +444,11 @@ Current implementation:
 - Application logic applies radius filtering and returns `distance_km` for each candidate.
 - Final discovery ordering is handled as:
   1. open-now priority
-  2. stronger search relevance
-  3. usage-signal `ranking_score`
-  4. distance as the final tie-breaker
+  2. distance within the same open/closed group
+  3. usage-signal `ranking_score` only when vendors are similarly close, currently within about `0.5` km
+  4. vendor name/id as stable tie-breakers
+- Search, category, price, radius, and open-now filters constrain the candidate set before ranking; search relevance does not override the open/distance/close-popularity contract.
+- Sponsored/promoted ranking is not implemented.
 - Nearby discovery returns at most `50` vendors per request after filtering and ordering so the map/list payload stays bounded.
 - Default nearby radius is 10 km when `radius_km` is not provided.
 - Missing user coordinates resolve to the Abuja default city view before the nearby query runs.

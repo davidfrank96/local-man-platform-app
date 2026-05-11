@@ -105,6 +105,14 @@ function getAdminStatusTone(status: string, isLoading: boolean): "neutral" | "su
   return "neutral";
 }
 
+function sortVendorImagesByOrder(images: VendorImage[]): VendorImage[] {
+  return [...images].sort(
+    (left, right) =>
+      left.sort_order - right.sort_order ||
+      left.id.localeCompare(right.id),
+  );
+}
+
 type AdminConsoleProps = {
   initialSelectedVendorId?: string | null;
   mode?: "dashboard" | "agent" | "vendors" | "create" | "edit";
@@ -117,11 +125,16 @@ export function AdminConsole({
   const { session, signOut } = useAdminSession();
   const role = session?.adminUser.role ?? "admin";
   const workspaceCacheScope = `role:${role}`;
+  const shouldLoadVendorRegistry = mode !== "create";
+  const shouldLoadVendorArtifacts = mode === "edit";
+  const shouldLoadVendorCategories = mode === "create";
   const workspaceCacheSnapshot = useMemo(
     () => getVendorWorkspaceSnapshot(workspaceCacheScope),
     [workspaceCacheScope],
   );
-  const initialCachedVendorId = initialSelectedVendorId ?? workspaceCacheSnapshot.selectedVendorId;
+  const initialCachedVendorId = mode === "create"
+    ? null
+    : initialSelectedVendorId ?? workspaceCacheSnapshot.selectedVendorId;
   const [filters, setFilters] = useState<AdminVendorFilters>(() => workspaceCacheSnapshot.filters);
   const [vendors, setVendors] = useState<AdminVendorSummary[]>(() => workspaceCacheSnapshot.vendors);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(() => initialCachedVendorId);
@@ -214,6 +227,10 @@ export function AdminConsole({
   }, [filters, selectedVendorId, vendors, workspaceCacheScope]);
 
   useEffect(() => {
+    if (!shouldLoadVendorCategories) {
+      return;
+    }
+
     let isCancelled = false;
 
     void fetchPublicCategories()
@@ -231,7 +248,7 @@ export function AdminConsole({
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [shouldLoadVendorCategories]);
 
   const loadVendorImages = useCallback(async function loadVendorImages(
     vendorId: string | null,
@@ -306,6 +323,10 @@ export function AdminConsole({
   }, [session, workspaceCacheScope]);
 
   useEffect(() => {
+    if (!shouldLoadVendorArtifacts) {
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       void loadVendorImages(selectedVendor?.id ?? null).catch((error) => {
         setVendorImages([]);
@@ -316,9 +337,13 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorImages, selectedVendor?.id]);
+  }, [loadVendorImages, selectedVendor?.id, shouldLoadVendorArtifacts]);
 
   useEffect(() => {
+    if (!shouldLoadVendorArtifacts) {
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       void loadVendorHours(selectedVendor?.id ?? null).catch((error) => {
         setVendorHours([]);
@@ -329,9 +354,13 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorHours, selectedVendor?.id]);
+  }, [loadVendorHours, selectedVendor?.id, shouldLoadVendorArtifacts]);
 
   useEffect(() => {
+    if (!shouldLoadVendorArtifacts) {
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       void loadVendorDishes(selectedVendor?.id ?? null).catch((error) => {
         setVendorDishes([]);
@@ -342,7 +371,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorDishes, selectedVendor?.id]);
+  }, [loadVendorDishes, selectedVendor?.id, shouldLoadVendorArtifacts]);
 
   const runAdminAction = useCallback(async function runAdminAction<T>(
     action: () => Promise<T>,
@@ -428,7 +457,7 @@ export function AdminConsole({
   }, [refreshVendors]);
 
   useEffect(() => {
-    if (!session || isLoading || vendors.length > 0) {
+    if (!shouldLoadVendorRegistry || !session || isLoading || vendors.length > 0) {
       return;
     }
 
@@ -439,7 +468,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [isLoading, refreshVendors, session, vendors.length]);
+  }, [isLoading, refreshVendors, session, shouldLoadVendorRegistry, vendors.length]);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -612,18 +641,14 @@ export function AdminConsole({
     );
 
     if (uploadedImages && selectedVendor) {
-      setVendorImages((current) =>
-        [...current, ...uploadedImages].toSorted(
-          (left, right) => left.sort_order - right.sort_order,
-        ),
-      );
+      const nextImages = sortVendorImagesByOrder([...vendorImages, ...uploadedImages]);
+
+      setVendorImages(nextImages);
       updateVendorArtifactCache(
         workspaceCacheScope,
         selectedVendor.id,
         "images",
-        [...vendorImages, ...uploadedImages].toSorted(
-          (left, right) => left.sort_order - right.sort_order,
-        ),
+        nextImages,
       );
     }
 

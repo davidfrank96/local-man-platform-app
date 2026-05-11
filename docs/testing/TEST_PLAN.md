@@ -36,7 +36,7 @@ Test:
 - incorrect coordinates
 - distance calculation accuracy
 - nearby radius filtering
-- nearby results stay within radius and expose stable `distance_km` and `ranking_score` fields even when discovery ranking reorders vendors
+- nearby results stay within radius and expose stable `distance_km` and `ranking_score` fields while preserving open-first, distance-first discovery ordering
 - browser geolocation success
 - IP approximation fallback
 - Abuja default city fallback
@@ -53,14 +53,15 @@ Current automated coverage:
 Runtime smoke coverage:
 - `npm run smoke:nearby`
 - Requires real Supabase env vars and seeded Abuja data.
-- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
+- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, open/distance/close-popularity ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
 
 ### Public Discovery Logic
 Test:
 - public nearby API client sends location, radius, search, category, price, and open-now filters
 - discovery sorting keeps open vendors above closed vendors
-- stronger search matches sort above weaker ones
-- vendors with higher usage ranking can beat farther vendors when other discovery signals are equal
+- distance sorts ascending within each open/closed group
+- vendors with higher usage ranking can only beat similarly close vendors within the same open/closed group
+- search and category filters do not add a relevance sort that overrides open status, distance, or close-distance usage ranking
 - popular-vendor highlighting stays bounded and deterministic
 - recently viewed vendors and last selected vendor memory restore cleanly from browser storage
 - call links normalize phone numbers
@@ -170,6 +171,7 @@ Test:
 - vendor image upload writes audit log
 - vendor image list and removal work against the same admin surface
 - vendor image list normalizes storage-path-only rows into browser-loadable public URLs
+- vendor image optimization validates real image bytes, resizes oversized uploads, writes matching content type and extension, and falls back safely when transformation fails
 - vendor hours can be loaded into the admin edit form before replacement
 - vendor featured dishes can be loaded for the selected vendor before adding more
 - vendor featured dish insertion writes audit log
@@ -178,6 +180,7 @@ Test:
 - base vendor creation requires explicit acknowledgement when hours, featured dishes, or images are still missing
 - empty image and dish arrays are rejected
 - invalid image type and oversize uploads are rejected before storage writes
+- corrupt image bytes are rejected before storage writes
 - malformed Supabase payloads return controlled `UPSTREAM_ERROR` responses
 - admin analytics route requires admin auth
 - admin analytics route aggregates summary counts correctly

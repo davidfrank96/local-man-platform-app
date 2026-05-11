@@ -8,9 +8,8 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - discovery homepage with map-first nearby vendors, floating mobile search, desktop search/filter bar, and an optional MapLibre map plus coordinate fallback
 - discovery ordering that prioritizes:
   - open vendors first
-  - stronger search matches
-  - usage-signal ranking
-  - distance as the final tie-breaker
+  - distance within the same open/closed group
+  - usage-signal ranking from real engagement events only as a close-distance tie-breaker
   - capped nearby payloads so the map and list stay bounded
 - vendor cards with:
   - name
@@ -223,7 +222,7 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - production deployment target: DigitalOcean App Platform
 - backend services: Supabase Postgres, Auth, and Storage
 - real map provider: MapLibre using a MapTiler style URL exposed through `NEXT_PUBLIC_MAP_STYLE_URL`
-- vendor image bucket: `vendor-images`
+- vendor image bucket: `vendor-images`; uploaded vendor photos keep the `5 MB` input cap and are optimized server-side with `sharp` before Storage upload when compression is beneficial
 - local development and smoke testing use `http://localhost:3000`
 - local dev smoke and operator checks may also use `http://127.0.0.1:3000`; `next.config.ts` explicitly allows that origin so HMR and chunk requests are not blocked
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only in DigitalOcean runtime secrets
@@ -261,7 +260,8 @@ Phase 6 currently covers:
 - nearby ranking aggregation executed in SQL for candidate vendor ids only
 - discovery refinement from real usage signals:
   - open-now priority
-  - improved relevance ordering
+  - distance-first ordering within each open/closed group
+  - usage-signal ranking only as a close-distance tie-breaker
   - clearer filter state
   - lower-friction vendor return paths
 - lightweight client-side retention:

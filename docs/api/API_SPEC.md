@@ -86,9 +86,11 @@ Behavior:
 - Results are filtered by `radius_km` after exact distance calculation.
 - Final discovery ordering prioritizes:
   1. vendors that are open now
-  2. stronger client-side search relevance
-  3. higher `ranking_score`
-  4. shorter distance
+  2. shorter distance within the same open/closed group
+  3. higher `ranking_score` from real usage signals only when vendors are similarly close, currently within about `0.5` km
+  4. stable vendor name/id tie-breakers
+- Search and category parameters filter the candidate set; they do not add a separate relevance sort that can override open status, distance, or close-distance usage ranking.
+- Sponsored/promoted ranking is not implemented.
 - Nearby results are capped to the top `50` vendors after filtering and ordering so the map/list payload remains bounded.
 - The public map currently renders those vendor results as individual markers when MapLibre is enabled.
 - Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.
@@ -465,7 +467,13 @@ Behavior:
 - accepts multipart form uploads with `image` and `sort_order`
 - accepts JSON image metadata as a compatibility fallback
 - validates file type, file size, and sort order
-- uploads the file to the `vendor-images` Supabase Storage bucket
+- rejects files over `5 MB`
+- validates real image bytes before storage
+- optimizes valid JPEG, PNG, and WebP uploads server-side with `sharp`
+- resizes oversized images inside a `1200px` maximum dimension and uses moderate quality compression
+- stores optimized WebP output when smaller; otherwise stores the original safe image
+- falls back to the original safe file if transformation fails after validation
+- uploads the stored file to the `vendor-images` Supabase Storage bucket with matching extension and content type
 - inserts `vendor_images` records with `image_url` and `storage_object_path`
 - returns vendor image rows for the selected vendor id
 - writes `vendor.image_uploaded` audit log

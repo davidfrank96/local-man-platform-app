@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import {
   GET as listDishesRoute,
@@ -17,6 +19,7 @@ import { DELETE as deleteImageRoute } from "../app/api/admin/vendors/[id]/images
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 const timestamp = "2026-04-22T00:00:00+00:00";
+const testJpegBytes = readFileSync(path.join(process.cwd(), "public/seed-images/rice.jpg"));
 
 function setAdminEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -243,7 +246,7 @@ function createMultipartAdminRequest(): Request {
   const body = new FormData();
   body.set(
     "image",
-    new File([Uint8Array.from([1, 2, 3, 4])], "cover.jpg", {
+    new File([testJpegBytes], "cover.jpg", {
       type: "image/jpeg",
     }),
   );
@@ -438,7 +441,7 @@ test("admin create vendor images route uploads a Uint8Array body to storage", as
 
     assert.equal(response.status, 201);
     assert.ok(storageBody instanceof Uint8Array);
-    assert.equal(storageContentType, "image/jpeg");
+    assert.equal(storageContentType, "image/webp");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -635,6 +638,35 @@ test("admin vendor image route rejects unsupported file types", async () => {
       createMultipartAdminRequestWithFile(
         new File([Uint8Array.from([1, 2, 3])], "notes.txt", {
           type: "text/plain",
+        }),
+      ),
+      createRouteContext(),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin vendor image route rejects corrupt image bytes", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await createImagesRoute(
+      createMultipartAdminRequestWithFile(
+        new File([Uint8Array.from([1, 2, 3])], "broken.jpg", {
+          type: "image/jpeg",
         }),
       ),
       createRouteContext(),
