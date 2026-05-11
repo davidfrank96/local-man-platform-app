@@ -86,9 +86,11 @@ Behavior:
 - Results are filtered by `radius_km` after exact distance calculation.
 - Final discovery ordering prioritizes:
   1. vendors that are open now
-  2. stronger client-side search relevance
-  3. higher `ranking_score`
-  4. shorter distance
+  2. shorter distance within the same open/closed group
+  3. higher `ranking_score` from real usage signals only when vendors are similarly close, currently within about `0.5` km
+  4. stable vendor name/id tie-breakers
+- Search and category parameters filter the candidate set; they do not add a separate relevance sort that can override open status, distance, or close-distance usage ranking.
+- Sponsored/promoted ranking is not implemented.
 - Nearby results are capped to the top `50` vendors after filtering and ordering so the map/list payload remains bounded.
 - The public map currently renders those vendor results as individual markers when MapLibre is enabled.
 - Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.

@@ -36,7 +36,7 @@ Test:
 - incorrect coordinates
 - distance calculation accuracy
 - nearby radius filtering
-- nearby results stay within radius and expose stable `distance_km` and `ranking_score` fields even when discovery ranking reorders vendors
+- nearby results stay within radius and expose stable `distance_km` and `ranking_score` fields while preserving open-first, distance-first discovery ordering
 - browser geolocation success
 - IP approximation fallback
 - Abuja default city fallback
@@ -53,14 +53,15 @@ Current automated coverage:
 Runtime smoke coverage:
 - `npm run smoke:nearby`
 - Requires real Supabase env vars and seeded Abuja data.
-- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
+- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, open/distance/close-popularity ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
 
 ### Public Discovery Logic
 Test:
 - public nearby API client sends location, radius, search, category, price, and open-now filters
 - discovery sorting keeps open vendors above closed vendors
-- stronger search matches sort above weaker ones
-- vendors with higher usage ranking can beat farther vendors when other discovery signals are equal
+- distance sorts ascending within each open/closed group
+- vendors with higher usage ranking can only beat similarly close vendors within the same open/closed group
+- search and category filters do not add a relevance sort that overrides open status, distance, or close-distance usage ranking
 - popular-vendor highlighting stays bounded and deterministic
 - recently viewed vendors and last selected vendor memory restore cleanly from browser storage
 - call links normalize phone numbers

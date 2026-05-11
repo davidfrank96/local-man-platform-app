@@ -7,7 +7,7 @@ import {
 } from "../location/distance.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import type { PriceBand } from "../../types";
-import { getVendorSearchRelevance } from "./discovery-ranking.ts";
+import { compareDiscoveryVendors } from "./discovery-ranking.ts";
 import {
   getVendorAvailabilitySnapshot,
   type VendorHourWindow,
@@ -68,7 +68,6 @@ export type NearbyVendorResult = {
 
 type NearbyVendorSortable = NearbyVendorResult & {
   rawDistanceKm: number;
-  searchScore: number;
 };
 
 export type VendorUsageScoreMap = Map<string, number>;
@@ -188,34 +187,17 @@ export function findNearbyVendors(
       featured_dish: getFeaturedDishSummary(vendor),
       today_hours: availability.todayHours,
       rawDistanceKm,
-      searchScore: 0,
     };
 
-    result.searchScore = getVendorSearchRelevance(result, query.search ?? "");
     results.push(result);
   }
 
-  results.sort((left, right) => {
-    if (left.is_open_now !== right.is_open_now) {
-      return left.is_open_now ? -1 : 1;
-    }
-    if (left.searchScore !== right.searchScore) {
-      return right.searchScore - left.searchScore;
-    }
-    if (left.ranking_score !== right.ranking_score) {
-      return right.ranking_score - left.ranking_score;
-    }
-    if (left.rawDistanceKm !== right.rawDistanceKm) {
-      return left.rawDistanceKm - right.rawDistanceKm;
-    }
-    return left.name.localeCompare(right.name);
-  });
+  results.sort(compareDiscoveryVendors);
 
   return results
     .slice(0, MAX_NEARBY_VENDOR_RESULTS)
-    .map(({ rawDistanceKm, searchScore, ...vendor }) => {
+    .map(({ rawDistanceKm, ...vendor }) => {
       void rawDistanceKm;
-      void searchScore;
       return vendor;
     });
 }

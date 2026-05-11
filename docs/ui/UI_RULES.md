@@ -108,10 +108,12 @@ The Local Man — UI Rules
 - If a vendor has no image, show a plain missing-image state instead of stock imagery.
 
 ## Discovery Clarity Rules
-- Search relevance should feel predictable: stronger name matches should rise above weaker descriptive matches.
-- Nearby results may prioritize open-now state and ranking signals before pure distance, but distances must still remain visible and truthful.
+- Nearby results prioritize open-now state, then distance within the same open/closed group. Real usage-signal ranking may only reorder vendors that are similarly close.
+- Search and category controls filter the candidate set; they should not imply sponsored or opaque relevance ranking.
+- Popular nearby badges may highlight top usage-signal vendors, but sponsored/promoted ranking is not implemented.
+- Distances must remain visible and truthful even when open status or close-distance usage ranking affects order.
 - When filters are active, the current filter state should be obvious and easy to clear.
-- Discovery ordering helper copy may explain the current emphasis, such as open now, search relevance, popularity, or distance.
+- Discovery ordering helper copy may explain the current emphasis, such as open now and nearest vendors.
 - Retention helpers such as recently viewed vendors or last selected vendor memory should remain compact and supportive rather than taking over the page.
 - Client-only retention must use local browser storage and must never block public browsing.
 

@@ -81,8 +81,9 @@ Status: completed
 - bounded `operational_events` persistence for warnings, failures, degraded responses, rate-limit blocks, slow requests, and selected admin mutation events
 - discovery ordering informed by usage signals:
   - open-now priority
-  - stronger search relevance
-  - ranking score before distance
+  - distance-first ordering within the same open/closed group
+  - ranking score only as a close-distance tie-breaker
+  - search and category remain filters, not sponsored ranking signals
 - lightweight client-side retention:
   - recently viewed vendors
   - last selected vendor memory

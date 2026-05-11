@@ -32,6 +32,7 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 const lat = Number(process.env.SMOKE_NEARBY_LAT ?? "9.0765");
 const lng = Number(process.env.SMOKE_NEARBY_LNG ?? "7.3986");
 const radiusKm = Number(process.env.SMOKE_NEARBY_RADIUS_KM ?? "30");
+const POPULARITY_DISTANCE_TIE_THRESHOLD_KM = 0.5;
 
 if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
   throw new Error("Smoke test coordinates and radius must be finite numbers.");
@@ -112,6 +113,71 @@ function assertAllWithinRadius(label, result, maxRadiusKm) {
   }
 }
 
+function compareNearbyRank(left, right) {
+  const leftOpenRank = left.is_open_now === true ? 0 : left.is_open_now === false ? 2 : 1;
+  const rightOpenRank = right.is_open_now === true ? 0 : right.is_open_now === false ? 2 : 1;
+
+  if (leftOpenRank !== rightOpenRank) {
+    return leftOpenRank - rightOpenRank;
+  }
+
+  const leftDistance =
+    typeof left.distance_km === "number" && Number.isFinite(left.distance_km)
+      ? left.distance_km
+      : Number.POSITIVE_INFINITY;
+  const rightDistance =
+    typeof right.distance_km === "number" && Number.isFinite(right.distance_km)
+      ? right.distance_km
+      : Number.POSITIVE_INFINITY;
+  const distanceDifference = leftDistance === rightDistance ? 0 : leftDistance - rightDistance;
+  const isCloseDistanceTie =
+    Number.isFinite(leftDistance) &&
+    Number.isFinite(rightDistance) &&
+    Math.abs(distanceDifference) <= POPULARITY_DISTANCE_TIE_THRESHOLD_KM;
+  const popularityDifference = right.ranking_score - left.ranking_score;
+
+  if (isCloseDistanceTie && popularityDifference !== 0) {
+    return popularityDifference;
+  }
+
+  if (distanceDifference !== 0) {
+    return distanceDifference;
+  }
+
+  if (popularityDifference !== 0) return popularityDifference;
+
+  return String(left.name).localeCompare(String(right.name)) ||
+    String(left.vendor_id).localeCompare(String(right.vendor_id));
+}
+
+function assertRankedByOpenDistancePopularity(label, result) {
+  const vendors = result.body.data.vendors;
+
+  for (let index = 1; index < vendors.length; index += 1) {
+    const previous = vendors[index - 1];
+    const current = vendors[index];
+
+    if (compareNearbyRank(previous, current) > 0) {
+      throw new Error(
+        `${label} returned vendors out of open/distance/popularity rank order: ${JSON.stringify({
+          previous: {
+            vendor_id: previous.vendor_id,
+            is_open_now: previous.is_open_now,
+            ranking_score: previous.ranking_score,
+            distance_km: previous.distance_km,
+          },
+          current: {
+            vendor_id: current.vendor_id,
+            is_open_now: current.is_open_now,
+            ranking_score: current.ranking_score,
+            distance_km: current.distance_km,
+          },
+        })}`,
+      );
+    }
+  }
+}
+
 async function assertValidationError(label, params) {
   const result = await fetchNearby(params);
 
@@ -137,6 +203,7 @@ const preciseResult = await fetchNearby({
 });
 assertSuccessResult("precise nearby query", preciseResult, { requireVendors: true });
 assertAllWithinRadius("precise nearby query", preciseResult, radiusKm);
+assertRankedByOpenDistancePopularity("precise nearby query", preciseResult);
 
 const tightRadiusKm = Number(process.env.SMOKE_NEARBY_TIGHT_RADIUS_KM ?? "1");
 const tightRadiusResult = await fetchNearby({
@@ -147,6 +214,7 @@ const tightRadiusResult = await fetchNearby({
 });
 assertSuccessResult("tight radius nearby query", tightRadiusResult, { requireVendors: false });
 assertAllWithinRadius("tight radius nearby query", tightRadiusResult, tightRadiusKm);
+assertRankedByOpenDistancePopularity("tight radius nearby query", tightRadiusResult);
 
 if (tightRadiusResult.body.data.vendors.length > preciseResult.body.data.vendors.length) {
   throw new Error("Tight radius query returned more vendors than the wider nearby query.");
@@ -154,6 +222,7 @@ if (tightRadiusResult.body.data.vendors.length > preciseResult.body.data.vendors
 
 const fallbackResult = await fetchNearby({});
 assertSuccessResult("Abuja fallback nearby query", fallbackResult, { requireVendors: true });
+assertRankedByOpenDistancePopularity("Abuja fallback nearby query", fallbackResult);
 
 if (fallbackResult.body.data.location?.source !== "default_city") {
   throw new Error(

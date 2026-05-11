@@ -1111,10 +1111,10 @@ export function PublicDiscovery({
                 {isLoading
                   ? "Loading…"
                   : filters.search
-                    ? "Best search matches first"
+                    ? "Open matching vendors nearest first"
                     : filters.openNow
-                      ? "Open now only"
-                      : "Open now, then popular, then distance"}
+                      ? "Open now nearest first"
+                      : "Open now, then nearest vendors"}
               </span>
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}

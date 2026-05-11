@@ -41,7 +41,7 @@ Phase 6 signal visibility is ready when:
 - `/admin/logs` is protected by admin auth and strict admin-only permission
 - analytics summaries, vendor performance, drop-off panels, recent user events, and recent team activity load without breaking when data is sparse
 - structured operational events remain sanitized, bounded, and reviewable without breaking public discovery or admin writes
-- discovery ordering remains open-now-first, relevance-aware, and usage-ranked without regressing location or selection behavior
+- discovery ordering remains open-now-first and usage-ranked without regressing location or selection behavior
 - local retention helpers stay non-blocking and device-local only
 - simple ratings update vendor aggregate score display without introducing comments or account requirements
 - Phase 5 public and admin workflows remain green under the full regression gate
@@ -69,8 +69,8 @@ Phase 6 signal visibility is ready when:
 - Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent user events.
 - Admin now includes a dedicated activity page for recent team activity from the protected audit-log route.
 - Admin now includes a dedicated logs page for persisted operational warnings, degraded responses, rate-limit blocks, and slow requests.
-- Nearby discovery now uses a simple weighted `ranking_score` from usage signals and keeps distance as a tie-breaker rather than the only sort rule.
-- Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and applies a clearer search ordering.
+- Nearby discovery now uses a simple weighted `ranking_score` from usage signals as a close-distance tie-breaker while keeping proximity primary within open/closed groups.
+- Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and keeps search/category behavior as filtering rather than sponsored or opaque relevance ranking.
 - Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.
 - Public vendor detail now supports a lightweight 1-5 star rating flow that updates aggregate vendor rating state.
 

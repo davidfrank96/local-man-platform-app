@@ -1440,6 +1440,167 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("nearby vendor cards rank open status, distance, then close-distance popularity", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const trackedBodies: Array<Record<string, unknown>> = [];
+
+    await page.route("**/api/events", async (route) => {
+      const rawBody = route.request().postData() ?? "";
+      trackedBodies.push(JSON.parse(rawBody) as Record<string, unknown>);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            accepted: true,
+          },
+          error: null,
+        }),
+      });
+    });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await mockNearbyDiscovery(page, [
+      {
+        vendor_id: "40000000-0000-4000-8000-000000000001",
+        name: "Open Far Popular 6km",
+        slug: "open-far-popular-6km",
+        short_description: "Open farther popular vendor.",
+        phone_number: "+2348000000001",
+        area: "Wuse",
+        latitude: 9.081,
+        longitude: 7.401,
+        price_band: "standard",
+        average_rating: 4.1,
+        review_count: 9,
+        ranking_score: 50,
+        distance_km: 6,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Rice",
+          description: null,
+        },
+        today_hours: "9:00 AM - 6:00 PM",
+      },
+      {
+        vendor_id: "40000000-0000-4000-8000-000000000003",
+        name: "Open Popular 1.3km",
+        slug: "open-popular-1-3km",
+        short_description: "Open similarly nearby popular vendor.",
+        phone_number: "+2348000000003",
+        area: "Maitama",
+        latitude: 9.083,
+        longitude: 7.403,
+        price_band: "premium",
+        average_rating: 4.8,
+        review_count: 40,
+        ranking_score: 12,
+        distance_km: 1.3,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Suya",
+          description: null,
+        },
+        today_hours: "9:00 AM - 11:00 PM",
+      },
+      {
+        vendor_id: "40000000-0000-4000-8000-000000000002",
+        name: "Open Near 1km",
+        slug: "open-near-1km",
+        short_description: "Open nearby vendor.",
+        phone_number: "+2348000000002",
+        area: "Jabi",
+        latitude: 9.082,
+        longitude: 7.402,
+        price_band: "budget",
+        average_rating: 4.4,
+        review_count: 12,
+        ranking_score: 0,
+        distance_km: 1.2,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Beans",
+          description: null,
+        },
+        today_hours: "9:00 AM - 8:00 PM",
+      },
+      {
+        vendor_id: "40000000-0000-4000-8000-000000000004",
+        name: "Closed Popular Close",
+        slug: "closed-popular-close",
+        short_description: "Closed popular vendor.",
+        phone_number: "+2348000000004",
+        area: "Garki",
+        latitude: 9.084,
+        longitude: 7.404,
+        price_band: "budget",
+        average_rating: 3.9,
+        review_count: 5,
+        ranking_score: 50,
+        distance_km: 0.5,
+        is_open_now: false,
+        featured_dish: {
+          dish_name: "Akara",
+          description: null,
+        },
+        today_hours: "Closed",
+      },
+      {
+        vendor_id: "40000000-0000-4000-8000-000000000005",
+        name: "Closed Near 2km",
+        slug: "closed-near-2km",
+        short_description: "Closed nearby vendor.",
+        phone_number: "+2348000000005",
+        area: "Utako",
+        latitude: 9.085,
+        longitude: 7.405,
+        price_band: "standard",
+        average_rating: 4,
+        review_count: 8,
+        ranking_score: 0,
+        distance_km: 2,
+        is_open_now: false,
+        featured_dish: {
+          dish_name: "Moi moi",
+          description: null,
+        },
+        today_hours: "Closed",
+      },
+    ]);
+
+    await page.goto("/");
+    await expect.poll(async () => page.locator(".vendor-card").count()).toBe(5);
+
+    const beforeSelectionSnapshot = await readVendorCardStateSnapshot(page);
+    expect(beforeSelectionSnapshot.map((vendor) => vendor.name)).toEqual([
+      "Open Popular 1.3km",
+      "Open Near 1km",
+      "Open Far Popular 6km",
+      "Closed Popular Close",
+      "Closed Near 2km",
+    ]);
+
+    await expect(
+      page.locator(".vendor-card").filter({ hasText: "Open Popular 1.3km" }).locator(".vendor-card-popular-badge"),
+    ).toHaveText("Popular nearby");
+    await expect(
+      page.locator(".vendor-card").filter({ hasText: "Closed Popular Close" }).locator(".vendor-card-popular-badge"),
+    ).toHaveText("Popular nearby");
+
+    const middleOpenCard = page.locator(".vendor-card").filter({ hasText: "Open Near 1km" });
+    await middleOpenCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await expect(page.locator(".selected-vendor-panel")).toContainText("Open Near 1km");
+
+    const afterSelectionSnapshot = await readVendorCardStateSnapshot(page);
+    expect(afterSelectionSnapshot.map((vendor) => vendor.name)).toEqual(
+      beforeSelectionSnapshot.map((vendor) => vendor.name),
+    );
+    expect(trackedBodies.some((body) => body.event_type === "vendor_selected")).toBe(true);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("cleanup invalidation prevents stale discovery snapshot and retention state from resurfacing deleted vendors", async ({ page }) => {
     const errors = trackClientErrors(page);
     const staleVendorId = "39999999-0000-4000-8000-000000000001";

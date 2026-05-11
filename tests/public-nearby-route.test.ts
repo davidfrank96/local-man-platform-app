@@ -41,9 +41,11 @@ function createCandidateVendor(index: number, overrides?: Partial<Record<string,
 function setPublicEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
   return () => {
     if (previousUrl === undefined) {
@@ -56,6 +58,12 @@ function setPublicEnv(): () => void {
       delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     } else {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previousAnonKey;
+    }
+
+    if (previousServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
     }
   };
 }
@@ -208,6 +216,89 @@ test("nearby route sanitizes injection-like search input and does not use the ra
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
     assert.ok(body.data.vendors.length <= 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("nearby route ranks open vendors by distance with popularity as a close-distance tie-breaker", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = toUrl(input);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        createCandidateVendor(0, {
+          id: "open-popular-similar",
+          name: "Open Popular Similar",
+          slug: "open-popular-similar",
+          longitude: 7.3986 + 0.0117,
+          is_open_override: true,
+        }),
+        createCandidateVendor(1, {
+          id: "open-near",
+          name: "Open Near",
+          slug: "open-near",
+          longitude: 7.3986 + 0.0108,
+          is_open_override: true,
+        }),
+        createCandidateVendor(2, {
+          id: "closed-popular-close",
+          name: "Closed Popular Close",
+          slug: "closed-popular-close",
+          longitude: 7.3986 + 0.0045,
+          is_open_override: false,
+        }),
+        createCandidateVendor(3, {
+          id: "open-far-popular",
+          name: "Open Far Popular",
+          slug: "open-far-popular",
+          longitude: 7.3986 + 0.054,
+          is_open_override: true,
+        }),
+        createCandidateVendor(4, {
+          id: "closed-near",
+          name: "Closed Near",
+          slug: "closed-near",
+          longitude: 7.3986 + 0.018,
+          is_open_override: false,
+        }),
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_vendor_usage_scores") {
+      return Response.json([
+        { vendor_id: "closed-popular-close", ranking_score: 50 },
+        { vendor_id: "open-popular-similar", ranking_score: 12 },
+        { vendor_id: "open-far-popular", ranking_score: 60 },
+      ]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const response = await nearbyRoute(
+      createNearbyNextRequest(
+        "http://localhost/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=10",
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      body.data.vendors.map((vendor: { slug: string }) => vendor.slug),
+      [
+        "open-popular-similar",
+        "open-near",
+        "open-far-popular",
+        "closed-popular-close",
+        "closed-near",
+      ],
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

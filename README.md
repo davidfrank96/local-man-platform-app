@@ -8,9 +8,8 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - discovery homepage with map-first nearby vendors, floating mobile search, desktop search/filter bar, and an optional MapLibre map plus coordinate fallback
 - discovery ordering that prioritizes:
   - open vendors first
-  - stronger search matches
-  - usage-signal ranking
-  - distance as the final tie-breaker
+  - distance within the same open/closed group
+  - usage-signal ranking from real engagement events only as a close-distance tie-breaker
   - capped nearby payloads so the map and list stay bounded
 - vendor cards with:
   - name
@@ -261,7 +260,8 @@ Phase 6 currently covers:
 - nearby ranking aggregation executed in SQL for candidate vendor ids only
 - discovery refinement from real usage signals:
   - open-now priority
-  - improved relevance ordering
+  - distance-first ordering within each open/closed group
+  - usage-signal ranking only as a close-distance tie-breaker
   - clearer filter state
   - lower-friction vendor return paths
 - lightweight client-side retention:

@@ -94,7 +94,7 @@ test("filters nearby vendors by radius and sorts nearest first", () => {
   assert.equal(results[0].ranking_score, 0);
 });
 
-test("sorts nearby vendors by usage ranking score before distance", () => {
+test("sorts nearby vendors by distance before usage ranking when distance differs meaningfully", () => {
   const vendors: VendorLocationRecord[] = [
     {
       ...baseVendor,
@@ -133,7 +133,52 @@ test("sorts nearby vendors by usage ranking score before distance", () => {
       ranking_score: vendor.ranking_score,
     })),
     [
+      { id: "near-low-score", ranking_score: 1 },
       { id: "far-high-score", ranking_score: 8 },
+    ],
+  );
+});
+
+test("uses usage ranking as a tie-breaker for similarly close vendors", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "near-low-score",
+      name: "Near Low Score",
+      latitude: 0,
+      longitude: 0.01,
+    },
+    {
+      ...baseVendor,
+      id: "similar-high-score",
+      name: "Similar High Score",
+      latitude: 0,
+      longitude: 0.011,
+    },
+  ];
+
+  const results = findNearbyVendors(
+    vendors,
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-04-28T12:00:00Z"),
+    new Map([
+      ["near-low-score", 1],
+      ["similar-high-score", 8],
+    ]),
+  );
+
+  assert.deepEqual(
+    results.map((vendor) => ({
+      id: vendor.vendor_id,
+      ranking_score: vendor.ranking_score,
+    })),
+    [
+      { id: "similar-high-score", ranking_score: 8 },
       { id: "near-low-score", ranking_score: 1 },
     ],
   );
@@ -180,7 +225,7 @@ test("keeps open vendors ahead of closed vendors before ranking and distance", (
   );
 });
 
-test("prioritizes stronger search matches before ranking when a search term is present", () => {
+test("keeps search as filtering while preserving nearby ranking order", () => {
   const vendors: VendorLocationRecord[] = [
     {
       ...baseVendor,
@@ -218,7 +263,107 @@ test("prioritizes stronger search matches before ranking when a search term is p
 
   assert.deepEqual(
     results.map((vendor) => vendor.vendor_id),
-    ["prefix-name-match", "ranked-area-match"],
+    ["ranked-area-match", "prefix-name-match"],
+  );
+});
+
+test("sorts open vendors by distance when engagement score matches", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "open-far",
+      name: "Open Far",
+      latitude: 0,
+      longitude: 0.045,
+      is_open_override: true,
+    },
+    {
+      ...baseVendor,
+      id: "open-near",
+      name: "Open Near",
+      latitude: 0,
+      longitude: 0.011,
+      is_open_override: true,
+    },
+    {
+      ...baseVendor,
+      id: "open-middle",
+      name: "Open Middle",
+      latitude: 0,
+      longitude: 0.03,
+      is_open_override: true,
+    },
+  ];
+
+  const results = findNearbyVendors(
+    vendors,
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 10,
+    },
+    new Date("2026-04-28T12:00:00Z"),
+    new Map([
+      ["open-far", 2],
+      ["open-near", 2],
+      ["open-middle", 2],
+    ]),
+  );
+
+  assert.deepEqual(
+    results.map((vendor) => vendor.vendor_id),
+    ["open-near", "open-middle", "open-far"],
+  );
+});
+
+test("sorts closed vendors by distance before engagement score after open vendors", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "closed-near-low-score",
+      name: "Closed Near Low Score",
+      latitude: 0,
+      longitude: 0.005,
+      is_open_override: false,
+    },
+    {
+      ...baseVendor,
+      id: "closed-far-high-score",
+      name: "Closed Far High Score",
+      latitude: 0,
+      longitude: 0.03,
+      is_open_override: false,
+    },
+    {
+      ...baseVendor,
+      id: "open-low-score",
+      name: "Open Low Score",
+      latitude: 0,
+      longitude: 0.04,
+      is_open_override: true,
+    },
+  ];
+
+  const results = findNearbyVendors(
+    vendors,
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 10,
+    },
+    new Date("2026-04-28T12:00:00Z"),
+    new Map([
+      ["closed-near-low-score", 1],
+      ["closed-far-high-score", 9],
+      ["open-low-score", 0],
+    ]),
+  );
+
+  assert.deepEqual(
+    results.map((vendor) => vendor.vendor_id),
+    ["open-low-score", "closed-near-low-score", "closed-far-high-score"],
   );
 });
 

@@ -47,7 +47,7 @@ Handles:
 - discovery homepage
 - nearby vendor loading
 - search and filters
-- open-now and usage-signal-aware discovery ordering
+- open-now and distance-first discovery ordering with usage signals as close-distance tie-breakers
 - selected vendor state through `selectedVendorId`
 - single vendor-marker system and selected preview synchronization
 - local retention surfaces for recent and last-selected vendors
@@ -119,7 +119,7 @@ Stores:
 2. Browser geolocation is attempted
 3. The app resolves precise, approximate, or default-city browse mode
 4. `/api/vendors/nearby` returns nearby vendors
-5. Discovery ordering prioritizes open-now state, then stronger search matches, then usage ranking, then distance
+5. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
 6. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
 7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
 
@@ -438,9 +438,11 @@ Current implementation:
 - Application logic applies radius filtering and returns `distance_km` for each candidate.
 - Final discovery ordering is handled as:
   1. open-now priority
-  2. stronger search relevance
-  3. usage-signal `ranking_score`
-  4. distance as the final tie-breaker
+  2. distance within the same open/closed group
+  3. usage-signal `ranking_score` only when vendors are similarly close, currently within about `0.5` km
+  4. vendor name/id as stable tie-breakers
+- Search, category, price, radius, and open-now filters constrain the candidate set before ranking; search relevance does not override the open/distance/close-popularity contract.
+- Sponsored/promoted ranking is not implemented.
 - Nearby discovery returns at most `50` vendors per request after filtering and ordering so the map/list payload stays bounded.
 - Default nearby radius is 10 km when `radius_km` is not provided.
 - Missing user coordinates resolve to the Abuja default city view before the nearby query runs.
