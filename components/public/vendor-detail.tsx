@@ -228,6 +228,7 @@ export function VendorDetail({
           <p className="eyebrow">Ratings</p>
           <h2>Rate this vendor</h2>
           <VendorRating
+            key={vendor.id}
             vendorId={vendor.id}
             vendorSlug={vendor.slug}
             initialAverageRating={vendor.rating_summary.average_rating}

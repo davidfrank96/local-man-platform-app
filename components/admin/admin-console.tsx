@@ -113,6 +113,29 @@ function sortVendorImagesByOrder(images: VendorImage[]): VendorImage[] {
   );
 }
 
+function mergeVendorImagesById(
+  currentImages: VendorImage[],
+  incomingImages: VendorImage[],
+): VendorImage[] {
+  const imagesById = new Map(currentImages.map((image) => [image.id, image]));
+
+  for (const image of incomingImages) {
+    imagesById.set(image.id, image);
+  }
+
+  return sortVendorImagesByOrder([...imagesById.values()]);
+}
+
+function updateVendorImagesCount(
+  vendors: AdminVendorSummary[],
+  vendorId: string,
+  imagesCount: number,
+): AdminVendorSummary[] {
+  return vendors.map((vendor) =>
+    vendor.id === vendorId ? { ...vendor, images_count: imagesCount } : vendor
+  );
+}
+
 type AdminConsoleProps = {
   initialSelectedVendorId?: string | null;
   mode?: "dashboard" | "agent" | "vendors" | "create" | "edit";
@@ -252,6 +275,7 @@ export function AdminConsole({
 
   const loadVendorImages = useCallback(async function loadVendorImages(
     vendorId: string | null,
+    expectedImageCount = 0,
   ) {
     if (!vendorId || !session) {
       setVendorImages([]);
@@ -260,7 +284,7 @@ export function AdminConsole({
 
     const cachedImages = readVendorArtifactCache(workspaceCacheScope, vendorId, "images");
 
-    if (cachedImages) {
+    if (cachedImages && cachedImages.length >= expectedImageCount) {
       setVendorImages(cachedImages as VendorImage[]);
       return;
     }
@@ -328,7 +352,10 @@ export function AdminConsole({
     }
 
     const timeout = window.setTimeout(() => {
-      void loadVendorImages(selectedVendor?.id ?? null).catch((error) => {
+      void loadVendorImages(
+        selectedVendor?.id ?? null,
+        selectedVendor?.images_count ?? 0,
+      ).catch((error) => {
         setVendorImages([]);
         setStatus(error instanceof Error ? error.message : "Unable to load vendor images.");
       });
@@ -337,7 +364,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorImages, selectedVendor?.id, shouldLoadVendorArtifacts]);
+  }, [loadVendorImages, selectedVendor?.id, selectedVendor?.images_count, shouldLoadVendorArtifacts]);
 
   useEffect(() => {
     if (!shouldLoadVendorArtifacts) {
@@ -641,9 +668,13 @@ export function AdminConsole({
     );
 
     if (uploadedImages && selectedVendor) {
-      const nextImages = sortVendorImagesByOrder([...vendorImages, ...uploadedImages]);
+      vendorImagesRequestId.current += 1;
+      const nextImages = mergeVendorImagesById(vendorImages, uploadedImages);
 
       setVendorImages(nextImages);
+      setVendors((current) =>
+        updateVendorImagesCount(current, selectedVendor.id, nextImages.length)
+      );
       updateVendorArtifactCache(
         workspaceCacheScope,
         selectedVendor.id,
@@ -667,8 +698,13 @@ export function AdminConsole({
     );
 
     if (deletedImage && selectedVendor) {
+      vendorImagesRequestId.current += 1;
       const nextImages = vendorImages.filter((image) => image.id !== deletedImage.id);
+
       setVendorImages(nextImages);
+      setVendors((current) =>
+        updateVendorImagesCount(current, selectedVendor.id, nextImages.length)
+      );
       updateVendorArtifactCache(workspaceCacheScope, selectedVendor.id, "images", nextImages);
     }
   }

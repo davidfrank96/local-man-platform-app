@@ -370,6 +370,7 @@ type MockAdminWorkspaceOptions = {
   operationalLogsHasMore?: boolean;
   vendorCount?: number;
   adminRequestLog?: string[];
+  delayInitialImageGetUntilUpload?: boolean;
 };
 
 function buildMockAnalyticsRecentEvents(count: number) {
@@ -514,6 +515,8 @@ async function mockAuthenticatedAdminWorkspace(
   const operationalLogsHasMore = options.operationalLogsHasMore ?? false;
   const vendorCount = options.vendorCount ?? 0;
   const mockVendors = buildMockAdminVendors(vendorCount);
+  let hasUploadedVendorImage = false;
+  let releaseInitialImageGet: (() => void) | null = null;
   const recordAdminRequest = (request: Request) => {
     const requestUrl = new URL(request.url());
     options.adminRequestLog?.push(`${request.method()} ${requestUrl.pathname}${requestUrl.search}`);
@@ -755,7 +758,16 @@ async function mockAuthenticatedAdminWorkspace(
           error: null,
         }),
       });
+      hasUploadedVendorImage = true;
+      releaseInitialImageGet?.();
+      releaseInitialImageGet = null;
       return;
+    }
+
+    if (options.delayInitialImageGetUntilUpload && !hasUploadedVendorImage) {
+      await new Promise<void>((resolve) => {
+        releaseInitialImageGet = resolve;
+      });
     }
 
     await route.fulfill({
@@ -1166,6 +1178,47 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("link", { name: "Call" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Directions" })).toBeVisible();
     await expect(page.locator(".vendor-detail-image")).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("vendor rating controls disable after one anonymous browser rating", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    let ratingRequestCount = 0;
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/ratings", async (route) => {
+      ratingRequestCount += 1;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            vendor_id: "20000000-0000-4000-8000-000000000008",
+            rating_summary: {
+              average_rating: 5,
+              review_count: 1,
+            },
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+
+    const fiveStarButton = page.getByRole("button", { name: "Rate 5 stars" });
+    await fiveStarButton.click();
+    await expect(page.getByText("Rating saved. Thanks for helping other customers.")).toBeVisible();
+    await expect(fiveStarButton).toBeDisabled();
+    await expect.poll(() => ratingRequestCount).toBe(1);
+
+    await page.reload();
+    await expect(page.locator(".vendor-rating-status")).toHaveText(
+      "You've already rated this vendor.",
+    );
+    await expect(page.getByRole("button", { name: "Rate 5 stars" })).toBeDisabled();
+    await expect.poll(() => ratingRequestCount).toBe(1);
 
     await expectNoClientErrors(errors);
   });
@@ -1991,6 +2044,35 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
     await expect(page.locator(".vendor-image-item")).toHaveCount(1);
     await expect(page.locator(".vendor-image-item")).toContainText("mock-upload.webp");
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin vendor image upload is not overwritten by stale image-list responses", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      vendorCount: 1,
+      delayInitialImageGetUntilUpload: true,
+    });
+
+    await page.goto("/admin/vendors");
+    await page.getByRole("button", { name: /Mock Vendor 1/ }).click();
+    await page.getByRole("link", { name: "Open edit workspace" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.getByRole("heading", { name: "Vendor images", exact: true })).toBeVisible();
+
+    await page.locator('input[name="image"]').setInputFiles({
+      name: "vendor-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+
+    await page.getByRole("button", { name: "Upload vendor image" }).click();
+    await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
+    await expect(page.locator(".vendor-image-item")).toHaveCount(1);
+    await expect(page.locator(".vendor-image-item")).toContainText("mock-upload.webp");
+    await expect(page.locator(".admin-identity-panel .admin-completeness-list")).not.toContainText("Missing images");
     await expectNoClientErrors(errors);
   });
 

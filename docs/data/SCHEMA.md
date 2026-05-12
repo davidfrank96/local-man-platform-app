@@ -126,10 +126,14 @@ Notes:
 - score: integer
 - comment: text
 - source_type: text
+- anonymous_client_hash: text nullable
 - created_at: timestamp
 
 Notes:
 - `score` is constrained from 1 to 5.
+- new public rating writes include a SHA-256 anonymous browser identity hash.
+- `ratings_vendor_anonymous_client_hash_idx` enforces one rating per vendor per anonymous hash when the hash is present.
+- legacy rows may have `anonymous_client_hash = null` and remain part of aggregate rating history.
 
 ## Table: admin_users
 - id: uuid, primary key
@@ -235,7 +239,7 @@ Admin users can:
 ## Future Extension Notes
 Potential future additions:
 - bookings table
-- anonymous feedback source tracking
+- account-backed rating identity
 - vendor verification state
 - operating status events
 

@@ -39,10 +39,10 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - vendor-card selection may gently focus the map
   - no clustering in the current release
 - vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
-- lightweight vendor rating input with 1-5 stars and no comments
+- lightweight vendor rating input with 1-5 stars, no comments, and one rating per vendor per anonymous browser identity
 - public abuse protection on write-heavy and search-heavy routes:
   - `/api/events` rate limits repeated event floods and deduplicates immediate retry payloads
-  - `/api/vendors/[slug]/ratings` rate limits repeated rating spam and collapses duplicate retry submissions
+  - `/api/vendors/[slug]/ratings` rate limits repeated rating spam, collapses duplicate retry submissions, and rejects repeat ratings for the same vendor/browser identity
   - `/api/vendors/nearby` rate limits search-bearing abuse traffic without throttling normal default-city browsing
 - local retention helpers:
   - recently viewed vendors
@@ -211,7 +211,7 @@ Server-side runtime logging is standardized through `lib/observability.ts`:
 Public abuse protection is centralized server-side in the API layer:
 - `/api/admin/login`: `5` attempts per `10` minutes per IP/email with a `15` minute block window
 - `/api/events`: `120` accepted requests per `5` minutes per client/IP with a short duplicate-submission collapse window
-- `/api/vendors/[slug]/ratings`: `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse
+- `/api/vendors/[slug]/ratings`: one accepted submission per vendor per anonymous browser identity, plus `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse
 - `/api/vendors/nearby` search requests only: `45` requests per minute per client/IP with a `2` minute block window
 - public limiter correlation may issue a non-privileged HTTP-only cookie so repeated browser abuse cannot avoid the per-IP bucket simply by retrying
 - the current limiter is in-memory and process-local, so it is best-effort for a single app instance rather than a distributed global throttle
@@ -268,7 +268,7 @@ Phase 6 currently covers:
   - recently viewed vendors
   - last selected vendor memory
   - popular vendors near you
-- simple public vendor ratings with aggregate score display
+- simple public vendor ratings with aggregate score display and one anonymous browser rating per vendor
 - tracked events:
   - `session_started`
   - `first_interaction`

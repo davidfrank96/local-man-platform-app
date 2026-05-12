@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { apiError, apiSuccess } from "../../../../../lib/api/responses.ts";
 import {
   applyRateLimitResponseHeaders,
   consumeRateLimit,
+  getExistingPublicClientId,
   PUBLIC_RATING_RATE_LIMIT,
   startSingleFlightGuard,
 } from "../../../../../lib/api/abuse-protection.ts";
@@ -39,6 +41,16 @@ type RatingSubmissionResult = {
   vendor_id: string;
   average_rating: number;
   review_count: number;
+  duplicate: boolean;
+};
+
+type RatingRouteResult = {
+  vendor_id: string;
+  rating_summary: {
+    average_rating: number;
+    review_count: number;
+  };
+  duplicate: boolean;
 };
 
 function getRatingWriteConfig(): RatingWriteConfig | null {
@@ -113,11 +125,15 @@ function normalizeRatingSubmissionPayload(payload: unknown): RatingSubmissionRes
   const reviewCount = "review_count" in candidate
     ? (candidate as { review_count?: unknown }).review_count
     : null;
+  const duplicate = "duplicate" in candidate
+    ? (candidate as { duplicate?: unknown }).duplicate
+    : false;
 
   if (
     typeof vendorId !== "string" ||
     typeof averageRating !== "number" ||
-    typeof reviewCount !== "number"
+    typeof reviewCount !== "number" ||
+    typeof duplicate !== "boolean"
   ) {
     return null;
   }
@@ -126,12 +142,57 @@ function normalizeRatingSubmissionPayload(payload: unknown): RatingSubmissionRes
     vendor_id: vendorId,
     average_rating: averageRating,
     review_count: reviewCount,
+    duplicate,
   };
+}
+
+function hashAnonymousRatingClientId(clientId: string): string {
+  return createHash("sha256")
+    .update(`localman-rating:${clientId}`)
+    .digest("hex");
+}
+
+function toRatingRouteResult(ratingSummary: RatingSubmissionResult): RatingRouteResult {
+  return {
+    vendor_id: ratingSummary.vendor_id,
+    rating_summary: {
+      average_rating: ratingSummary.average_rating,
+      review_count: ratingSummary.review_count,
+    },
+    duplicate: ratingSummary.duplicate,
+  };
+}
+
+function toRatingResponseData(result: RatingRouteResult): Omit<RatingRouteResult, "duplicate"> {
+  return {
+    vendor_id: result.vendor_id,
+    rating_summary: result.rating_summary,
+  };
+}
+
+function duplicateRatingResponse(
+  result: RatingRouteResult,
+  rateLimit: ReturnType<typeof consumeRateLimit>,
+): Response {
+  return applyRateLimitResponseHeaders(
+    apiError(
+      "VALIDATION_ERROR",
+      "You've already rated this vendor.",
+      409,
+      {
+        ...toRatingResponseData(result),
+        duplicate: true,
+      },
+      "Each browser can rate a vendor once.",
+    ),
+    rateLimit,
+  );
 }
 
 async function submitPublicVendorRating(
   vendorId: string,
   score: number,
+  anonymousClientHash: string,
   config: RatingWriteConfig,
 ): Promise<RatingSubmissionResult | null> {
   const response = await fetch(
@@ -143,6 +204,7 @@ async function submitPublicVendorRating(
         target_vendor_id: vendorId,
         target_score: score,
         target_source_type: "public_simple_rating",
+        target_anonymous_client_hash: anonymousClientHash,
       }),
     },
   );
@@ -247,6 +309,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
           average_rating: number;
           review_count: number;
         };
+        duplicate: boolean;
       }>>,
       { status: "fresh" }
     >
@@ -271,13 +334,12 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       );
     }
 
-    const dedupeGuard = startSingleFlightGuard<{
-      vendor_id: string;
-      rating_summary: {
-        average_rating: number;
-        review_count: number;
-      };
-    }>(
+    const anonymousClientId =
+      getExistingPublicClientId(request) ??
+      rateLimit.responseClientId ??
+      crypto.randomUUID();
+    const anonymousClientHash = hashAnonymousRatingClientId(anonymousClientId);
+    const dedupeGuard = startSingleFlightGuard<RatingRouteResult>(
       [
         rateLimit.identityKey,
         vendor.id,
@@ -301,11 +363,19 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
           vendorSlug: routeParams.data.slug,
           metadata: {
             score: body.data.score,
+            duplicate: payload.duplicate,
           },
         });
 
+        if (payload.duplicate) {
+          return attachRequestIdHeader(
+            duplicateRatingResponse(payload, rateLimit),
+            routeLog.requestId,
+          );
+        }
+
         return attachRequestIdHeader(
-          applyRateLimitResponseHeaders(apiSuccess(payload, 200), rateLimit),
+          applyRateLimitResponseHeaders(apiSuccess(toRatingResponseData(payload), 200), rateLimit),
           routeLog.requestId,
         );
       } catch (error) {
@@ -331,7 +401,12 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       }
     }
 
-    const ratingSummary = await submitPublicVendorRating(vendor.id, body.data.score, config);
+    const ratingSummary = await submitPublicVendorRating(
+      vendor.id,
+      body.data.score,
+      anonymousClientHash,
+      config,
+    );
 
     if (!ratingSummary) {
       dedupeGuard.reject(new Error("Vendor was not found."));
@@ -351,14 +426,28 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       );
     }
 
-    const responseData = {
-      vendor_id: ratingSummary.vendor_id,
-      rating_summary: {
-        average_rating: ratingSummary.average_rating,
-        review_count: ratingSummary.review_count,
-      },
-    };
+    const responseData = toRatingRouteResult(ratingSummary);
     dedupeGuard.resolve(responseData);
+
+    if (responseData.duplicate) {
+      logRouteEvent("info", routeLog, {
+        event: "PUBLIC_VENDOR_RATING_DUPLICATE_REJECTED",
+        status: 409,
+        message: "Vendor rating duplicate attempt was rejected.",
+        vendorId: ratingSummary.vendor_id,
+        vendorSlug: routeParams.data.slug,
+        metadata: {
+          score: body.data.score,
+          reviewCount: ratingSummary.review_count,
+          averageRating: ratingSummary.average_rating,
+        },
+      });
+
+      return attachRequestIdHeader(
+        duplicateRatingResponse(responseData, rateLimit),
+        routeLog.requestId,
+      );
+    }
 
     logRouteEvent("info", routeLog, {
       event: "PUBLIC_VENDOR_RATING_ACCEPTED",
@@ -374,7 +463,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     });
 
     return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(apiSuccess(responseData, 201), rateLimit),
+      applyRateLimitResponseHeaders(apiSuccess(toRatingResponseData(responseData), 201), rateLimit),
       routeLog.requestId,
     );
   } catch (error) {

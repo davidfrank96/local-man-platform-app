@@ -120,6 +120,7 @@ Migration files:
 - `supabase/migrations/20260503123000_admin_analytics_snapshot_perf.sql`
 - `supabase/migrations/20260507193000_public_rating_submission_rpc.sql`
 - `supabase/migrations/20260508143000_operational_events.sql`
+- `supabase/migrations/20260512003000_public_rating_anonymous_identity.sql`
 
 Preferred command when `psql` is available:
 
@@ -140,7 +141,7 @@ Dashboard fallback:
 4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, and `app_schema_migrations`.
 5. Confirm `public.vendor_images` includes `storage_object_path`.
 6. Confirm `public.user_events` exists for Phase 6 analytics.
-7. Confirm `public.submit_public_vendor_rating(uuid, integer, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
+7. Confirm `public.submit_public_vendor_rating(uuid, integer, text, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
 8. Confirm `public.operational_events` exists with the admin read policy before enabling operational-event persistence.
 
 Rollback note:

@@ -180,6 +180,13 @@ function getOrCreatePublicClientId(request: Request, useClientCookie: boolean): 
   };
 }
 
+export function getExistingPublicClientId(request: Request): string | null {
+  const cookies = parseCookies(request.headers.get("cookie"));
+  const existing = cookies.get(PUBLIC_CLIENT_COOKIE_NAME)?.trim();
+
+  return existing && existing.length > 0 ? existing : null;
+}
+
 function sweepStore(nowMs: number): void {
   const store = getStore();
 

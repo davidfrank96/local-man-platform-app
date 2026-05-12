@@ -108,16 +108,22 @@ Test:
 - unknown vendor slug returns `NOT_FOUND`
 - rating RPC failures return `UPSTREAM_ERROR`
 - vendor lookup connectivity failures return `UPSTREAM_ERROR`
+- first anonymous browser rating for a vendor succeeds
+- second rating for the same vendor and anonymous browser identity returns a clean duplicate response and does not update the aggregate
+- the same anonymous browser identity can rate a different vendor
+- a different anonymous browser identity can rate the same vendor once
 - rating summary updates:
   - `average_rating`
   - `review_count`
 - vendor cards and detail continue to show `New` when no ratings exist
 - repeated rating spam from one client is rate limited
 - duplicate sequential and concurrent rating retries collapse into one upstream write
+- public rating controls disable after success and stay disabled on refresh using client-side storage
 - route returns the database-owned post-write summary instead of recomputing ratings client-side
 
 Current automated coverage:
 - `tests/public-rating-route.test.ts`
+- `tests/e2e/app-smoke.spec.ts`
 
 ### Abuse Protection Logic
 Test:
