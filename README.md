@@ -338,8 +338,21 @@ Phase 5 delivered:
 - admin dashboard restructuring
 - fuller vendor onboarding flow
 - vendor image upload pipeline fixes
+- vendor image upload state isolation across vendor switches
+- vendor image metadata-row verification before upload success responses
 - featured dish add/remove management
 - simplified 12-hour admin hours input
+
+## Current Release-Gate Notes
+The latest full-platform gate verified the upload, cache, admin, public discovery, map, ratings, DB, and production build paths together. The highest-risk upload checks now include real cross-vendor uploads in both dev and local production runtime:
+- selecting an image must not reload or reset the page
+- switching vendors must clear pending file refs and local previews
+- upload requests must use the current native file input value
+- uploaded image rows must belong to the selected vendor id
+- operational upload logs must show the current filename, size, MIME type, request id, and vendor id
+- a successful upload response must require the `vendor_images` metadata row to be returned
+
+Production promotion still requires a clean committed worktree and a green dependency audit. A high-severity `npm audit` result is treated as a deployment blocker even when functional tests pass.
 
 ## Working Rules
 - update docs when behavior changes

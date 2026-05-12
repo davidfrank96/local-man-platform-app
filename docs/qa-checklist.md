@@ -105,6 +105,19 @@ Use this checklist before pushing or releasing UI work.
 - [ ] analytics empty state is real data absence, not auth/config failure
 - [ ] logs empty state is expected when storage is disabled or no persistable events match the current filters
 
+## Vendor Images
+
+- [ ] selecting a vendor image does not reload or reset the edit page
+- [ ] selecting a file shows the current filename and local preview when preview creation is available
+- [ ] upload sends `POST /api/admin/vendors/:id/images`
+- [ ] operational upload logs show the current file metadata, not a stale previous file
+- [ ] switching from Vendor A to Vendor B clears pending file input and preview state
+- [ ] Vendor B upload creates a `vendor_images` row with Vendor B's id and a Vendor B storage path
+- [ ] switching back to Vendor A does not show Vendor B's pending file or uploaded image
+- [ ] upload success is not accepted if the metadata row is missing
+- [ ] delete removes the storage object, removes the row, and updates the current image list
+- [ ] public vendor detail renders the uploaded storage-backed image after refresh
+
 ## CSV intake
 
 - [ ] CSV template downloads

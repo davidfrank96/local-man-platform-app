@@ -113,6 +113,10 @@ function sortVendorImagesByOrder(images: VendorImage[]): VendorImage[] {
   );
 }
 
+function filterVendorImagesForVendor(images: VendorImage[], vendorId: string): VendorImage[] {
+  return images.filter((image) => image.vendor_id === vendorId);
+}
+
 function mergeVendorImagesById(
   currentImages: VendorImage[],
   incomingImages: VendorImage[],
@@ -277,24 +281,30 @@ export function AdminConsole({
     vendorId: string | null,
     expectedImageCount = 0,
   ) {
+    const requestId = ++vendorImagesRequestId.current;
+
     if (!vendorId || !session) {
       setVendorImages([]);
       return;
     }
 
     const cachedImages = readVendorArtifactCache(workspaceCacheScope, vendorId, "images");
+    const cachedVendorImages = Array.isArray(cachedImages)
+      ? filterVendorImagesForVendor(cachedImages as VendorImage[], vendorId)
+      : null;
 
-    if (cachedImages && cachedImages.length >= expectedImageCount) {
-      setVendorImages(cachedImages as VendorImage[]);
+    if (cachedVendorImages && cachedVendorImages.length >= expectedImageCount) {
+      setVendorImages(cachedVendorImages);
       return;
     }
 
-    const requestId = ++vendorImagesRequestId.current;
+    setVendorImages([]);
     const images = await listAdminVendorImages(vendorId);
+    const vendorScopedImages = filterVendorImagesForVendor(images, vendorId);
 
     if (requestId === vendorImagesRequestId.current) {
-      setVendorImages(images);
-      updateVendorArtifactCache(workspaceCacheScope, vendorId, "images", images);
+      setVendorImages(vendorScopedImages);
+      updateVendorArtifactCache(workspaceCacheScope, vendorId, "images", vendorScopedImages);
     }
   }, [session, workspaceCacheScope]);
 
@@ -669,7 +679,9 @@ export function AdminConsole({
 
     if (uploadedImages && selectedVendor) {
       vendorImagesRequestId.current += 1;
-      const nextImages = mergeVendorImagesById(vendorImages, uploadedImages);
+      const currentVendorImages = filterVendorImagesForVendor(vendorImages, selectedVendor.id);
+      const uploadedVendorImages = filterVendorImagesForVendor(uploadedImages, selectedVendor.id);
+      const nextImages = mergeVendorImagesById(currentVendorImages, uploadedVendorImages);
 
       setVendorImages(nextImages);
       setVendors((current) =>
@@ -699,7 +711,8 @@ export function AdminConsole({
 
     if (deletedImage && selectedVendor) {
       vendorImagesRequestId.current += 1;
-      const nextImages = vendorImages.filter((image) => image.id !== deletedImage.id);
+      const currentVendorImages = filterVendorImagesForVendor(vendorImages, selectedVendor.id);
+      const nextImages = currentVendorImages.filter((image) => image.id !== deletedImage.id);
 
       setVendorImages(nextImages);
       setVendors((current) =>

@@ -169,6 +169,10 @@ The Local Man — UI Rules
 - vendor profile images and featured dishes must be presented as separate admin sections with separate helper text
 - vendor image upload should use a file input with a visible size/type hint, immediate local preview before upload, and removal should show the current uploaded images when available
 - `No images yet` should appear only when the selected vendor has no current vendor profile images
+- switching selected vendors must clear any pending vendor-image file, filename, local object URL, and preview before the next upload
+- the Vendor Images section must render only image rows belonging to the selected vendor id
+- failed image upload validation should keep the user on the same edit surface and show status copy instead of resetting the workspace
+- successful image upload should clear the local file input and preview after the returned image row is merged
 - hours editor must be easy to understand
 - admin vendor edit workflows must load current hours, current uploaded images, and current featured dishes before editing so updates do not start from a blank state
 - current featured dishes should have a clear remove action in the same selected-vendor edit surface

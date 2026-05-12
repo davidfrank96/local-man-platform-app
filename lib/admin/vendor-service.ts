@@ -223,6 +223,27 @@ function parseReturnedImages(payload: unknown): VendorImageRecord[] {
   return parseSupabasePayload(z.array(vendorImageSchema), payload);
 }
 
+function requireInsertedVendorImages(
+  images: VendorImageRecord[],
+  expectedCount: number,
+  details: Record<string, unknown>,
+): VendorImageRecord[] {
+  if (images.length !== expectedCount) {
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      "Vendor image metadata insert did not return the expected row count.",
+      502,
+      {
+        expected_count: expectedCount,
+        returned_count: images.length,
+        ...details,
+      },
+    );
+  }
+
+  return images;
+}
+
 function parseReturnedImage(payload: unknown): VendorImageRecord {
   const images = parseReturnedImages(payload);
   const image = images[0];
@@ -965,6 +986,10 @@ export async function createVendorImages(
     fetchImpl,
   );
   const images = parseReturnedImages(payload);
+  requireInsertedVendorImages(images, data.images.length, {
+    vendor_id: params.id,
+    operation: "metadata_create",
+  });
 
   void writeAuditLogSafely(
     {
@@ -1162,6 +1187,12 @@ export async function uploadVendorImage(
     const images = parseReturnedImages(
       normalizeVendorImageRows(resolvedConfig.supabaseUrl, payload),
     );
+    requireInsertedVendorImages(images, 1, {
+      vendor_id: params.id,
+      operation: "storage_upload_metadata_create",
+      storage_object_path: storageObjectPath,
+      image_url: imageUrl,
+    });
 
     logStructuredEvent("info", {
       event: "ADMIN_VENDOR_IMAGE_ROW_INSERT_COMPLETED",

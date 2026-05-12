@@ -29,6 +29,7 @@ Metadata also carries:
 - `request_id`
 - `actor_label`
 - target labels such as vendor name, slug, email, or changed fields when available
+- vendor image upload metadata such as file name, MIME type, file size, storage path, and resulting image count when available
 
 ## Tracked actions
 
@@ -85,6 +86,7 @@ Audit-log visibility currently appears on the dedicated admin activity route as:
 
 Agents do not see this UI and cannot access the API route.
 Operational platform warnings and failures are intentionally separate and live on `/admin/logs`.
+If an image upload writes Storage but no `vendor_images` row is returned, that is treated as an upload failure rather than a completed auditable image attachment.
 
 ## Source ownership
 

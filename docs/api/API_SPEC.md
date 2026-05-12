@@ -478,8 +478,11 @@ Behavior:
 - falls back to the original safe file if transformation fails after validation
 - uploads the stored file to the `vendor-images` Supabase Storage bucket with matching extension and content type
 - inserts `vendor_images` records with `image_url` and `storage_object_path`
+- treats a missing or empty returned metadata row as an upstream failure instead of a successful upload
 - returns vendor image rows for the selected vendor id
+- returns only rows scoped to the selected vendor id
 - writes `vendor.image_uploaded` audit log
+- emits operational upload metadata that should match the current selected file and vendor id
 
 Returns:
 - `images`
@@ -495,6 +498,7 @@ Behavior:
 - validates vendor id
 - returns vendor image records ordered by `sort_order`
 - normalizes any storage-path-only rows into browser-loadable public URLs before responding
+- responses are consumed by a vendor-scoped admin image cache; callers must not merge images from another vendor into the current edit state
 
 Returns:
 - `images`

@@ -308,6 +308,8 @@ Vendor profile images use this path:
 8. `vendor_images.image_url` stores the public URL when created
 9. admin and public APIs normalize storage-backed rows into browser-loadable URLs
 10. public vendor detail renders the returned image URL
+11. upload success is reported only after the metadata insert returns the expected `vendor_images` row
+12. failed metadata inserts are treated as upstream failures so storage-only uploads do not masquerade as complete vendor images
 
 Rules:
 - vendor profile images belong to `vendor_images`
@@ -318,6 +320,8 @@ Rules:
 - optimization failures after validation fall back to the original safe file so valid uploads do not fail because compression failed
 - `storage_object_path` is the Storage source of truth
 - frontend rendering uses the returned public URL
+- the admin edit image list must remain scoped to the selected vendor id
+- local file previews and pending file refs must be cleared on upload success, component unmount, and vendor switch
 
 ## State Model
 
@@ -341,6 +345,14 @@ Rules:
 - `/api/admin/session` validates and refreshes the cookie-backed session against `admin_users`
 - authenticated users missing from `admin_users` are denied and any cookie-backed privileged session is cleared
 - protected routes resolve through the admin route guard
+
+### Admin Vendor Workspace State
+- vendor registry filters and selected vendor id are kept in a process-local workspace cache by role
+- hours, dishes, and images are cached separately by vendor id
+- vendor image cache reads and writes must filter rows by `vendor_id`
+- changing the selected vendor invalidates in-flight image-list requests and clears the visible image list until the selected vendor's rows are known
+- the Vendor Images uploader is keyed by selected vendor id so native file input state, local previews, and file refs do not leak between edit sessions
+- upload success merges only rows returned for the selected vendor id before updating image counts
 
 ### Usage Signal State
 - public tracking is fire-and-forget and must never block UI

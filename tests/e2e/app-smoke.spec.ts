@@ -370,6 +370,7 @@ type MockAdminWorkspaceOptions = {
   operationalLogsHasMore?: boolean;
   vendorCount?: number;
   adminRequestLog?: string[];
+  vendorImageUploadPayloads?: string[];
   delayInitialImageGetUntilUpload?: boolean;
 };
 
@@ -737,6 +738,7 @@ async function mockAuthenticatedAdminWorkspace(
     recordAdminRequest(route.request());
     if (route.request().method() === "POST") {
       const vendorId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+      options.vendorImageUploadPayloads?.push(route.request().postDataBuffer()?.toString("utf8") ?? "");
 
       await route.fulfill({
         status: 201,
@@ -2044,6 +2046,158 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
     await expect(page.locator(".vendor-image-item")).toHaveCount(1);
     await expect(page.locator(".vendor-image-item")).toContainText("mock-upload.webp");
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin vendor image selection does not reset when local preview creation fails", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const adminRequestLog: string[] = [];
+
+    await page.addInitScript(() => {
+      URL.createObjectURL = () => {
+        throw new Error("blob preview unavailable");
+      };
+    });
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      vendorCount: 1,
+      adminRequestLog,
+    });
+
+    await page.goto("/admin/vendors");
+    await page.getByRole("button", { name: /Mock Vendor 1/ }).click();
+    await page.getByRole("link", { name: "Open edit workspace" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.getByRole("heading", { name: "Vendor images", exact: true })).toBeVisible();
+
+    await page.locator('input[name="image"]').setInputFiles({
+      name: "vendor-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect
+      .poll(() => page.locator('input[name="image"]').evaluate((input) => (input as HTMLInputElement).files?.length ?? 0))
+      .toBe(1);
+    expect(
+      adminRequestLog.filter(
+        (entry) =>
+          entry === "POST /api/admin/vendors/60000000-0000-4000-8000-000000000001/images",
+      ),
+    ).toHaveLength(0);
+
+    const uploadRequest = page.waitForRequest((request) =>
+      request.method() === "POST" &&
+      request.url().includes("/api/admin/vendors/60000000-0000-4000-8000-000000000001/images"),
+    );
+
+    await page.getByRole("button", { name: "Upload vendor image" }).click();
+    await uploadRequest;
+
+    await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
+    await expect(page.locator(".vendor-image-item")).toHaveCount(1);
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin vendor image upload uses the current native file when state diverges", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const vendorImageUploadPayloads: string[] = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      vendorCount: 1,
+      vendorImageUploadPayloads,
+    });
+
+    await page.goto("/admin/vendors");
+    await page.getByRole("button", { name: /Mock Vendor 1/ }).click();
+    await page.getByRole("link", { name: "Open edit workspace" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.getByRole("heading", { name: "Vendor images", exact: true })).toBeVisible();
+
+    await page.locator('input[name="image"]').setInputFiles({
+      name: "first-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+
+    await page.locator('input[name="image"]').evaluate((input) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], "second-upload.jpg", {
+        type: "image/jpeg",
+      }));
+      (input as HTMLInputElement).files = transfer.files;
+    });
+    await expect
+      .poll(() =>
+        page.locator('input[name="image"]').evaluate((input) => (input as HTMLInputElement).files?.[0]?.name ?? null)
+      )
+      .toBe("second-upload.jpg");
+
+    await page.getByRole("button", { name: "Upload vendor image" }).click();
+    await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
+    expect(vendorImageUploadPayloads).toHaveLength(1);
+    expect(vendorImageUploadPayloads[0]).toContain('filename="second-upload.jpg"');
+    expect(vendorImageUploadPayloads[0]).not.toContain('filename="first-upload.jpg"');
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin vendor image selection resets when switching vendors", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const adminRequestLog: string[] = [];
+    const vendorImageUploadPayloads: string[] = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      vendorCount: 2,
+      adminRequestLog,
+      vendorImageUploadPayloads,
+    });
+
+    await page.goto("/admin/vendors");
+    await page.getByRole("button", { name: /Mock Vendor 1/ }).click();
+    await page.getByRole("link", { name: "Open edit workspace" }).click();
+    await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.locator("#edit-vendor-identity")).toHaveText("Mock Vendor 1");
+
+    await page.locator('input[name="image"]').setInputFiles({
+      name: "vendor-one-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    await expect(page.locator(".vendor-image-local-preview")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.locator('input[name="image"]').evaluate((input) => (input as HTMLInputElement).files?.[0]?.name ?? null)
+      )
+      .toBe("vendor-one-upload.jpg");
+
+    await page.getByRole("button", { name: /Mock Vendor 2/ }).click();
+    await expect(page.locator("#edit-vendor-identity")).toHaveText("Mock Vendor 2");
+    await expect(page.locator(".vendor-image-local-preview")).toHaveCount(0);
+    await expect(page.locator(".vendor-image-item")).toHaveCount(0);
+    await expect
+      .poll(() => page.locator('input[name="image"]').evaluate((input) => (input as HTMLInputElement).files?.length ?? 0))
+      .toBe(0);
+
+    await page.locator('input[name="image"]').setInputFiles({
+      name: "vendor-two-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    await page.getByRole("button", { name: "Upload vendor image" }).click();
+
+    await expect(page.locator(".admin-status-copy")).toContainText("Image uploaded successfully.");
+    await expect(page.locator(".vendor-image-item")).toHaveCount(1);
+    expect(
+      adminRequestLog.filter(
+        (entry) =>
+          entry === "POST /api/admin/vendors/60000000-0000-4000-8000-000000000002/images",
+      ),
+    ).toHaveLength(1);
+    expect(vendorImageUploadPayloads).toHaveLength(1);
+    expect(vendorImageUploadPayloads[0]).toContain('filename="vendor-two-upload.jpg"');
+    expect(vendorImageUploadPayloads[0]).not.toContain('filename="vendor-one-upload.jpg"');
     await expectNoClientErrors(errors);
   });
 

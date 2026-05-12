@@ -58,9 +58,9 @@ Card actions are:
 
 Action rules:
 
-- `Call` is primary
+- `Call` and `View details` share the green/glassy CTA family so primary vendor actions feel related
 - `Directions` is secondary
-- `View details` uses a lighter green treatment where implemented
+- `Directions` may remain visually distinct because it leaves the app for navigation
 - clicking/tapping the card body previews the vendor on the map
 - action clicks must not be intercepted by the map-preview click target
 
@@ -102,6 +102,7 @@ Related but separate discovery surfaces:
 - Last selected vendor
 
 These are not selected vendor cards. They are retention/supporting surfaces and should not be documented as the primary preview panel.
+The `Popular vendors near you` surface is visual/supporting; main nearby ordering still follows the discovery ranking contract rather than letting a popularity panel reorder the primary list.
 
 ## Vendor detail image rule
 

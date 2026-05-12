@@ -120,6 +120,12 @@ Notes:
 - sort_order: integer default 0
 - created_at: timestamp
 
+Runtime rules:
+- uploaded vendor profile images should have both `image_url` and `storage_object_path`
+- seed or legacy image rows may have no `storage_object_path`, but upload/delete bookkeeping depends on it
+- admin upload success is valid only when the insert returns the expected `vendor_images` row
+- admin and public render paths should always scope image rows by `vendor_id`
+
 ## Table: ratings
 - id: uuid, primary key
 - vendor_id: uuid, foreign key to vendors
