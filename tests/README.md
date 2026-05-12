@@ -29,3 +29,11 @@ Shared-environment cleanup safety:
 - pair browser tests with `npm run smoke:nearby` and the static gate (`lint`, `typecheck`, `test`, `build`) before release signoff
 - keep the worktree clean before final browser verification so the tested state matches the deployable state
 - on local macOS sandboxed runs, Chromium launch can fail before the app loads; rerun Playwright outside the sandbox when that happens
+- include the targeted vendor-image browser tests after upload changes:
+  - native file input reset still posts
+  - local preview creation failure does not reset the form
+  - current native file beats stale React state
+  - vendor switch clears pending file and preview state
+  - stale image-list responses cannot overwrite a successful upload
+- run a real Supabase-backed cross-vendor upload check when changing upload state, metadata insert handling, or admin image caches
+- run `npm audit` as a release blocker check; high-severity advisories require remediation before production deploy

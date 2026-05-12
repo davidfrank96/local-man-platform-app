@@ -77,6 +77,7 @@ Default:
 - restored nearby vendor data is reused only when the snapshot is still fresh enough to trust
 - restored nearby vendor data still yields to one live nearby fetch before it becomes authoritative again
 - admin vendor create, update, deactivate, hours, image, and featured-dish mutations invalidate restored discovery vendor data
+- vendor-image uploads also invalidate restored discovery data because public vendor detail may now prefer the new storage-backed image
 
 ## Search and filter rules
 

@@ -88,7 +88,13 @@ Phase 6 signal visibility is ready when:
 - Discovery retention is browser-local only and does not sync across devices.
 
 ## Readiness
-Phase 6 is functionally complete. Deployment readiness depends on keeping the regression gate, runtime gate, and production environment configuration green together.
+Phase 6 is functionally complete. Deployment readiness depends on keeping the regression gate, runtime gate, production environment configuration, and dependency audit green together.
+
+Current release-gate notes:
+- the vendor image upload lifecycle now has deterministic cleanup for vendor switches, upload success, preview object URLs, and stale in-flight image-list requests
+- upload success now requires the returned `vendor_images` metadata row so Storage-only writes cannot be reported as complete uploads
+- real cross-vendor upload verification should be run against both local dev and local production runtime before promotion
+- high-severity dependency audit findings remain deployment blockers even when functional checks pass
 
 ## Phase 5 Boundaries
 Allowed:

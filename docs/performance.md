@@ -29,6 +29,8 @@ Current stability rules include:
 - no flicker of the nearby-results helper row during vendor selection
 - no scroll-anchor jumps from dynamic upper panels such as the selected vendor panel or last-selected panel
 - no horizontal viewport growth on narrow mobile widths, including 320px long unbroken vendor content cases
+- no admin vendor-image page reset or route reload when selecting a local file
+- no cross-vendor preview or file-input state leakage after switching edit sessions
 
 ## Known regression fixes in this phase
 
@@ -70,6 +72,20 @@ Fix:
   - location panel
   - vendor sections
   - retention panels
+
+### Vendor-image upload state leakage
+
+Problem:
+
+- upload state could appear stable for one vendor but later reuse stale file, preview, or image-list state after switching vendors during the same admin runtime
+
+Fix:
+
+- key the Vendor Images section by selected vendor id
+- use the native file input as the upload source of truth at submit time
+- revoke local object URLs on replacement and unmount
+- clear image-list state during uncached vendor switches
+- merge uploaded images only after filtering current and returned rows by selected `vendor_id`
 
 ## Theme and visual identity constraints
 

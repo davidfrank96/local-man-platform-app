@@ -7,6 +7,7 @@ Ensure the runtime, admin operations, public discovery surface, Phase 5 UX polis
 Release-discipline notes:
 - release candidates should come from a clean committed worktree so the tested source tree matches the deployable artifact
 - on local macOS sandboxed runs, Chromium launch may fail before Playwright can open the app; rerun those browser checks outside the sandbox and treat the in-sandbox failure as an environment limitation rather than an app regression
+- a passing functional gate is not enough for production promotion when `npm audit` reports high-severity advisories
 
 ## Documentation Validation
 Check:
@@ -108,16 +109,22 @@ Test:
 - unknown vendor slug returns `NOT_FOUND`
 - rating RPC failures return `UPSTREAM_ERROR`
 - vendor lookup connectivity failures return `UPSTREAM_ERROR`
+- first anonymous browser rating for a vendor succeeds
+- second rating for the same vendor and anonymous browser identity returns a clean duplicate response and does not update the aggregate
+- the same anonymous browser identity can rate a different vendor
+- a different anonymous browser identity can rate the same vendor once
 - rating summary updates:
   - `average_rating`
   - `review_count`
 - vendor cards and detail continue to show `New` when no ratings exist
 - repeated rating spam from one client is rate limited
 - duplicate sequential and concurrent rating retries collapse into one upstream write
+- public rating controls disable after success and stay disabled on refresh using client-side storage
 - route returns the database-owned post-write summary instead of recomputing ratings client-side
 
 Current automated coverage:
 - `tests/public-rating-route.test.ts`
+- `tests/e2e/app-smoke.spec.ts`
 
 ### Abuse Protection Logic
 Test:
@@ -172,6 +179,10 @@ Test:
 - vendor image list and removal work against the same admin surface
 - vendor image list normalizes storage-path-only rows into browser-loadable public URLs
 - vendor image optimization validates real image bytes, resizes oversized uploads, writes matching content type and extension, and falls back safely when transformation fails
+- vendor image upload fails if the Storage object is written but the `vendor_images` metadata row is not returned
+- vendor image upload state is isolated by selected vendor id and cannot reuse a stale file from a prior vendor edit session
+- vendor image upload uses the current native file input value even if React state and the DOM briefly diverge
+- vendor image list state filters cached, fetched, uploaded, and deleted rows by the selected vendor id
 - vendor hours can be loaded into the admin edit form before replacement
 - vendor featured dishes can be loaded for the selected vendor before adding more
 - vendor featured dish insertion writes audit log
@@ -244,6 +255,9 @@ Manual admin UI smoke coverage:
 - upload one image file and verify it appears in the current image list
 - confirm a local preview appears before upload
 - confirm a visible success message appears after image upload
+- switch to a second vendor and confirm the file input, local preview, and image count reset before selecting another image
+- upload a different image to the second vendor and confirm logs, request payload, DB row, and storage path show the second file and second vendor id
+- switch back to the first vendor and confirm no pending file or preview from the second vendor is retained
 - remove the uploaded image and confirm the list updates
 - add one featured dish
 - confirm the featured dish list updates for the same selected vendor without a manual reload
@@ -261,6 +275,13 @@ Public detail follow-up after admin edits:
 - open the public vendor detail page for the edited vendor
 - confirm updated hours appear without waiting for a manual cache refresh
 - confirm a real uploaded image is preferred over a seed placeholder when one exists
+
+Release-gate upload sequence:
+- run the targeted browser upload tests in `tests/e2e/app-smoke.spec.ts`
+- run a real Supabase-backed cross-vendor upload script against local dev runtime
+- run the same cross-vendor upload script against local production runtime after `npm run build` and `npm run start`
+- inspect `vendor_images`, Storage paths, and `ADMIN_VENDOR_IMAGE_UPLOADED` operational events for matching vendor id and file metadata
+- run `npm run db:inspect:playwright` afterward and confirm no QA vendors, users, or storage objects remain
 
 ### Vendor Display Logic
 Test:

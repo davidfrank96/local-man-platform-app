@@ -187,17 +187,20 @@ Returns:
   - `review_count`
 
 Behavior:
-- no login required for the initial lightweight flow
+- no login required for the lightweight public rating flow
+- one anonymous browser identity may rate a specific vendor once
+- anonymous rating identity is stored in the existing public client cookie and written to the database only as a server-side SHA-256 hash
 - validates the vendor slug and rating score
 - resolves the active vendor id first, then submits the write through the server-only `submit_public_vendor_rating` RPC
 - database-side aggregation owns `vendors.average_rating` and `vendors.review_count`
 - the response returns the authoritative post-write summary from the database instead of recalculating scores in Node
-- release requires `supabase/migrations/20260507193000_public_rating_submission_rpc.sql` to be applied so the ratings RPC and summary refresh function exist
+- release requires both `supabase/migrations/20260507193000_public_rating_submission_rpc.sql` and `supabase/migrations/20260512003000_public_rating_anonymous_identity.sql` to be applied so the ratings RPC, summary refresh function, anonymous hash column, and vendor/hash unique index exist
 - does not support review comments
 - abuse protection:
   - threshold: `8` accepted submissions per `10` minutes per client/IP
   - block window: `10` minutes after exceeding the threshold
   - sequential or concurrent duplicate retry submissions for the same vendor/score are collapsed into one upstream write for `60` seconds
+- returns `VALIDATION_ERROR` with HTTP `409` when the same anonymous browser identity rates the same vendor again; the response includes the current authoritative `rating_summary` and `duplicate: true`
 - returns `NOT_FOUND` when the vendor slug does not resolve to an active vendor
 - returns `UPSTREAM_ERROR` when the rating RPC or summary refresh fails
 
@@ -475,8 +478,11 @@ Behavior:
 - falls back to the original safe file if transformation fails after validation
 - uploads the stored file to the `vendor-images` Supabase Storage bucket with matching extension and content type
 - inserts `vendor_images` records with `image_url` and `storage_object_path`
+- treats a missing or empty returned metadata row as an upstream failure instead of a successful upload
 - returns vendor image rows for the selected vendor id
+- returns only rows scoped to the selected vendor id
 - writes `vendor.image_uploaded` audit log
+- emits operational upload metadata that should match the current selected file and vendor id
 
 Returns:
 - `images`
@@ -492,6 +498,7 @@ Behavior:
 - validates vendor id
 - returns vendor image records ordered by `sort_order`
 - normalizes any storage-path-only rows into browser-loadable public URLs before responding
+- responses are consumed by a vendor-scoped admin image cache; callers must not merge images from another vendor into the current edit state
 
 Returns:
 - `images`

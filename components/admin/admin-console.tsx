@@ -113,6 +113,33 @@ function sortVendorImagesByOrder(images: VendorImage[]): VendorImage[] {
   );
 }
 
+function filterVendorImagesForVendor(images: VendorImage[], vendorId: string): VendorImage[] {
+  return images.filter((image) => image.vendor_id === vendorId);
+}
+
+function mergeVendorImagesById(
+  currentImages: VendorImage[],
+  incomingImages: VendorImage[],
+): VendorImage[] {
+  const imagesById = new Map(currentImages.map((image) => [image.id, image]));
+
+  for (const image of incomingImages) {
+    imagesById.set(image.id, image);
+  }
+
+  return sortVendorImagesByOrder([...imagesById.values()]);
+}
+
+function updateVendorImagesCount(
+  vendors: AdminVendorSummary[],
+  vendorId: string,
+  imagesCount: number,
+): AdminVendorSummary[] {
+  return vendors.map((vendor) =>
+    vendor.id === vendorId ? { ...vendor, images_count: imagesCount } : vendor
+  );
+}
+
 type AdminConsoleProps = {
   initialSelectedVendorId?: string | null;
   mode?: "dashboard" | "agent" | "vendors" | "create" | "edit";
@@ -252,25 +279,32 @@ export function AdminConsole({
 
   const loadVendorImages = useCallback(async function loadVendorImages(
     vendorId: string | null,
+    expectedImageCount = 0,
   ) {
+    const requestId = ++vendorImagesRequestId.current;
+
     if (!vendorId || !session) {
       setVendorImages([]);
       return;
     }
 
     const cachedImages = readVendorArtifactCache(workspaceCacheScope, vendorId, "images");
+    const cachedVendorImages = Array.isArray(cachedImages)
+      ? filterVendorImagesForVendor(cachedImages as VendorImage[], vendorId)
+      : null;
 
-    if (cachedImages) {
-      setVendorImages(cachedImages as VendorImage[]);
+    if (cachedVendorImages && cachedVendorImages.length >= expectedImageCount) {
+      setVendorImages(cachedVendorImages);
       return;
     }
 
-    const requestId = ++vendorImagesRequestId.current;
+    setVendorImages([]);
     const images = await listAdminVendorImages(vendorId);
+    const vendorScopedImages = filterVendorImagesForVendor(images, vendorId);
 
     if (requestId === vendorImagesRequestId.current) {
-      setVendorImages(images);
-      updateVendorArtifactCache(workspaceCacheScope, vendorId, "images", images);
+      setVendorImages(vendorScopedImages);
+      updateVendorArtifactCache(workspaceCacheScope, vendorId, "images", vendorScopedImages);
     }
   }, [session, workspaceCacheScope]);
 
@@ -328,7 +362,10 @@ export function AdminConsole({
     }
 
     const timeout = window.setTimeout(() => {
-      void loadVendorImages(selectedVendor?.id ?? null).catch((error) => {
+      void loadVendorImages(
+        selectedVendor?.id ?? null,
+        selectedVendor?.images_count ?? 0,
+      ).catch((error) => {
         setVendorImages([]);
         setStatus(error instanceof Error ? error.message : "Unable to load vendor images.");
       });
@@ -337,7 +374,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [loadVendorImages, selectedVendor?.id, shouldLoadVendorArtifacts]);
+  }, [loadVendorImages, selectedVendor?.id, selectedVendor?.images_count, shouldLoadVendorArtifacts]);
 
   useEffect(() => {
     if (!shouldLoadVendorArtifacts) {
@@ -641,9 +678,15 @@ export function AdminConsole({
     );
 
     if (uploadedImages && selectedVendor) {
-      const nextImages = sortVendorImagesByOrder([...vendorImages, ...uploadedImages]);
+      vendorImagesRequestId.current += 1;
+      const currentVendorImages = filterVendorImagesForVendor(vendorImages, selectedVendor.id);
+      const uploadedVendorImages = filterVendorImagesForVendor(uploadedImages, selectedVendor.id);
+      const nextImages = mergeVendorImagesById(currentVendorImages, uploadedVendorImages);
 
       setVendorImages(nextImages);
+      setVendors((current) =>
+        updateVendorImagesCount(current, selectedVendor.id, nextImages.length)
+      );
       updateVendorArtifactCache(
         workspaceCacheScope,
         selectedVendor.id,
@@ -667,8 +710,14 @@ export function AdminConsole({
     );
 
     if (deletedImage && selectedVendor) {
-      const nextImages = vendorImages.filter((image) => image.id !== deletedImage.id);
+      vendorImagesRequestId.current += 1;
+      const currentVendorImages = filterVendorImagesForVendor(vendorImages, selectedVendor.id);
+      const nextImages = currentVendorImages.filter((image) => image.id !== deletedImage.id);
+
       setVendorImages(nextImages);
+      setVendors((current) =>
+        updateVendorImagesCount(current, selectedVendor.id, nextImages.length)
+      );
       updateVendorArtifactCache(workspaceCacheScope, selectedVendor.id, "images", nextImages);
     }
   }

@@ -120,16 +120,26 @@ Notes:
 - sort_order: integer default 0
 - created_at: timestamp
 
+Runtime rules:
+- uploaded vendor profile images should have both `image_url` and `storage_object_path`
+- seed or legacy image rows may have no `storage_object_path`, but upload/delete bookkeeping depends on it
+- admin upload success is valid only when the insert returns the expected `vendor_images` row
+- admin and public render paths should always scope image rows by `vendor_id`
+
 ## Table: ratings
 - id: uuid, primary key
 - vendor_id: uuid, foreign key to vendors
 - score: integer
 - comment: text
 - source_type: text
+- anonymous_client_hash: text nullable
 - created_at: timestamp
 
 Notes:
 - `score` is constrained from 1 to 5.
+- new public rating writes include a SHA-256 anonymous browser identity hash.
+- `ratings_vendor_anonymous_client_hash_idx` enforces one rating per vendor per anonymous hash when the hash is present.
+- legacy rows may have `anonymous_client_hash = null` and remain part of aggregate rating history.
 
 ## Table: admin_users
 - id: uuid, primary key
@@ -235,7 +245,7 @@ Admin users can:
 ## Future Extension Notes
 Potential future additions:
 - bookings table
-- anonymous feedback source tracking
+- account-backed rating identity
 - vendor verification state
 - operating status events
 

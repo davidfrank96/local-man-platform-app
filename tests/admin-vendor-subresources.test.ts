@@ -504,6 +504,73 @@ test("admin create vendor images route surfaces upstream upload failures", async
   }
 });
 
+test("admin create vendor images route fails when metadata row is not returned", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${url.pathname}`);
+
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "admin-id",
+        email: "admin@example.com",
+      });
+    }
+
+    if (url.pathname === "/rest/v1/admin_users") {
+      return Response.json([
+        {
+          id: "admin-id",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "admin",
+        },
+      ]);
+    }
+
+    if (url.pathname.startsWith(`/storage/v1/object/vendor-images/${vendorId}/`)) {
+      return new Response(null, { status: 200 });
+    }
+
+    if (url.pathname === "/rest/v1/vendor_images" && method === "POST") {
+      return Response.json([]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await createImagesRoute(
+      createMultipartAdminRequest(),
+      createRouteContext(),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "UPSTREAM_ERROR");
+    assert.equal(
+      body.error.message,
+      "Vendor image metadata insert did not return the expected row count.",
+    );
+    assert.equal(body.error.details.expected_count, 1);
+    assert.equal(body.error.details.returned_count, 0);
+    assert.ok(
+      calls.some((call) => call.startsWith(`POST /storage/v1/object/vendor-images/${vendorId}/`)),
+    );
+    assert.ok(
+      calls.some((call) => call.startsWith(`DELETE /storage/v1/object/vendor-images/${vendorId}/`)),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin create vendor images route reports missing service role configuration clearly", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;

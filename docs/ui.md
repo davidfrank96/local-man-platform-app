@@ -57,6 +57,12 @@ The vendor list is the primary interaction surface.
 - the selected vendor summary updates without leaving discovery
 - `Call`, `Directions`, and `View details` are available from both the card system and the selected preview
 
+Default nearby ordering is:
+- open vendors before closed vendors
+- distance ascending inside the same open/closed group
+- usage-signal popularity only as a close-distance tie-breaker
+- stable name/id ordering last
+
 ## Supporting UI systems
 
 - time-based themes: morning, afternoon, night
@@ -108,6 +114,11 @@ Those client-side checks are presentation-only:
 - they reduce clutter
 - they improve redirects and denied-state copy
 - they must never be treated as the authorization boundary
+
+Vendor image upload state is also workspace UI state:
+- pending file, filename, local preview URL, and upload status are scoped to the selected vendor edit session
+- switching vendors must clear pending image state before another upload starts
+- upload success is shown only after the storage-backed `vendor_images` row is returned and merged for the current vendor
 
 ## Source of truth
 

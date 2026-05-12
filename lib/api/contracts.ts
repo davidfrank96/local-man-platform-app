@@ -73,11 +73,14 @@ export const apiEndpoints = {
     method: "POST",
     path: "/api/vendors/[slug]/ratings",
     requestShape: "Route param: slug. JSON body with score = 1 through 5.",
-    responseShape: "Vendor id and updated rating summary for the rated vendor.",
+    responseShape:
+      "Vendor id and updated rating summary for accepted ratings; duplicate attempts return 409 with duplicate=true and the current rating summary.",
     validationBoundary: [
       "slug must match the documented slug format",
       "score must be an integer from 1 through 5",
       "rating writes must remain lightweight and comment-free",
+      "one anonymous browser identity may rate a specific vendor once",
+      "duplicate attempts must not update average_rating or review_count",
     ],
   },
   getCategories: {

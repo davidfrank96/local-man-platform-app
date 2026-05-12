@@ -57,6 +57,8 @@ For each vendor before activation:
 - [ ] Keep files within the documented size limit.
 - [ ] Confirm the image appears in the current image list.
 - [ ] Refresh the page and confirm the image still appears.
+- [ ] Switch to a different vendor and confirm the previous file name, preview, and image count do not carry over.
+- [ ] Upload a different image to the second vendor and confirm the current file metadata appears in the operational log.
 - [ ] Remove the image when no longer needed.
 - [ ] Confirm the storage object and database row are both removed.
 
@@ -98,7 +100,9 @@ If storage uploads are broken:
 - [ ] Keep existing vendor records active.
 - [ ] Pause new image uploads.
 - [ ] Continue using the missing-image fallback.
-- [ ] Investigate the bucket and auth configuration before resuming uploads.
+- [ ] Check whether the POST request fires before debugging Storage.
+- [ ] If Storage object exists but the image does not render, check `vendor_images` for the matching metadata row.
+- [ ] Investigate the bucket, service-role auth, metadata insert, and selected-vendor state before resuming uploads.
 
 ## Known Limitations
 - IP approximation is still an interface, not a concrete provider.

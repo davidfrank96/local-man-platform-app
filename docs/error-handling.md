@@ -50,6 +50,15 @@ Agent and public flows should only show:
 
 Stack traces, raw Supabase payloads, and secrets must never be shown in UI.
 
+### Admin vendor images
+
+Vendor image upload failures should remain inline in the current edit workspace:
+
+- validation errors return safe copy without resetting the page
+- storage or metadata-row failures surface as upload errors, not false success
+- non-auth upload failures must not trigger logout, session recovery, or workspace ejection
+- successful upload copy is shown only after the returned image row is merged for the selected vendor
+
 ## Global frontend systems
 
 ### Toast system

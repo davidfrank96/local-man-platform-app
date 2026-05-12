@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState, type FormEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   type AdminVendorFilters,
   type AdminVendorSummary,
@@ -67,6 +67,30 @@ type AdminFormProps = {
   onCreateDishes: (data: CreateVendorDishesRequest) => Promise<void>;
   onDeleteDish: (dishId: string) => Promise<void>;
 };
+
+function createLocalImagePreviewUrl(file: File | null) {
+  if (!file || typeof URL.createObjectURL !== "function") {
+    return null;
+  }
+
+  try {
+    return URL.createObjectURL(file);
+  } catch {
+    return null;
+  }
+}
+
+function revokeLocalImagePreviewUrl(url: string | null) {
+  if (!url || typeof URL.revokeObjectURL !== "function") {
+    return;
+  }
+
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    // Preview cleanup must never interrupt the upload form lifecycle.
+  }
+}
 
 export const VendorRegistryPanel = memo(function VendorRegistryPanel({
   disabled,
@@ -212,6 +236,7 @@ export function AdminCreateVendorSection({
   >>>({});
   const [pendingCreateVendorImagePreviewUrl, setPendingCreateVendorImagePreviewUrl] = useState<string | null>(null);
   const [pendingCreateVendorImageName, setPendingCreateVendorImageName] = useState<string | null>(null);
+  const pendingCreateVendorImagePreviewUrlRef = useRef<string | null>(null);
   const [hoursDraft, setHoursDraft] = useState(
     dayLabels.map(() => ({
       open: "",
@@ -232,11 +257,9 @@ export function AdminCreateVendorSection({
 
   useEffect(() => {
     return () => {
-      if (pendingCreateVendorImagePreviewUrl) {
-        URL.revokeObjectURL(pendingCreateVendorImagePreviewUrl);
-      }
+      revokeLocalImagePreviewUrl(pendingCreateVendorImagePreviewUrlRef.current);
     };
-  }, [pendingCreateVendorImagePreviewUrl]);
+  }, []);
 
   async function submitCreateVendor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -288,13 +311,9 @@ export function AdminCreateVendorSection({
         missingImagesAcknowledged: false,
       });
       setPendingCreateVendorImageName(null);
-      setPendingCreateVendorImagePreviewUrl((current) => {
-        if (current) {
-          URL.revokeObjectURL(current);
-        }
-
-        return null;
-      });
+      revokeLocalImagePreviewUrl(pendingCreateVendorImagePreviewUrlRef.current);
+      pendingCreateVendorImagePreviewUrlRef.current = null;
+      setPendingCreateVendorImagePreviewUrl(null);
       form.reset();
     } catch (error) {
       if ((error as AdminApiError).code === "VALIDATION_ERROR") {
@@ -534,14 +553,11 @@ export function AdminCreateVendorSection({
               type="file"
               onChange={(event) => {
                 const file = event.currentTarget.files?.[0] ?? null;
+                const nextPreviewUrl = createLocalImagePreviewUrl(file);
 
-                setPendingCreateVendorImagePreviewUrl((current) => {
-                  if (current) {
-                    URL.revokeObjectURL(current);
-                  }
-
-                  return file ? URL.createObjectURL(file) : null;
-                });
+                revokeLocalImagePreviewUrl(pendingCreateVendorImagePreviewUrlRef.current);
+                pendingCreateVendorImagePreviewUrlRef.current = nextPreviewUrl;
+                setPendingCreateVendorImagePreviewUrl(nextPreviewUrl);
                 setPendingCreateVendorImageName(file?.name ?? null);
               }}
             />
@@ -764,6 +780,7 @@ export function EditVendorWorkspace({
           </div>
           <div id="edit-images">
             <VendorImagesSection
+              key={`vendor-images:${selectedVendor.id}`}
               disabled={disabled}
               selectedVendor={selectedVendor}
               vendorImages={vendorImages}
@@ -793,14 +810,14 @@ function VendorImagesSection({
   const [pendingVendorImageFile, setPendingVendorImageFile] = useState<File | null>(null);
   const [pendingVendorImagePreviewUrl, setPendingVendorImagePreviewUrl] = useState<string | null>(null);
   const [pendingVendorImageName, setPendingVendorImageName] = useState<string | null>(null);
+  const pendingVendorImageFileRef = useRef<File | null>(null);
+  const pendingVendorImagePreviewUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
-      if (pendingVendorImagePreviewUrl) {
-        URL.revokeObjectURL(pendingVendorImagePreviewUrl);
-      }
+      revokeLocalImagePreviewUrl(pendingVendorImagePreviewUrlRef.current);
     };
-  }, [pendingVendorImagePreviewUrl]);
+  }, []);
 
   return (
     <section className="admin-panel" aria-labelledby="vendor-images">
@@ -817,9 +834,11 @@ function VendorImagesSection({
           const form = event.currentTarget;
           const imageInput = form.elements.namedItem("image");
           const sortOrderInput = form.elements.namedItem("sort_order");
+          const currentInputFile = imageInput instanceof HTMLInputElement ? imageInput.files?.[0] ?? null : null;
           const selectedImageFile =
-            pendingVendorImageFile ??
-            (imageInput instanceof HTMLInputElement ? imageInput.files?.[0] ?? null : null);
+            currentInputFile ??
+            pendingVendorImageFileRef.current ??
+            pendingVendorImageFile;
 
           if (!selectedImageFile) {
             form.reportValidity();
@@ -836,15 +855,12 @@ function VendorImagesSection({
           const uploadedImages = await onCreateImages(formData);
 
           if (uploadedImages) {
+            pendingVendorImageFileRef.current = null;
             setPendingVendorImageFile(null);
             setPendingVendorImageName(null);
-            setPendingVendorImagePreviewUrl((current) => {
-              if (current) {
-                URL.revokeObjectURL(current);
-              }
-
-              return null;
-            });
+            revokeLocalImagePreviewUrl(pendingVendorImagePreviewUrlRef.current);
+            pendingVendorImagePreviewUrlRef.current = null;
+            setPendingVendorImagePreviewUrl(null);
             form.reset();
           }
         }}
@@ -860,15 +876,13 @@ function VendorImagesSection({
             type="file"
             onChange={(event) => {
               const file = event.currentTarget.files?.[0] ?? null;
+              const nextPreviewUrl = createLocalImagePreviewUrl(file);
 
+              revokeLocalImagePreviewUrl(pendingVendorImagePreviewUrlRef.current);
+              pendingVendorImageFileRef.current = file;
+              pendingVendorImagePreviewUrlRef.current = nextPreviewUrl;
               setPendingVendorImageFile(file);
-              setPendingVendorImagePreviewUrl((current) => {
-                if (current) {
-                  URL.revokeObjectURL(current);
-                }
-
-                return file ? URL.createObjectURL(file) : null;
-              });
+              setPendingVendorImagePreviewUrl(nextPreviewUrl);
               setPendingVendorImageName(file?.name ?? null);
             }}
           />

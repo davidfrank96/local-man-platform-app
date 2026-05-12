@@ -22,6 +22,7 @@ Notes:
 - the selected vendor card remains directly below the map
 - the location status panel sits below the selected vendor card
 - recent and popular sections are accessed through the mobile vendor section navbar rather than always rendering above the fold
+- the current mobile map minimum height is `360px`; tablet and desktop map heights are larger through breakpoint-specific CSS
 
 ## Mobile section behavior
 
@@ -45,7 +46,7 @@ Current desktop and laptop layout is a two-column discovery shell.
 
 The left content column contains:
 
-1. `Abuja pilot / Local Man` heading
+1. `Abuja pilot` eyebrow, public title, and short discovery subtitle
 2. desktop search/filter bar
 3. location reminder toast when visible
 4. location status / retry panel

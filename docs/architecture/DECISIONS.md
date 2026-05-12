@@ -42,3 +42,8 @@ The Local Man — Architecture and Product Decisions
 **Decision:** The product will prioritize discovery, not delivery.
 **Reason:** Core value is visibility and location-based finding, not logistics.
 **Impact:** Delivery, payments, and live order systems remain out of scope.
+
+### Decision 009
+**Decision:** Admin vendor-image upload state is isolated by selected vendor id, and upload success requires a returned metadata row.
+**Reason:** Real runtime debugging showed that storage success alone is not enough; stale file refs, stale image-list state, or missing `vendor_images` rows can make an upload appear successful while the UI cannot render the image correctly.
+**Impact:** Vendor-image UI state must reset on vendor switch, local previews must be revoked deterministically, image lists must be filtered by `vendor_id`, and the backend must fail the upload when the metadata insert does not return the expected row.

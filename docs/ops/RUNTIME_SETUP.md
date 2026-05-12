@@ -96,6 +96,7 @@ Supabase requirements:
 - Storage bucket `vendor-images` must exist
 - `vendor-images` must be public for the current vendor image URL strategy
 - vendor image uploads use the server-only `sharp` native package to validate and optimize images before Storage upload; the upload route runs on the Node.js runtime and must not be deployed as an Edge route
+- vendor image upload success requires both a Storage object and a returned `vendor_images` metadata row; storage-only success is treated as a failed upload
 
 Validate app runtime env:
 
@@ -120,6 +121,7 @@ Migration files:
 - `supabase/migrations/20260503123000_admin_analytics_snapshot_perf.sql`
 - `supabase/migrations/20260507193000_public_rating_submission_rpc.sql`
 - `supabase/migrations/20260508143000_operational_events.sql`
+- `supabase/migrations/20260512003000_public_rating_anonymous_identity.sql`
 
 Preferred command when `psql` is available:
 
@@ -140,7 +142,7 @@ Dashboard fallback:
 4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, and `app_schema_migrations`.
 5. Confirm `public.vendor_images` includes `storage_object_path`.
 6. Confirm `public.user_events` exists for Phase 6 analytics.
-7. Confirm `public.submit_public_vendor_rating(uuid, integer, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
+7. Confirm `public.submit_public_vendor_rating(uuid, integer, text, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
 8. Confirm `public.operational_events` exists with the admin read policy before enabling operational-event persistence.
 
 Rollback note:
@@ -344,6 +346,8 @@ Deployment, pilot validation, or further UX iteration should proceed only after:
 - After changing DigitalOcean env vars, redeploy the app so new public values are compiled into the Next.js build.
 - App Router route files such as `app/admin/**/page.tsx` and `app/api/admin/**/route.ts` must be committed and pushed before deployment; DigitalOcean cannot build local-only or ignored files.
 - Run production promotion from a clean committed worktree so the deployed source tree, route manifests, and local verification state match.
+- Run `npm audit` before deployment and do not promote while high-severity advisories remain unresolved.
+- After image-upload changes, verify both local dev and local production runtime with real cross-vendor uploads so hot-reload state cannot mask a production-state bug.
 
 For launch-day operator work and ongoing Abuja pilot checks, use [docs/ops/PILOT_CHECKLIST.md](./PILOT_CHECKLIST.md).
 

@@ -75,7 +75,7 @@ Small food businesses with:
 - admin-only login
 - vendor CRUD
 - vendor hours management
-- vendor image upload
+- vendor image upload with selected-vendor state isolation and storage-backed metadata rows
 - vendor category assignment
 - featured dishes management
 - active/inactive visibility toggle

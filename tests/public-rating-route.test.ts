@@ -99,7 +99,139 @@ test("public vendor ratings route saves a rating and returns updated summary", a
       target_vendor_id: vendorId,
       target_score: 4,
       target_source_type: "public_simple_rating",
+      target_anonymous_client_hash: (calls[1]?.body as Record<string, unknown>).target_anonymous_client_hash,
     });
+    assert.match(
+      String((calls[1]?.body as Record<string, unknown>).target_anonymous_client_hash),
+      /^[a-f0-9]{64}$/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route rejects duplicate ratings for the same anonymous identity", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  let ratingsInsertCount = 0;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      ratingsInsertCount += 1;
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.33,
+        review_count: 3,
+        duplicate: true,
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "localman_public_client=anonymous-client-1",
+        },
+        body: JSON.stringify({ score: 4 }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 409);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.equal(body.error.details.duplicate, true);
+    assert.deepEqual(body.error.details.rating_summary, {
+      average_rating: 4.33,
+      review_count: 3,
+    });
+    assert.equal(ratingsInsertCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route permits the same anonymous identity to rate different vendors", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  const rpcBodies: Array<Record<string, unknown>> = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      const slug = String(url.searchParams.get("slug") ?? "").replace(/^eq\./, "");
+
+      return Response.json([
+        {
+          id: slug === "second-vendor"
+            ? "00000000-0000-4000-8000-000000000002"
+            : vendorId,
+          slug,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      rpcBodies.push(body);
+      return Response.json({
+        vendor_id: body.target_vendor_id,
+        average_rating: 4.5,
+        review_count: 1,
+        duplicate: false,
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const createRequest = (slug: string) =>
+      new Request(`http://localhost/api/vendors/${slug}/ratings`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "localman_public_client=anonymous-client-1",
+        },
+        body: JSON.stringify({ score: 5 }),
+      });
+
+    const firstResponse = await vendorRatingsRoute(createRequest("test-vendor"), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+    const secondResponse = await vendorRatingsRoute(createRequest("second-vendor"), {
+      params: Promise.resolve({ slug: "second-vendor" }),
+    });
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 201);
+    assert.equal(rpcBodies.length, 2);
+    assert.equal(rpcBodies[0]?.target_anonymous_client_hash, rpcBodies[1]?.target_anonymous_client_hash);
+    assert.notEqual(rpcBodies[0]?.target_vendor_id, rpcBodies[1]?.target_vendor_id);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

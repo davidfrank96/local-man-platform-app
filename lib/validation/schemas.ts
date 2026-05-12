@@ -128,6 +128,7 @@ export const ratingSchema = z.object({
   score: z.coerce.number().int().min(1).max(5),
   comment: z.string().nullable(),
   source_type: z.string().nullable(),
+  anonymous_client_hash: z.string().nullable().optional(),
   created_at: timestampSchema,
 });
 
