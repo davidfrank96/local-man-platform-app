@@ -1,6 +1,7 @@
 import { expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 import type { NearbyVendorsResponseData } from "../../../types/index.ts";
+import { PUBLIC_DISCOVERY_CACHE_VERSION } from "../../../lib/public/discovery-cache-hygiene.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 export type MockNearbyVendor = Omit<NearbyVendor, "ranking_score"> & {
@@ -258,7 +259,11 @@ export async function seedPublicDiscoverySnapshot(
     try {
       window.sessionStorage.setItem(
         payload.key,
-        JSON.stringify(payload.snapshot),
+        JSON.stringify({
+          ...payload.snapshot,
+          cacheVersion: payload.cacheVersion,
+          cacheEnvironment: window.location.origin,
+        }),
       );
     } catch {
       // Ignore storage failures in browser tests.
@@ -291,6 +296,7 @@ export async function seedPublicDiscoverySnapshot(
   }, {
     key: options.key ?? "public-discovery:/",
     snapshot: options.snapshot,
+    cacheVersion: PUBLIC_DISCOVERY_CACHE_VERSION,
     invalidationPayload: options.invalidationPayload ?? null,
     recentlyViewed: options.recentlyViewed ?? null,
     lastSelected: options.lastSelected ?? null,

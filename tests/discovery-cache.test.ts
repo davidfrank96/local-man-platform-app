@@ -8,7 +8,18 @@ import {
   isPublicDiscoverySnapshotFresh,
   readPublicDiscoverySnapshot,
   shouldSkipPublicDiscoveryFetch,
+  writePublicDiscoverySnapshot,
 } from "../lib/public/discovery-cache.ts";
+import {
+  getDiscoveryOfflineCacheKey,
+  readCachedNearbyDiscoveryData,
+  writeCachedNearbyDiscoveryData,
+} from "../lib/public/discovery-offline-cache.ts";
+import {
+  getPublicDiscoveryCacheEnvironmentKey,
+  PUBLIC_DISCOVERY_CACHE_VERSION,
+} from "../lib/public/discovery-cache-hygiene.ts";
+import type { NormalizedNearbyVendorsResponseData } from "../lib/public/vendor-normalization.ts";
 
 function createStorage(initialEntries: Array<[string, string]> = []) {
   const values = new Map(initialEntries);
@@ -29,6 +40,67 @@ function createStorage(initialEntries: Array<[string, string]> = []) {
     removeItem(key: string) {
       values.delete(key);
     },
+  };
+}
+
+function createNearbyData(vendorId = "00000000-0000-4000-8000-000000000001") {
+  return {
+    location: {
+      source: "default_city" as const,
+      label: "Abuja",
+      coordinates: {
+        lat: 9.0765,
+        lng: 7.3986,
+      },
+      isApproximate: true,
+    },
+    vendors: [
+      {
+        vendor_id: vendorId,
+        name: "Safe Vendor",
+        slug: "safe-vendor",
+        short_description: "Safe cached vendor",
+        phone_number: "+2348000000000",
+        area: "Wuse",
+        latitude: 9.08,
+        longitude: 7.4,
+        price_band: "standard" as const,
+        average_rating: 4.5,
+        review_count: 12,
+        ranking_score: 0,
+        distance_km: 1.2,
+        is_open_now: true,
+        featured_dish: null,
+        today_hours: "9:00 AM - 5:00 PM",
+      },
+    ],
+  };
+}
+
+function createNormalizedNearbyData(
+  vendorId = "00000000-0000-4000-8000-000000000001",
+): NormalizedNearbyVendorsResponseData {
+  const nearbyData = createNearbyData(vendorId);
+
+  return {
+    ...nearbyData,
+    vendors: nearbyData.vendors.map((vendor) => ({
+      ...vendor,
+      id: vendor.vendor_id,
+      lat: vendor.latitude,
+      lng: vendor.longitude,
+      imageUrl: "/seed-images/rice.jpg",
+      distanceKm: vendor.distance_km,
+      hasValidCoordinates: true,
+    })),
+  };
+}
+
+function createSnapshot(value: Record<string, unknown>) {
+  return {
+    cacheVersion: PUBLIC_DISCOVERY_CACHE_VERSION,
+    cacheEnvironment: getPublicDiscoveryCacheEnvironmentKey(),
+    ...value,
   };
 }
 
@@ -206,27 +278,12 @@ test("expired discovery snapshot does not restore cached nearby vendor data", ()
   const sessionStorage = createStorage([
     [
       "public-discovery:/",
-      JSON.stringify({
-        nearbyData: {
-          location: {
-            source: "default_city",
-            label: "Abuja",
-            coordinates: {
-              lat: 9.0765,
-              lng: 7.3986,
-            },
-            isApproximate: true,
-          },
-          vendors: [
-            {
-              vendor_id: "vendor-1",
-            },
-          ],
-        },
+      JSON.stringify(createSnapshot({
+        nearbyData: createNearbyData(),
         nearbyDataUpdatedAt: staleTimestamp,
-        selectedVendorId: "vendor-1",
+        selectedVendorId: "00000000-0000-4000-8000-000000000001",
         scrollY: 120,
-      }),
+      })),
     ],
   ]);
 
@@ -235,7 +292,7 @@ test("expired discovery snapshot does not restore cached nearby vendor data", ()
   });
 
   assert.ok(snapshot);
-  assert.equal(snapshot?.selectedVendorId, "vendor-1");
+  assert.equal(snapshot?.selectedVendorId, "00000000-0000-4000-8000-000000000001");
   assert.equal(
     isPublicDiscoverySnapshotFresh(snapshot, {
       nowMs: Date.now(),
@@ -249,27 +306,12 @@ test("discovery snapshot is treated as stale after a later vendor invalidation",
   const sessionStorage = createStorage([
     [
       "public-discovery:/",
-      JSON.stringify({
-        nearbyData: {
-          location: {
-            source: "default_city",
-            label: "Abuja",
-            coordinates: {
-              lat: 9.0765,
-              lng: 7.3986,
-            },
-            isApproximate: true,
-          },
-          vendors: [
-            {
-              vendor_id: "vendor-1",
-            },
-          ],
-        },
+      JSON.stringify(createSnapshot({
+        nearbyData: createNearbyData(),
         nearbyDataUpdatedAt,
-        selectedVendorId: "vendor-1",
+        selectedVendorId: "00000000-0000-4000-8000-000000000001",
         scrollY: 120,
-      }),
+      })),
     ],
   ]);
   const localStorage = createStorage([
@@ -277,7 +319,7 @@ test("discovery snapshot is treated as stale after a later vendor invalidation",
       "public-discovery:vendors:invalidation",
       JSON.stringify({
         reason: "vendor_deactivated",
-        vendorId: "vendor-1",
+        vendorId: "00000000-0000-4000-8000-000000000001",
         timestamp: new Date().toISOString(),
       }),
     ],
@@ -295,6 +337,136 @@ test("discovery snapshot is treated as stale after a later vendor invalidation",
     }),
     false,
   );
+});
+
+test("discovery snapshot write stamps cache version and environment", () => {
+  const sessionStorage = createStorage();
+
+  writePublicDiscoverySnapshot(
+    "public-discovery:/",
+    {
+      nearbyData: createNearbyData(),
+      nearbyDataUpdatedAt: new Date().toISOString(),
+      selectedVendorId: "00000000-0000-4000-8000-000000000001",
+      scrollY: 0,
+    },
+    { sessionStorage },
+  );
+
+  const rawSnapshot = sessionStorage.getItem("public-discovery:/");
+  assert.ok(rawSnapshot);
+  const snapshot = JSON.parse(rawSnapshot);
+
+  assert.equal(snapshot.cacheVersion, PUBLIC_DISCOVERY_CACHE_VERSION);
+  assert.equal(snapshot.cacheEnvironment, getPublicDiscoveryCacheEnvironmentKey());
+});
+
+test("mock discovery cache never hydrates production discovery state", () => {
+  const sessionStorage = createStorage([
+    [
+      "public-discovery:/",
+      JSON.stringify(createSnapshot({
+        nearbyData: createNearbyData("30000000-0000-4000-8000-000000000003"),
+        nearbyDataUpdatedAt: new Date().toISOString(),
+        selectedVendorId: "30000000-0000-4000-8000-000000000003",
+        selectedVendorSlug: "open-evening-grill",
+        scrollY: 120,
+      })),
+    ],
+  ]);
+
+  const snapshot = readPublicDiscoverySnapshot("public-discovery:/", {
+    sessionStorage,
+  });
+
+  assert.equal(snapshot, null);
+  assert.equal(sessionStorage.getItem("public-discovery:/"), null);
+});
+
+test("malformed vendor ids are rejected during discovery cache restore", () => {
+  const sessionStorage = createStorage([
+    [
+      "public-discovery:/",
+      JSON.stringify(createSnapshot({
+        nearbyData: createNearbyData("vendor-1"),
+        nearbyDataUpdatedAt: new Date().toISOString(),
+        selectedVendorId: null,
+        scrollY: 120,
+      })),
+    ],
+  ]);
+
+  const snapshot = readPublicDiscoverySnapshot("public-discovery:/", {
+    sessionStorage,
+  });
+
+  assert.equal(snapshot, null);
+  assert.equal(sessionStorage.getItem("public-discovery:/"), null);
+});
+
+test("incomplete vendor records are rejected during discovery cache restore", () => {
+  const nearbyData = createNearbyData();
+  delete (nearbyData.vendors[0] as Record<string, unknown>).name;
+  const sessionStorage = createStorage([
+    [
+      "public-discovery:/",
+      JSON.stringify(createSnapshot({
+        nearbyData,
+        nearbyDataUpdatedAt: new Date().toISOString(),
+        selectedVendorId: null,
+        scrollY: 120,
+      })),
+    ],
+  ]);
+
+  const snapshot = readPublicDiscoverySnapshot("public-discovery:/", {
+    sessionStorage,
+  });
+
+  assert.equal(snapshot, null);
+  assert.equal(sessionStorage.getItem("public-discovery:/"), null);
+});
+
+test("environment-mismatched discovery snapshots are discarded", () => {
+  const sessionStorage = createStorage([
+    [
+      "public-discovery:/",
+      JSON.stringify({
+        ...createSnapshot({
+          nearbyData: createNearbyData(),
+          nearbyDataUpdatedAt: new Date().toISOString(),
+          selectedVendorId: null,
+          scrollY: 120,
+        }),
+        cacheEnvironment: "https://production.example.test",
+      }),
+    ],
+  ]);
+
+  const snapshot = readPublicDiscoverySnapshot("public-discovery:/", {
+    sessionStorage,
+  });
+
+  assert.equal(snapshot, null);
+  assert.equal(sessionStorage.getItem("public-discovery:/"), null);
+});
+
+test("offline discovery cache rejects mock vendor payloads", () => {
+  const localStorage = createStorage();
+  const cacheKey = getDiscoveryOfflineCacheKey("public-discovery:/");
+
+  writeCachedNearbyDiscoveryData(cacheKey, createNormalizedNearbyData(), localStorage);
+  assert.ok(readCachedNearbyDiscoveryData(cacheKey, localStorage));
+
+  localStorage.setItem(
+    cacheKey,
+    JSON.stringify(createSnapshot({
+      nearbyData: createNearbyData("30000000-0000-4000-8000-000000000003"),
+      cachedAt: new Date().toISOString(),
+    })),
+  );
+
+  assert.equal(readCachedNearbyDiscoveryData(cacheKey, localStorage), null);
 });
 
 test("restored snapshot still requires an authoritative fetch when freshness is forced", () => {

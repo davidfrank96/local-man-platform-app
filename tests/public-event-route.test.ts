@@ -6,6 +6,9 @@ import {
   resetAbuseProtectionStateForTests,
 } from "../lib/api/abuse-protection.ts";
 
+const EXISTING_VENDOR_ID = "00000000-0000-4000-8000-000000000001";
+const STALE_MOCK_VENDOR_ID = "30000000-0000-4000-8000-000000000003";
+
 function setTrackingEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -28,6 +31,41 @@ function setTrackingEnv(): () => void {
   };
 }
 
+function createTrackingFetchMock(options: {
+  existingVendorIds?: string[];
+  userEventStatus?: number;
+  userEventResponse?: unknown;
+  onVendorCheck?: (vendorId: string | null) => void;
+  onUserEventWrite?: (body: Record<string, unknown>) => void;
+} = {}): typeof fetch {
+  const existingVendorIds = new Set(options.existingVendorIds ?? [EXISTING_VENDOR_ID]);
+
+  return (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors") {
+      const vendorId = url.searchParams.get("id")?.replace(/^eq\./, "") ?? null;
+      options.onVendorCheck?.(vendorId);
+      return Response.json(vendorId && existingVendorIds.has(vendorId) ? [{ id: vendorId }] : []);
+    }
+
+    if (url.pathname === "/rest/v1/user_events") {
+      const requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      options.onUserEventWrite?.(requestBody);
+
+      if (options.userEventResponse !== undefined) {
+        return Response.json(options.userEventResponse, {
+          status: options.userEventStatus ?? 201,
+        });
+      }
+
+      return new Response(null, { status: options.userEventStatus ?? 201 });
+    }
+
+    throw new Error(`Unexpected fetch URL in public event route test: ${url.toString()}`);
+  }) as typeof fetch;
+}
+
 test.beforeEach(() => {
   resetAbuseProtectionStateForTests();
 });
@@ -37,10 +75,11 @@ test("public event route stores accepted tracking events", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: Record<string, unknown> = {};
 
-  globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-    requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    return new Response(null, { status: 201 });
-  }) as typeof fetch;
+  globalThis.fetch = createTrackingFetchMock({
+    onUserEventWrite: (body) => {
+      requestBody = body;
+    },
+  });
 
   try {
     const response = await trackEventRoute(
@@ -51,7 +90,7 @@ test("public event route stores accepted tracking events", async () => {
         },
         body: JSON.stringify({
           event_type: "vendor_selected",
-          vendor_id: "00000000-0000-4000-8000-000000000001",
+          vendor_id: EXISTING_VENDOR_ID,
           device_type: "desktop",
           location_source: "precise",
         }),
@@ -74,10 +113,11 @@ test("public event route accepts text/plain beacon payloads", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: Record<string, unknown> = {};
 
-  globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-    requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    return new Response(null, { status: 201 });
-  }) as typeof fetch;
+  globalThis.fetch = createTrackingFetchMock({
+    onUserEventWrite: (body) => {
+      requestBody = body;
+    },
+  });
 
   try {
     const response = await trackEventRoute(
@@ -88,7 +128,7 @@ test("public event route accepts text/plain beacon payloads", async () => {
         },
         body: JSON.stringify({
           event_type: "call_clicked",
-          vendor_id: "00000000-0000-4000-8000-000000000001",
+          vendor_id: EXISTING_VENDOR_ID,
           vendor_slug: "test-vendor",
           page_path: "/vendors/test-vendor",
           device_type: "desktop",
@@ -116,14 +156,15 @@ test("public event route stores call and directions click events with vendor con
   const originalFetch = globalThis.fetch;
   const requestBodies: Array<Record<string, unknown>> = [];
 
-  globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-    requestBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
-    return new Response(null, { status: 201 });
-  }) as typeof fetch;
+  globalThis.fetch = createTrackingFetchMock({
+    onUserEventWrite: (body) => {
+      requestBodies.push(body);
+    },
+  });
 
   try {
     const commonPayload = {
-      vendor_id: "00000000-0000-4000-8000-000000000001",
+      vendor_id: EXISTING_VENDOR_ID,
       vendor_slug: "test-vendor",
       device_type: "desktop",
       location_source: "precise",
@@ -263,10 +304,11 @@ test("public event route deduplicates immediate retry payloads", async () => {
   const originalFetch = globalThis.fetch;
   let upstreamWrites = 0;
 
-  globalThis.fetch = (async () => {
-    upstreamWrites += 1;
-    return new Response(null, { status: 201 });
-  }) as typeof fetch;
+  globalThis.fetch = createTrackingFetchMock({
+    onUserEventWrite: () => {
+      upstreamWrites += 1;
+    },
+  });
 
   try {
     const createRequest = () =>
@@ -279,7 +321,7 @@ test("public event route deduplicates immediate retry payloads", async () => {
         body: JSON.stringify({
           event_type: "vendor_selected",
           session_id: "90000000-0000-4000-8000-000000000001",
-          vendor_id: "00000000-0000-4000-8000-000000000001",
+          vendor_id: EXISTING_VENDOR_ID,
           vendor_slug: "test-vendor",
           device_type: "mobile",
           location_source: "precise",
@@ -304,15 +346,114 @@ test("public event route deduplicates immediate retry payloads", async () => {
   }
 });
 
+test("public event route skips stale mock vendor ids before analytics insert", async () => {
+  const restoreEnv = setTrackingEnv();
+  const originalFetch = globalThis.fetch;
+  const checkedVendorIds: Array<string | null> = [];
+  let upstreamWrites = 0;
+
+  globalThis.fetch = createTrackingFetchMock({
+    existingVendorIds: [EXISTING_VENDOR_ID],
+    onVendorCheck: (vendorId) => {
+      checkedVendorIds.push(vendorId);
+    },
+    onUserEventWrite: () => {
+      upstreamWrites += 1;
+    },
+  });
+
+  try {
+    const response = await trackEventRoute(
+      new Request("http://localhost/api/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          event_type: "vendor_selected",
+          session_id: "90000000-0000-4000-8000-000000000099",
+          vendor_id: STALE_MOCK_VENDOR_ID,
+          vendor_slug: "open-evening-grill",
+          device_type: "desktop",
+          location_source: "precise",
+          page_path: "/",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 202);
+    assert.equal(body.success, true);
+    assert.equal(body.data.accepted, false);
+    assert.equal(body.data.reason, "vendor_not_found");
+    assert.deepEqual(checkedVendorIds, [STALE_MOCK_VENDOR_ID]);
+    assert.equal(upstreamWrites, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public event route treats deleted-vendor foreign key races as skipped analytics", async () => {
+  const restoreEnv = setTrackingEnv();
+  const originalFetch = globalThis.fetch;
+  let upstreamWrites = 0;
+
+  globalThis.fetch = createTrackingFetchMock({
+    existingVendorIds: [STALE_MOCK_VENDOR_ID],
+    userEventStatus: 409,
+    userEventResponse: {
+      code: "23503",
+      message:
+        'insert or update on table "user_events" violates foreign key constraint "user_action_events_vendor_id_fkey"',
+      details: `Key (vendor_id)=(${STALE_MOCK_VENDOR_ID}) is not present in table "vendors".`,
+    },
+    onUserEventWrite: () => {
+      upstreamWrites += 1;
+    },
+  });
+
+  try {
+    const response = await trackEventRoute(
+      new Request("http://localhost/api/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          event_type: "vendor_selected",
+          session_id: "90000000-0000-4000-8000-000000000100",
+          vendor_id: STALE_MOCK_VENDOR_ID,
+          vendor_slug: "open-evening-grill",
+          device_type: "desktop",
+          location_source: "precise",
+          page_path: "/",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 202);
+    assert.equal(body.success, true);
+    assert.equal(body.data.accepted, false);
+    assert.equal(body.data.reason, "vendor_not_found");
+    assert.equal(upstreamWrites, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("public event route stops accepting flood traffic after the route threshold", async () => {
   const restoreEnv = setTrackingEnv();
   const originalFetch = globalThis.fetch;
   let upstreamWrites = 0;
 
-  globalThis.fetch = (async () => {
-    upstreamWrites += 1;
-    return new Response(null, { status: 201 });
-  }) as typeof fetch;
+  globalThis.fetch = createTrackingFetchMock({
+    onUserEventWrite: () => {
+      upstreamWrites += 1;
+    },
+  });
 
   try {
     let lastResponse: Response | null = null;

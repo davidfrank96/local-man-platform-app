@@ -1,4 +1,5 @@
 import type { NearbyVendorsResponseData } from "../../types/index.ts";
+import { getUnsafeRetainedVendorCacheReason } from "./discovery-cache-hygiene.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 type VendorRetentionSource = Pick<
@@ -49,7 +50,8 @@ function isRetainedVendorPreview(value: unknown): value is RetainedVendorPreview
       (value as RetainedVendorPreview).area === null) &&
     typeof (value as RetainedVendorPreview).today_hours === "string" &&
     typeof (value as RetainedVendorPreview).is_open_now === "boolean" &&
-    typeof (value as RetainedVendorPreview).timestamp === "string"
+    typeof (value as RetainedVendorPreview).timestamp === "string" &&
+    getUnsafeRetainedVendorCacheReason(value) === null
   );
 }
 
@@ -64,7 +66,17 @@ function readStoredArray(key: string, storageImpl?: StorageLike): RetainedVendor
   try {
     const value = JSON.parse(raw);
 
-    return Array.isArray(value) ? value.filter(isRetainedVendorPreview) : [];
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    const retainedVendors = value.filter(isRetainedVendorPreview);
+
+    if (retainedVendors.length !== value.length) {
+      writeStoredValue(key, retainedVendors, storageImpl);
+    }
+
+    return retainedVendors;
   } catch {
     return [];
   }
@@ -76,9 +88,14 @@ function writeStoredValue(
   storageImpl?: StorageLike,
 ): void {
   const storage = getStorage(storageImpl);
+  const safeValue = Array.isArray(value)
+    ? value.filter(isRetainedVendorPreview)
+    : isRetainedVendorPreview(value)
+      ? value
+      : [];
 
   try {
-    storage?.setItem(key, JSON.stringify(value));
+    storage?.setItem(key, JSON.stringify(safeValue));
   } catch {
     // Ignore retention storage failures.
   }
@@ -116,6 +133,10 @@ export function rememberRecentlyViewedVendor(
   vendor: RetainedVendorPreview,
   storageImpl?: StorageLike,
 ): RetainedVendorPreview[] {
+  if (!isRetainedVendorPreview(vendor)) {
+    return readRecentlyViewedVendors(storageImpl);
+  }
+
   const nextVendors = [
     vendor,
     ...readRecentlyViewedVendors(storageImpl).filter(
@@ -139,7 +160,12 @@ export function readLastSelectedVendor(storageImpl?: StorageLike): RetainedVendo
   try {
     const value = JSON.parse(raw);
 
-    return isRetainedVendorPreview(value) ? value : null;
+    if (isRetainedVendorPreview(value)) {
+      return value;
+    }
+
+    clearStoredValue(LAST_SELECTED_KEY, storageImpl);
+    return null;
   } catch {
     return null;
   }
@@ -149,7 +175,10 @@ export function rememberLastSelectedVendor(
   vendor: RetainedVendorPreview,
   storageImpl?: StorageLike,
 ): RetainedVendorPreview {
-  writeStoredValue(LAST_SELECTED_KEY, vendor, storageImpl);
+  if (isRetainedVendorPreview(vendor)) {
+    writeStoredValue(LAST_SELECTED_KEY, vendor, storageImpl);
+  }
+
   return vendor;
 }
 

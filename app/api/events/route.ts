@@ -18,6 +18,25 @@ type EventWriteConfig = {
   serviceRoleKey: string;
 };
 
+type EventTrackingResult = {
+  accepted: boolean;
+  deduplicated?: boolean;
+  reason?: string;
+};
+
+type VendorExistenceResult =
+  | {
+      status: "exists";
+    }
+  | {
+      status: "missing";
+    }
+  | {
+      status: "unavailable";
+      details: unknown;
+      upstreamStatus: number;
+    };
+
 function getEventWriteConfig(): EventWriteConfig | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
@@ -43,6 +62,60 @@ async function readUpstreamError(response: Response): Promise<unknown> {
       return null;
     }
   }
+}
+
+async function verifyVendorExists(
+  config: EventWriteConfig,
+  vendorId: string,
+): Promise<VendorExistenceResult> {
+  const url = new URL("/rest/v1/vendors", config.supabaseUrl);
+  url.searchParams.set("select", "id");
+  url.searchParams.set("id", `eq.${vendorId}`);
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      apikey: config.serviceRoleKey,
+      authorization: `Bearer ${config.serviceRoleKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return {
+      status: "unavailable",
+      upstreamStatus: response.status,
+      details: await readUpstreamError(response),
+    };
+  }
+
+  let rows: Array<{ id?: string | null }> = [];
+
+  try {
+    rows = (await response.json()) as Array<{ id?: string | null }>;
+  } catch {
+    rows = [];
+  }
+
+  return rows.some((row) => row.id === vendorId) ? { status: "exists" } : { status: "missing" };
+}
+
+function isVendorForeignKeyError(details: unknown): boolean {
+  if (!details || typeof details !== "object") {
+    return false;
+  }
+
+  const record = details as Record<string, unknown>;
+  const code = String(record.code ?? "");
+  const message = String(record.message ?? "");
+  const detail = String(record.details ?? "");
+
+  return (
+    code === "23503" &&
+    (message.includes("user_action_events_vendor_id_fkey") ||
+      message.includes("user_events") ||
+      detail.includes("vendor_id"))
+  );
 }
 
 export async function POST(request: Request) {
@@ -150,14 +223,16 @@ export async function POST(request: Request) {
       metadata: event.metadata ?? {},
     }),
   ].join("|");
-  const dedupeGuard = startSingleFlightGuard<{ accepted: true; deduplicated?: boolean }>(
+  const dedupeGuard = startSingleFlightGuard<EventTrackingResult>(
     dedupeKey,
     2_000,
   );
 
   if (dedupeGuard.status === "joined") {
+    let dedupedResult: EventTrackingResult;
+
     try {
-      await dedupeGuard.promise;
+      dedupedResult = await dedupeGuard.promise;
     } catch {
       logRouteEvent("warn", routeLog, {
         event: "PUBLIC_EVENT_DUPLICATE_FAILED",
@@ -192,7 +267,7 @@ export async function POST(request: Request) {
     });
     return attachRequestIdHeader(
       applyRateLimitResponseHeaders(
-        apiSuccess({ accepted: true, deduplicated: true }, 202),
+        apiSuccess({ ...dedupedResult, deduplicated: true }, 202),
         rateLimit,
       ),
       routeLog.requestId,
@@ -200,6 +275,56 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (event.vendor_id) {
+      const vendorExistence = await verifyVendorExists(config, event.vendor_id);
+
+      if (vendorExistence.status === "missing") {
+        const skippedResult = { accepted: false, reason: "vendor_not_found" } satisfies
+          EventTrackingResult;
+
+        logRouteEvent("warn", routeLog, {
+          event: "PUBLIC_EVENT_VENDOR_NOT_FOUND_SKIPPED",
+          message: "Public event referenced a vendor that does not exist; tracking write skipped.",
+          status: 202,
+          metadata: {
+            eventType: event.event_type,
+            sessionIdPresent: Boolean(event.session_id),
+            vendorId: event.vendor_id,
+            vendorSlug: event.vendor_slug ?? null,
+            pagePath: event.page_path ?? null,
+          },
+        });
+        dedupeGuard.resolve(skippedResult);
+        return attachRequestIdHeader(
+          applyRateLimitResponseHeaders(apiSuccess(skippedResult, 202), rateLimit),
+          routeLog.requestId,
+        );
+      }
+
+      if (vendorExistence.status === "unavailable") {
+        logRouteEvent("error", routeLog, {
+          event: "PUBLIC_EVENT_VENDOR_VALIDATION_FAILED",
+          message: "Public event vendor validation failed before tracking write.",
+          status: vendorExistence.upstreamStatus,
+          metadata: {
+            eventType: event.event_type,
+            sessionIdPresent: Boolean(event.session_id),
+            vendorId: event.vendor_id,
+            vendorSlug: event.vendor_slug ?? null,
+            details: vendorExistence.details ?? { status: vendorExistence.upstreamStatus },
+          },
+        });
+        dedupeGuard.reject(new Error("tracking_unavailable"));
+        return attachRequestIdHeader(
+          applyRateLimitResponseHeaders(
+            apiSuccess({ accepted: false, reason: "tracking_unavailable" }, 202),
+            rateLimit,
+          ),
+          routeLog.requestId,
+        );
+      }
+    }
+
     const response = await fetch(new URL("/rest/v1/user_events", config.supabaseUrl), {
       method: "POST",
       headers: {
@@ -228,6 +353,29 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const details = await readUpstreamError(response);
+
+      if (event.vendor_id && isVendorForeignKeyError(details)) {
+        const skippedResult = { accepted: false, reason: "vendor_not_found" } satisfies
+          EventTrackingResult;
+
+        logRouteEvent("warn", routeLog, {
+          event: "PUBLIC_EVENT_VENDOR_NOT_FOUND_SKIPPED",
+          status: 202,
+          message: "Public event referenced a vendor deleted before insert; tracking write skipped.",
+          metadata: {
+            eventType: event.event_type,
+            sessionIdPresent: Boolean(event.session_id),
+            vendorId: event.vendor_id,
+            vendorSlug: event.vendor_slug ?? null,
+            details: details ?? { status: response.status },
+          },
+        });
+        dedupeGuard.resolve(skippedResult);
+        return attachRequestIdHeader(
+          applyRateLimitResponseHeaders(apiSuccess(skippedResult, 202), rateLimit),
+          routeLog.requestId,
+        );
+      }
 
       logRouteEvent("error", routeLog, {
         event: "PUBLIC_EVENT_TRACKING_FAILED",
