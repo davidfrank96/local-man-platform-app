@@ -2201,6 +2201,54 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("admin create vendor image selection preserves form state through session refresh", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const adminRequestLog: string[] = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      adminRequestLog,
+    });
+
+    await page.goto("/admin/vendors/new");
+    await expect(page.getByRole("heading", { name: "New vendor" })).toBeVisible();
+
+    await page.locator('input[name="name"]').fill("Create Upload Probe");
+    await page.locator('input[name="phone_number"]').fill("+2348000000000");
+    await page.locator('input[name="area"]').fill("Wuse");
+    await page.locator('textarea[name="short_description"]').fill("Testing create image selection state.");
+
+    await page.locator('input[name="create-image"]').setInputFiles({
+      name: "create-upload.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    await expect(page.locator(".vendor-image-local-preview")).toBeVisible();
+
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect
+      .poll(() => adminRequestLog.filter((entry) => entry === "GET /api/admin/session").length)
+      .toBeGreaterThanOrEqual(2);
+
+    await expect(page).toHaveURL(/\/admin\/vendors\/new$/);
+    await expect(page.locator('input[name="name"]')).toHaveValue("Create Upload Probe");
+    await expect(page.locator('input[name="phone_number"]')).toHaveValue("+2348000000000");
+    await expect(page.locator('input[name="area"]')).toHaveValue("Wuse");
+    await expect(page.locator('textarea[name="short_description"]')).toHaveValue(
+      "Testing create image selection state.",
+    );
+    await expect
+      .poll(() =>
+        page.locator('input[name="create-image"]').evaluate((input) =>
+          (input as HTMLInputElement).files?.[0]?.name ?? null
+        )
+      )
+      .toBe("create-upload.jpg");
+    expect(adminRequestLog.some((entry) => entry === "POST /api/admin/vendors")).toBe(false);
+    expect(adminRequestLog.some((entry) => /^POST \/api\/admin\/vendors\/.+\/images$/.test(entry))).toBe(false);
+    await expectNoClientErrors(errors);
+  });
+
   test("admin vendor image upload is not overwritten by stale image-list responses", async ({ page }) => {
     const errors = trackClientErrors(page);
     const auditLogRequests: Array<{ userRole: string; action: string }> = [];
