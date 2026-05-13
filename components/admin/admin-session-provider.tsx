@@ -63,7 +63,10 @@ export function AdminSessionProvider(
   }, []);
 
   const refresh = useCallback(async () => {
-    setStatus("loading");
+    // Background session checks can be triggered by focus/visibility changes
+    // when a native file picker closes. Keep authenticated workspaces mounted
+    // during that revalidation so in-progress forms do not lose local state.
+    setStatus((currentStatus) => currentStatus === "authenticated" ? currentStatus : "loading");
     setError(null);
 
     try {
