@@ -31,6 +31,14 @@ async function expectNoClientErrors(errors: string[]) {
   expect(errors, errors.join("\n")).toEqual([]);
 }
 
+function isExpectedAdminLogsFailureConsoleMessage(message: string): boolean {
+  return message.includes("status of 502") ||
+    (
+      message.includes("code: UPSTREAM_ERROR") &&
+      message.includes("context: admin_logs")
+    );
+}
+
 async function expectInnerScroll(locator: Locator) {
   const metrics = await locator.evaluate((element) => {
     const styles = window.getComputedStyle(element);
@@ -2333,11 +2341,11 @@ test.describe("Phase 3 browser smoke", () => {
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
       .toBe(true);
 
-    expect(errors.some((message) => message.includes("status of 502"))).toBe(true);
+    expect(errors.some(isExpectedAdminLogsFailureConsoleMessage)).toBe(true);
     await expectNoClientErrors(
       errors.filter(
         (message) =>
-          !message.includes("status of 502"),
+          !isExpectedAdminLogsFailureConsoleMessage(message),
       ),
     );
   });

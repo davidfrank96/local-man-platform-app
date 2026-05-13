@@ -2,6 +2,11 @@ import {
   normalizeNearbyDiscoveryData,
   type NormalizedNearbyVendorsResponseData,
 } from "./vendor-normalization.ts";
+import {
+  addPublicDiscoveryCacheEnvelope,
+  getUnsafeNearbyDiscoveryCacheReason,
+  isCurrentPublicDiscoveryCacheEnvelope,
+} from "./discovery-cache-hygiene.ts";
 
 type StorageLike = Pick<Storage, "getItem" | "setItem"> | null;
 
@@ -40,6 +45,15 @@ export function readCachedNearbyDiscoveryData(
 
   try {
     const value = JSON.parse(raw) as { nearbyData?: unknown };
+
+    if (!isCurrentPublicDiscoveryCacheEnvelope(value)) {
+      return null;
+    }
+
+    if (getUnsafeNearbyDiscoveryCacheReason(value?.nearbyData ?? value)) {
+      return null;
+    }
+
     const normalized = normalizeNearbyDiscoveryData(value?.nearbyData ?? value);
 
     return normalized.vendors.length > 0 ? normalized : null;
@@ -60,12 +74,16 @@ export function writeCachedNearbyDiscoveryData(
   }
 
   try {
+    if (getUnsafeNearbyDiscoveryCacheReason(nearbyData)) {
+      return;
+    }
+
     storage.setItem(
       cacheKey,
-      JSON.stringify({
+      JSON.stringify(addPublicDiscoveryCacheEnvelope({
         nearbyData,
         cachedAt: new Date().toISOString(),
-      }),
+      })),
     );
   } catch {
     // Ignore localStorage failures.

@@ -2,6 +2,12 @@ import {
   removeRetainedVendorPreview,
 } from "./vendor-retention.ts";
 import {
+  addPublicDiscoveryCacheEnvelope,
+  getUnsafeNearbyDiscoveryCacheReason,
+  getUnsafeRetainedVendorCacheReason,
+  isCurrentPublicDiscoveryCacheEnvelope,
+} from "./discovery-cache-hygiene.ts";
+import {
   isDestructiveVendorInvalidationReason,
 } from "../testing/playwright-artifacts.ts";
 
@@ -19,6 +25,8 @@ type StorageLike = Pick<
 > | null;
 
 export type PublicDiscoverySnapshot<T = unknown> = {
+  cacheVersion?: number;
+  cacheEnvironment?: string;
   nearbyData: T | null;
   nearbyDataUpdatedAt?: string | null;
   selectedVendorId: string | null;
@@ -48,6 +56,29 @@ function getSessionStorage(storageImpl?: StorageLike): StorageLike {
   }
 }
 
+function isUnsafeSnapshot(value: PublicDiscoverySnapshot): boolean {
+  if (!isCurrentPublicDiscoveryCacheEnvelope(value)) {
+    return true;
+  }
+
+  if (
+    value.selectedVendorId &&
+    getUnsafeRetainedVendorCacheReason({
+      vendor_id: value.selectedVendorId,
+      slug: value.selectedVendorSlug ?? "selected-vendor",
+      name: "Selected vendor",
+      area: null,
+      today_hours: "Unavailable",
+      is_open_now: false,
+      timestamp: new Date().toISOString(),
+    })
+  ) {
+    return true;
+  }
+
+  return Boolean(getUnsafeNearbyDiscoveryCacheReason(value.nearbyData));
+}
+
 export function readPublicDiscoverySnapshot<T = unknown>(
   key: string,
   options?: {
@@ -63,8 +94,16 @@ export function readPublicDiscoverySnapshot<T = unknown>(
       return null;
     }
 
-    return JSON.parse(raw) as PublicDiscoverySnapshot<T>;
+    const snapshot = JSON.parse(raw) as PublicDiscoverySnapshot<T>;
+
+    if (isUnsafeSnapshot(snapshot as PublicDiscoverySnapshot)) {
+      sessionStorage?.removeItem(key);
+      return null;
+    }
+
+    return snapshot;
   } catch {
+    sessionStorage?.removeItem(key);
     return null;
   }
 }
@@ -79,7 +118,17 @@ export function writePublicDiscoverySnapshot<T = unknown>(
   const sessionStorage = getSessionStorage(options?.sessionStorage);
 
   try {
-    sessionStorage?.setItem(key, JSON.stringify(snapshot));
+    const nextSnapshot = addPublicDiscoveryCacheEnvelope({ ...snapshot });
+
+    if (isUnsafeSnapshot(nextSnapshot as PublicDiscoverySnapshot)) {
+      sessionStorage?.removeItem(key);
+      return;
+    }
+
+    sessionStorage?.setItem(
+      key,
+      JSON.stringify(nextSnapshot),
+    );
   } catch {
     // Ignore session storage failures.
   }
