@@ -94,6 +94,10 @@ type PublicDiscoveryProps = {
 };
 
 type MobileDiscoveryTab = "home" | "map" | "about";
+type DiscoveryEmptyStateCopy = {
+  title: string;
+  body: string;
+};
 
 const defaultFilters: DiscoveryFilters = {
   search: "",
@@ -107,6 +111,53 @@ const LOCALMAN_WEBSITE_URL =
   process.env.NEXT_PUBLIC_LOCALMAN_WEBSITE_URL ?? "https://localman.app";
 const LOCALMAN_SUPPORT_EMAIL =
   process.env.NEXT_PUBLIC_LOCALMAN_SUPPORT_EMAIL ?? "support@localman.app";
+
+function getDiscoveryEmptyStateCopy(
+  filters: DiscoveryFilters,
+  isOnline: boolean,
+): DiscoveryEmptyStateCopy {
+  if (!isOnline) {
+    return {
+      title: "No cached vendors available.",
+      body: "Reconnect to refresh nearby vendors.",
+    };
+  }
+
+  const hasSearch = filters.search.trim().length > 0;
+  const hasTightRadius = filters.radiusKm < defaultFilters.radiusKm;
+  const hasWideRadius = filters.radiusKm > defaultFilters.radiusKm;
+  const hasOtherFilters = Boolean(filters.category || filters.priceBand || filters.openNow);
+
+  if (hasSearch) {
+    return {
+      title: "Nothing matched your search.",
+      body: hasTightRadius || hasOtherFilters
+        ? "Try increasing your distance or clearing one filter."
+        : "Try another vendor, dish, or area.",
+    };
+  }
+
+  if (hasTightRadius) {
+    return {
+      title: "No vendors found nearby.",
+      body: `No food spots found within ${filters.radiusKm} km yet. Try a wider distance.`,
+    };
+  }
+
+  if (hasOtherFilters) {
+    return {
+      title: "No vendors found with these filters.",
+      body: hasWideRadius
+        ? "Try changing your search or clearing one filter."
+        : "Try increasing your distance or changing your filters.",
+    };
+  }
+
+  return {
+    title: "No vendors found nearby.",
+    body: "Try refreshing the map or checking another area.",
+  };
+}
 
 export function PublicDiscovery({
   title = "Local Man",
@@ -145,6 +196,7 @@ export function PublicDiscovery({
     useState<VendorSection>("nearby");
   const [activeMobileTab, setActiveMobileTab] =
     useState<MobileDiscoveryTab>("home");
+  const [mapRefreshToken, setMapRefreshToken] = useState(0);
   const [showLocationReminder, setShowLocationReminder] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
@@ -928,7 +980,17 @@ export function PublicDiscovery({
   const showNearbyEmptyState =
     snapshotHydrated &&
     vendors.length === 0 &&
-    !isLoading;
+    !isLoading &&
+    !nearbyError;
+  const showMapEmptyState =
+    snapshotHydrated &&
+    mappableVendors.length === 0 &&
+    !isLoading &&
+    !nearbyError;
+  const emptyStateCopy = useMemo(
+    () => getDiscoveryEmptyStateCopy(filters, isOnline),
+    [filters, isOnline],
+  );
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
       ? resolvedLocationLabel.label
@@ -992,6 +1054,7 @@ export function PublicDiscovery({
       writePublicDiscoverySnapshot(discoverySnapshotKey, {
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt: nearbyDataRef.current ? nearbyDataUpdatedAtRef.current : null,
+        nearbyRequestKey: nearbyDataRef.current ? nearbyDataRequestKeyRef.current : null,
         selectedVendorId: vendor?.vendor_id ?? null,
         scrollY: window.scrollY,
       });
@@ -1024,6 +1087,39 @@ export function PublicDiscovery({
       );
     }
   }, [isOnline, locationStatus, refreshLocation]);
+
+  const refreshMapDiscovery = useCallback(async () => {
+    if (!isOnline) {
+      setRetryMessage("Still offline");
+      setNearbyError(null);
+      return;
+    }
+
+    if (!activeFetchLocation || isFetchingVendors || locationStatus === "resolving") {
+      return;
+    }
+
+    setRetryMessage(null);
+    setNearbyError(null);
+    nearbyRequestKeyRef.current = null;
+    restoredSnapshotNeedsLiveFetchRef.current = false;
+    setMapRefreshToken((current) => current + 1);
+    recordSelectionIntent(selectionSourceRef.current ?? "restore");
+
+    await loadNearbyVendors(activeFetchLocation, filters);
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("resize"));
+    }
+  }, [
+    activeFetchLocation,
+    filters,
+    isFetchingVendors,
+    isOnline,
+    loadNearbyVendors,
+    locationStatus,
+    recordSelectionIntent,
+  ]);
 
   const scrollToDiscoveryTop = useCallback(() => {
     discoveryTopRef.current?.scrollIntoView({
@@ -1167,11 +1263,10 @@ export function PublicDiscovery({
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
             {showNearbyEmptyState ? (
-              <p className="empty-state">
-                {isOnline
-                  ? "No vendors matched this search."
-                  : "No cached vendors available while offline."}
-              </p>
+              <div className="empty-state discovery-empty-state" data-testid="discovery-empty-state">
+                <strong>{emptyStateCopy.title}</strong>
+                <p>{emptyStateCopy.body}</p>
+              </div>
             ) : null}
             {vendors.map((vendor) => (
               <VendorCard
@@ -1361,6 +1456,7 @@ export function PublicDiscovery({
               />
             </div>
             <VendorMap
+              key={mapRefreshToken}
               selectionActionToken={selectionActionToken}
               selectionSource={selectionSource}
               selectedVendorId={selectedVendorId}
@@ -1369,6 +1465,26 @@ export function PublicDiscovery({
               vendors={mappableVendors}
               onSelectVendor={selectVendorById}
             />
+            <button
+              className="mobile-map-refresh-button"
+              data-testid="mobile-map-refresh"
+              disabled={!isOnline || isFetchingVendors || locationStatus === "resolving"}
+              type="button"
+              onClick={() => void refreshMapDiscovery()}
+            >
+              {isFetchingVendors ? "Refreshing…" : "Refresh map"}
+            </button>
+            {showMapEmptyState ? (
+              <div
+                className="mobile-map-empty-state"
+                data-testid="mobile-map-empty-state"
+                role="status"
+                aria-live="polite"
+              >
+                <strong>{emptyStateCopy.title}</strong>
+                <p>{emptyStateCopy.body}</p>
+              </div>
+            ) : null}
           </div>
 
           <SelectedVendorPanel

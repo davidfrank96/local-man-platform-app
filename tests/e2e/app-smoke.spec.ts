@@ -151,6 +151,32 @@ async function topPosition(locator: Locator) {
   return box!.y;
 }
 
+async function expectTapTarget(locator: Locator, label: string, minimumSize = 40) {
+  const box = await locator.boundingBox();
+  expect(box, `${label} should be visible and measurable`).not.toBeNull();
+  expect(box!.width, `${label} width`).toBeGreaterThanOrEqual(minimumSize);
+  expect(box!.height, `${label} height`).toBeGreaterThanOrEqual(minimumSize);
+}
+
+async function expectNoBoxOverlap(first: Locator, second: Locator, label: string) {
+  const [firstBox, secondBox] = await Promise.all([
+    first.boundingBox(),
+    second.boundingBox(),
+  ]);
+
+  expect(firstBox, `${label}: first element should be measurable`).not.toBeNull();
+  expect(secondBox, `${label}: second element should be measurable`).not.toBeNull();
+
+  const overlaps = !(
+    firstBox!.x + firstBox!.width <= secondBox!.x ||
+    secondBox!.x + secondBox!.width <= firstBox!.x ||
+    firstBox!.y + firstBox!.height <= secondBox!.y ||
+    secondBox!.y + secondBox!.height <= firstBox!.y
+  );
+
+  expect(overlaps, `${label} should not overlap`).toBe(false);
+}
+
 function parseRgbChannels(value: string) {
   const match = value.match(/\d+(\.\d+)?/g) ?? [];
 
@@ -2845,6 +2871,253 @@ test.describe("Phase 3 browser smoke", () => {
     await openMobileDiscoveryTab(page, "home");
     await expect(homeFilters.locator('select[name="radiusKm"]')).toHaveValue("5");
     await expect(page.locator(".vendor-card:visible")).toHaveCount(2);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("discovery empty states explain search and radius misses without hiding the map", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const vendor: MockNearbyVendor = {
+      vendor_id: "5b000000-0000-4000-8000-000000000001",
+      name: "Radius Rice Kitchen",
+      slug: "radius-rice-kitchen",
+      short_description: "Rice bowls beyond the tight radius.",
+      phone_number: "+2348000000301",
+      area: "Jabi",
+      latitude: 9.064,
+      longitude: 7.43,
+      price_band: "standard",
+      average_rating: 4.5,
+      review_count: 18,
+      distance_km: 3.4,
+      is_open_now: true,
+      featured_dish: {
+        dish_name: "Jollof rice",
+        description: "Jollof and chicken",
+      },
+      today_hours: "10:00 AM - 8:00 PM",
+    };
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockSearchableNearbyDiscovery(page, [vendor]);
+
+    await page.goto("/");
+    await expect.poll(async () => page.locator(".vendor-card:visible").count()).toBe(1);
+
+    const homeFilters = page.getByTestId("mobile-home-filters");
+    await homeFilters.locator('input[name="search"]').fill("zzzz-impossible");
+    await homeFilters.locator('input[name="search"]').press("Enter");
+    await expect(page.getByTestId("discovery-empty-state")).toContainText("Nothing matched your search.");
+    await expect(page.getByTestId("discovery-empty-state")).toContainText("Try another vendor, dish, or area.");
+
+    await homeFilters.locator('input[name="search"]').fill("");
+    await homeFilters.locator('input[name="search"]').press("Enter");
+    await expect.poll(async () => page.locator(".vendor-card:visible").count()).toBe(1);
+
+    await homeFilters.locator('button[aria-label="Open filters"]').click();
+    await homeFilters.locator('select[name="radiusKm"]').selectOption("1");
+    await homeFilters.getByRole("button", { name: "Apply" }).click();
+    await expect(page.getByTestId("discovery-empty-state")).toContainText("No vendors found nearby.");
+    await expect(page.getByTestId("discovery-empty-state")).toContainText("within 1 km");
+
+    await openMobileDiscoveryTab(page, "map");
+    await expect(page.locator(".discovery-map")).toBeVisible();
+    await expect(page.getByTestId("mobile-map-empty-state")).toContainText("No vendors found nearby.");
+    await expect(page.getByTestId("mobile-map-empty-state")).toContainText("Try a wider distance.");
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await expect(page.getByTestId("mobile-discovery-dock")).toBeHidden();
+    const desktopFilters = page.locator(".desktop-discovery-filters");
+    await desktopFilters.locator('input[name="search"]').fill("zzzz-impossible");
+    await desktopFilters.locator('input[name="search"]').press("Enter");
+    await expect(page.getByTestId("discovery-empty-state")).toContainText("Nothing matched your search.");
+    await expect(page.locator(".discovery-map")).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("mobile map refresh reloads vendors while preserving search and radius filters", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const refreshedVendor: MockNearbyVendor = {
+      vendor_id: "5c000000-0000-4000-8000-000000000001",
+      name: "Refresh Rice Stand",
+      slug: "refresh-rice-stand",
+      short_description: "Rice vendor returned after refreshing the map.",
+      phone_number: "+2348000000401",
+      area: "Wuse",
+      latitude: 9.079,
+      longitude: 7.42,
+      price_band: "standard",
+      average_rating: 4.6,
+      review_count: 16,
+      distance_km: 3.2,
+      is_open_now: true,
+      featured_dish: {
+        dish_name: "Jollof rice",
+        description: "Fresh rice bowl",
+      },
+      today_hours: "9:00 AM - 8:00 PM",
+    };
+    let targetRequestCount = 0;
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await page.route("**/api/vendors/nearby**", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const isTargetRefresh =
+        requestUrl.searchParams.get("search") === "rice" &&
+        requestUrl.searchParams.get("radius_km") === "30";
+
+      if (isTargetRefresh) {
+        targetRequestCount += 1;
+      }
+
+      const vendors = isTargetRefresh && targetRequestCount >= 2
+        ? [refreshedVendor]
+        : [];
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            location: {
+              source: "precise",
+              label: "Current location",
+              coordinates: {
+                lat: 9.08,
+                lng: 7.4,
+              },
+              isApproximate: false,
+            },
+            vendors: vendors.map((vendor) => ({
+              ranking_score: 0,
+              ...vendor,
+            })),
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.goto("/");
+    const homeFilters = page.getByTestId("mobile-home-filters");
+    await homeFilters.locator('input[name="search"]').fill("rice");
+    await homeFilters.locator('button[aria-label="Open filters"]').click();
+    const emptyResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("search") === "rice" &&
+        url.searchParams.get("radius_km") === "30"
+      );
+    });
+    await homeFilters.locator('select[name="radiusKm"]').selectOption("30");
+    await homeFilters.getByRole("button", { name: "Apply" }).click();
+    await emptyResponsePromise;
+    await expect(page.getByTestId("discovery-empty-state")).toContainText("Nothing matched your search.");
+
+    await openMobileDiscoveryTab(page, "map");
+    const mapFilters = page.getByTestId("mobile-map-filters");
+    await expect(mapFilters.locator('input[name="search"]')).toHaveValue("rice");
+    await expect(page).toHaveURL(/q=rice/);
+    await expect(page).toHaveURL(/radius_km=30/);
+    await expect(page.getByTestId("mobile-map-empty-state")).toBeVisible();
+
+    const refreshResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("search") === "rice" &&
+        url.searchParams.get("radius_km") === "30"
+      );
+    });
+    await page.getByTestId("mobile-map-refresh").click();
+    await refreshResponsePromise;
+
+    await expect(page.locator(`.discovery-map [data-vendor-id="${refreshedVendor.vendor_id}"]`)).toBeVisible();
+    await expect(page.getByTestId("mobile-map-empty-state")).toHaveCount(0);
+    await expect(mapFilters.locator('input[name="search"]')).toHaveValue("rice");
+    await expect(page).toHaveURL(/q=rice/);
+    await expect(page).toHaveURL(/radius_km=30/);
+
+    await openMobileDiscoveryTab(page, "home");
+    await expect(page.locator(".vendor-card:visible")).toHaveCount(1);
+    await expect(page.locator(".vendor-card:visible").first()).toContainText("Refresh Rice Stand");
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("mobile map controls stay tappable without overlay collisions", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const firstCard = page.locator(".vendor-card").first();
+    await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    await openMobileDiscoveryTab(page, "map");
+    await expect(page.locator(".discovery-map")).toBeVisible();
+    await expectUniqueMapVendorMarkers(page);
+
+    const refreshButton = page.getByTestId("mobile-map-refresh");
+    const mapFilters = page.getByTestId("mobile-map-filters");
+    const selectedPanel = page.locator(".selected-vendor-panel");
+    await expect(refreshButton).toBeVisible();
+    await expect(refreshButton).toBeEnabled();
+    await expectTapTarget(refreshButton, "mobile map refresh button");
+    await expect(mapFilters.locator('input[name="search"]')).toBeVisible();
+    await expect(selectedPanel).toBeVisible();
+
+    for (const width of [320, 375, 390, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(refreshButton).toBeVisible();
+      await expectNoBoxOverlap(refreshButton, mapFilters, `refresh button and search filters at ${width}px`);
+      await expectNoBoxOverlap(refreshButton, selectedPanel, `refresh button and selected vendor card at ${width}px`);
+
+      const hasHorizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth + 1,
+      );
+      expect(hasHorizontalOverflow, `horizontal overflow at ${width}px`).toBe(false);
+    }
+
+    const mapLibreSurface = page.locator('.discovery-map[data-map-mode="maplibre"]');
+    if (await mapLibreSurface.count()) {
+      const zoomIn = mapLibreSurface.locator(".maplibregl-ctrl-zoom-in");
+      const zoomOut = mapLibreSurface.locator(".maplibregl-ctrl-zoom-out");
+      const locateMe = mapLibreSurface.locator(".maplibregl-ctrl-geolocate");
+      await expect(zoomIn).toBeVisible();
+      await expect(zoomOut).toBeVisible();
+      await expect(locateMe).toBeVisible();
+      await expect(locateMe).toBeEnabled();
+      await expectTapTarget(zoomIn, "mobile map zoom in button");
+      await expectTapTarget(zoomOut, "mobile map zoom out button");
+      await expectTapTarget(locateMe, "mobile map locate-me button");
+      await expectNoBoxOverlap(refreshButton, zoomIn, "refresh button and zoom in control");
+      await expectNoBoxOverlap(refreshButton, zoomOut, "refresh button and zoom out control");
+      await expectNoBoxOverlap(refreshButton, locateMe, "refresh button and locate-me control");
+      await expectNoBoxOverlap(mapFilters, zoomIn, "floating search filters and zoom in control");
+
+      await zoomIn.click();
+      await zoomOut.click();
+      await locateMe.click();
+    }
+
+    await refreshButton.click();
+    await expect(refreshButton).toBeVisible();
+    await expect(selectedPanel).toBeVisible();
+    await expect(mapFilters.locator('input[name="search"]')).toBeVisible();
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await expect(page.getByTestId("mobile-discovery-dock")).toBeHidden();
+    await expect(page.getByTestId("mobile-map-refresh")).toBeHidden();
 
     await expectNoClientErrors(errors);
   });
