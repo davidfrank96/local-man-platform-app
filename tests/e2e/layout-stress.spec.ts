@@ -193,7 +193,7 @@ test.describe("Layout stress", () => {
     await page.goto("/search?q=rice");
     await expect(page.getByRole("heading", { name: "Search local food" })).toBeVisible();
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "The Local Man" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Local Man" })).toBeVisible();
     await expect(page.locator(".vendor-card").first()).toBeVisible();
 
     await expectNoClientErrors(errors);
