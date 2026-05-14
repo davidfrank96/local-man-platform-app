@@ -489,4 +489,24 @@ test("restored snapshot still requires an authoritative fetch when freshness is 
     }),
     true,
   );
+
+  assert.equal(
+    shouldSkipPublicDiscoveryFetch({
+      existingRequestKey: null,
+      nextRequestKey: "{\"source\":\"default_city\",\"radiusKm\":30}",
+      restoredNearbyDataRequestKey: "{\"source\":\"default_city\",\"radiusKm\":1}",
+      requiresAuthoritativeFetch: false,
+    }),
+    false,
+  );
+
+  assert.equal(
+    shouldSkipPublicDiscoveryFetch({
+      existingRequestKey: null,
+      nextRequestKey: "{\"source\":\"default_city\",\"radiusKm\":30}",
+      restoredNearbyDataRequestKey: null,
+      requiresAuthoritativeFetch: false,
+    }),
+    false,
+  );
 });

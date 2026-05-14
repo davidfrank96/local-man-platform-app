@@ -93,6 +93,12 @@ type PublicDiscoveryProps = {
   initialSearch?: string;
 };
 
+type MobileDiscoveryTab = "home" | "map" | "about";
+type DiscoveryEmptyStateCopy = {
+  title: string;
+  body: string;
+};
+
 const defaultFilters: DiscoveryFilters = {
   search: "",
   radiusKm: 10,
@@ -101,9 +107,60 @@ const defaultFilters: DiscoveryFilters = {
   category: "",
 };
 const DEFAULT_CITY_BOOTSTRAP_DELAY_MS = 250;
+const LOCALMAN_WEBSITE_URL =
+  process.env.NEXT_PUBLIC_LOCALMAN_WEBSITE_URL ?? "https://localman.app";
+const LOCALMAN_SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_LOCALMAN_SUPPORT_EMAIL ?? "support@localman.app";
+
+function getDiscoveryEmptyStateCopy(
+  filters: DiscoveryFilters,
+  isOnline: boolean,
+): DiscoveryEmptyStateCopy {
+  if (!isOnline) {
+    return {
+      title: "No cached vendors available.",
+      body: "Reconnect to refresh nearby vendors.",
+    };
+  }
+
+  const hasSearch = filters.search.trim().length > 0;
+  const hasTightRadius = filters.radiusKm < defaultFilters.radiusKm;
+  const hasWideRadius = filters.radiusKm > defaultFilters.radiusKm;
+  const hasOtherFilters = Boolean(filters.category || filters.priceBand || filters.openNow);
+
+  if (hasSearch) {
+    return {
+      title: "Nothing matched your search.",
+      body: hasTightRadius || hasOtherFilters
+        ? "Try increasing your distance or clearing one filter."
+        : "Try another vendor, dish, or area.",
+    };
+  }
+
+  if (hasTightRadius) {
+    return {
+      title: "No vendors found nearby.",
+      body: `No food spots found within ${filters.radiusKm} km yet. Try a wider distance.`,
+    };
+  }
+
+  if (hasOtherFilters) {
+    return {
+      title: "No vendors found with these filters.",
+      body: hasWideRadius
+        ? "Try changing your search or clearing one filter."
+        : "Try increasing your distance or changing your filters.",
+    };
+  }
+
+  return {
+    title: "No vendors found nearby.",
+    body: "Try refreshing the map or checking another area.",
+  };
+}
 
 export function PublicDiscovery({
-  title = "The Local Man",
+  title = "Local Man",
   initialSearch = "",
 }: PublicDiscoveryProps) {
   const pathname = usePathname();
@@ -134,8 +191,12 @@ export function PublicDiscovery({
   const [selectionSource, setSelectionSource] = useState<VendorSelectionSource>(null);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileMapFiltersOpen, setMobileMapFiltersOpen] = useState(false);
   const [activeVendorSection, setActiveVendorSection] =
     useState<VendorSection>("nearby");
+  const [activeMobileTab, setActiveMobileTab] =
+    useState<MobileDiscoveryTab>("home");
+  const [mapRefreshToken, setMapRefreshToken] = useState(0);
   const [showLocationReminder, setShowLocationReminder] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
@@ -146,6 +207,7 @@ export function PublicDiscovery({
     useState<RetainedVendorPreview | null>(null);
   const nearbyDataRef = useRef<NearbyVendorsResponseData | null>(null);
   const nearbyDataUpdatedAtRef = useRef<string | null>(null);
+  const nearbyDataRequestKeyRef = useRef<string | null>(null);
   const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
   const preferredSelectedVendorIdRef = useRef<string | null>(null);
   const restoredSnapshotNeedsLiveFetchRef = useRef(false);
@@ -433,6 +495,9 @@ export function PublicDiscovery({
       nearbyDataUpdatedAtRef.current = hasFreshNearbyData
         ? snapshot.nearbyDataUpdatedAt ?? null
         : null;
+      nearbyDataRequestKeyRef.current = hasFreshNearbyData
+        ? snapshot.nearbyRequestKey ?? null
+        : null;
       restoredSnapshotNeedsLiveFetchRef.current = Boolean(restoredNearbyData);
       setNearbyData(restoredNearbyData);
       const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
@@ -462,6 +527,7 @@ export function PublicDiscovery({
     writePublicDiscoverySnapshot(discoverySnapshotKey, {
       nearbyData,
       nearbyDataUpdatedAt: nearbyData ? nearbyDataUpdatedAtRef.current : null,
+      nearbyRequestKey: nearbyData ? nearbyDataRequestKeyRef.current : null,
       selectedVendorId,
       scrollY: window.scrollY,
     });
@@ -469,6 +535,7 @@ export function PublicDiscovery({
       writePublicDiscoverySnapshot(fallbackDiscoverySnapshotKey, {
         nearbyData,
         nearbyDataUpdatedAt: nearbyData ? nearbyDataUpdatedAtRef.current : null,
+        nearbyRequestKey: nearbyData ? nearbyDataRequestKeyRef.current : null,
         selectedVendorId,
         scrollY: window.scrollY,
       });
@@ -488,6 +555,7 @@ export function PublicDiscovery({
       const snapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(discoverySnapshotKey) ?? {
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt: nearbyDataUpdatedAtRef.current,
+        nearbyRequestKey: nearbyDataRequestKeyRef.current,
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: 0,
       };
@@ -497,6 +565,9 @@ export function PublicDiscovery({
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt:
           nearbyDataRef.current ? (nearbyDataUpdatedAtRef.current ?? snapshot.nearbyDataUpdatedAt ?? null) : null,
+        nearbyRequestKey: nearbyDataRef.current
+          ? nearbyDataRequestKeyRef.current ?? snapshot.nearbyRequestKey ?? null
+          : null,
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: window.scrollY,
       });
@@ -506,6 +577,9 @@ export function PublicDiscovery({
           nearbyData: nearbyDataRef.current,
           nearbyDataUpdatedAt:
             nearbyDataRef.current ? (nearbyDataUpdatedAtRef.current ?? snapshot.nearbyDataUpdatedAt ?? null) : null,
+          nearbyRequestKey: nearbyDataRef.current
+            ? nearbyDataRequestKeyRef.current ?? snapshot.nearbyRequestKey ?? null
+            : null,
           selectedVendorId: selectedVendorIdRef.current,
           scrollY: window.scrollY,
         });
@@ -545,17 +619,15 @@ export function PublicDiscovery({
       const restoredNearbyData = hasFreshNearbyData ? restoredSnapshot.nearbyData : null;
       const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(restoredSnapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
-      nearbyDataRef.current = restoredNearbyData;
-      nearbyDataUpdatedAtRef.current = hasFreshNearbyData
-        ? restoredSnapshot.nearbyDataUpdatedAt ?? null
-        : nearbyDataUpdatedAtRef.current;
-      restoredSnapshotNeedsLiveFetchRef.current = restoredSnapshotNeedsLiveFetchRef.current ||
-        Boolean(restoredNearbyData);
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
       setSelectedVendorId(snapshotSelectedVendorId);
-      if (restoredNearbyData) {
-        setNearbyData((current) => current ?? restoredNearbyData);
+      if (restoredNearbyData && !nearbyDataRef.current) {
+        nearbyDataRef.current = restoredNearbyData;
+        nearbyDataUpdatedAtRef.current = restoredSnapshot.nearbyDataUpdatedAt ?? null;
+        nearbyDataRequestKeyRef.current = restoredSnapshot.nearbyRequestKey ?? null;
+        restoredSnapshotNeedsLiveFetchRef.current = true;
+        setNearbyData(restoredNearbyData);
       }
     }
 
@@ -614,6 +686,7 @@ export function PublicDiscovery({
         }
 
         nearbyDataUpdatedAtRef.current = new Date().toISOString();
+        nearbyDataRequestKeyRef.current = buildNearbyRequestKey(nextLocation, nextFilters);
         restoredSnapshotNeedsLiveFetchRef.current = false;
         setNearbyData(result);
         const nextSelectionSource =
@@ -703,6 +776,7 @@ export function PublicDiscovery({
       clearPublicDiscoveryVendorCache();
       hydrateRetentionState();
       nearbyDataUpdatedAtRef.current = null;
+      nearbyDataRequestKeyRef.current = null;
       nearbyRequestKeyRef.current = null;
       restoredSnapshotNeedsLiveFetchRef.current = true;
 
@@ -737,13 +811,7 @@ export function PublicDiscovery({
 
     const requestKey = buildNearbyRequestKey(activeFetchLocation, filters);
     const restoredNearbyDataRequestKey = nearbyData
-      ? buildNearbyRequestKey(
-          {
-            source: nearbyData.location.source,
-            coordinates: nearbyData.location.coordinates,
-          },
-          filters,
-        )
+      ? nearbyDataRequestKeyRef.current
       : null;
 
     if (shouldSkipPublicDiscoveryFetch({
@@ -792,11 +860,12 @@ export function PublicDiscovery({
         },
         nearbyData?.location ?? null,
       ).vendors;
+      const radiusMatched = normalized.filter((vendor) => vendor.distance_km <= filters.radiusKm);
 
       return sortDiscoveryVendors(
-        normalized as NearbyVendorsResponseData["vendors"],
+        radiusMatched as NearbyVendorsResponseData["vendors"],
         filters,
-      ) as typeof normalized;
+      ) as typeof radiusMatched;
     },
     [filters, nearbyData],
   );
@@ -853,6 +922,22 @@ export function PublicDiscovery({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (activeMobileTab !== "map" || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+      recordSelectionIntent(selectionSourceRef.current ?? "restore");
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [activeMobileTab, recordSelectionIntent]);
+
   const vendorById = useMemo(
     () => new Map(vendors.map((vendor) => [vendor.vendor_id, vendor] as const)),
     [vendors],
@@ -895,7 +980,17 @@ export function PublicDiscovery({
   const showNearbyEmptyState =
     snapshotHydrated &&
     vendors.length === 0 &&
-    !isLoading;
+    !isLoading &&
+    !nearbyError;
+  const showMapEmptyState =
+    snapshotHydrated &&
+    mappableVendors.length === 0 &&
+    !isLoading &&
+    !nearbyError;
+  const emptyStateCopy = useMemo(
+    () => getDiscoveryEmptyStateCopy(filters, isOnline),
+    [filters, isOnline],
+  );
   const locationDisplayLabel =
     resolvedLocationKey && resolvedLocationLabel?.key === resolvedLocationKey
       ? resolvedLocationLabel.label
@@ -916,6 +1011,7 @@ export function PublicDiscovery({
     setActiveVendorSection("nearby");
     setDesktopFiltersOpen(false);
     setMobileFiltersOpen(false);
+    setMobileMapFiltersOpen(false);
   }, [recordSelectionIntent]);
 
   const selectVendorById = useCallback((vendorId: string, source: "card" | "map" = "map") => {
@@ -958,6 +1054,7 @@ export function PublicDiscovery({
       writePublicDiscoverySnapshot(discoverySnapshotKey, {
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt: nearbyDataRef.current ? nearbyDataUpdatedAtRef.current : null,
+        nearbyRequestKey: nearbyDataRef.current ? nearbyDataRequestKeyRef.current : null,
         selectedVendorId: vendor?.vendor_id ?? null,
         scrollY: window.scrollY,
       });
@@ -991,6 +1088,39 @@ export function PublicDiscovery({
     }
   }, [isOnline, locationStatus, refreshLocation]);
 
+  const refreshMapDiscovery = useCallback(async () => {
+    if (!isOnline) {
+      setRetryMessage("Still offline");
+      setNearbyError(null);
+      return;
+    }
+
+    if (!activeFetchLocation || isFetchingVendors || locationStatus === "resolving") {
+      return;
+    }
+
+    setRetryMessage(null);
+    setNearbyError(null);
+    nearbyRequestKeyRef.current = null;
+    restoredSnapshotNeedsLiveFetchRef.current = false;
+    setMapRefreshToken((current) => current + 1);
+    recordSelectionIntent(selectionSourceRef.current ?? "restore");
+
+    await loadNearbyVendors(activeFetchLocation, filters);
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("resize"));
+    }
+  }, [
+    activeFetchLocation,
+    filters,
+    isFetchingVendors,
+    isOnline,
+    loadNearbyVendors,
+    locationStatus,
+    recordSelectionIntent,
+  ]);
+
   const scrollToDiscoveryTop = useCallback(() => {
     discoveryTopRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -1000,19 +1130,20 @@ export function PublicDiscovery({
 
   return (
     <main
-      className="public-shell"
+      className="public-shell public-discovery-shell"
       data-time-theme={timeTheme ?? undefined}
     >
       <section
         ref={discoveryTopRef}
         className="discovery-layout"
+        data-mobile-tab={activeMobileTab}
         aria-labelledby="discovery-title"
       >
         <div className="discovery-sidebar">
           <div className="discovery-heading">
             <p className="eyebrow">Abuja pilot</p>
             <h1 id="discovery-title">{title}</h1>
-            <p>Find food and everyday vendors near you.</p>
+            <p>Find Local Food Vendors Near You.</p>
           </div>
 
           <div className="desktop-discovery-filters">
@@ -1025,6 +1156,19 @@ export function PublicDiscovery({
               variant="desktopFloating"
               onChange={applyFilters}
               onTogglePanel={() => setDesktopFiltersOpen((current) => !current)}
+            />
+          </div>
+
+          <div className="mobile-discovery-filters" data-testid="mobile-home-filters">
+            <VendorFilters
+              categories={categories}
+              filters={filters}
+              key={`mobile-${filterFormKey}`}
+              locationSource={activeLocationSource ?? null}
+              panelOpen={mobileFiltersOpen}
+              variant="mobileFloating"
+              onChange={applyFilters}
+              onTogglePanel={() => setMobileFiltersOpen((current) => !current)}
             />
           </div>
 
@@ -1119,11 +1263,10 @@ export function PublicDiscovery({
             </div>
             {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
             {showNearbyEmptyState ? (
-              <p className="empty-state">
-                {isOnline
-                  ? "No vendors matched this search."
-                  : "No cached vendors available while offline."}
-              </p>
+              <div className="empty-state discovery-empty-state" data-testid="discovery-empty-state">
+                <strong>{emptyStateCopy.title}</strong>
+                <p>{emptyStateCopy.body}</p>
+              </div>
             ) : null}
             {vendors.map((vendor) => (
               <VendorCard
@@ -1212,12 +1355,23 @@ export function PublicDiscovery({
                       </span>
                     </div>
                     <button
-                      className="button-secondary compact-button"
+                      className="button-secondary compact-button retention-desktop-action"
                       type="button"
                       onClick={() => selectVendorById(vendor.vendor_id, "card")}
                     >
                       Preview
                     </button>
+                    <Link
+                      className="button-secondary compact-button retention-mobile-action"
+                      href={buildVendorDetailHref(
+                        vendor.slug,
+                        discoveryReturnTo,
+                        activeLocationSource ?? null,
+                      )}
+                      onClick={() => selectVendorById(vendor.vendor_id, "card")}
+                    >
+                      Open
+                    </Link>
                   </div>
                 ))}
               </div>
@@ -1246,13 +1400,26 @@ export function PublicDiscovery({
                     </span>
                   </div>
                   {rememberedSelectedVendor ? (
-                    <button
-                      className="button-secondary compact-button"
-                      type="button"
-                      onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
-                    >
-                      Preview again
-                    </button>
+                    <>
+                      <button
+                        className="button-secondary compact-button retention-desktop-action"
+                        type="button"
+                        onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
+                      >
+                        Preview again
+                      </button>
+                      <Link
+                        className="button-secondary compact-button retention-mobile-action"
+                        href={buildVendorDetailHref(
+                          rememberedSelectedVendor.slug,
+                          discoveryReturnTo,
+                          activeLocationSource ?? null,
+                        )}
+                        onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
+                      >
+                        Open
+                      </Link>
+                    </>
                   ) : (
                     <Link
                       className="button-secondary compact-button"
@@ -1262,7 +1429,8 @@ export function PublicDiscovery({
                         activeLocationSource ?? null,
                       )}
                     >
-                      View details
+                      <span className="retention-desktop-label">View details</span>
+                      <span className="retention-mobile-label">Open</span>
                     </Link>
                   )}
                 </div>
@@ -1275,19 +1443,20 @@ export function PublicDiscovery({
 
         <div className="discovery-main">
           <div className="mobile-map-stack">
-            <div className="mobile-discovery-filters">
+            <div className="mobile-map-discovery-filters" data-testid="mobile-map-filters">
               <VendorFilters
                 categories={categories}
                 filters={filters}
-                key={`mobile-${filterFormKey}`}
+                key={`mobile-map-${filterFormKey}`}
                 locationSource={activeLocationSource ?? null}
-                panelOpen={mobileFiltersOpen}
+                panelOpen={mobileMapFiltersOpen}
                 variant="mobileFloating"
                 onChange={applyFilters}
-                onTogglePanel={() => setMobileFiltersOpen((current) => !current)}
+                onTogglePanel={() => setMobileMapFiltersOpen((current) => !current)}
               />
             </div>
             <VendorMap
+              key={mapRefreshToken}
               selectionActionToken={selectionActionToken}
               selectionSource={selectionSource}
               selectedVendorId={selectedVendorId}
@@ -1296,6 +1465,26 @@ export function PublicDiscovery({
               vendors={mappableVendors}
               onSelectVendor={selectVendorById}
             />
+            <button
+              className="mobile-map-refresh-button"
+              data-testid="mobile-map-refresh"
+              disabled={!isOnline || isFetchingVendors || locationStatus === "resolving"}
+              type="button"
+              onClick={() => void refreshMapDiscovery()}
+            >
+              {isFetchingVendors ? "Refreshing…" : "Refresh map"}
+            </button>
+            {showMapEmptyState ? (
+              <div
+                className="mobile-map-empty-state"
+                data-testid="mobile-map-empty-state"
+                role="status"
+                aria-live="polite"
+              >
+                <strong>{emptyStateCopy.title}</strong>
+                <p>{emptyStateCopy.body}</p>
+              </div>
+            ) : null}
           </div>
 
           <SelectedVendorPanel
@@ -1307,6 +1496,32 @@ export function PublicDiscovery({
             selectedVendorOpenState={selectedVendorOpenState}
           />
         </div>
+        <section
+          className="mobile-about-view"
+          data-testid="mobile-about-view"
+          aria-labelledby="mobile-about-title"
+        >
+          <p className="eyebrow">About Localman</p>
+          <h2 id="mobile-about-title">Find useful vendors near you.</h2>
+          <p>
+            Localman helps you search nearby food and everyday vendors, compare who is open,
+            preview them on the map, and open details for calls or directions.
+          </p>
+          <div className="mobile-about-card">
+            <strong>How to use it</strong>
+            <p>Search or filter vendors on Home, switch to Map for location context, then open a vendor for details.</p>
+          </div>
+          <div className="mobile-about-card">
+            <strong>Support</strong>
+            <p>
+              Need help or want to list a vendor? Email{" "}
+              <a href={`mailto:${LOCALMAN_SUPPORT_EMAIL}`}>{LOCALMAN_SUPPORT_EMAIL}</a>.
+            </p>
+            <a href={LOCALMAN_WEBSITE_URL} rel="noreferrer" target="_blank">
+              Visit Localman
+            </a>
+          </div>
+        </section>
         {showBackToTop ? (
           <button
             type="button"
@@ -1318,6 +1533,53 @@ export function PublicDiscovery({
           </button>
         ) : null}
       </section>
+      <nav
+        aria-label="Mobile discovery sections"
+        className="mobile-discovery-dock"
+        data-testid="mobile-discovery-dock"
+      >
+        <button
+          type="button"
+          className="mobile-discovery-dock-button"
+          data-active={activeMobileTab === "home"}
+          data-testid="mobile-discovery-tab-home"
+          aria-current={activeMobileTab === "home" ? "page" : undefined}
+          onClick={() => setActiveMobileTab("home")}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M3 9.2 10 3l7 6.2v7.1a1.4 1.4 0 0 1-1.4 1.4h-3.2v-5.2H7.6v5.2H4.4A1.4 1.4 0 0 1 3 16.3V9.2Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+          </svg>
+          <span>Home</span>
+        </button>
+        <button
+          type="button"
+          className="mobile-discovery-dock-button"
+          data-active={activeMobileTab === "map"}
+          data-testid="mobile-discovery-tab-map"
+          aria-current={activeMobileTab === "map" ? "page" : undefined}
+          onClick={() => setActiveMobileTab("map")}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="m7 4-4 2v11l4-2 6 2 4-2V4l-4 2-6-2Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+            <path d="M7 4v11M13 6v11" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+          </svg>
+          <span>Map</span>
+        </button>
+        <button
+          type="button"
+          className="mobile-discovery-dock-button"
+          data-active={activeMobileTab === "about"}
+          data-testid="mobile-discovery-tab-about"
+          aria-current={activeMobileTab === "about" ? "page" : undefined}
+          onClick={() => setActiveMobileTab("about")}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M10 8.6v5M10 6.1h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+          </svg>
+          <span>About</span>
+        </button>
+      </nav>
     </main>
   );
 }

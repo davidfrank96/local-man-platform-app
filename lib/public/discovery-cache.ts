@@ -29,6 +29,7 @@ export type PublicDiscoverySnapshot<T = unknown> = {
   cacheEnvironment?: string;
   nearbyData: T | null;
   nearbyDataUpdatedAt?: string | null;
+  nearbyRequestKey?: string | null;
   selectedVendorId: string | null;
   selectedVendorSlug?: string | null;
   scrollY: number;
