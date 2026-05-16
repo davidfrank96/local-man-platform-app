@@ -1,8 +1,8 @@
 ## Title
-The Local Man — UI Rules
+Local Man — UI Rules
 
 ## Design Principles
-1. Map-first discovery.
+1. Discovery-first layout with a dedicated mobile map tab.
 2. Mobile-first layout.
 3. Clear actions.
 4. Minimal clutter.
@@ -11,7 +11,7 @@ The Local Man — UI Rules
 7. Low-data polish beats decorative weight.
 
 ## Public UI Rules
-- Homepage must open into a map-first layout.
+- Homepage must open into mobile Home content on small screens and the combined discovery layout on tablet/desktop.
 - The public discovery map may render as MapLibre using the browser-safe MapTiler style URL or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
 - The map should mount immediately on page load; nearby vendors may hydrate asynchronously from default-city data first and then upgrade to precise results when location resolves.
 - When MapLibre is active, the map must use one marker system only:
@@ -21,14 +21,15 @@ The Local Man — UI Rules
   - no clustering
 - Marker click selects a vendor and updates the selected preview, but must not move the camera.
 - Vendor-card selection may gently focus the map marker when that improves orientation.
-- Core mobile discovery order must remain:
-  - Local Man header
-  - floating search/filter bar
-  - map
-  - selected vendor card
-  - vendor list
-- Mobile discovery should keep the hero compact enough that search, map context, and the first useful vendor content are reachable quickly on small Android screens.
-- Reminder toasts and location status panels must not move the map above the header or filters.
+- Core mobile discovery uses a fixed bottom dock with:
+  - Home
+  - Map
+  - About
+- Mobile Home must show the header, shared search/filter controls, location messaging, vendor section navigation, and vendor results.
+- Mobile Map must show shared search/filter controls over the map, the map refresh control, the map, and the selected vendor panel below the map.
+- Mobile About must show only lightweight support/about content and must not render search, filters, or the map.
+- The mobile selected vendor panel must flow naturally below the map through normal page scrolling.
+- Reminder toasts and location status panels must not move the Home search/filter and vendor list out of usable reach.
 - Web discovery currently uses:
   - left column for header, search/filter, reminder toast, location panel, vendor section navbar, and vendor content
   - right column for map and selected vendor preview
@@ -44,6 +45,7 @@ The Local Man — UI Rules
 - Open vendors should be easier to find than closed vendors.
 - The UI may highlight a small set of popular nearby vendors when real usage signals support it.
 - If the interactive map is unavailable, show calm fallback copy and keep the vendor list fully usable.
+- If a filtered state returns no vendors, show a friendly empty state after loading completes. Do not show empty-state copy while data is still fetching.
 - Do not overload the home screen with too many actions.
 - Runtime errors must be visible when Supabase data is unavailable.
 - Public UI must not render fake vendor data.
@@ -80,9 +82,9 @@ The Local Man — UI Rules
 - optional lightweight popularity badge when a vendor is among the top ranked nearby results
 - call button
 - directions button
-- helper text: `Tap to preview on map`
+- desktop may show map-preview helper copy; mobile must hide map-preview helper wording because map context lives in the dedicated Map tab
 - visible detail link text: `View details →`
-- tapping the card body should preview the vendor on the map without interfering with call, directions, or details
+- tapping/clicking the card body should update selected vendor state without interfering with call, directions, or details
 - `Active hours:`, distance, and open/closed state must remain visible before and after the card is selected.
 - open/closed state and `Active hours:` must come from the shared server-computed availability fields so the card badge and hours line never contradict each other
 - compact card density matters: metadata rows should scan quickly without making the card tall
@@ -114,6 +116,9 @@ The Local Man — UI Rules
 - Distances must remain visible and truthful even when open status or close-distance usage ranking affects order.
 - When filters are active, the current filter state should be obvious and easy to clear.
 - Discovery ordering helper copy may explain the current emphasis, such as open now and nearest vendors.
+- Radius filters currently support 1 km, 5 km, 10 km, and 30 km and must affect Home, Map, and desktop through the same shared filter state.
+- Search, category, price, open-now, and radius state must persist when switching between mobile Home and Map. About must not reset those filters.
+- The map refresh action must refresh nearby discovery state without hard-refreshing the browser page and must preserve current search/filter state.
 - Retention helpers such as recently viewed vendors or last selected vendor memory should remain compact and supportive rather than taking over the page.
 - Client-only retention must use local browser storage and must never block public browsing.
 
@@ -196,6 +201,7 @@ The Local Man — UI Rules
 - analytics must never expose raw tracking failures in the public app
 - analytics filters should stay lightweight: last 24 hours, 7 days, 30 days, and all time
 - agents must not see or access `/admin/logs`; client-side hiding is presentation-only and backend permission checks remain authoritative
+- background admin session refresh must keep already-authenticated workspace forms mounted; native file-picker focus/visibility events must not reset create/edit vendor form state
 
 ## Style Guidance
 - clean modern look
@@ -214,8 +220,8 @@ The Local Man — UI Rules
 - Selected vendor cards should use a clearer active treatment through border, elevation, or subtle tint, but must keep `Active hours:`, distance, open/closed state, featured dish, price, area, rating, slug, and actions easy to read.
 - Selected vendor preview panels should stay compact and action-oriented, with `View details`, `Call`, and `Directions` visible on mobile.
 - Selected vendor preview panels on desktop should keep `Call`, `Directions`, and `View details` on one row when space allows.
-- Selected vendor preview panels currently remain below the map on mobile and in the map column on desktop.
-- On mobile, the selected vendor preview must already sit directly under the map so marker selection does not require a page jump.
+- Selected vendor preview panels currently remain below the map on the mobile Map tab and in the map column on desktop.
+- On mobile, the selected vendor preview must sit directly under the Map tab map and must remain reachable through normal page scrolling above the fixed dock.
 - The full storefront marker button must be tappable, including the storefront SVG hit area used for both default and selected marker states.
 - Morning background tones should stay soft and calm with cream, gentle green, and light mint accents.
 - Afternoon background tones should stay warm and sunny with cream, amber, and gentle orange accents.

@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Pilot Operations Checklist
+Local Man — Pilot Operations Checklist
 
 ## Purpose
 Use this checklist for Abuja pilot launch and daily pilot operations.
@@ -13,6 +13,7 @@ This is an operator runbook, not a feature document. It should stay short, pract
 - [ ] Confirm `npm run runtime:check-db-env` passes.
 - [ ] Confirm migration applied successfully.
 - [ ] Confirm `npm run db:check` passes.
+- [ ] Confirm explicit Data API grants and RLS policies are applied on the target Supabase project.
 - [ ] Confirm Abuja seed applied successfully.
 - [ ] Confirm `npm run smoke:nearby` passes against the real Supabase environment.
 - [ ] Confirm admin login works for a user present in `admin_users`.
@@ -64,13 +65,17 @@ For each vendor before activation:
 
 ## Public Discovery Smoke Test
 - [ ] Open the homepage.
-- [ ] Confirm vendor cards render.
-- [ ] Confirm the map area renders without a blank screen.
-- [ ] Confirm search changes the result set.
-- [ ] Confirm filters still work.
+- [ ] On mobile, confirm the Home, Map, and About dock tabs render.
+- [ ] On mobile Home, confirm vendor cards render and search/filter controls work.
+- [ ] On mobile Map, confirm the map area renders without a blank screen and the refresh control is usable.
+- [ ] On mobile About, confirm support/about copy appears and search/filter controls are absent.
+- [ ] On desktop, confirm the combined list/map layout still renders.
+- [ ] Confirm search changes the result set on mobile Home, mobile Map, and desktop.
+- [ ] Confirm filters still work, including 1 km, 5 km, 10 km, and 30 km radius choices where seeded data exists.
 - [ ] Confirm vendor cards open the vendor detail page.
 - [ ] Confirm call and directions actions render correctly.
 - [ ] Confirm the selected vendor panel shows open state, area, active hours, and call/directions/detail actions.
+- [ ] Confirm stale/mock cached vendors do not appear after browser refresh.
 
 ## Mobile Geolocation Test
 - [ ] Test on a mobile browser with location permission allowed.

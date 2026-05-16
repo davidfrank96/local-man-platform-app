@@ -4,9 +4,9 @@ This document describes the current public UI as implemented.
 
 ## Product model
 
-Local Man is a map-first, vendor-first discovery surface:
+Local Man is a discovery-first, vendor-first surface:
 
-- the map is always part of the discovery experience
+- the map remains part of discovery, but mobile gives it a dedicated tab
 - vendor cards are compact, text-first, and action-oriented
 - vendor selection updates the map preview and selected vendor summary
 - mobile and web use the same data and actions, but different layout organization
@@ -20,26 +20,27 @@ The public homepage combines:
 - a selected vendor summary
 - a map preview
 - lightweight retention sections for recent, popular, and last-selected vendors
+- a mobile-only bottom dock with Home, Map, and About tabs
 
 The interaction model is:
 
 1. resolve location
 2. load nearby vendors
 3. let the user search or filter
-4. let the user preview a vendor from the list or map
+4. let the user select a vendor from the list or map
 5. let the user call, get directions, or open the full vendor detail page
 
 ## Mobile vs web
 
 ### Mobile
 
-Mobile is stacked and map-first.
+Mobile is tabbed through a fixed bottom dock.
 
-- the discovery header stays at the top
-- search and filters live in a floating surface
-- the map appears before the main vendor list
-- the selected vendor summary appears directly below the map
-- section switching uses a compact mobile vendor navbar
+- Home shows the discovery header, shared search/filter controls, location messaging, vendor section navigation, and vendor cards
+- Map shows a dedicated map view with shared search/filter controls, map refresh, and the selected vendor summary below the map
+- About shows lightweight product/support guidance without search, filters, or map
+- Home and Map share the same search, radius, category, price, open-now, and selected-vendor state
+- the selected vendor summary on Map uses normal page scrolling
 
 ### Web
 
@@ -53,7 +54,7 @@ Web separates content and map into two columns.
 
 The vendor list is the primary interaction surface.
 
-- clicking or tapping a vendor card previews that vendor on the map
+- clicking or tapping a vendor card updates the selected vendor state
 - the selected vendor summary updates without leaving discovery
 - `Call`, `Directions`, and `View details` are available from both the card system and the selected preview
 
@@ -74,6 +75,10 @@ Default nearby ordering is:
   - recently viewed vendors
   - popular vendors near you
   - last selected vendor
+- cache hygiene:
+  - discovery snapshots carry a cache version, browser-origin environment, and nearby request key
+  - malformed cached vendor records and known mock/test vendor ids or slugs are rejected before hydration
+  - restored discovery snapshots yield to a live nearby fetch before becoming authoritative again
 
 ## Workspace UI surfaces
 

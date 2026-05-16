@@ -1,0 +1,88 @@
+# Local Man Release Notes
+
+## 2026-05 Mobile, Cache, Security, and Regression Lockdown
+
+This note summarizes the current branch behavior after the mobile discovery restructure, cache/security hardening, admin upload/session stabilization, and regression-lockdown coverage.
+
+### Public Mobile Discovery
+
+- Mobile discovery now uses a fixed bottom dock with `Home`, `Map`, and `About`.
+- `Home` contains the mobile header, shared search/filter controls, location messaging, vendor sections, and vendor cards.
+- `Map` contains the dedicated map view, shared search/filter controls, map refresh, marker selection, and selected vendor panel.
+- `About` contains lightweight support/about guidance only; it does not render search, filters, map, or vendor results.
+- Home and Map share one search/filter/selected-vendor state. Search, category, price, open-now, and radius filters persist when switching between them.
+- The selected vendor panel on the mobile Map tab flows naturally below the map through normal page scrolling.
+- Desktop keeps the existing combined discovery layout with list/search content in the left column and map/selected vendor content in the right column.
+
+### Search, Radius, Empty States, and Map Refresh
+
+- Radius filters currently support 1 km, 5 km, 10 km, and 30 km.
+- Radius/search/category/open-now/price filters are shared across mobile Home, mobile Map, and desktop discovery.
+- Friendly empty states now distinguish true empty search/filter/radius results from loading and fetch errors.
+- The mobile Map tab keeps the map visible for zero-result states and shows compact empty-state guidance.
+- The mobile Map refresh control retries nearby discovery for the current state without hard-refreshing the browser page.
+
+### Cache and Mock-Data Hygiene
+
+- Public discovery snapshots include cache version, browser-origin environment, and a nearby request key.
+- Restored nearby data cannot skip a live fetch when the active request key differs from the cached key.
+- Malformed cached vendor records are rejected before hydration.
+- Known Playwright/mock vendor ids and known mock slugs are rejected before they can hydrate discovery state or retained-vendor memory.
+- Admin vendor mutations invalidate restored public discovery state after vendor create, update, deactivate, hours, image, and featured-dish changes.
+
+### Analytics Integrity
+
+- `/api/events` remains fire-and-forget and must not block public UI.
+- Referenced vendor ids are validated before `user_events` insert.
+- Stale or nonexistent vendor ids are skipped safely with sanitized operational logging instead of triggering database foreign-key failures.
+- Valid vendor events still feed admin analytics and usage-signal ranking.
+
+### Admin Session and Vendor Images
+
+- Admin sessions are cookie-backed and validated through `/api/admin/session`.
+- Background focus/visibility refresh keeps authenticated workspaces mounted, including create/edit forms and native file-picker state.
+- Vendor image upload state is scoped by selected vendor id.
+- Switching vendors clears pending file refs, native file input state, local previews, and stale image-list state.
+- Upload success requires both the Storage object and the returned `vendor_images` metadata row.
+- Public vendor detail uses storage-backed image rows when available.
+
+### Supabase Security Hardening
+
+- Public-schema Data API access is explicitly granted through migrations.
+- Legacy broad grants are revoked and replaced with least-privilege grants.
+- RLS remains enabled for public-schema tables.
+- `app_schema_migrations` has RLS enabled with a deny-all client policy.
+- Future public-schema tables, functions, and sequences fail closed until a migration grants access intentionally.
+- RLS helper functions remain executable because policies call them; trigger/admin/RPC functions stay service_role-only unless documented otherwise.
+
+### Regression Protection
+
+The current regression-lockdown suite covers:
+
+- mobile Home/Map shared search/filter state
+- radius filter cache/request-key safety
+- mock vendor cache contamination
+- invalid analytics vendor ids
+- admin session refresh form-state preservation
+- image picker form reset prevention
+- mobile dock state persistence
+- map refresh state persistence
+- empty-state rendering
+- selected vendor synchronization
+- discovery cache request-key mismatch handling
+
+### Release Gate
+
+Before production promotion, run:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- `npm run db:check`
+- `npm run smoke:nearby`
+- targeted mobile discovery Playwright tests
+- targeted admin upload/session Playwright tests
+- `npm audit`
+
+High-severity dependency advisories remain deployment blockers even when functional tests pass.

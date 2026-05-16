@@ -1,5 +1,5 @@
 ## Title
-The Local Man — API Specification
+Local Man — API Specification
 
 ## API Principles
 - keep endpoints minimal
@@ -79,6 +79,8 @@ Behavior:
 - Base candidate filtering for `search` currently matches vendor name, short description, and area in the Supabase vendor query and is rechecked in application logic for safety.
 - The Supabase nearby candidate read uses a short `5` second Next revalidation window so discovery can stay bounded without holding vendor edits, deactivations, or hours changes for the older generic `30` second window.
 - Client discovery snapshots currently expire after `5` minutes and must yield to a live nearby fetch on restore before they can become authoritative again.
+- Client discovery snapshots include a nearby request key derived from location source, coordinates, search, radius, category, price, and open-now state; a restored snapshot cannot skip a fetch for a different request key.
+- Cache hydration rejects malformed vendor records, known mock/test vendor ids, and known mock/test slugs before they can render or emit analytics.
 - Admin vendor mutations publish a public discovery invalidation event so restored discovery state is cleared after vendor create, update, deactivate, hours, image, and featured-dish changes.
 - Usage-signal ranking is aggregated server-side through the `get_vendor_usage_scores` SQL function instead of fetching raw `user_events` rows into Node.
 - If that SQL function is unavailable in a partially migrated environment, the API falls back to a service-role `user_events` read so nearby discovery still responds.
@@ -241,6 +243,8 @@ Behavior:
 - validates event type and optional metadata
 - writes to `public.user_events`
 - uses server-side credentials only
+- validates referenced `vendor_id` values before insert; if the vendor no longer exists, the route skips the write, logs a sanitized warning, and still returns a safe `202`
+- valid vendor events continue to write normally and remain available for analytics and usage-signal ranking
 - returns `202` instead of surfacing public UX failures when tracking is unavailable
 - must not block or degrade public interactions
 - abuse protection:

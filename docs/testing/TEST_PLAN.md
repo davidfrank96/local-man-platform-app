@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Test Plan
+Local Man — Test Plan
 
 ## Test Goal
 Ensure the runtime, admin operations, public discovery surface, Phase 5 UX polish, and Phase 6 usage signals remain coherent before commit, deployment, or pilot use.
@@ -84,6 +84,14 @@ Test:
 - browser back restores discovery state
 - `Back to map` restores discovery state
 - restored discovery state keeps search and filter controls usable without manual reload
+- mobile Home and Map tabs share search, category, price, open-now, radius, and selected-vendor state
+- mobile About renders no search/filter controls and does not reset shared discovery state
+- mobile radius filters return correct results for 1 km, 5 km, 10 km, and 30 km where seeded data exists
+- stale wider-radius or different-filter cached snapshots cannot hydrate a mismatched request key
+- mock/test vendor ids and known mock slugs cannot hydrate public discovery cache or retained vendor memory
+- friendly empty states appear only after loading completes for true empty search/filter/radius states
+- mobile Map keeps the map visible when filtered results are empty and shows a lightweight empty-state overlay
+- mobile Map refresh retries nearby discovery without a hard page reload and preserves current filters
 - small-phone and tablet layouts remain stable
 - public mobile polish keeps useful content reachable without the map or hero dominating the first screen
 - time-based morning, afternoon, and night themes do not compromise card readability
@@ -98,6 +106,7 @@ Current automated coverage:
 - `tests/public-routes.test.ts`
 - `tests/discovery-ranking.test.ts`
 - `tests/public-user-action-tracking.test.ts`
+- `tests/discovery-cache.test.ts`
 - `tests/vendor-retention.test.ts`
 - `tests/e2e/app-smoke.spec.ts`
 - `tests/e2e/layout-stress.spec.ts`
@@ -154,12 +163,14 @@ Test:
 - nearby degraded empty responses emit a distinct failure log instead of looking like true empty search results
 - ratings RPC failures emit structured route-failure logs without leaking sensitive config
 - admin session validation failures emit structured auth logs without leaking cookies or auth headers
+- public event tracking with stale or nonexistent vendor ids returns safely without violating `user_events` foreign keys
 
 Current automated coverage:
 - `tests/observability.test.ts`
 - `tests/public-nearby-route.test.ts`
 - `tests/public-rating-route.test.ts`
 - `tests/admin-session-routes.test.ts`
+- `tests/public-event-route.test.ts`
 
 ### Admin Foundation Logic
 Test:
@@ -169,6 +180,7 @@ Test:
 - authenticated admin user is accepted
 - cookie-backed admin session validation route returns the authenticated admin identity
 - expired cookie-backed admin sessions refresh server-side when a valid refresh cookie is present
+- background focus/visibility refresh does not unmount authenticated route-guard children or reset create/edit form state
 - removed `admin_users` membership clears privileged cookies and blocks the stale session
 - vendor listing supports pagination and filters
 - vendor create writes audit log
@@ -231,6 +243,7 @@ Manual admin UI smoke coverage:
 - sign in with an email/password account that exists in `admin_users`
 - open `/admin/vendors`
 - open `/admin/vendors/new`
+- fill create-vendor form fields, open a native file picker, select an image, and confirm the page does not reload and field values remain
 - open `/admin/vendors/[id]` with a valid vendor id
 - load vendors
 - confirm the dashboard overview cards show vendor totals and missing-data counts
@@ -313,7 +326,11 @@ Manual viewport checks:
 - `1440px`
 
 Manual UI checks:
-- homepage/map view loads without overlap
+- mobile Home, Map, and About dock tabs render only on mobile
+- mobile Home shows search/filter and vendor cards
+- mobile Map shows shared search/filter, map refresh, map/fallback, and selected vendor panel
+- mobile About shows support/about copy only
+- desktop keeps the combined discovery layout and does not show the mobile dock
 - vendor cards remain compact, readable, and image-free
 - selected vendor preview keeps `Call`, `Directions`, and `View details` accessible
 - vendor detail hero remains compact and readable
@@ -321,7 +338,7 @@ Manual UI checks:
 - map controls stay visible
 - MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
 - the real map should show oxblood storefront markers by default, a green storefront marker when selected, a blue user-location marker, and no cluster bubbles
-- mobile discovery should keep the order: header, filters, map, selected vendor preview, vendor list
+- mobile Map selected vendor panel should flow below the map through normal page scrolling
 - mobile marker taps should update the selected preview without drifting the map or scrolling the page down
 - mobile pinch zoom and drag-pan should be checked on a real device before final release confidence
 - no horizontal overflow on mobile

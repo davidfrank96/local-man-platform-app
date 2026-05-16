@@ -54,6 +54,7 @@ After successful workspace login:
 - `admin` resolves to `/admin/dashboard`
 - `agent` resolves to `/admin/agent`
 - the browser session is restored through secure same-origin HTTP-only cookies and `/api/admin/session`
+- background focus/visibility refresh validates the session without moving an already-authenticated route back to loading state, so create/edit forms and file picker state stay mounted
 
 Authentication proves identity only. Privileged workspace access exists only when the authenticated user already has an explicit row in `admin_users`.
 `admin_users.role` is the authoritative role source. Supabase Auth `user_metadata.role` is mirrored from `admin_users.role` during create and role-change flows so session reads, dashboard routing, and the admin UI stay aligned.
@@ -83,3 +84,5 @@ Important behavior:
 - agents are valid workspace users but not full admins
 - audit log reads remain admin-only
 - vendor category mapping remains admin-only at the DB policy layer, so the server-controlled vendor intake flow performs that step safely
+- explicit Supabase Data API grants expose only intended public tables to anon/authenticated roles; admin/internal tables are not anon-readable
+- `app_schema_migrations` remains service-role bookkeeping with a deny-all client RLS policy

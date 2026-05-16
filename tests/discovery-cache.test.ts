@@ -469,6 +469,24 @@ test("offline discovery cache rejects mock vendor payloads", () => {
   assert.equal(readCachedNearbyDiscoveryData(cacheKey, localStorage), null);
 });
 
+test("offline discovery cache rejects known mock slugs even with production-shaped ids", () => {
+  const localStorage = createStorage();
+  const cacheKey = getDiscoveryOfflineCacheKey("public-discovery:/");
+  const nearbyData = createNormalizedNearbyData("5f000000-0000-4000-8000-000000000001");
+
+  nearbyData.vendors[0].slug = "open-evening-grill";
+
+  localStorage.setItem(
+    cacheKey,
+    JSON.stringify(createSnapshot({
+      nearbyData,
+      cachedAt: new Date().toISOString(),
+    })),
+  );
+
+  assert.equal(readCachedNearbyDiscoveryData(cacheKey, localStorage), null);
+});
+
 test("restored snapshot still requires an authoritative fetch when freshness is forced", () => {
   assert.equal(
     shouldSkipPublicDiscoveryFetch({

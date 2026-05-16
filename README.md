@@ -1,11 +1,15 @@
-## The Local Man
+## Local Man
 
-The Local Man is a location-based food discovery product for finding nearby local vendors, starting with Abuja, Nigeria. The public app helps people see nearby vendors, whether they are open, what they sell, and how to call or reach them. The admin app supports vendor onboarding, maintenance, media upload, and content completeness review.
+Local Man is a location-based food discovery product for finding nearby local vendors, starting with Abuja, Nigeria. The public app helps people see nearby vendors, whether they are open, what they sell, and how to call or reach them. The admin app supports vendor onboarding, maintenance, media upload, and content completeness review.
 
 ## Product Surface
 
 ### Public
-- discovery homepage with map-first nearby vendors, floating mobile search, desktop search/filter bar, and an optional MapLibre map plus coordinate fallback
+- discovery homepage with mobile bottom-dock navigation and the existing desktop combined discovery layout
+- mobile Home tab for search, filters, nearby vendor cards, recent vendors, popular vendors, and last-selected memory
+- mobile Map tab for the dedicated map view, shared search/filter controls, map refresh, marker selection, and the selected vendor panel
+- mobile About tab for lightweight support and usage guidance, without search/filter controls
+- desktop search/filter bar with the map and selected vendor panel in the right column
 - discovery ordering that prioritizes:
   - open vendors first
   - distance within the same open/closed group
@@ -23,7 +27,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - call, directions, and detail actions
   - no vendor card photos or thumbnails
 - popular-vendor highlighting when ranking signals exist
-- selected vendor preview below the map on mobile and beside the map on web
+- selected vendor panel below the map on the mobile Map tab and beside the map on web
   - selected vendor name
   - distance
   - open/closed state
@@ -56,6 +60,9 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - bounded public discovery freshness:
   - nearby vendor reads use a short 5 second server revalidation window
   - session snapshot restore expires after 5 minutes
+  - discovery snapshots include a request-bound nearby key so stale radius/search/category/open-now results cannot hydrate a different filter state
+  - cache envelopes are scoped by version and browser origin
+  - malformed vendor records, known mock vendor ids, and known mock vendor slugs are discarded before browser cache hydration
   - restored discovery data yields to one live nearby fetch before it becomes authoritative again
   - admin vendor mutations invalidate restored public discovery vendor data
 - morning, afternoon, and night discovery themes based on browser-local time
@@ -93,6 +100,7 @@ The Local Man is a location-based food discovery product for finding nearby loca
   - delete admin/agent
   - recover existing auth users cleanly, mirror role metadata, and refresh the list from the authoritative team-access API
 - centralized UI error boundary and toast notifications
+- background admin session refresh keeps authenticated workspace forms mounted so native file-picker focus changes do not reset local form state
 
 ## Tech Stack
 - Next.js App Router
@@ -125,9 +133,11 @@ The Local Man is a location-based food discovery product for finding nearby loca
 - [docs/performance.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/performance.md) - low-bandwidth and UI-stability constraints
 - [docs/qa-checklist.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/qa-checklist.md) - release and regression checklist
 - [docs/rbac.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rbac.md) - admin and agent role rules
+- [docs/ops/SECURITY.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/SECURITY.md) - auth/RBAC, Supabase grants/RLS, public write, cache, and secret-handling security notes
 - [docs/audit-logs.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/audit-logs.md) - workspace audit logging behavior
 - [docs/analytics.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/analytics.md) - public event tracking and admin analytics reads
 - [docs/error-handling.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/error-handling.md) - shared error contract, toast system, and error boundary
+- [docs/RELEASE_NOTES.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/RELEASE_NOTES.md) - current release notes for mobile UX, cache/security hardening, admin upload/session stabilization, and regression lockdown coverage
 
 ## Local Setup
 1. Install dependencies:
@@ -340,6 +350,12 @@ Phase 5 delivered:
 - vendor image upload pipeline fixes
 - vendor image upload state isolation across vendor switches
 - vendor image metadata-row verification before upload success responses
+- mobile discovery bottom dock with Home, Map, and About tabs
+- shared Home/Map search, category, open-now, price, and radius filter state
+- mobile map refresh and empty-state UX without changing MapLibre internals
+- public discovery cache hygiene for request-key mismatches, malformed cached vendor records, and known mock/test vendor identities
+- public analytics FK hardening so stale or nonexistent vendor ids are skipped safely instead of poisoning `user_events`
+- Supabase Data API grant hardening with explicit table/function grants and fail-closed future public-schema defaults
 - featured dish add/remove management
 - simplified 12-hour admin hours input
 
@@ -351,6 +367,7 @@ The latest full-platform gate verified the upload, cache, admin, public discover
 - uploaded image rows must belong to the selected vendor id
 - operational upload logs must show the current filename, size, MIME type, request id, and vendor id
 - a successful upload response must require the `vendor_images` metadata row to be returned
+- mobile discovery regression checks must cover Home/Map shared search state, radius filters, mock-cache rejection, invalid analytics vendor ids, empty states, dock tab state, and map refresh state
 
 Production promotion still requires a clean committed worktree and a green dependency audit. A high-severity `npm audit` result is treated as a deployment blocker even when functional tests pass.
 

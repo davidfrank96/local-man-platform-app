@@ -19,6 +19,8 @@ This document records the current lightweight UI constraints and stability decis
 - selected vendor preview stays compact so the map keeps usable space
 - filter surfaces are collapsible on mobile and web
 - section navbars switch existing content instead of fetching new data per tab
+- mobile Home and Map tabs share one discovery state instead of duplicating fetches or filter state
+- mobile Map refresh should reuse the existing nearby fetch path and must not hard-refresh the browser page
 
 ## Layout-shift prevention
 
@@ -31,6 +33,8 @@ Current stability rules include:
 - no horizontal viewport growth on narrow mobile widths, including 320px long unbroken vendor content cases
 - no admin vendor-image page reset or route reload when selecting a local file
 - no cross-vendor preview or file-input state leakage after switching edit sessions
+- no stale discovery cache hydration when the nearby request key, cache version, browser origin, or vendor payload shape is unsafe
+- the mobile Map selected vendor panel stays in normal page flow above the fixed dock
 
 ## Known regression fixes in this phase
 
@@ -64,7 +68,7 @@ Problem:
 
 Fix:
 
-- explicit breakpoint-specific ordering for:
+- explicit breakpoint-specific ordering and mobile dock state for:
   - header
   - floating filters
   - map
@@ -72,6 +76,19 @@ Fix:
   - location panel
   - vendor sections
   - retention panels
+
+### Discovery cache leakage
+
+Problem:
+
+- stale browser discovery state or Playwright-shaped vendors could hydrate the public UI and emit invalid analytics vendor ids
+
+Fix:
+
+- include a nearby request key with restored snapshots
+- scope cache envelopes by version and browser origin
+- reject malformed vendor records and known mock/test vendor identities before hydration
+- require a live nearby fetch when restored data is not authoritative for the active filter state
 
 ### Vendor-image upload state leakage
 

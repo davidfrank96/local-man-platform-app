@@ -50,6 +50,15 @@ Agent and public flows should only show:
 
 Stack traces, raw Supabase payloads, and secrets must never be shown in UI.
 
+### Public discovery empty states
+
+Discovery empty states must be differentiated from loading and errors:
+
+- search/category/radius/open-now empty states render only after loading completes
+- Map tab empty states keep the map visible and add lightweight guidance
+- offline cache absence uses clear reconnect copy
+- malformed or mock cached vendors are discarded silently and followed by normal refetch/error handling
+
 ### Admin vendor images
 
 Vendor image upload failures should remain inline in the current edit workspace:

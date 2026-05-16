@@ -217,7 +217,10 @@ test.describe("Layout stress", () => {
     await mockDiscovery(emptyPage, { vendors: [] });
     await emptyPage.setViewportSize({ width: 320, height: 844 });
     await emptyPage.goto("/");
-    await expect(emptyPage.getByText("No vendors matched this search.")).toBeVisible();
+    await expect(emptyPage.getByTestId("discovery-empty-state")).toContainText("No vendors found nearby.");
+    await expect(emptyPage.getByTestId("discovery-empty-state")).toContainText(
+      "Try refreshing the map or checking another area.",
+    );
     await expectNoClientErrors(emptyErrors);
     await emptyPage.close();
 

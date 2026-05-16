@@ -1,8 +1,10 @@
 ## Title
-The Local Man — Environment Variables
+Local Man — Environment Variables
 
 ## Frontend / App
 - `NEXT_PUBLIC_APP_URL`: public application origin used by smoke scripts and client-side API helpers.
+- `NEXT_PUBLIC_LOCALMAN_WEBSITE_URL`: optional mobile About tab website link. Defaults to `https://localman.app`.
+- `NEXT_PUBLIC_LOCALMAN_SUPPORT_EMAIL`: optional mobile About tab support email. Defaults to `support@localman.app`.
 - `NEXT_PUBLIC_MAP_STYLE_URL`: optional MapLibre-compatible browser style URL for the public discovery map. The current production target uses a browser-safe MapTiler `style.json` URL. If omitted, the app uses the built-in coordinate fallback map instead of a real tile map.
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL. Required by public read routes and admin route verification.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and the server-side admin login/session exchange against Supabase Auth.

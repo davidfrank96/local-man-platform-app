@@ -5,13 +5,19 @@ Use this checklist before pushing or releasing UI work.
 ## Layout and rendering
 
 - [ ] mobile header appears once
-- [ ] mobile floating search/filter bar is visible
-- [ ] mobile map is visible
-- [ ] mobile selected vendor card is below the map
-- [ ] mobile location panel appears below the selected vendor card
+- [ ] mobile bottom dock appears with Home, Map, and About tabs
+- [ ] mobile Home search/filter bar is visible
+- [ ] mobile Home vendor cards are visible
+- [ ] mobile Map tab shows floating search/filter controls
+- [ ] mobile Map tab shows the map or coordinate fallback
+- [ ] mobile Map selected vendor card is below the map
+- [ ] mobile Map selected vendor card uses natural page scrolling
+- [ ] mobile location panel appears in the Home flow
 - [ ] mobile vendor section navbar is visible
+- [ ] mobile About tab shows about/support copy and no search/filter/map controls
 - [ ] web left column contains header, search/filter, location panel, section navbar, and vendor content
 - [ ] web right column contains map and selected vendor card
+- [ ] desktop does not show the mobile bottom dock
 - [ ] no hidden map on mobile or web
 - [ ] no duplicate selected vendor cards
 - [ ] no duplicate headers
@@ -22,9 +28,13 @@ Use this checklist before pushing or releasing UI work.
 
 - [ ] search works
 - [ ] filter toggle opens and closes
-- [ ] radius filter works
+- [ ] search state persists between mobile Home and Map
+- [ ] radius filter works at 1 km, 5 km, 10 km, and 30 km where seeded data exists
+- [ ] radius filter does not reuse a stale cached wider-radius result set
 - [ ] category filter works
 - [ ] open-now filter works
+- [ ] map refresh preserves the current search/filter state
+- [ ] friendly empty states appear for true empty search/filter/radius results
 - [ ] vendor section navbars switch content correctly
 - [ ] vendor card selection is smooth
 - [ ] no list or helper-row flicker during vendor selection
@@ -92,6 +102,7 @@ Use this checklist before pushing or releasing UI work.
 ## Audit logs and analytics
 
 - [ ] public event tracking still records events
+- [ ] public event tracking skips stale/nonexistent vendor ids safely without `user_events` foreign-key errors
 - [ ] admin analytics page loads summary data
 - [ ] admin activity page loads recent team activity
 - [ ] admin logs page loads recent operational warnings or shows the correct empty state when storage is disabled
@@ -108,6 +119,7 @@ Use this checklist before pushing or releasing UI work.
 ## Vendor Images
 
 - [ ] selecting a vendor image does not reload or reset the edit page
+- [ ] selecting a vendor image on `/admin/vendors/new` preserves all entered create-form fields
 - [ ] selecting a file shows the current filename and local preview when preview creation is available
 - [ ] upload sends `POST /api/admin/vendors/:id/images`
 - [ ] operational upload logs show the current file metadata, not a stale previous file

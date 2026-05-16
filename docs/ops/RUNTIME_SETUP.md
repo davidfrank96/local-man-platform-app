@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Runtime Setup and Nearby Smoke Test
+Local Man — Runtime Setup and Nearby Smoke Test
 
 ## Goal
 Validate the real Supabase-backed runtime data flow before deployment or further feature expansion.
@@ -97,6 +97,7 @@ Supabase requirements:
 - `vendor-images` must be public for the current vendor image URL strategy
 - vendor image uploads use the server-only `sharp` native package to validate and optimize images before Storage upload; the upload route runs on the Node.js runtime and must not be deployed as an Edge route
 - vendor image upload success requires both a Storage object and a returned `vendor_images` metadata row; storage-only success is treated as a failed upload
+- explicit Data API grants must be applied from the `20260513*` migrations; future public-schema objects should not become reachable until their own migration grants access intentionally
 
 Validate app runtime env:
 
@@ -117,11 +118,24 @@ Migration files:
 - `supabase/migrations/20260426190000_user_action_events.sql`
 - `supabase/migrations/20260426203000_user_events_alignment.sql`
 - `supabase/migrations/20260426213000_user_events_session_flow.sql`
+- `supabase/migrations/20260426233000_vendor_rating_summary_sync.sql`
+- `supabase/migrations/20260428120000_admin_rbac.sql`
+- `supabase/migrations/20260428153000_audit_log_roles.sql`
+- `supabase/migrations/20260429110000_user_events_admin_read.sql`
 - `supabase/migrations/20260502120000_admin_analytics_snapshot.sql`
+- `supabase/migrations/20260503011000_vendor_usage_scores_rpc.sql`
+- `supabase/migrations/20260503023000_phase11_query_indexes.sql`
 - `supabase/migrations/20260503123000_admin_analytics_snapshot_perf.sql`
 - `supabase/migrations/20260507193000_public_rating_submission_rpc.sql`
 - `supabase/migrations/20260508143000_operational_events.sql`
 - `supabase/migrations/20260512003000_public_rating_anonymous_identity.sql`
+- `supabase/migrations/20260513030000_explicit_data_api_grants.sql`
+- `supabase/migrations/20260513031000_revoke_legacy_data_api_role_grants.sql`
+- `supabase/migrations/20260513032000_enable_schema_migration_rls.sql`
+- `supabase/migrations/20260513033000_harden_public_function_grants.sql`
+- `supabase/migrations/20260513034000_schema_migrations_deny_policy.sql`
+- `supabase/migrations/20260513035000_revoke_public_default_privileges.sql`
+- `supabase/migrations/20260513036000_revoke_additional_default_privileges.sql`
 
 Preferred command when `psql` is available:
 
@@ -144,6 +158,8 @@ Dashboard fallback:
 6. Confirm `public.user_events` exists for Phase 6 analytics.
 7. Confirm `public.submit_public_vendor_rating(uuid, integer, text, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
 8. Confirm `public.operational_events` exists with the admin read policy before enabling operational-event persistence.
+9. Confirm Data API grants are explicit and least privilege: public read tables remain selectable by anon/authenticated where intended, admin/internal tables are not anon-readable, and `app_schema_migrations` is inaccessible to client roles.
+10. Confirm future default privileges are revoked for public-schema tables, functions, and sequences so new migrations fail closed until grants are added.
 
 Rollback note:
 - current migrations are additive and tracked in `public.app_schema_migrations`
@@ -154,6 +170,14 @@ Operational-event retention:
 - persisted operational events are intentionally bounded and are not meant to grow forever
 - use `npm run db:prune:operational-events` on an operator cadence after migrations are in place
 - the command deletes rows older than `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS` days, defaulting to `30`
+
+Data API security gate:
+- run `npm run db:check` after migrations
+- inspect grants for `anon`, `authenticated`, and `service_role`
+- verify RLS remains enabled on public tables
+- verify public flows still work: categories, nearby vendors, vendor detail, ratings, and events
+- verify admin flows still work through protected routes: login/session, vendor create/edit, image upload, analytics, activity, logs, and team access
+- any new public-schema migration must include explicit grants for the objects it creates; do not rely on Supabase default exposure
 
 ## Abuja Seed Data
 Seed file:

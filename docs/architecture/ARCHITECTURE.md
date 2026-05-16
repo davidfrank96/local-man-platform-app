@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Architecture Overview
+Local Man — Architecture Overview
 
 ## Architecture Goal
 Provide a stable, maintainable architecture for a location-based vendor discovery product with a separate admin operations surface.
@@ -45,6 +45,7 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 ### Public App
 Handles:
 - discovery homepage
+- mobile Home/Map/About dock navigation
 - nearby vendor loading
 - search and filters
 - open-now and distance-first discovery ordering with usage signals as close-distance tie-breakers
@@ -126,7 +127,10 @@ Stores:
 Public rendering rules:
 - discovery/list surfaces use compact no-image vendor cards
 - vendor images remain detail-page only
+- mobile Home is list/search oriented; mobile Map is the dedicated map view with shared filters, map refresh, and the selected vendor panel
+- desktop keeps the combined left-list/right-map discovery layout
 - selected vendor preview stays compact so the map retains usable space
+- mobile selected vendor preview flows below the map with normal page scrolling
 - the public map must degrade quietly to the coordinate fallback when style loading, WebGL, or network conditions prevent MapLibre from loading
 - the current real map uses one marker system only:
   - oxblood storefront vendor markers
@@ -145,6 +149,7 @@ Public rendering rules:
 - vendor-card selection may gently focus the map
 - filter and radius apply fit the map to the current visible vendor set
 - locate-me recenters the map on the resolved user location
+- mobile map refresh clears the active request guard and retries nearby discovery for the current filters without reloading the browser page
 - theme changes update overlays and control contrast without recreating the map instance
 
 ## User Location Handling
@@ -335,9 +340,15 @@ Rules:
   - short-lived `sessionStorage` snapshot state
   - selected vendor id
   - preserved scroll position
+- discovery snapshots include:
+  - cache version
+  - browser-origin environment
+  - nearby request key for the active location/search/radius/category/price/open-now state
 - restored nearby vendor data is reused only while the snapshot remains fresh
+- restored nearby vendor data can skip a fetch only when the stored request key matches the active nearby request key
 - restored nearby vendor data still yields to one live nearby fetch before it becomes authoritative again
 - admin vendor mutations invalidate restored discovery vendor data through the shared public invalidation channel
+- malformed vendor records, known mock/test vendor ids, and known mock/test slugs are rejected before cached discovery or retained-vendor state hydrates the UI
 
 ### Admin Session State
 - admin login uses Supabase email/password auth
@@ -345,6 +356,7 @@ Rules:
 - `/api/admin/session` validates and refreshes the cookie-backed session against `admin_users`
 - authenticated users missing from `admin_users` are denied and any cookie-backed privileged session is cleared
 - protected routes resolve through the admin route guard
+- focus and visibility-triggered background refresh keeps authenticated routes mounted so active admin forms and native file picker selections do not lose local state
 
 ### Admin Vendor Workspace State
 - vendor registry filters and selected vendor id are kept in a process-local workspace cache by role
@@ -357,6 +369,7 @@ Rules:
 ### Usage Signal State
 - public tracking is fire-and-forget and must never block UI
 - public event writes go through `/api/events`
+- `/api/events` verifies referenced vendor ids before insert; stale or nonexistent vendor ids are skipped with sanitized operational logging instead of violating `user_events` foreign keys
 - analytics reads stay admin-only and go through `/api/admin/analytics`, which prefers the aggregated SQL snapshot and falls back safely when needed
 - `user_events` is append-only for lightweight interaction capture
 - session-level drop-off analysis depends on `session_id` coverage; the admin analytics page must tolerate historical rows without that field
@@ -483,6 +496,20 @@ Use clickable phone links.
 - upload restrictions
 - safe environment variable handling
 - audit logging for changes
+- explicit Supabase Data API grants with RLS still enabled
+- future public-schema tables, functions, and sequences fail closed until a migration grants the minimum required access
+
+## Supabase Data API Grant Model
+
+Localman uses Supabase Data API/PostgREST through `supabase-js`, so the public-schema grant surface is explicit:
+
+- anon/authenticated receive public read access only for discovery and vendor-detail tables
+- anon receives public write access only where an endpoint intentionally uses the public client path; current public writes are routed server-side
+- authenticated workspace mutation grants are still constrained by RLS policies and backend admin route checks
+- service_role keeps required server-side access for migrations, admin routes, analytics, event tracking, rating submission, and image storage bookkeeping
+- `admin_users`, `audit_logs`, `operational_events`, and `app_schema_migrations` are not exposed to anon
+- `app_schema_migrations` has RLS enabled with a deny-all client policy; service_role keeps table privileges and bypasses RLS for migration bookkeeping
+- public helper functions required by RLS policies remain executable by Data API roles, while trigger/admin/RPC functions are restricted to service_role unless explicitly documented otherwise
 
 ## Non-Functional Requirements
 - mobile-first responsiveness

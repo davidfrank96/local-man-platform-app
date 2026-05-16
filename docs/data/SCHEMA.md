@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Database Schema
+Local Man — Database Schema
 
 ## Design Principles
 - simple and production-usable
@@ -13,6 +13,13 @@ Initial schema migration:
 - `supabase/migrations/20260422180000_initial_schema.sql`
 
 The migration creates the Phase 1 MVP tables, basic constraints, lookup indexes, `updated_at` triggers, and Supabase row-level security policies for public-read/admin-write access.
+
+Current migration security posture:
+- explicit Supabase Data API grants are defined in the `20260513*` hardening migrations
+- legacy broad Data API role grants are revoked and replaced with least-privilege table/function grants
+- `public.app_schema_migrations` has RLS enabled with a deny-all client policy
+- future tables, functions, and sequences in `public` fail closed until their migration grants access intentionally
+- RLS remains the row-level authorization boundary; grants only expose the object to the Data API role surface
 
 ## Seed Strategy
 Initial seed strategy:
@@ -141,6 +148,24 @@ Notes:
 - `ratings_vendor_anonymous_client_hash_idx` enforces one rating per vendor per anonymous hash when the hash is present.
 - legacy rows may have `anonymous_client_hash = null` and remain part of aggregate rating history.
 
+## Table: user_events
+- id: uuid, primary key
+- event_type: text
+- vendor_id: uuid nullable, foreign key to vendors
+- vendor_slug: text nullable
+- session_id: text nullable
+- page_path: text nullable
+- location_source: text nullable
+- device_type: text nullable
+- metadata: jsonb
+- created_at: timestamp
+
+Runtime rules:
+- public event tracking is fire-and-forget and must not break public discovery
+- events with nonexistent `vendor_id` values are skipped before insert so `user_events` foreign-key integrity is preserved
+- invalid vendor references should emit sanitized operational warnings, not noisy database constraint failures
+- valid vendor events remain available to usage-score ranking and admin analytics
+
 ## Table: admin_users
 - id: uuid, primary key
 - email: text, unique
@@ -241,6 +266,34 @@ Admin users can:
 - read admin users
 - read and create audit logs
 - read operational events
+
+## Data API Grant Rules
+The public schema is intentionally explicit-grant only.
+
+Public read grants exist for:
+- `vendors`
+- `vendor_hours`
+- `vendor_categories`
+- `vendor_category_map`
+- `vendor_featured_dishes`
+- `vendor_images`
+- `ratings`
+
+Authenticated workspace grants exist for vendor-management mutations where RLS allows the current admin/agent role.
+
+Service-role grants exist for:
+- admin/server route writes
+- analytics/event/rating writes
+- image upload/delete bookkeeping
+- migration bookkeeping through `app_schema_migrations`
+
+Anon must not receive access to:
+- `admin_users`
+- `audit_logs`
+- `operational_events`
+- `app_schema_migrations`
+
+Function execution is also explicit. RLS helper functions remain executable because policies call them during row checks; trigger/admin/RPC functions remain service_role-only unless a migration documents a narrower public need.
 
 ## Future Extension Notes
 Potential future additions:
