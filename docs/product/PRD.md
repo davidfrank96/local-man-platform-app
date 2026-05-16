@@ -1,8 +1,8 @@
 ## Title
-The Local Man — Product Requirements Document
+Local Man — Product Requirements Document
 
 ## Product Summary
-The Local Man is a location-based food discovery platform designed to help people find nearby local and underrepresented food vendors that are often not listed on mainstream delivery apps.
+Local Man is a location-based food discovery platform designed to help people find nearby local and underrepresented food vendors that are often not listed on mainstream delivery apps.
 
 The product is designed first for Abuja, Nigeria, with a focus on informal roadside vendors, neighborhood kitchens, breakfast sellers, lunch vendors, night food spots, and small local businesses that depend heavily on physical discovery and local visibility.
 
@@ -61,8 +61,10 @@ Small food businesses with:
 ## MVP Features
 ### Public User Features
 - current location detection
-- nearby vendor map
-- vendor list below map
+- mobile Home tab for search/filter and vendor browsing
+- mobile Map tab for dedicated map context, selected vendor sync, and map refresh
+- mobile About tab for lightweight support and usage guidance
+- desktop combined vendor list and map layout
 - vendor detail page
 - search by vendor, dish, or area
 - filtering by radius, category, price, and open now

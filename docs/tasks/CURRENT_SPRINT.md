@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Current Sprint
+Local Man — Current Sprint
 
 ## Sprint Goal
 Close Phase 6 `Usage Signals` with a stable analytics surface, discovery refinement informed by real usage, and lightweight retention/rating loops that do not add backend weight.
@@ -73,6 +73,11 @@ Phase 6 signal visibility is ready when:
 - Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and keeps search/category behavior as filtering rather than sponsored or opaque relevance ranking.
 - Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.
 - Public vendor detail now supports a lightweight 1-5 star rating flow that updates aggregate vendor rating state.
+- Mobile discovery now uses a Home/Map/About bottom dock while desktop keeps the combined list/map layout.
+- Home and Map share one search/filter/radius/selected-vendor state; About does not render search or filters.
+- Public discovery cache hydration now rejects request-key mismatches, malformed vendor rows, and known mock/test vendor identities.
+- Public analytics event writes now skip stale/nonexistent vendor ids safely before database insert.
+- Supabase Data API grants are explicit and future public-schema objects fail closed until granted.
 
 ## Current Warnings
 - IP approximation is still an interface only; there is no live provider yet.
@@ -94,6 +99,8 @@ Current release-gate notes:
 - the vendor image upload lifecycle now has deterministic cleanup for vendor switches, upload success, preview object URLs, and stale in-flight image-list requests
 - upload success now requires the returned `vendor_images` metadata row so Storage-only writes cannot be reported as complete uploads
 - real cross-vendor upload verification should be run against both local dev and local production runtime before promotion
+- mobile regression gates should cover dock tab state, shared Home/Map filters, radius filters, empty states, mock-cache rejection, invalid analytics vendor ids, and map refresh state
+- Supabase security gates should cover explicit grants, RLS, function execution grants, and fail-closed default privileges
 - high-severity dependency audit findings remain deployment blockers even when functional checks pass
 
 ## Phase 5 Boundaries

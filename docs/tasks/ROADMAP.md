@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Roadmap
+Local Man — Roadmap
 
 ## Phase 1 — Foundation
 - product docs
@@ -107,3 +107,15 @@ Potential future work only after real usage signals justify it:
 - broader city rollout only after Abuja pilot quality is stable
 
 Status: planned
+
+## Current Release Lockdown Baseline
+The active branch includes:
+- mobile Home/Map/About dock navigation
+- shared Home/Map search, category, price, open-now, radius, and selected-vendor state
+- request-keyed discovery cache hydration with mock/malformed vendor rejection
+- invalid analytics vendor-id skipping before `user_events` insert
+- admin session refresh stabilization for form and file-picker state
+- vendor image upload state isolation by selected vendor id
+- explicit Supabase Data API grants and fail-closed future public-schema defaults
+
+These are release-hardening outcomes, not new roadmap scope.

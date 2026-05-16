@@ -4,14 +4,37 @@ This document covers the current search, filter, and section-navigation behavior
 
 ## Mobile navigation
 
-### Floating search/navbar
+### Bottom dock
 
-On mobile, search and filters are presented as a floating discovery surface.
+On mobile, top-level discovery navigation is a fixed bottom dock with:
 
-- search field stays above the map
-- filter button is part of the same floating row
+- `Home`
+- `Map`
+- `About`
+
+It is local UI state, not route navigation.
+
+### Home search/filter surface
+
+On the mobile Home tab, search and filters are presented above the vendor sections.
+
+- search field filters the same nearby dataset used by the Map tab
+- filter button is part of the same mobile row
 - filter panel expands below that row
 - search behavior is unchanged from the underlying discovery query logic
+
+### Map search/filter surface
+
+On the mobile Map tab, the same search/filter state is available in the map view.
+
+- the floating Map search/filter surface uses the same handlers and filter state as Home
+- search or filter changes on Map persist when switching back to Home
+- the map marker dataset follows the same filtered vendor set
+- the map refresh control retries nearby discovery without hard-refreshing the browser page
+
+### About tab
+
+The mobile About tab does not render search, filters, map, or vendor sections. Switching to About must not reset the shared discovery filters.
 
 ### Mobile filter behavior
 
@@ -25,6 +48,7 @@ The filter toggle opens the existing filter controls:
 - clear when active
 
 The panel is hidden by default and uses the same discovery state as the rest of the page.
+Supported radius choices are currently 1 km, 5 km, 10 km, and 30 km.
 
 ### Mobile vendor section navbar
 
@@ -70,7 +94,9 @@ Default:
 
 ## Selected vendor and detail navigation
 
-- vendor card body click/tap previews a vendor on the map
+- vendor card body click/tap updates the selected vendor state
+- on desktop this also previews the vendor in the right-column map context
+- on mobile the selected vendor is visible on the Map tab
 - `View details` opens the vendor detail page
 - `Back to map` returns to discovery
 - discovery search, filters, selected vendor, and scroll position are restored through query state plus a short-lived session snapshot
@@ -78,6 +104,7 @@ Default:
 - restored nearby vendor data still yields to one live nearby fetch before it becomes authoritative again
 - admin vendor create, update, deactivate, hours, image, and featured-dish mutations invalidate restored discovery vendor data
 - vendor-image uploads also invalidate restored discovery data because public vendor detail may now prefer the new storage-backed image
+- mobile Popular and Last selected retention actions use `Open` for direct detail navigation, while desktop can keep map-preview actions where the map is visible beside the list
 
 ## Search and filter rules
 
@@ -90,3 +117,4 @@ Supported public discovery filters are:
 - category
 
 There is no separate user-facing sort dropdown at the moment. Ordering is automatic and based on discovery logic.
+Search and filter state is shared across mobile Home and Map; do not introduce separate mobile tab-specific filter stores.

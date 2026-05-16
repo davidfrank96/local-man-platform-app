@@ -2,27 +2,45 @@
 
 This document describes the current discovery layout and ordering rules.
 
-## Mobile homepage order
+## Mobile dock structure
 
-Current mobile discovery flow is:
+Current mobile discovery uses a fixed bottom dock with three tabs:
+
+- `Home`
+- `Map`
+- `About`
+
+The default active tab is `Home`.
+
+### Home tab order
 
 1. Local Man header block
-2. floating search/navbar with filter toggle
+2. shared mobile search/filter surface
 3. location reminder toast when visible
-4. map interface
-5. selected vendor card
-6. location status / retry panel (`Showing nearby vendors` and retry action)
-7. mobile vendor section navbar
-8. active vendor section content
-9. last selected vendor panel at the bottom
+4. location status / retry panel (`Showing nearby vendors` and retry action)
+5. mobile vendor section navbar
+6. active vendor section content
+7. last-selected vendor panel when that section is active
 
 Notes:
 
 - the location reminder toast is conditional and auto-dismisses
-- the selected vendor card remains directly below the map
-- the location status panel sits below the selected vendor card
-- recent and popular sections are accessed through the mobile vendor section navbar rather than always rendering above the fold
-- the current mobile map minimum height is `360px`; tablet and desktop map heights are larger through breakpoint-specific CSS
+- recent, popular, and last-selected sections are accessed through the mobile vendor section navbar rather than always rendering above the fold
+- Home does not render the large map, so vendor browsing remains list-first on small screens
+
+### Map tab order
+
+1. shared mobile map search/filter surface
+2. map interface
+3. map refresh control
+4. selected vendor card
+
+Notes:
+
+- the selected vendor card flows naturally below the map
+- the page, not the card itself, provides scrolling
+- the fixed dock must not cover the selected vendor card actions
+- the current mobile Map tab uses a taller map than the Home tab used before the dock restructure
 
 ## Mobile section behavior
 
@@ -31,12 +49,17 @@ The mobile vendor section navbar controls which content pane is visible:
 - `Nearby`
 - `Recent`
 - `Popular`
+- `Last selected`
 
 Default active section:
 
 - `Nearby`
 
-The `Last selected vendor` panel remains separate and lower in the flow.
+The section switcher does not change routes and does not reset shared discovery filters.
+
+## Mobile About behavior
+
+The mobile About tab is local UI state, not a route. It shows lightweight product/support guidance and must not render search, filters, map, or vendor results.
 
 ## Web layout
 
@@ -75,7 +98,8 @@ Tablet keeps a balanced discovery layout:
 - no horizontal overflow on mobile
 - no overlapping fixed or sticky discovery surfaces
 - map stays visible on mobile and web
-- selected vendor card does not move above the header
+- selected vendor card does not move above the mobile Map tab map or above the desktop map
+- mobile selected vendor card remains in the normal page flow
 - mobile and web maintain separate ordering rules through breakpoint-specific CSS
 
 ## Regression notes
@@ -83,6 +107,6 @@ Tablet keeps a balanced discovery layout:
 Recent fixes in this phase restored:
 
 - desktop content-left / map-right layout
-- mobile stacked ordering
+- mobile dock ordering
 - map visibility after responsive wrapper regressions
 - correct positioning of the location and retention panels in the mobile flow

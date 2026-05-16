@@ -29,6 +29,19 @@ Shared-environment cleanup safety:
 - pair browser tests with `npm run smoke:nearby` and the static gate (`lint`, `typecheck`, `test`, `build`) before release signoff
 - keep the worktree clean before final browser verification so the tested state matches the deployable state
 - on local macOS sandboxed runs, Chromium launch can fail before the app loads; rerun Playwright outside the sandbox when that happens
+- include mobile discovery regression coverage after dock/search/map changes:
+  - Home and Map share search/filter state
+  - radius filters do not reuse stale wider-radius cache
+  - About renders no search/filter controls
+  - map refresh preserves filters and selected-vendor state
+  - empty-state copy appears only for true empty results
+- include cache integrity coverage after discovery-state changes:
+  - request-key mismatches require a live nearby fetch
+  - malformed vendor cache is rejected
+  - known mock ids and known mock slugs never hydrate production-shaped discovery state
+- include public analytics FK-safety coverage after event-tracking changes:
+  - valid-shaped missing vendor ids are skipped safely
+  - mock vendor ids/slugs cannot reach production analytics through restored cache
 - include the targeted vendor-image browser tests after upload changes:
   - native file input reset still posts
   - local preview creation failure does not reset the form

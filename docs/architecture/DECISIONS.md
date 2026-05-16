@@ -1,5 +1,5 @@
 ## Title
-The Local Man — Architecture and Product Decisions
+Local Man — Architecture and Product Decisions
 
 ## Decision Log
 
@@ -47,3 +47,18 @@ The Local Man — Architecture and Product Decisions
 **Decision:** Admin vendor-image upload state is isolated by selected vendor id, and upload success requires a returned metadata row.
 **Reason:** Real runtime debugging showed that storage success alone is not enough; stale file refs, stale image-list state, or missing `vendor_images` rows can make an upload appear successful while the UI cannot render the image correctly.
 **Impact:** Vendor-image UI state must reset on vendor switch, local previews must be revoked deterministically, image lists must be filtered by `vendor_id`, and the backend must fail the upload when the metadata insert does not return the expected row.
+
+### Decision 010
+**Decision:** Mobile public discovery uses a Home/Map/About bottom dock while desktop keeps the combined list/map layout.
+**Reason:** Small-screen users need search and vendor browsing without the map dominating the Home view, while still retaining a dedicated map experience.
+**Impact:** Home and Map share one search/filter/selected-vendor state, About stays informational only, and the selected vendor card on Map must use natural page scrolling.
+
+### Decision 011
+**Decision:** Public discovery cache hydration is guarded by cache version, browser-origin environment, nearby request key, and mock/malformed vendor rejection.
+**Reason:** Stale or Playwright-shaped vendor records previously reached production-like discovery state and analytics paths.
+**Impact:** Cache restores can improve return navigation only when the payload is structurally safe and matches the active request state; otherwise the app discards the cache and refetches.
+
+### Decision 012
+**Decision:** Supabase public-schema Data API access is granted explicitly and future public-schema defaults fail closed.
+**Reason:** Supabase Data API exposure defaults are changing, and Localman must avoid accidental anon exposure while keeping app routes stable.
+**Impact:** Migrations must grant only the minimum needed table/function/sequence access, keep RLS enabled, and document any public or service_role-only function execution intentionally.

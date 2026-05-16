@@ -8,6 +8,7 @@ import {
 
 const EXISTING_VENDOR_ID = "00000000-0000-4000-8000-000000000001";
 const STALE_MOCK_VENDOR_ID = "30000000-0000-4000-8000-000000000003";
+const MISSING_VENDOR_ID = "5f000000-0000-4000-8000-000000000001";
 
 function setTrackingEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -387,6 +388,54 @@ test("public event route skips stale mock vendor ids before analytics insert", a
     assert.equal(body.data.accepted, false);
     assert.equal(body.data.reason, "vendor_not_found");
     assert.deepEqual(checkedVendorIds, [STALE_MOCK_VENDOR_ID]);
+    assert.equal(upstreamWrites, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public event route skips valid-shaped missing vendor ids before analytics insert", async () => {
+  const restoreEnv = setTrackingEnv();
+  const originalFetch = globalThis.fetch;
+  const checkedVendorIds: Array<string | null> = [];
+  let upstreamWrites = 0;
+
+  globalThis.fetch = createTrackingFetchMock({
+    existingVendorIds: [EXISTING_VENDOR_ID],
+    onVendorCheck: (vendorId) => {
+      checkedVendorIds.push(vendorId);
+    },
+    onUserEventWrite: () => {
+      upstreamWrites += 1;
+    },
+  });
+
+  try {
+    const response = await trackEventRoute(
+      new Request("http://localhost/api/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          event_type: "vendor_selected",
+          session_id: "90000000-0000-4000-8000-000000000101",
+          vendor_id: MISSING_VENDOR_ID,
+          vendor_slug: "deleted-real-vendor",
+          device_type: "desktop",
+          location_source: "precise",
+          page_path: "/",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 202);
+    assert.equal(body.success, true);
+    assert.equal(body.data.accepted, false);
+    assert.equal(body.data.reason, "vendor_not_found");
+    assert.deepEqual(checkedVendorIds, [MISSING_VENDOR_ID]);
     assert.equal(upstreamWrites, 0);
   } finally {
     globalThis.fetch = originalFetch;

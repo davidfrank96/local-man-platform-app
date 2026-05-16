@@ -61,7 +61,9 @@ Action rules:
 - `Call` and `View details` share the green/glassy CTA family so primary vendor actions feel related
 - `Directions` is secondary
 - `Directions` may remain visually distinct because it leaves the app for navigation
-- clicking/tapping the card body previews the vendor on the map
+- clicking/tapping the card body updates the selected vendor state
+- desktop may show map-preview helper copy because the map stays visible beside the list
+- mobile hides map-preview helper copy because the map now lives in the dedicated Map tab
 - action clicks must not be intercepted by the map-preview click target
 
 ## Selected vendor card
@@ -70,7 +72,7 @@ The selected vendor card is separate from the discovery list cards.
 
 ### Placement
 
-- mobile: directly below the map
+- mobile: directly below the map inside the Map tab
 - web: in the right column under the map
 
 ### Current content
@@ -90,7 +92,8 @@ The selected vendor card is separate from the discovery list cards.
 - compact by design
 - does not take over the page
 - must not force the map off screen on web
-- must stay within the viewport on narrow mobile widths, including 320px long-content cases
+- must stay readable on narrow mobile widths, including 320px long-content cases
+- must use natural page scrolling on mobile
 - must update smoothly when the selection changes
 
 ## Retention panels
@@ -103,6 +106,7 @@ Related but separate discovery surfaces:
 
 These are not selected vendor cards. They are retention/supporting surfaces and should not be documented as the primary preview panel.
 The `Popular vendors near you` surface is visual/supporting; main nearby ordering still follows the discovery ranking contract rather than letting a popularity panel reorder the primary list.
+On mobile, Popular and Last selected retention actions use `Open` for direct detail navigation. Desktop can keep preview-style actions where the map context remains visible beside the list.
 
 ## Vendor detail image rule
 

@@ -1,4 +1,4 @@
-# The Local Man — Abuja Seed Strategy
+# Local Man — Abuja Seed Strategy
 
 ## Goal
 

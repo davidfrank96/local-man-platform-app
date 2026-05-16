@@ -2875,6 +2875,113 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("mobile radius filters ignore stale wider-radius cached snapshots", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const cachedFarVendor: MockNearbyVendor = {
+      vendor_id: "5d000000-0000-4000-8000-000000000030",
+      name: "Cached Thirty Kilometer Suya",
+      slug: "cached-thirty-kilometer-suya",
+      short_description: "This stale cache entry should not survive a 1km radius restore.",
+      phone_number: "+2348000000210",
+      area: "Guzape",
+      latitude: 9.004,
+      longitude: 7.519,
+      price_band: "premium",
+      average_rating: 4.8,
+      review_count: 30,
+      distance_km: 22.5,
+      is_open_now: true,
+      featured_dish: {
+        dish_name: "Beef suya",
+        description: "Stale wide-radius vendor",
+      },
+      today_hours: "6:00 PM - 12:00 AM",
+    };
+    const liveNearVendor: MockNearbyVendor = {
+      vendor_id: "5d000000-0000-4000-8000-000000000001",
+      name: "Live One Kilometer Akara",
+      slug: "live-one-kilometer-akara",
+      short_description: "Fresh vendor inside the selected tight radius.",
+      phone_number: "+2348000000211",
+      area: "Wuse",
+      latitude: 9.081,
+      longitude: 7.401,
+      price_band: "budget",
+      average_rating: 4.2,
+      review_count: 9,
+      distance_km: 0.8,
+      is_open_now: true,
+      featured_dish: {
+        dish_name: "Akara",
+        description: "Hot akara and pap",
+      },
+      today_hours: "7:00 AM - 12:00 PM",
+    };
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedPublicDiscoverySnapshot(page.context(), {
+      key: "public-discovery:/?radius_km=1",
+      snapshot: {
+        nearbyData: {
+          location: {
+            source: "precise",
+            label: "Current location",
+            coordinates: {
+              lat: 9.08,
+              lng: 7.4,
+            },
+            isApproximate: false,
+          },
+          vendors: [
+            {
+              ranking_score: 0,
+              ...cachedFarVendor,
+            },
+          ],
+        },
+        nearbyDataUpdatedAt: new Date().toISOString(),
+        nearbyRequestKey: JSON.stringify({
+          source: "precise",
+          lat: 9.08,
+          lng: 7.4,
+          search: "",
+          radiusKm: 30,
+          openNow: false,
+          priceBand: "",
+          category: "",
+        }),
+        selectedVendorId: cachedFarVendor.vendor_id,
+        selectedVendorSlug: cachedFarVendor.slug,
+        scrollY: 0,
+      },
+    });
+    await primePublicLocation(page);
+    await mockSearchableNearbyDiscovery(page, [liveNearVendor, cachedFarVendor]);
+
+    const tightRadiusResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("radius_km") === "1"
+      );
+    });
+    await page.goto("/?radius_km=1");
+    await tightRadiusResponse;
+
+    await expect(page).toHaveURL(/radius_km=1/);
+    await expect(page.locator(".vendor-card:visible")).toHaveCount(1);
+    await expect(page.locator(".vendor-card:visible").first()).toContainText("Live One Kilometer Akara");
+    await expect(page.getByText("Cached Thirty Kilometer Suya")).toHaveCount(0);
+
+    await openMobileDiscoveryTab(page, "map");
+    await expect(page.getByTestId("mobile-map-filters").locator('select[name="radiusKm"]')).toHaveValue("1");
+    await expect(page.getByRole("button", { name: "Select Live One Kilometer Akara" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Select Cached Thirty Kilometer Suya" })).toHaveCount(0);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("discovery empty states explain search and radius misses without hiding the map", async ({ page }) => {
     const errors = trackClientErrors(page);
     const vendor: MockNearbyVendor = {

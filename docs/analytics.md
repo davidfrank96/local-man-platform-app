@@ -8,8 +8,10 @@ Current flow:
 
 1. public interaction occurs
 2. frontend tracking sends event to `/api/events`
-3. backend validates and stores into `user_events`
-4. admin analytics reads aggregate the stored events
+3. backend validates the event and any referenced vendor id
+4. backend stores valid events into `user_events`
+5. invalid or stale vendor ids are skipped with sanitized operational logging instead of causing foreign-key failures
+6. admin analytics reads aggregate the stored events
 
 Tracked public events currently include:
 
@@ -88,6 +90,7 @@ Current structured logs:
 - `ANALYTICS_FETCH`
 - `AUDIT_LOGS_FETCH`
 - public tracking skip/failure events
+- invalid-vendor tracking skips for stale browser cache or deleted vendors
 
 ## Known constraint
 

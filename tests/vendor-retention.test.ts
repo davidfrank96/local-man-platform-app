@@ -125,6 +125,25 @@ test("retained vendor memory rejects known Playwright mock identities", () => {
   assert.equal(readLastSelectedVendor(storage), null);
 });
 
+test("retained vendor memory rejects known mock slugs with production-shaped ids", () => {
+  const storage = createStorage();
+  const mockVendor: RetainedVendorPreview = {
+    vendor_id: "5f000000-0000-4000-8000-000000000001",
+    slug: "open-evening-grill",
+    name: "Open Evening Grill",
+    area: "Wuse",
+    today_hours: "12:00 PM - 11:00 PM",
+    is_open_now: true,
+    timestamp: new Date("2026-05-08T12:00:00.000Z").toISOString(),
+  };
+
+  rememberRecentlyViewedVendor(mockVendor, storage);
+  rememberLastSelectedVendor(mockVendor, storage);
+
+  assert.deepEqual(readRecentlyViewedVendors(storage), []);
+  assert.equal(readLastSelectedVendor(storage), null);
+});
+
 test("retained vendor memory prunes malformed cached entries", () => {
   const storage = createStorage();
   storage.setItem(
