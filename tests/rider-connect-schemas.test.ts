@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  adminRiderSchema,
   publicRiderSuggestionSchema,
   riderApplicationRequestSchema,
   riderApplicationResponseDataSchema,
@@ -13,6 +14,7 @@ import {
   riderUnavailableReportRequestSchema,
   riderVerificationStatusSchema,
   riderVisibilityStatusSchema,
+  updateAdminRiderRequestSchema,
 } from "../lib/validation/schemas.ts";
 
 const riderConnectMigrationPath = resolve(
@@ -120,7 +122,7 @@ test("contact handoff schema requires current contact details and accepted discl
 });
 
 test("rider database schema keeps private contact fields separate from public cards", () => {
-  const parsed = riderSchema.safeParse({
+  const baseRider = {
     id: "11111111-1111-4111-8111-111111111111",
     display_name: "Amina Rider",
     full_name: "Amina Musa",
@@ -139,9 +141,47 @@ test("rider database schema keeps private contact fields separate from public ca
     consent_accepted_at: "2026-05-17T10:00:00.000Z",
     created_at: "2026-05-17T10:00:00.000Z",
     updated_at: "2026-05-17T10:00:00.000Z",
-  });
+  };
 
-  assert.equal(parsed.success, true);
+  assert.equal(riderSchema.safeParse(baseRider).success, true);
+  assert.equal(
+    adminRiderSchema.safeParse({
+      ...baseRider,
+      contact_intent_count: 2,
+      unavailable_report_count: 1,
+    }).success,
+    true,
+  );
+});
+
+test("admin rider update schema allows only managed profile and status fields", () => {
+  assert.equal(
+    updateAdminRiderRequestSchema.safeParse({
+      display_name: "Amina Rider",
+      phone: "+2348000000000",
+      whatsapp_phone: "+2348000000001",
+      operating_areas: ["Wuse", "Garki"],
+      usual_available_hours: "Weekdays 10 AM - 7 PM",
+      verification_status: "verified",
+      visibility_status: "visible",
+      notes: "Reviewed by admin.",
+    }).success,
+    true,
+  );
+  assert.equal(
+    updateAdminRiderRequestSchema.safeParse({
+      verification_status: "approved",
+    }).success,
+    false,
+  );
+  assert.equal(
+    updateAdminRiderRequestSchema.safeParse({
+      photo_url: "https://example.com/rider.jpg",
+      visibility_status: "visible",
+    }).success,
+    false,
+  );
+  assert.equal(updateAdminRiderRequestSchema.safeParse({}).success, false);
 });
 
 test("unavailable report request schema accepts only supported reasons", () => {

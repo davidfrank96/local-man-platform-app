@@ -26,6 +26,7 @@ export function AdminShell({ title, intro, children }: AdminShellProps) {
     { href: "/admin/analytics", label: "Analytics", permission: "analytics:read" as const },
     { href: "/admin/vendors", label: "Manage vendors" },
     { href: "/admin/vendors/new", label: "Create vendor" },
+    { href: "/admin/riders", label: "Riders", permission: "riders:manage" as const },
     { href: "/admin/team", label: "Team access", permission: "admin_users:manage" as const },
     { href: "/admin/activity", label: "Activity", permission: "audit_logs:read" as const },
     { href: "/admin/logs", label: "Logs", permission: "platform_logs:read" as const },

@@ -1,6 +1,8 @@
 import type { z } from "zod";
 import type {
   adminUserSchema,
+  adminRiderSchema,
+  adminRidersQuerySchema,
   adminAnalyticsQuerySchema,
   adminAnalyticsRangeSchema,
   adminAnalyticsResponseDataSchema,
@@ -28,6 +30,7 @@ import type {
   riderApplicationRequestSchema,
   riderApplicationResponseDataSchema,
   updateVendorRequestSchema,
+  updateAdminRiderRequestSchema,
   riderContactHandoffRequestSchema,
   riderContactHandoffResponseDataSchema,
   riderContactIntentSchema,
@@ -93,6 +96,9 @@ export type RiderApplicationRequest = z.infer<typeof riderApplicationRequestSche
 export type RiderApplicationResponseData = z.infer<
   typeof riderApplicationResponseDataSchema
 >;
+export type AdminRider = z.infer<typeof adminRiderSchema>;
+export type AdminRidersQuery = z.infer<typeof adminRidersQuerySchema>;
+export type UpdateAdminRiderRequest = z.infer<typeof updateAdminRiderRequestSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AdminRole = AdminUser["role"];
 export type AuditActionType = z.infer<typeof auditActionTypeSchema>;

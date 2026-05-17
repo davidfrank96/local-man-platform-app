@@ -318,6 +318,46 @@ export const riderApplicationResponseDataSchema = z.object({
   message: nonEmptyTextSchema,
 }).strict();
 
+const adminRiderHoursInputSchema = z.union([
+  riderJsonObjectSchema,
+  z
+    .string()
+    .trim()
+    .max(240)
+    .transform((value) => (value.length > 0 ? { label: value } : null)),
+  z.null(),
+]);
+
+export const adminRiderSchema = riderSchema.extend({
+  contact_intent_count: z.coerce.number().int().min(0).nullable(),
+  unavailable_report_count: z.coerce.number().int().min(0).nullable(),
+});
+
+export const adminRidersQuerySchema = paginationQuerySchema.extend({
+  search: z.string().trim().max(120).optional(),
+  verification_status: riderVerificationStatusSchema.optional(),
+  visibility_status: riderVisibilityStatusSchema.optional(),
+});
+
+export const updateAdminRiderRequestSchema = z
+  .object({
+    display_name: z.string().trim().min(1).max(80).optional(),
+    full_name: optionalRiderTextSchema(120),
+    phone: riderPhoneSchema.optional(),
+    whatsapp_phone: riderPhoneSchema.optional(),
+    vehicle_type: optionalRiderTextSchema(80),
+    plate_number: optionalRiderTextSchema(40),
+    operating_areas: riderOperatingAreasSchema.optional(),
+    usual_available_hours: adminRiderHoursInputSchema.optional(),
+    verification_status: riderVerificationStatusSchema.optional(),
+    visibility_status: riderVisibilityStatusSchema.optional(),
+    notes: optionalRiderTextSchema(1000),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one rider field must be provided.",
+  });
+
 export const adminUserSchema = z.object({
   id: uuidSchema,
   email: z.email(),
@@ -341,9 +381,11 @@ export const auditActionTypeSchema = z.enum([
   "UPDATE_ADMIN_USER",
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
+  "UPDATE_RIDER",
+  "UPDATE_RIDER_STATUS",
 ]);
 
-export const auditEntityTypeSchema = z.enum(["vendor", "admin_user"]);
+export const auditEntityTypeSchema = z.enum(["vendor", "admin_user", "rider"]);
 
 export const auditLogActorSchema = z.object({
   id: uuidSchema,

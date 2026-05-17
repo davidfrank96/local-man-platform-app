@@ -62,6 +62,10 @@ test("resolveAdminNextPath redirects agents away from /admin/team", () => {
   assert.equal(resolveAdminNextPath("agent", "/admin/team"), "/admin/agent");
 });
 
+test("resolveAdminNextPath redirects agents away from /admin/riders", () => {
+  assert.equal(resolveAdminNextPath("agent", "/admin/riders"), "/admin/agent");
+});
+
 test("resolveAdminNextPath redirects admins away from /admin/agent", () => {
   assert.equal(resolveAdminNextPath("admin", "/admin/agent"), "/admin/dashboard");
 });

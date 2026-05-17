@@ -5,6 +5,8 @@ import { invalidatePublicDiscoveryVendorCache } from "../public/discovery-cache.
 import { adminUserSchema } from "../validation/schemas.ts";
 import type {
   AdminRole,
+  AdminRider,
+  AdminRidersQuery,
   AdminUser,
   AuditActionType,
   AuditLog,
@@ -18,6 +20,7 @@ import type {
   PriceBand,
   ReplaceVendorHoursRequest,
   UpdateVendorRequest,
+  UpdateAdminRiderRequest,
   Vendor,
   VendorFeaturedDish,
   VendorHours,
@@ -103,6 +106,15 @@ export type AdminOperationalLogListResult = {
     limit: number;
     has_more: boolean;
     next_cursor: string | null;
+  };
+};
+
+export type AdminRiderListResult = {
+  riders: AdminRider[];
+  pagination: {
+    limit: number;
+    offset: number;
+    count: number;
   };
 };
 
@@ -746,6 +758,53 @@ export async function fetchAdminOperationalLogs(
     buildOperationalLogsPath(normalizedFilters),
     options,
   );
+}
+
+export async function listAdminRiders(
+  filters: AdminRidersQuery,
+  options: AdminApiClientOptions = {},
+): Promise<AdminRiderListResult> {
+  const params = new URLSearchParams({
+    limit: String(filters.limit ?? 50),
+    offset: String(filters.offset ?? 0),
+  });
+  appendDefinedParam(params, "search", filters.search);
+  appendDefinedParam(params, "verification_status", filters.verification_status);
+  appendDefinedParam(params, "visibility_status", filters.visibility_status);
+
+  return requestAdminApi<AdminRiderListResult>(
+    `/api/admin/riders?${params.toString()}`,
+    options,
+  );
+}
+
+export async function getAdminRider(
+  riderId: string,
+  options: AdminApiClientOptions = {},
+): Promise<AdminRider> {
+  const result = await requestAdminApi<{ rider: AdminRider }>(
+    `/api/admin/riders/${riderId}`,
+    options,
+  );
+
+  return result.rider;
+}
+
+export async function updateManagedRider(
+  riderId: string,
+  data: UpdateAdminRiderRequest,
+  options: AdminApiClientOptions = {},
+): Promise<AdminRider> {
+  const result = await requestAdminApi<{ rider: AdminRider }>(
+    `/api/admin/riders/${riderId}`,
+    options,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    },
+  );
+
+  return result.rider;
 }
 
 export async function listAdminUsers(
