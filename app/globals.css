@@ -3377,6 +3377,127 @@ h2 {
   width: 100%;
 }
 
+.vendor-detail-actions .rider-connect-trigger {
+  width: 100%;
+  min-height: 40px;
+  justify-content: center;
+}
+
+.rider-connect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(20, 23, 20, 0.46);
+  backdrop-filter: blur(8px);
+}
+
+.rider-connect-modal {
+  display: grid;
+  gap: 14px;
+  width: min(720px, 100%);
+  max-height: min(88vh, 820px);
+  overflow: auto;
+  border: 1px solid rgba(37, 41, 36, 0.12);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 200, 87, 0.14), transparent 36%),
+    rgba(255, 253, 246, 0.98);
+  box-shadow: 0 24px 70px rgba(37, 41, 36, 0.28);
+  padding: 18px;
+}
+
+.rider-connect-header,
+.rider-connect-handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rider-connect-header h2,
+.rider-connect-handoff h3,
+.rider-suggestion-card h3 {
+  margin: 0;
+}
+
+.rider-connect-reminder,
+.rider-connect-disclaimer {
+  border: 1px solid rgba(36, 97, 79, 0.14);
+  border-radius: 10px;
+  background: rgba(36, 97, 79, 0.08);
+  padding: 10px 12px;
+}
+
+.rider-connect-form,
+.rider-connect-results,
+.rider-connect-handoff {
+  display: grid;
+  gap: 12px;
+}
+
+.rider-suggestion-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.rider-suggestion-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(37, 41, 36, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 12px;
+}
+
+.rider-suggestion-card p {
+  margin: 2px 0 0;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+}
+
+.rider-suggestion-card img,
+.rider-suggestion-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.rider-suggestion-avatar {
+  display: grid;
+  place-items: center;
+  background: var(--color-green);
+  color: #fff;
+  font-weight: 900;
+}
+
+@media (max-width: 640px) {
+  .rider-connect-overlay {
+    align-items: start;
+    padding: 12px;
+  }
+
+  .rider-connect-modal {
+    max-height: calc(100dvh - 24px);
+    padding: 14px;
+  }
+
+  .rider-suggestion-card {
+    grid-template-columns: 1fr;
+  }
+
+  .rider-connect-handoff-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .vendor-detail-meta,
 .category-row {
   display: flex;

@@ -7,6 +7,7 @@ import {
   publicRiderSuggestionSchema,
   riderApplicationRequestSchema,
   riderApplicationResponseDataSchema,
+  riderContactHandoffResponseDataSchema,
   riderContactHandoffRequestSchema,
   riderPaymentNoteTypeSchema,
   riderSchema,
@@ -116,6 +117,40 @@ test("contact handoff schema requires current contact details and accepted discl
       ...validRequest,
       deliveryAddress: "",
       deliveryArea: "",
+    }).success,
+    false,
+  );
+});
+
+test("contact handoff response exposes only safe selected-rider fields", () => {
+  const safeResponse = {
+    intent_id: "22222222-2222-4222-8222-222222222222",
+    whatsapp_url: "https://wa.me/2348000000000?text=hello",
+    rider: {
+      rider_id: "11111111-1111-4111-8111-111111111111",
+      display_name: "Amina Rider",
+      photo_url: null,
+      vehicle_type: "bike",
+      operating_areas: ["Wuse"],
+      usual_availability_label: "Usually available afternoons",
+    },
+  };
+
+  assert.equal(riderContactHandoffResponseDataSchema.safeParse(safeResponse).success, true);
+  assert.equal(
+    riderContactHandoffResponseDataSchema.safeParse({
+      ...safeResponse,
+      whatsapp_phone: "+2348000000000",
+    }).success,
+    false,
+  );
+  assert.equal(
+    riderContactHandoffResponseDataSchema.safeParse({
+      ...safeResponse,
+      rider: {
+        ...safeResponse.rider,
+        phone: "+2348000000000",
+      },
     }).success,
     false,
   );

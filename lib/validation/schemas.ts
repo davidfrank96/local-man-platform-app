@@ -247,7 +247,7 @@ export const publicRiderSuggestionSchema = z
 export const riderSuggestionsResponseDataSchema = z.object({
   vendor_slug: slugSchema,
   riders: z.array(publicRiderSuggestionSchema),
-});
+}).strict();
 
 export const riderContactHandoffRequestSchema = z
   .object({
@@ -288,7 +288,7 @@ export const riderContactHandoffResponseDataSchema = z.object({
   intent_id: uuidSchema,
   whatsapp_url: z.url(),
   rider: publicRiderSuggestionSchema,
-});
+}).strict();
 
 export const riderUnavailableReportRequestSchema = z.object({
   riderId: uuidSchema,

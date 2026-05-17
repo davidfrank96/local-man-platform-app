@@ -39,6 +39,11 @@ function isExpectedAdminLogsFailureConsoleMessage(message: string): boolean {
     );
 }
 
+function isExpectedAdminRiderInvalidStatusConsoleMessage(message: string): boolean {
+  return message.includes("status of 400") &&
+    message.includes("Bad Request");
+}
+
 async function expectInnerScroll(locator: Locator) {
   const metrics = await locator.evaluate((element) => {
     const styles = window.getComputedStyle(element);
@@ -473,7 +478,9 @@ type MockAdminWorkspaceOptions = {
   operationalLogCount?: number;
   operationalLogsHasMore?: boolean;
   vendorCount?: number;
+  riderCount?: number;
   adminRequestLog?: string[];
+  riderUpdatePayloads?: unknown[];
   vendorImageUploadPayloads?: string[];
   delayInitialImageGetUntilUpload?: boolean;
 };
@@ -558,6 +565,31 @@ function buildMockAdminVendors(count: number) {
   }));
 }
 
+function buildMockAdminRiders(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `81000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    display_name: `Mock Rider ${index + 1}`,
+    full_name: `Mock Rider Legal ${index + 1}`,
+    phone: `+234810000${String(index + 1).padStart(4, "0")}`,
+    whatsapp_phone: `+234811000${String(index + 1).padStart(4, "0")}`,
+    photo_url: null,
+    vehicle_type: index % 2 === 0 ? "Motorcycle" : "Bicycle",
+    plate_number: index % 2 === 0 ? `RID-${index + 1}` : null,
+    operating_areas: index % 2 === 0 ? ["Wuse", "Garki"] : ["Maitama"],
+    usual_available_hours: {
+      label: index % 2 === 0 ? "Weekdays 9am-6pm" : "Evenings and weekends",
+    },
+    verification_status: index === 0 ? "pending" : "verified",
+    visibility_status: index === 0 ? "hidden" : "visible",
+    notes: index === 0 ? "Needs admin review" : "Reviewed profile",
+    consent_accepted_at: "2026-05-17T09:00:00.000Z",
+    created_at: new Date(Date.UTC(2026, 4, 17, 9, index, 0)).toISOString(),
+    updated_at: new Date(Date.UTC(2026, 4, 17, 10, index, 0)).toISOString(),
+    contact_intent_count: index === 0 ? 2 : 0,
+    unavailable_report_count: index === 0 ? 1 : 0,
+  }));
+}
+
 function buildMockOperationalLogs(
   count: number,
   requestedLevel: string,
@@ -619,7 +651,9 @@ async function mockAuthenticatedAdminWorkspace(
   const operationalLogCount = options.operationalLogCount ?? 1;
   const operationalLogsHasMore = options.operationalLogsHasMore ?? false;
   const vendorCount = options.vendorCount ?? 0;
+  const riderCount = options.riderCount ?? 0;
   const mockVendors = buildMockAdminVendors(vendorCount);
+  let mockRiders = buildMockAdminRiders(riderCount);
   let hasUploadedVendorImage = false;
   let releaseInitialImageGet: (() => void) | null = null;
   const recordAdminRequest = (request: Request) => {
@@ -917,6 +951,135 @@ async function mockAuthenticatedAdminWorkspace(
             limit: 100,
             offset: 0,
             count: mockVendors.length,
+          },
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/admin\/riders\/[^/]+(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
+    const requestUrl = new URL(route.request().url());
+    const riderId = requestUrl.pathname.split("/").at(-1) ?? "";
+    const rider = mockRiders.find((entry) => entry.id === riderId) ?? null;
+
+    if (!rider) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          data: null,
+          error: {
+            code: "NOT_FOUND",
+            message: "Rider was not found.",
+            status: 404,
+          },
+        }),
+      });
+      return;
+    }
+
+    if (route.request().method() === "PATCH") {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      options.riderUpdatePayloads?.push(payload);
+
+      if (
+        payload.verification_status === "approved" ||
+        payload.visibility_status === "public"
+      ) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: false,
+            data: null,
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Invalid rider status.",
+              status: 400,
+            },
+          }),
+        });
+        return;
+      }
+
+      const updatedRider = {
+        ...rider,
+        ...payload,
+        updated_at: "2026-05-17T11:00:00.000Z",
+      };
+      mockRiders = mockRiders.map((entry) => entry.id === riderId ? updatedRider : entry);
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            rider: updatedRider,
+          },
+          error: null,
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          rider,
+        },
+        error: null,
+      }),
+    });
+  });
+
+  await page.route(/\/api\/admin\/riders(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
+    const requestUrl = new URL(route.request().url());
+    const search = requestUrl.searchParams.get("search")?.trim().toLowerCase() ?? "";
+    const verificationStatus = requestUrl.searchParams.get("verification_status") ?? "";
+    const visibilityStatus = requestUrl.searchParams.get("visibility_status") ?? "";
+    const filteredRiders = mockRiders.filter((rider) => {
+      if (verificationStatus && rider.verification_status !== verificationStatus) {
+        return false;
+      }
+
+      if (visibilityStatus && rider.visibility_status !== visibilityStatus) {
+        return false;
+      }
+
+      if (!search) {
+        return true;
+      }
+
+      return [
+        rider.display_name,
+        rider.full_name,
+        rider.phone,
+        rider.whatsapp_phone,
+        rider.vehicle_type,
+        rider.plate_number,
+        ...rider.operating_areas,
+      ].some((value) => value?.toLowerCase().includes(search));
+    });
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          riders: filteredRiders,
+          pagination: {
+            limit: 100,
+            offset: 0,
+            count: filteredRiders.length,
           },
         },
         error: null,
@@ -1283,7 +1446,125 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("heading", { name: "Jabi Office Lunch Bowl" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Call" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Directions" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Request Rider" })).toBeVisible();
     await expect(page.locator(".vendor-detail-image")).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("vendor detail Request Rider flow creates WhatsApp handoff", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const contactPayloads: unknown[] = [];
+    let suggestionRequestCount = 0;
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/riders", async (route) => {
+      suggestionRequestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            vendor_slug: "jabi-office-lunch-bowl",
+            riders: [
+              {
+                rider_id: "11111111-1111-4111-8111-111111111111",
+                display_name: "Amina Rider",
+                photo_url: null,
+                vehicle_type: "Motorcycle",
+                operating_areas: ["Jabi", "Wuse"],
+                usual_availability_label: "Usually available afternoons",
+              },
+            ],
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/riders/contact", async (route) => {
+      contactPayloads.push(JSON.parse(route.request().postData() ?? "{}"));
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            intent_id: "22222222-2222-4222-8222-222222222222",
+            whatsapp_url: "https://wa.me/2348111111111?text=hello",
+            rider: {
+              rider_id: "11111111-1111-4111-8111-111111111111",
+              display_name: "Amina Rider",
+              photo_url: null,
+              vehicle_type: "Motorcycle",
+              operating_areas: ["Jabi", "Wuse"],
+              usual_availability_label: "Usually available afternoons",
+            },
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+    await page.getByRole("button", { name: "Request Rider" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Find a Rider" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Please call the vendor first")).toBeVisible();
+    await expect(dialog.getByText("Localman only connects users")).toBeVisible();
+    await expect(dialog.getByText(/Order Now|Book Delivery|Pay Now|Localman Delivery|guaranteed delivery|assigned driver|official courier/i)).toHaveCount(0);
+
+    await dialog.getByLabel("Customer name").fill("Ada");
+    await dialog.getByLabel("Phone / WhatsApp").fill("+2348123456789");
+    await dialog.getByLabel("Delivery location mode").selectOption("manual_address");
+    await dialog.getByLabel("Payment coordination note").selectOption("already_paid_vendor");
+    await dialog.getByLabel("Delivery address").fill("25 Ademola Adetokunbo Crescent");
+    await dialog.getByLabel("Delivery area").fill("Wuse 2");
+    await dialog.getByLabel("Order note").fill("Two plates of jollof rice.");
+    await dialog.getByRole("checkbox").check();
+    await dialog.getByRole("button", { name: "Find a Rider" }).click();
+
+    await expect(dialog.getByText("Amina Rider")).toBeVisible();
+    await expect(dialog.getByText("Motorcycle")).toBeVisible();
+    await expect(dialog.getByText("Jabi, Wuse")).toBeVisible();
+    await expect(dialog.getByText("+2348111111111")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Select rider" }).click();
+
+    await expect(dialog.getByText("Amina Rider is selected.")).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "Message rider" })).toHaveAttribute(
+      "href",
+      "https://wa.me/2348111111111?text=hello",
+    );
+    await expect(dialog.getByRole("button", { name: "Try another rider" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Back to vendor" })).toBeVisible();
+    await expect.poll(() => suggestionRequestCount).toBe(1);
+    expect(contactPayloads).toHaveLength(1);
+    expect(contactPayloads[0]).toMatchObject({
+      riderId: "11111111-1111-4111-8111-111111111111",
+      customerName: "Ada",
+      customerPhone: "+2348123456789",
+      deliveryLocationMode: "manual_address",
+      deliveryAddress: "25 Ademola Adetokunbo Crescent",
+      deliveryArea: "Wuse 2",
+      orderNote: "Two plates of jollof rice.",
+      paymentNoteType: "already_paid_vendor",
+      disclaimerAccepted: true,
+    });
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("vendor detail Request Rider modal remains usable on mobile", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+    await expect(page.getByRole("button", { name: "Request Rider" })).toBeVisible();
+    await page.getByRole("button", { name: "Request Rider" }).click();
+    await expect(page.getByRole("dialog", { name: "Find a Rider" })).toBeVisible();
+    await page.getByRole("button", { name: "Close Request Rider" }).click();
+    await expect(page.getByRole("dialog", { name: "Find a Rider" })).toHaveCount(0);
 
     await expectNoClientErrors(errors);
   });
@@ -1974,6 +2255,143 @@ test.describe("Phase 3 browser smoke", () => {
     await page.goto("/admin/logs");
     await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin riders route loads behind auth", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/admin/riders");
+    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("agent is redirected away from admin riders", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      role: "agent",
+      riderCount: 1,
+      vendorCount: 2,
+    });
+
+    await page.goto("/admin/riders");
+    await expect(page).toHaveURL(/\/admin\/agent$/);
+    await expect(page.getByRole("heading", { name: "Agent dashboard", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toHaveCount(0);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("admin riders page renders and manages rider status", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const adminRequestLog: string[] = [];
+    const riderUpdatePayloads: unknown[] = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      adminRequestLog,
+      riderCount: 2,
+      riderUpdatePayloads,
+    });
+
+    await page.goto("/admin/riders");
+    const riderFiltersPanel = page.locator('section[aria-labelledby="rider-filters"]');
+    await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Riders" })).toBeVisible();
+    await expect(page.locator(".admin-nav-link.active")).toContainText("Riders");
+    await expect(riderFiltersPanel.getByLabel("Search by name, phone, or area")).toBeVisible();
+    await expect(riderFiltersPanel.getByLabel("Verification")).toBeVisible();
+    await expect(riderFiltersPanel.getByLabel("Visibility")).toBeVisible();
+    await expect(page.getByText("Riders are independent. Making a rider visible only allows them")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Pending");
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Hidden");
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("2 contacts");
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("1 reports");
+
+    await riderFiltersPanel.getByLabel("Search by name, phone, or area").fill("Maitama");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("button", { name: /Mock Rider 2/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toBeVisible();
+
+    await page.getByLabel("Verification status").selectOption("verified");
+    await page.getByLabel("Visibility status").selectOption("visible");
+    await page.getByRole("button", { name: "Save rider" }).click();
+
+    await expect(page.locator(".admin-status-copy")).toContainText("Mock Rider 1 updated.");
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Verified");
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Visible");
+    expect(riderUpdatePayloads).toHaveLength(1);
+    expect(riderUpdatePayloads[0]).toMatchObject({
+      verification_status: "verified",
+      visibility_status: "visible",
+    });
+
+    const invalidUpdate = await page.evaluate(async () => {
+      const response = await fetch("/api/admin/riders/81000000-0000-4000-8000-000000000001", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          verification_status: "approved",
+        }),
+      });
+      const payload = await response.json();
+
+      return {
+        status: response.status,
+        success: payload.success,
+      };
+    });
+    expect(invalidUpdate).toEqual({
+      status: 400,
+      success: false,
+    });
+
+    await expectNoClientErrors(
+      errors.filter(
+        (message) => !isExpectedAdminRiderInvalidStatusConsoleMessage(message),
+      ),
+    );
+  });
+
+  test("admin riders page preserves filters through background session refresh", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const adminRequestLog: string[] = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      adminRequestLog,
+      riderCount: 2,
+    });
+
+    await page.goto("/admin/riders");
+    const riderFiltersPanel = page.locator('section[aria-labelledby="rider-filters"]');
+    await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
+    await riderFiltersPanel.getByLabel("Search by name, phone, or area").fill("Wuse");
+    await riderFiltersPanel.getByLabel("Verification").selectOption("pending");
+    await riderFiltersPanel.getByLabel("Visibility").selectOption("hidden");
+
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect
+      .poll(() => adminRequestLog.filter((entry) => entry === "GET /api/admin/session").length)
+      .toBeGreaterThanOrEqual(2);
+
+    await expect(page).toHaveURL(/\/admin\/riders$/);
+    await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
+    await expect(riderFiltersPanel.getByLabel("Search by name, phone, or area")).toHaveValue("Wuse");
+    await expect(riderFiltersPanel.getByLabel("Verification")).toHaveValue("pending");
+    await expect(riderFiltersPanel.getByLabel("Visibility")).toHaveValue("hidden");
+    await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toBeVisible();
 
     await expectNoClientErrors(errors);
   });

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createVendorRiderContactHandoff,
   fetchNearbyVendors,
+  fetchVendorRiderSuggestions,
   getDirectionsUrl,
   getPhoneHref,
   sanitizePublicSearchInput,
@@ -158,4 +160,85 @@ test("public API client reports malformed API responses clearly", async () => {
     () => fetchNearbyVendors({}, fetchImpl),
     /INVALID_RESPONSE: API returned an unexpected response shape/,
   );
+});
+
+test("public API client requests vendor rider suggestions by slug", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl = (async (input: URL | RequestInfo) => {
+    requestedUrls.push(String(input));
+
+    return Response.json({
+      success: true,
+      data: {
+        vendor_slug: "jabi-office-lunch-bowl",
+        riders: [],
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const result = await fetchVendorRiderSuggestions("jabi-office-lunch-bowl", fetchImpl);
+
+  assert.equal(requestedUrls[0], "/api/vendors/jabi-office-lunch-bowl/riders");
+  assert.deepEqual(result, {
+    vendor_slug: "jabi-office-lunch-bowl",
+    riders: [],
+  });
+});
+
+test("public API client posts rider contact handoff payloads", async () => {
+  const requests: Array<{ url: string; body: unknown }> = [];
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    requests.push({
+      url: String(input),
+      body: JSON.parse(String(init?.body ?? "{}")),
+    });
+
+    return Response.json({
+      success: true,
+      data: {
+        intent_id: "22222222-2222-4222-8222-222222222222",
+        whatsapp_url: "https://wa.me/2348000000000?text=hello",
+        rider: {
+          rider_id: "11111111-1111-4111-8111-111111111111",
+          display_name: "Amina Rider",
+          photo_url: null,
+          vehicle_type: "Motorcycle",
+          operating_areas: ["Jabi"],
+          usual_availability_label: "Usually available afternoons",
+        },
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const result = await createVendorRiderContactHandoff(
+    "jabi-office-lunch-bowl",
+    {
+      riderId: "11111111-1111-4111-8111-111111111111",
+      customerName: "Ada",
+      customerPhone: "+2348123456789",
+      deliveryLocationMode: "manual_address",
+      deliveryAddress: "25 Ademola Adetokunbo Crescent",
+      deliveryArea: "Wuse 2",
+      orderNote: "Two plates of jollof rice.",
+      paymentNoteType: "already_paid_vendor",
+      disclaimerAccepted: true,
+    },
+    fetchImpl,
+  );
+
+  assert.equal(requests[0].url, "/api/vendors/jabi-office-lunch-bowl/riders/contact");
+  assert.deepEqual(requests[0].body, {
+    riderId: "11111111-1111-4111-8111-111111111111",
+    customerName: "Ada",
+    customerPhone: "+2348123456789",
+    deliveryLocationMode: "manual_address",
+    deliveryAddress: "25 Ademola Adetokunbo Crescent",
+    deliveryArea: "Wuse 2",
+    orderNote: "Two plates of jollof rice.",
+    paymentNoteType: "already_paid_vendor",
+    disclaimerAccepted: true,
+  });
+  assert.equal(result.rider.display_name, "Amina Rider");
 });

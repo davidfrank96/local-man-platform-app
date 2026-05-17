@@ -83,6 +83,37 @@ export const apiEndpoints = {
       "duplicate attempts must not update average_rating or review_count",
     ],
   },
+  getVendorRiderSuggestions: {
+    access: "public",
+    method: "GET",
+    path: "/api/vendors/[slug]/riders",
+    requestShape: "Route param: slug.",
+    responseShape:
+      "Public-safe rider suggestion cards for verified, visible independent riders. Response excludes rider phone, WhatsApp, legal name, private notes, and internal status fields.",
+    validationBoundary: [
+      "slug must match the documented slug format",
+      "riders must be verification_status=verified and visibility_status=visible",
+      "suggestions must not expose raw rider phone or WhatsApp values",
+      "server-side service-role reads must shape the response before returning it to public clients",
+    ],
+  },
+  createRiderContactHandoff: {
+    access: "public",
+    method: "POST",
+    path: "/api/vendors/[slug]/riders/contact",
+    requestShape:
+      "Route param: slug. JSON body with riderId, customerName, customerPhone, delivery location mode/address/area, order note, payment note type, and disclaimerAccepted=true.",
+    responseShape:
+      "Minimal contact intent id, public-safe selected rider card, and WhatsApp click-to-chat URL for the selected rider only.",
+    validationBoundary: [
+      "slug and riderId must be valid",
+      "disclaimerAccepted must be true",
+      "selected rider must be verified and visible",
+      "customer phone must be hashed before storage",
+      "response must not expose raw rider contact columns outside the selected WhatsApp URL",
+      "Localman must not collect payment, assign delivery, or auto-send WhatsApp messages",
+    ],
+  },
   getCategories: {
     access: "public",
     method: "GET",

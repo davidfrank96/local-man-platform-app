@@ -4,6 +4,9 @@ import type {
   LocationSource,
   NearbyVendorsResponseData,
   PriceBand,
+  RiderContactHandoffRequest,
+  RiderContactHandoffResponseData,
+  RiderSuggestionsResponseData,
   VendorCategory,
   VendorDetailResponseData,
 } from "../../types/index.ts";
@@ -185,4 +188,48 @@ export async function fetchVendorDetail(
   );
 
   return result.vendor;
+}
+
+export async function fetchVendorRiderSuggestions(
+  slug: string,
+  fetchImpl?: typeof fetch,
+): Promise<RiderSuggestionsResponseData> {
+  return requestPublicApi<RiderSuggestionsResponseData>(
+    `/api/vendors/${slug}/riders`,
+    fetchImpl,
+  );
+}
+
+export async function createVendorRiderContactHandoff(
+  slug: string,
+  payload: RiderContactHandoffRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RiderContactHandoffResponseData> {
+  const response = await fetchImpl(`/api/vendors/${slug}/riders/contact`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  let body: ApiResponse<RiderContactHandoffResponseData>;
+
+  try {
+    body = (await response.json()) as ApiResponse<RiderContactHandoffResponseData>;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "INVALID_RESPONSE: API returned a response that could not be parsed."
+        : `HTTP_ERROR: API request failed with status ${response.status}.`,
+    );
+  }
+
+  if (!body.success) {
+    const code = body.error?.code ?? "UNKNOWN_ERROR";
+    const message = body.error?.message ?? "API request failed.";
+
+    throw new Error(`${code}: ${message}`);
+  }
+
+  return body.data;
 }

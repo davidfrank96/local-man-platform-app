@@ -6,6 +6,7 @@ import { VendorActions } from "./vendor-actions.tsx";
 import { VendorDetailTracker } from "./vendor-detail-tracker.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
 import { VendorRating } from "./vendor-rating.tsx";
+import { RiderConnectModal } from "./rider-connect-modal.tsx";
 import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
 import { resolveVendorOpenState } from "../../lib/vendors/hours.ts";
 
@@ -143,6 +144,7 @@ export function VendorDetail({
               vendorSlug={vendor.slug}
               locationSource={locationSource}
             />
+            <RiderConnectModal vendorName={vendor.name} vendorSlug={vendor.slug} />
           </div>
           <p className="vendor-detail-note">
             {hasHours
