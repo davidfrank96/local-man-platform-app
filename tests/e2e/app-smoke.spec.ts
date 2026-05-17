@@ -1455,6 +1455,7 @@ test.describe("Phase 3 browser smoke", () => {
   test("vendor detail Request Rider flow creates WhatsApp handoff", async ({ page }) => {
     const errors = trackClientErrors(page);
     const contactPayloads: unknown[] = [];
+    const reportPayloads: unknown[] = [];
     let suggestionRequestCount = 0;
 
     await page.route("**/api/vendors/jabi-office-lunch-bowl/riders", async (route) => {
@@ -1506,6 +1507,26 @@ test.describe("Phase 3 browser smoke", () => {
       });
     });
 
+    await page.route(
+      "**/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+      async (route) => {
+        reportPayloads.push(JSON.parse(route.request().postData() ?? "{}"));
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            data: {
+              received: true,
+              report_id: "33333333-3333-4333-8333-333333333333",
+              message: "Thanks. Localman saved this rider availability report for admin review.",
+            },
+            error: null,
+          }),
+        });
+      },
+    );
+
     await page.goto("/vendors/jabi-office-lunch-bowl");
     await page.getByRole("button", { name: "Request Rider" }).click();
 
@@ -1538,6 +1559,9 @@ test.describe("Phase 3 browser smoke", () => {
     );
     await expect(dialog.getByRole("button", { name: "Try another rider" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Back to vendor" })).toBeVisible();
+    await dialog.getByLabel("Rider unavailable?").selectOption("no_response");
+    await dialog.getByRole("button", { name: "Report rider unavailable" }).click();
+    await expect(dialog.getByText("saved this rider availability report")).toBeVisible();
     await expect.poll(() => suggestionRequestCount).toBe(1);
     expect(contactPayloads).toHaveLength(1);
     expect(contactPayloads[0]).toMatchObject({
@@ -1550,6 +1574,12 @@ test.describe("Phase 3 browser smoke", () => {
       orderNote: "Two plates of jollof rice.",
       paymentNoteType: "already_paid_vendor",
       disclaimerAccepted: true,
+    });
+    expect(reportPayloads).toHaveLength(1);
+    expect(reportPayloads[0]).toMatchObject({
+      riderId: "11111111-1111-4111-8111-111111111111",
+      reason: "no_response",
+      reporterPhone: "+2348123456789",
     });
 
     await expectNoClientErrors(errors);

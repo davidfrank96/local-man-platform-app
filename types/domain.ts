@@ -40,6 +40,7 @@ import type {
   riderSuggestionsResponseDataSchema,
   riderUnavailableReasonSchema,
   riderUnavailableReportRequestSchema,
+  riderUnavailableReportResponseDataSchema,
   riderUnavailableReportSchema,
   riderVerificationStatusSchema,
   riderVisibilityStatusSchema,
@@ -91,6 +92,9 @@ export type RiderContactHandoffResponseData = z.infer<
 >;
 export type RiderUnavailableReportRequest = z.infer<
   typeof riderUnavailableReportRequestSchema
+>;
+export type RiderUnavailableReportResponseData = z.infer<
+  typeof riderUnavailableReportResponseDataSchema
 >;
 export type RiderApplicationRequest = z.infer<typeof riderApplicationRequestSchema>;
 export type RiderApplicationResponseData = z.infer<

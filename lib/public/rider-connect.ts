@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import {
   publicRiderSuggestionSchema,
   riderContactHandoffResponseDataSchema,
+  riderUnavailableReportResponseDataSchema,
 } from "../validation/index.ts";
 import {
   getSupabaseServiceRoleConfig,
@@ -12,6 +13,8 @@ import type {
   RiderContactHandoffResponseData,
   RiderPaymentNoteType,
   RiderSuggestionsResponseData,
+  RiderUnavailableReportRequest,
+  RiderUnavailableReportResponseData,
 } from "../../types/index.ts";
 
 type RiderConnectConfig = {
@@ -46,6 +49,10 @@ type RiderContactRow = PublicRiderSuggestionRow & {
 };
 
 type InsertedContactIntentRow = {
+  id: string;
+};
+
+type InsertedUnavailableReportRow = {
   id: string;
 };
 
@@ -255,11 +262,43 @@ async function fetchSelectedVisibleRider(
   return rows[0] ?? null;
 }
 
-function hashCustomerPhone(phone: string): string {
+async function fetchReportableVisibleRider(
+  riderId: string,
+  config: RiderConnectConfig,
+): Promise<PublicRiderSuggestionRow | null> {
+  const url = new URL("/rest/v1/riders", config.url);
+  url.searchParams.set("select", riderPublicSelect);
+  url.searchParams.set("id", `eq.${riderId}`);
+  url.searchParams.set("verification_status", "eq.verified");
+  url.searchParams.set("visibility_status", "eq.visible");
+  url.searchParams.set("limit", "1");
+
+  const rows = await fetchServiceJson<PublicRiderSuggestionRow[]>(
+    url,
+    config,
+    "Reportable rider lookup failed",
+  );
+
+  return rows[0] ?? null;
+}
+
+function getHashSecret(config: RiderConnectConfig): string {
+  const configuredSecret = process.env.RIDER_CONNECT_HASH_SECRET?.trim();
+
+  return configuredSecret && configuredSecret.length > 0
+    ? configuredSecret
+    : config.serviceRoleKey;
+}
+
+function hashPhoneForStorage(
+  phone: string,
+  config: RiderConnectConfig,
+  purpose: "contact" | "unavailable_report",
+): string {
   const normalizedPhone = phone.replace(/[^\d+]/g, "");
 
-  return createHash("sha256")
-    .update(`localman-rider-contact:${normalizedPhone}`)
+  return createHmac("sha256", getHashSecret(config))
+    .update(`localman-rider-connect:${purpose}:${normalizedPhone}`)
     .digest("hex");
 }
 
@@ -375,7 +414,7 @@ async function insertContactIntent(
     body: JSON.stringify({
       vendor_id: vendor.id,
       rider_id: rider.rider_id,
-      customer_phone_hash: hashCustomerPhone(request.customerPhone),
+      customer_phone_hash: hashPhoneForStorage(request.customerPhone, config, "contact"),
       delivery_area: request.deliveryArea ?? null,
       location_mode: request.deliveryLocationMode,
       payment_note_type: request.paymentNoteType,
@@ -408,6 +447,52 @@ async function insertContactIntent(
     throw new RiderConnectServiceError(
       "UPSTREAM_ERROR",
       "Rider contact intent insert returned an unexpected payload.",
+      502,
+    );
+  }
+
+  return row.id;
+}
+
+async function insertUnavailableReport(
+  vendor: VendorRiderTarget,
+  request: RiderUnavailableReportRequest,
+  config: RiderConnectConfig,
+): Promise<string> {
+  const url = new URL("/rest/v1/rider_unavailable_reports", config.url);
+  url.searchParams.set("select", "id");
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: createServiceRoleHeaders(config, "return=representation"),
+    body: JSON.stringify({
+      vendor_id: vendor.id,
+      rider_id: request.riderId,
+      reason: request.reason,
+      reporter_phone_hash: request.reporterPhone
+        ? hashPhoneForStorage(request.reporterPhone, config, "unavailable_report")
+        : null,
+    }),
+    cache: "no-store",
+  });
+  const payload = await readJson(response);
+
+  if (!response.ok) {
+    throw new RiderConnectServiceError(
+      "UPSTREAM_ERROR",
+      `Rider unavailable report insert failed: ${response.status}`,
+      502,
+    );
+  }
+
+  const row = Array.isArray(payload)
+    ? payload[0] as InsertedUnavailableReportRow | undefined
+    : null;
+
+  if (!row?.id) {
+    throw new RiderConnectServiceError(
+      "UPSTREAM_ERROR",
+      "Rider unavailable report insert returned an unexpected payload.",
       502,
     );
   }
@@ -464,5 +549,31 @@ export async function createRiderContactHandoff(
     intent_id: intentId,
     whatsapp_url: whatsappUrl,
     rider,
+  });
+}
+
+export async function createRiderUnavailableReport(
+  slug: string,
+  request: RiderUnavailableReportRequest,
+): Promise<RiderUnavailableReportResponseData> {
+  const config = getRiderConnectConfig();
+  const vendor = await fetchVendorTarget(slug, config);
+
+  if (!vendor) {
+    throw new RiderConnectServiceError("NOT_FOUND", "Vendor was not found.", 404);
+  }
+
+  const rider = await fetchReportableVisibleRider(request.riderId, config);
+
+  if (!rider) {
+    throw new RiderConnectServiceError("NOT_FOUND", "Rider was not found.", 404);
+  }
+
+  const reportId = await insertUnavailableReport(vendor, request, config);
+
+  return riderUnavailableReportResponseDataSchema.parse({
+    received: true,
+    report_id: reportId,
+    message: "Thanks. Localman saved this rider availability report for admin review.",
   });
 }

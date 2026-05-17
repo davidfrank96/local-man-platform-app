@@ -3434,9 +3434,15 @@ h2 {
 
 .rider-connect-form,
 .rider-connect-results,
-.rider-connect-handoff {
+.rider-connect-handoff,
+.rider-connect-report {
   display: grid;
   gap: 12px;
+}
+
+.rider-connect-report {
+  border-top: 1px solid rgba(37, 41, 36, 0.1);
+  padding-top: 12px;
 }
 
 .rider-suggestion-grid {

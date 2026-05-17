@@ -1,4 +1,9 @@
 import { apiError, apiSuccess } from "../../../../../lib/api/responses.ts";
+import {
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+  PUBLIC_RIDER_SUGGESTIONS_RATE_LIMIT,
+} from "../../../../../lib/api/abuse-protection.ts";
 import { validateInput } from "../../../../../lib/api/validation.ts";
 import {
   RiderConnectServiceError,
@@ -33,6 +38,38 @@ export async function GET(request: Request, { params }: VendorRidersRouteContext
     return attachRequestIdHeader(routeParams.response, routeLog.requestId);
   }
 
+  const rateLimit = consumeRateLimit(request, {
+    policy: PUBLIC_RIDER_SUGGESTIONS_RATE_LIMIT,
+    scope: `suggestions:${routeParams.data.slug}`,
+  });
+
+  if (!rateLimit.allowed) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_RIDER_SUGGESTIONS_RATE_LIMITED",
+      status: 429,
+      message: "Rider suggestion request was rate limited.",
+      vendorSlug: routeParams.data.slug,
+      metadata: {
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "TOO_MANY_REQUESTS",
+          "Too many rider suggestion requests. Please wait before trying again.",
+          429,
+          {
+            retry_after_seconds: rateLimit.retryAfterSeconds,
+          },
+          "Rider suggestions are temporarily rate limited to protect Localman.",
+        ),
+        rateLimit,
+      ),
+      routeLog.requestId,
+    );
+  }
+
   try {
     const data = await getPublicRiderSuggestionsForVendor(routeParams.data.slug);
 
@@ -46,7 +83,10 @@ export async function GET(request: Request, { params }: VendorRidersRouteContext
       },
     });
 
-    return attachRequestIdHeader(apiSuccess(data), routeLog.requestId);
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(apiSuccess(data), rateLimit),
+      routeLog.requestId,
+    );
   } catch (error) {
     const status = error instanceof RiderConnectServiceError ? error.status : 502;
     const code = error instanceof RiderConnectServiceError
@@ -67,7 +107,7 @@ export async function GET(request: Request, { params }: VendorRidersRouteContext
     });
 
     return attachRequestIdHeader(
-      apiError(code, message, status),
+      applyRateLimitResponseHeaders(apiError(code, message, status), rateLimit),
       routeLog.requestId,
     );
   }

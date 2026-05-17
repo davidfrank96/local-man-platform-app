@@ -6,6 +6,13 @@ import {
 import {
   POST as riderContactRoute,
 } from "../app/api/vendors/[slug]/riders/contact/route.ts";
+import {
+  POST as riderReportRoute,
+} from "../app/api/vendors/[slug]/riders/report-unavailable/route.ts";
+import {
+  PUBLIC_RIDER_SUGGESTIONS_RATE_LIMIT,
+  resetAbuseProtectionStateForTests,
+} from "../lib/api/abuse-protection.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 const riderId = "11111111-1111-4111-8111-111111111111";
@@ -35,6 +42,10 @@ const selectedRiderRow = {
   },
   whatsapp_phone: "+2348111111111",
 };
+
+test.beforeEach(() => {
+  resetAbuseProtectionStateForTests();
+});
 
 function setRiderEnv(): () => void {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -79,6 +90,15 @@ function createValidContactPayload(overrides: Record<string, unknown> = {}) {
     orderNote: "Two plates of jollof rice.",
     paymentNoteType: "already_paid_vendor",
     disclaimerAccepted: true,
+    ...overrides,
+  };
+}
+
+function createValidReportPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    riderId,
+    reason: "no_response",
+    reporterPhone: "+2348123456789",
     ...overrides,
   };
 }
@@ -272,6 +292,303 @@ test("rider contact endpoint creates minimal intent and returns selected WhatsAp
     assert.match(message, /Order note:\nTwo plates of jollof rice\./);
     assert.match(message, /I have already paid the vendor\./);
     assert.match(message, /Localman only connected us/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider suggestions route rate limits repeated public requests safely", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    let response = new Response();
+
+    for (let index = 0; index < PUBLIC_RIDER_SUGGESTIONS_RATE_LIMIT.maxRequests; index += 1) {
+      response = await riderSuggestionsRoute(
+        createRequest("/api/vendors/jabi-office-lunch-bowl/riders"),
+        { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+      );
+      assert.equal(response.status, 200);
+    }
+
+    response = await riderSuggestionsRoute(
+      createRequest("/api/vendors/jabi-office-lunch-bowl/riders"),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    assert.equal(response.status, 429);
+    assert.equal(body.success, false);
+    assert.equal(serialized.includes("whatsapp_phone"), false);
+    assert.equal(serialized.includes(hiddenRiderPhone), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider contact endpoint rate limits repeated handoffs before private lookup", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  let contactIntentInsertCount = 0;
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([selectedRiderRow]);
+    }
+
+    if (url.pathname === "/rest/v1/rider_contact_intents") {
+      contactIntentInsertCount += 1;
+      assert.equal(String(init?.body ?? "").includes("+2348123456789"), false);
+      return Response.json([
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+        },
+      ], { status: 201 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const acceptedResponse = await riderContactRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/contact",
+        createValidContactPayload(),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const limitedResponse = await riderContactRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/contact",
+        createValidContactPayload(),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await limitedResponse.json();
+    const serialized = JSON.stringify(body);
+
+    assert.equal(acceptedResponse.status, 201);
+    assert.equal(limitedResponse.status, 429);
+    assert.equal(contactIntentInsertCount, 1);
+    assert.equal(serialized.includes("whatsapp_phone"), false);
+    assert.equal(serialized.includes(hiddenRiderPhone), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider unavailable report endpoint validates and stores a hashed report", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  const reportBodies: unknown[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      assert.equal(url.searchParams.get("select")?.includes("whatsapp_phone"), false);
+      return Response.json([{
+        ...selectedRiderRow,
+        whatsapp_phone: undefined,
+      }]);
+    }
+
+    if (url.pathname === "/rest/v1/rider_unavailable_reports") {
+      reportBodies.push(JSON.parse(String(init?.body ?? "{}")));
+      return Response.json([
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+        },
+      ], { status: 201 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await riderReportRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+        createValidReportPayload(),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+    const reportBody = reportBodies[0] as Record<string, unknown>;
+    const serialized = JSON.stringify({ response: body, reportBody });
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.equal(body.data.report_id, "44444444-4444-4444-8444-444444444444");
+    assert.equal(reportBody.rider_id, riderId);
+    assert.equal(reportBody.vendor_id, vendorId);
+    assert.equal(reportBody.reason, "no_response");
+    assert.equal(reportBody.reporter_phone_hash, hashLike(reportBody.reporter_phone_hash));
+    assert.equal(serialized.includes("+2348123456789"), false);
+    assert.equal(serialized.includes("whatsapp_phone"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider unavailable report endpoint rejects invalid reasons before writing", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = (async () => {
+    fetchCalled = true;
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await riderReportRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+        createValidReportPayload({ reason: "delivery_fee_dispute" }),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider unavailable report endpoint rejects hidden or unverified riders", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    calls.push(url.pathname);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      assert.equal(url.searchParams.get("verification_status"), "eq.verified");
+      assert.equal(url.searchParams.get("visibility_status"), "eq.visible");
+      return Response.json([]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await riderReportRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+        createValidReportPayload(),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 404);
+    assert.equal(body.success, false);
+    assert.equal(calls.includes("/rest/v1/rider_unavailable_reports"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider unavailable report endpoint rate limits repeated reports", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  let reportInsertCount = 0;
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([{
+        id: riderId,
+        display_name: "Amina Rider",
+        photo_url: null,
+        vehicle_type: "Motorcycle",
+        operating_areas: ["Jabi"],
+        usual_available_hours: null,
+      }]);
+    }
+
+    if (url.pathname === "/rest/v1/rider_unavailable_reports") {
+      reportInsertCount += 1;
+      return Response.json([
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+        },
+      ], { status: 201 });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const firstResponse = await riderReportRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+        createValidReportPayload({ reason: "no_response" }),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const secondResponse = await riderReportRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+        createValidReportPayload({ reason: "unavailable" }),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const limitedResponse = await riderReportRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+        createValidReportPayload({ reason: "wrong_number" }),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await limitedResponse.json();
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 201);
+    assert.equal(limitedResponse.status, 429);
+    assert.equal(body.success, false);
+    assert.equal(reportInsertCount, 2);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

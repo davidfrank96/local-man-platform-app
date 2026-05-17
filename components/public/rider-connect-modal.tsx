@@ -6,10 +6,12 @@ import type {
   PublicRiderSuggestion,
   RiderContactHandoffRequest,
   RiderContactHandoffResponseData,
+  RiderUnavailableReason,
 } from "../../types/index.ts";
 import {
   createVendorRiderContactHandoff,
   fetchVendorRiderSuggestions,
+  reportVendorRiderUnavailable,
 } from "../../lib/vendors/public-api-client.ts";
 
 type RiderContactDetails = Omit<RiderContactHandoffRequest, "riderId">;
@@ -64,12 +66,18 @@ export function RiderConnectModal({
   const [contactDetails, setContactDetails] = useState<RiderContactDetails | null>(null);
   const [riders, setRiders] = useState<PublicRiderSuggestion[]>([]);
   const [handoff, setHandoff] = useState<RiderContactHandoffResponseData | null>(null);
+  const [reportReason, setReportReason] = useState<RiderUnavailableReason>("no_response");
+  const [reportFeedback, setReportFeedback] = useState<Feedback>({
+    type: "idle",
+    message: null,
+  });
 
   function openModal() {
     setIsOpen(true);
     setStep("details");
     setFeedback({ type: "idle", message: null });
     setHandoff(null);
+    setReportFeedback({ type: "idle", message: null });
   }
 
   function closeModal() {
@@ -79,6 +87,8 @@ export function RiderConnectModal({
     setContactDetails(null);
     setRiders([]);
     setHandoff(null);
+    setReportReason("no_response");
+    setReportFeedback({ type: "idle", message: null });
   }
 
   async function handleDetailsSubmit(event: FormEvent<HTMLFormElement>) {
@@ -154,6 +164,7 @@ export function RiderConnectModal({
 
       setHandoff(result);
       setStep("handoff");
+      setReportFeedback({ type: "idle", message: null });
       setFeedback({
         type: "success",
         message: "WhatsApp handoff ready. You stay in control of the message.",
@@ -162,6 +173,35 @@ export function RiderConnectModal({
       setFeedback({
         type: "error",
         message: await readErrorMessage(error, "Unable to prepare rider handoff right now."),
+      });
+    }
+  }
+
+  async function handleUnavailableReport() {
+    if (!handoff) {
+      return;
+    }
+
+    setReportFeedback({
+      type: "loading",
+      message: "Sending rider availability report...",
+    });
+
+    try {
+      const result = await reportVendorRiderUnavailable(vendorSlug, {
+        riderId: handoff.rider.rider_id,
+        reason: reportReason,
+        reporterPhone: contactDetails?.customerPhone,
+      });
+
+      setReportFeedback({
+        type: "success",
+        message: result.message,
+      });
+    } catch (error) {
+      setReportFeedback({
+        type: "error",
+        message: await readErrorMessage(error, "Unable to report rider availability right now."),
       });
     }
   }
@@ -355,12 +395,53 @@ export function RiderConnectModal({
                   >
                     Message rider
                   </a>
-                  <button className="button-secondary compact-button" type="button" onClick={() => setStep("riders")}>
+                  <button
+                    className="button-secondary compact-button"
+                    type="button"
+                    onClick={() => {
+                      setReportFeedback({ type: "idle", message: null });
+                      setStep("riders");
+                    }}
+                  >
                     Try another rider
                   </button>
                   <button className="button-secondary compact-button" type="button" onClick={closeModal}>
                     Back to vendor
                   </button>
+                </div>
+                <div className="rider-connect-report">
+                  <label className="field">
+                    <span>Rider unavailable?</span>
+                    <select
+                      value={reportReason}
+                      onChange={(event) => setReportReason(
+                        event.currentTarget.value as RiderUnavailableReason,
+                      )}
+                    >
+                      <option value="no_response">No response</option>
+                      <option value="unavailable">Unavailable</option>
+                      <option value="wrong_number">Wrong number</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <button
+                    className="button-secondary compact-button"
+                    disabled={reportFeedback.type === "loading"}
+                    type="button"
+                    onClick={() => void handleUnavailableReport()}
+                  >
+                    {reportFeedback.type === "loading"
+                      ? "Reporting..."
+                      : "Report rider unavailable"}
+                  </button>
+                  {reportFeedback.message ? (
+                    <p
+                      className={reportFeedback.type === "error" ? "field-error" : "form-note"}
+                      role={reportFeedback.type === "error" ? "alert" : "status"}
+                    >
+                      {reportFeedback.message}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}

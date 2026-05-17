@@ -6,6 +6,7 @@ import {
   fetchVendorRiderSuggestions,
   getDirectionsUrl,
   getPhoneHref,
+  reportVendorRiderUnavailable,
   sanitizePublicSearchInput,
 } from "../lib/vendors/public-api-client.ts";
 
@@ -241,4 +242,45 @@ test("public API client posts rider contact handoff payloads", async () => {
     disclaimerAccepted: true,
   });
   assert.equal(result.rider.display_name, "Amina Rider");
+});
+
+test("public API client posts rider unavailable reports", async () => {
+  const requests: Array<{ url: string; body: unknown }> = [];
+  const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    requests.push({
+      url: String(input),
+      body: JSON.parse(String(init?.body ?? "{}")),
+    });
+
+    return Response.json({
+      success: true,
+      data: {
+        received: true,
+        report_id: "33333333-3333-4333-8333-333333333333",
+        message: "Thanks. Localman saved this rider availability report for admin review.",
+      },
+      error: null,
+    });
+  }) as typeof fetch;
+
+  const result = await reportVendorRiderUnavailable(
+    "jabi-office-lunch-bowl",
+    {
+      riderId: "11111111-1111-4111-8111-111111111111",
+      reason: "no_response",
+      reporterPhone: "+2348123456789",
+    },
+    fetchImpl,
+  );
+
+  assert.equal(
+    requests[0].url,
+    "/api/vendors/jabi-office-lunch-bowl/riders/report-unavailable",
+  );
+  assert.deepEqual(requests[0].body, {
+    riderId: "11111111-1111-4111-8111-111111111111",
+    reason: "no_response",
+    reporterPhone: "+2348123456789",
+  });
+  assert.equal(result.received, true);
 });

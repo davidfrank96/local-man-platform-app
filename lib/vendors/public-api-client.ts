@@ -7,6 +7,8 @@ import type {
   RiderContactHandoffRequest,
   RiderContactHandoffResponseData,
   RiderSuggestionsResponseData,
+  RiderUnavailableReportRequest,
+  RiderUnavailableReportResponseData,
   VendorCategory,
   VendorDetailResponseData,
 } from "../../types/index.ts";
@@ -216,6 +218,40 @@ export async function createVendorRiderContactHandoff(
 
   try {
     body = (await response.json()) as ApiResponse<RiderContactHandoffResponseData>;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "INVALID_RESPONSE: API returned a response that could not be parsed."
+        : `HTTP_ERROR: API request failed with status ${response.status}.`,
+    );
+  }
+
+  if (!body.success) {
+    const code = body.error?.code ?? "UNKNOWN_ERROR";
+    const message = body.error?.message ?? "API request failed.";
+
+    throw new Error(`${code}: ${message}`);
+  }
+
+  return body.data;
+}
+
+export async function reportVendorRiderUnavailable(
+  slug: string,
+  payload: RiderUnavailableReportRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RiderUnavailableReportResponseData> {
+  const response = await fetchImpl(`/api/vendors/${slug}/riders/report-unavailable`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  let body: ApiResponse<RiderUnavailableReportResponseData>;
+
+  try {
+    body = (await response.json()) as ApiResponse<RiderUnavailableReportResponseData>;
   } catch {
     throw new Error(
       response.ok

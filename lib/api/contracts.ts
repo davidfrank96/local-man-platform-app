@@ -114,6 +114,23 @@ export const apiEndpoints = {
       "Localman must not collect payment, assign delivery, or auto-send WhatsApp messages",
     ],
   },
+  reportRiderUnavailable: {
+    access: "public",
+    method: "POST",
+    path: "/api/vendors/[slug]/riders/report-unavailable",
+    requestShape:
+      "Route param: slug. JSON body with riderId, unavailable reason, and optional reporter phone.",
+    responseShape:
+      "Minimal acknowledgement and report id for an admin-only rider availability report.",
+    validationBoundary: [
+      "slug and riderId must be valid",
+      "reason must be one of no_response, unavailable, wrong_number, or other",
+      "selected rider must still be verified and visible before accepting a public report",
+      "reporter phone must be hashed before storage",
+      "report data must never be publicly readable",
+      "one anonymous report must not auto-suspend or hide a rider",
+    ],
+  },
   getCategories: {
     access: "public",
     method: "GET",

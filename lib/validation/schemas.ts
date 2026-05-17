@@ -297,6 +297,12 @@ export const riderUnavailableReportRequestSchema = z.object({
   reporterPhone: riderPhoneSchema.optional(),
 });
 
+export const riderUnavailableReportResponseDataSchema = z.object({
+  received: z.literal(true),
+  report_id: uuidSchema,
+  message: nonEmptyTextSchema,
+}).strict();
+
 export const riderApplicationRequestSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   fullName: z.string().trim().min(1).max(120),

@@ -13,6 +13,7 @@ import {
   riderSchema,
   riderSuggestionsResponseDataSchema,
   riderUnavailableReportRequestSchema,
+  riderUnavailableReportResponseDataSchema,
   riderVerificationStatusSchema,
   riderVisibilityStatusSchema,
   updateAdminRiderRequestSchema,
@@ -232,6 +233,23 @@ test("unavailable report request schema accepts only supported reasons", () => {
     riderUnavailableReportRequestSchema.safeParse({
       ...validReport,
       reason: "late_delivery_refund",
+    }).success,
+    false,
+  );
+});
+
+test("unavailable report response exposes only admin-review acknowledgement", () => {
+  const safeResponse = {
+    received: true,
+    report_id: "33333333-3333-4333-8333-333333333333",
+    message: "Thanks. Localman saved this rider availability report for admin review.",
+  };
+
+  assert.equal(riderUnavailableReportResponseDataSchema.safeParse(safeResponse).success, true);
+  assert.equal(
+    riderUnavailableReportResponseDataSchema.safeParse({
+      ...safeResponse,
+      rider_phone: "+2348111111111",
     }).success,
     false,
   );
