@@ -24,7 +24,20 @@ import type {
   ratingSchema,
   ratingSummarySchema,
   replaceVendorHoursRequestSchema,
+  publicRiderSuggestionSchema,
   updateVendorRequestSchema,
+  riderContactHandoffRequestSchema,
+  riderContactHandoffResponseDataSchema,
+  riderContactIntentSchema,
+  riderDeliveryLocationModeSchema,
+  riderPaymentNoteTypeSchema,
+  riderSchema,
+  riderSuggestionsResponseDataSchema,
+  riderUnavailableReasonSchema,
+  riderUnavailableReportRequestSchema,
+  riderUnavailableReportSchema,
+  riderVerificationStatusSchema,
+  riderVisibilityStatusSchema,
   userActionEventNameSchema,
   userActionEventSchema,
   operationalEventAreaSchema,
@@ -57,6 +70,23 @@ export type VendorFeaturedDish = z.infer<typeof vendorFeaturedDishSchema>;
 export type VendorImage = z.infer<typeof vendorImageSchema>;
 export type Rating = z.infer<typeof ratingSchema>;
 export type RatingSummary = z.infer<typeof ratingSummarySchema>;
+export type Rider = z.infer<typeof riderSchema>;
+export type RiderVerificationStatus = z.infer<typeof riderVerificationStatusSchema>;
+export type RiderVisibilityStatus = z.infer<typeof riderVisibilityStatusSchema>;
+export type RiderDeliveryLocationMode = z.infer<typeof riderDeliveryLocationModeSchema>;
+export type RiderPaymentNoteType = z.infer<typeof riderPaymentNoteTypeSchema>;
+export type RiderUnavailableReason = z.infer<typeof riderUnavailableReasonSchema>;
+export type RiderContactIntent = z.infer<typeof riderContactIntentSchema>;
+export type RiderUnavailableReport = z.infer<typeof riderUnavailableReportSchema>;
+export type PublicRiderSuggestion = z.infer<typeof publicRiderSuggestionSchema>;
+export type RiderSuggestionsResponseData = z.infer<typeof riderSuggestionsResponseDataSchema>;
+export type RiderContactHandoffRequest = z.infer<typeof riderContactHandoffRequestSchema>;
+export type RiderContactHandoffResponseData = z.infer<
+  typeof riderContactHandoffResponseDataSchema
+>;
+export type RiderUnavailableReportRequest = z.infer<
+  typeof riderUnavailableReportRequestSchema
+>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AdminRole = AdminUser["role"];
 export type AuditActionType = z.infer<typeof auditActionTypeSchema>;

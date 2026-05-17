@@ -137,6 +137,166 @@ export const ratingSummarySchema = z.object({
   review_count: z.coerce.number().int().min(0),
 });
 
+export const riderVerificationStatusSchema = z.enum([
+  "pending",
+  "verified",
+  "rejected",
+]);
+
+export const riderVisibilityStatusSchema = z.enum([
+  "hidden",
+  "visible",
+  "suspended",
+]);
+
+export const riderDeliveryLocationModeSchema = z.enum([
+  "current_location",
+  "manual_address",
+]);
+
+export const riderPaymentNoteTypeSchema = z.enum([
+  "coordinate_directly",
+  "already_paid_vendor",
+  "pay_vendor_on_pickup",
+  "cash_on_delivery",
+]);
+
+export const riderUnavailableReasonSchema = z.enum([
+  "no_response",
+  "unavailable",
+  "wrong_number",
+  "unsafe",
+  "other",
+]);
+
+const riderPhoneSchema = z
+  .string()
+  .trim()
+  .min(7)
+  .max(32)
+  .regex(/^\+?[0-9][0-9\s().-]{6,31}$/, "Use a valid phone number.");
+
+const riderOperatingAreasSchema = z
+  .array(z.string().trim().min(1).max(80))
+  .max(25);
+
+const riderJsonObjectSchema = z.record(z.string(), z.unknown());
+
+const optionalRiderTextSchema = (maxLength: number) =>
+  z
+    .string()
+    .trim()
+    .max(maxLength)
+    .transform((value) => (value.length === 0 ? null : value))
+    .nullable()
+    .optional();
+
+export const riderSchema = z.object({
+  id: uuidSchema,
+  display_name: nonEmptyTextSchema,
+  full_name: z.string().nullable(),
+  phone: riderPhoneSchema,
+  whatsapp_phone: riderPhoneSchema,
+  photo_url: z.string().nullable(),
+  vehicle_type: z.string().nullable(),
+  plate_number: z.string().nullable(),
+  operating_areas: riderOperatingAreasSchema.default([]),
+  usual_available_hours: riderJsonObjectSchema.nullable(),
+  verification_status: riderVerificationStatusSchema,
+  visibility_status: riderVisibilityStatusSchema,
+  notes: z.string().nullable(),
+  consent_accepted_at: timestampSchema.nullable(),
+  created_at: timestampSchema,
+  updated_at: timestampSchema,
+});
+
+export const riderContactIntentSchema = z.object({
+  id: uuidSchema,
+  vendor_id: uuidSchema,
+  rider_id: uuidSchema,
+  customer_phone_hash: z.string().nullable(),
+  delivery_area: z.string().nullable(),
+  location_mode: riderDeliveryLocationModeSchema.nullable(),
+  payment_note_type: riderPaymentNoteTypeSchema.nullable(),
+  disclaimer_accepted_at: timestampSchema,
+  whatsapp_link_generated_at: timestampSchema,
+  request_metadata: riderJsonObjectSchema.nullable(),
+  created_at: timestampSchema,
+});
+
+export const riderUnavailableReportSchema = z.object({
+  id: uuidSchema,
+  rider_id: uuidSchema,
+  vendor_id: uuidSchema.nullable(),
+  reason: riderUnavailableReasonSchema,
+  reporter_phone_hash: z.string().nullable(),
+  created_at: timestampSchema,
+});
+
+export const publicRiderSuggestionSchema = z
+  .object({
+    rider_id: uuidSchema,
+    display_name: nonEmptyTextSchema,
+    photo_url: z.string().nullable(),
+    vehicle_type: z.string().nullable(),
+    operating_areas: riderOperatingAreasSchema,
+    usual_availability_label: z.string().trim().min(1).max(120).nullable(),
+  })
+  .strict();
+
+export const riderSuggestionsResponseDataSchema = z.object({
+  vendor_slug: slugSchema,
+  riders: z.array(publicRiderSuggestionSchema),
+});
+
+export const riderContactHandoffRequestSchema = z
+  .object({
+    riderId: uuidSchema,
+    customerName: z.string().trim().min(1).max(80),
+    customerPhone: riderPhoneSchema,
+    deliveryLocationMode: riderDeliveryLocationModeSchema,
+    deliveryAddress: optionalRiderTextSchema(240),
+    deliveryArea: optionalRiderTextSchema(120),
+    orderNote: optionalRiderTextSchema(500),
+    paymentNoteType: riderPaymentNoteTypeSchema,
+    disclaimerAccepted: z.literal(true),
+  })
+  .superRefine((request, context) => {
+    const hasDeliveryAddress =
+      typeof request.deliveryAddress === "string" && request.deliveryAddress.length > 0;
+    const hasDeliveryArea =
+      typeof request.deliveryArea === "string" && request.deliveryArea.length > 0;
+
+    if (request.deliveryLocationMode === "manual_address" && !hasDeliveryAddress) {
+      context.addIssue({
+        code: "custom",
+        message: "Manual delivery requests require a delivery address.",
+        path: ["deliveryAddress"],
+      });
+    }
+
+    if (!hasDeliveryAddress && !hasDeliveryArea) {
+      context.addIssue({
+        code: "custom",
+        message: "Provide a delivery address or approximate delivery area.",
+        path: ["deliveryArea"],
+      });
+    }
+  });
+
+export const riderContactHandoffResponseDataSchema = z.object({
+  intent_id: uuidSchema,
+  whatsapp_url: z.url(),
+  rider: publicRiderSuggestionSchema,
+});
+
+export const riderUnavailableReportRequestSchema = z.object({
+  riderId: uuidSchema,
+  vendorId: uuidSchema.optional(),
+  reason: riderUnavailableReasonSchema,
+  reporterPhone: riderPhoneSchema.optional(),
+});
+
 export const adminUserSchema = z.object({
   id: uuidSchema,
   email: z.email(),
