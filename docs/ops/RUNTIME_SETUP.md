@@ -49,6 +49,7 @@ NEXT_PUBLIC_MAP_STYLE_URL=<optional-browser-safe-maptiler-style-json-url>
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+RIDER_CONNECT_HASH_SECRET=<server-only-rider-connect-phone-hash-secret>
 DATABASE_URL=<postgres-connection-string>
 LOCALMAN_LOG_LEVEL=info
 LOCALMAN_ENABLE_DEBUG_LOGS=false
@@ -59,7 +60,9 @@ LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS=30
 
 `DATABASE_URL` is only required for the `npm run db:migrate` and `npm run db:seed:abuja` scripts. Those scripts load `.env.local` before invoking `psql`. If using the Supabase Dashboard SQL Editor, `DATABASE_URL` is not required locally.
 
-`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations, public analytics event writes, public vendor rating writes, admin analytics reads, and server-side admin user creation.
+`SUPABASE_SERVICE_ROLE_KEY` is required for admin vendor image upload and delete operations, public analytics event writes, public vendor rating writes, Rider Connect server routes, admin analytics reads, and server-side admin user creation.
+
+`RIDER_CONNECT_HASH_SECRET` is required for production-grade Rider Connect phone hashing. It must be server-only. If omitted, the MVP falls back to `SUPABASE_SERVICE_ROLE_KEY`, but rotating the fallback key changes future hashes and can reduce comparability with earlier Rider Connect contact/report rows.
 
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional. Set it only if you want the public discovery page to render a real MapLibre map. If it is left empty, the discovery page will continue to use the built-in coordinate fallback map and the rest of the app will behave normally.
 
@@ -97,6 +100,7 @@ Supabase requirements:
 - `vendor-images` must be public for the current vendor image URL strategy
 - vendor image uploads use the server-only `sharp` native package to validate and optimize images before Storage upload; the upload route runs on the Node.js runtime and must not be deployed as an Edge route
 - vendor image upload success requires both a Storage object and a returned `vendor_images` metadata row; storage-only success is treated as a failed upload
+- Rider Connect tables must not be directly anon-readable; public suggestions and handoffs should flow through server routes that shape safe responses and hash customer/reporter phone values
 - explicit Data API grants must be applied from the `20260513*` migrations; future public-schema objects should not become reachable until their own migration grants access intentionally
 
 Validate app runtime env:
@@ -136,6 +140,7 @@ Migration files:
 - `supabase/migrations/20260513034000_schema_migrations_deny_policy.sql`
 - `supabase/migrations/20260513035000_revoke_public_default_privileges.sql`
 - `supabase/migrations/20260513036000_revoke_additional_default_privileges.sql`
+- `supabase/migrations/20260517090000_rider_connect_schema.sql`
 
 Preferred command when `psql` is available:
 
@@ -153,13 +158,14 @@ Dashboard fallback:
 1. Open the Supabase project.
 2. Go to SQL Editor.
 3. Run every file in `supabase/migrations` in filename order.
-4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, and `app_schema_migrations`.
+4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, `riders`, `rider_contact_intents`, `rider_unavailable_reports`, and `app_schema_migrations`.
 5. Confirm `public.vendor_images` includes `storage_object_path`.
 6. Confirm `public.user_events` exists for Phase 6 analytics.
 7. Confirm `public.submit_public_vendor_rating(uuid, integer, text, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
 8. Confirm `public.operational_events` exists with the admin read policy before enabling operational-event persistence.
 9. Confirm Data API grants are explicit and least privilege: public read tables remain selectable by anon/authenticated where intended, admin/internal tables are not anon-readable, and `app_schema_migrations` is inaccessible to client roles.
 10. Confirm future default privileges are revoked for public-schema tables, functions, and sequences so new migrations fail closed until grants are added.
+11. Confirm Rider Connect tables have RLS enabled, no anon grants, authenticated admin access through RLS, and service-role access for server routes.
 
 Rollback note:
 - current migrations are additive and tracked in `public.app_schema_migrations`

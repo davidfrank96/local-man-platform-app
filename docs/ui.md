@@ -9,6 +9,7 @@ Local Man is a discovery-first, vendor-first surface:
 - the map remains part of discovery, but mobile gives it a dedicated tab
 - vendor cards are compact, text-first, and action-oriented
 - vendor selection updates the map preview and selected vendor summary
+- vendor detail pages can open a liability-safe Rider Connect handoff flow
 - mobile and web use the same data and actions, but different layout organization
 
 ## Discovery concept
@@ -29,6 +30,7 @@ The interaction model is:
 3. let the user search or filter
 4. let the user select a vendor from the list or map
 5. let the user call, get directions, or open the full vendor detail page
+6. on detail pages, let the user request an independent rider handoff without adding payments or dispatch
 
 ## Mobile vs web
 
@@ -90,6 +92,7 @@ The admin workspace now has two user-facing shells:
   - activity
   - logs
   - team management
+  - rider management
   - vendor registry and edit/create workflows
 - agent dashboard:
   - full Create Vendor page
@@ -103,6 +106,7 @@ Current admin navigation order:
 - `Analytics`
 - `Manage vendors`
 - `Create vendor`
+- `Riders`
 - `Team access`
 - `Activity`
 - `Logs`
@@ -124,6 +128,12 @@ Vendor image upload state is also workspace UI state:
 - pending file, filename, local preview URL, and upload status are scoped to the selected vendor edit session
 - switching vendors must clear pending image state before another upload starts
 - upload success is shown only after the storage-backed `vendor_images` row is returned and merged for the current vendor
+
+Rider Connect UI state is intentionally lightweight:
+- public suggestions show listed independent riders with public-safe profile fields only
+- rider phone and WhatsApp values stay server-side until the selected-rider handoff is created
+- the user sends the WhatsApp message directly
+- admin rider management controls profile review and visibility only, not delivery assignment or payment
 
 ## Source of truth
 

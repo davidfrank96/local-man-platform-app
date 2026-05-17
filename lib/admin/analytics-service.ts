@@ -15,6 +15,7 @@ import { logStructuredEvent } from "../observability.ts";
 import type {
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
+  AdminAnalyticsRiderMetrics,
 } from "../../types/index.ts";
 
 type AdminAnalyticsServiceContext = {
@@ -44,6 +45,11 @@ type VendorLookupRow = {
   id: string;
   name: string;
   slug: string;
+};
+
+type RiderMetricRow = {
+  verification_status: string | null;
+  visibility_status: string | null;
 };
 
 const ANALYTICS_PAGE_SIZE = 1000;
@@ -182,6 +188,114 @@ function isMissingAnalyticsSnapshotRpc(details: unknown): boolean {
     (message.includes("could not find") ||
       message.includes("does not exist") ||
       message.includes("not found"));
+}
+
+function createEmptyRiderMetrics(): AdminAnalyticsRiderMetrics {
+  return {
+    total: 0,
+    verified: 0,
+    pending: 0,
+    rejected: 0,
+    visible: 0,
+    hidden: 0,
+    suspended: 0,
+  };
+}
+
+async function fetchRiderMetrics({
+  session,
+  config,
+  fetchImpl,
+}: AdminAnalyticsResolvedContext): Promise<AdminAnalyticsRiderMetrics> {
+  const url = createRestUrl(config, "riders", {
+    select: "verification_status,visibility_status",
+    limit: "10000",
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort("ANALYTICS_RIDER_METRICS_TIMEOUT");
+  }, analyticsFetchTimeoutMs);
+  const startedAt = Date.now();
+  let response: Response;
+
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: createHeaders(session, config),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted)
+    ) {
+      throw new AdminServiceError(
+        "NETWORK_ERROR",
+        "Rider analytics query timed out.",
+        504,
+        { timeoutMs: analyticsFetchTimeoutMs },
+        "Rider analytics temporarily unavailable.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > analyticsQueryWarnThresholdMs) {
+    logStructuredEvent("warn", {
+      type: "ANALYTICS_RIDER_METRICS_SLOW_QUERY",
+      requestId: session.requestId,
+      durationMs,
+      url: url.toString(),
+    });
+  }
+
+  const payload = await readJson(response);
+
+  if (!response.ok) {
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      "Unable to load rider analytics.",
+      502,
+      payload,
+    );
+  }
+
+  if (!Array.isArray(payload)) {
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      "Rider analytics payload was malformed.",
+      502,
+      payload,
+    );
+  }
+
+  const metrics = createEmptyRiderMetrics();
+
+  for (const row of payload as RiderMetricRow[]) {
+    metrics.total += 1;
+
+    if (row.verification_status === "verified") {
+      metrics.verified += 1;
+    } else if (row.verification_status === "pending") {
+      metrics.pending += 1;
+    } else if (row.verification_status === "rejected") {
+      metrics.rejected += 1;
+    }
+
+    if (row.visibility_status === "visible") {
+      metrics.visible += 1;
+    } else if (row.visibility_status === "hidden") {
+      metrics.hidden += 1;
+    } else if (row.visibility_status === "suspended") {
+      metrics.suspended += 1;
+    }
+  }
+
+  return metrics;
 }
 
 async function fetchAnalyticsSnapshotViaRpc(
@@ -649,29 +763,39 @@ export async function getAdminAnalytics(
     },
     range,
   );
+  const riderMetrics = await fetchRiderMetrics({
+    session,
+    config: resolvedConfig,
+    fetchImpl,
+  });
 
   if (rpcPayload) {
-    writeCachedAnalytics(range, rpcPayload);
+    const payloadWithRiderMetrics = adminAnalyticsResponseDataSchema.parse({
+      ...rpcPayload,
+      rider_metrics: riderMetrics,
+    });
+    writeCachedAnalytics(range, payloadWithRiderMetrics);
 
     const durationMs = Date.now() - startedAt;
     logStructuredEvent("info", {
       type: "ANALYTICS_FETCH",
       requestId: session.requestId,
       range,
-      resultCount: rpcPayload.summary.total_events,
+      resultCount: payloadWithRiderMetrics.summary.total_events,
       vendorCount:
-        rpcPayload.vendor_performance.most_selected_vendors.length +
-        rpcPayload.vendor_performance.most_viewed_vendor_details.length +
-        rpcPayload.vendor_performance.most_call_clicks.length +
-        rpcPayload.vendor_performance.most_directions_clicks.length,
-      recentEventCount: rpcPayload.recent_events.length,
+        payloadWithRiderMetrics.vendor_performance.most_selected_vendors.length +
+        payloadWithRiderMetrics.vendor_performance.most_viewed_vendor_details.length +
+        payloadWithRiderMetrics.vendor_performance.most_call_clicks.length +
+        payloadWithRiderMetrics.vendor_performance.most_directions_clicks.length,
+      recentEventCount: payloadWithRiderMetrics.recent_events.length,
+      riderCount: payloadWithRiderMetrics.rider_metrics.total,
       durationMs,
       supabaseHost: new URL(resolvedConfig.supabaseUrl).host,
       usingServiceRole: true,
       source: "rpc",
     });
 
-    return rpcPayload;
+    return payloadWithRiderMetrics;
   }
 
   const eventResult = await fetchEventRows(
@@ -754,6 +878,7 @@ export async function getAdminAnalytics(
       most_directions_clicks: rankVendorEvents(rows, ["directions_clicked"], vendorLookup),
     },
     dropoff: buildDropoffSummary(rows, eventResult.sessionIdAvailable),
+    rider_metrics: riderMetrics,
     recent_events: recentEvents,
   };
 
@@ -767,6 +892,7 @@ export async function getAdminAnalytics(
     range,
     resultCount: rows.length,
     vendorCount: vendorIds.length,
+    riderCount: parsedPayload.rider_metrics.total,
     recentEventCount: recentEvents.length,
     durationMs,
     supabaseHost: new URL(resolvedConfig.supabaseUrl).host,
@@ -781,6 +907,7 @@ export async function getAdminAnalytics(
       durationMs,
       resultCount: rows.length,
       vendorCount: vendorIds.length,
+      riderCount: parsedPayload.rider_metrics.total,
     });
   }
 

@@ -185,3 +185,18 @@ export function buildNearbyRequestKey(
     category: filters.category,
   });
 }
+
+export function buildNearbyBaseDatasetKey(
+  location: Pick<AcquiredUserLocation, "source" | "coordinates">,
+  filters: DiscoveryFiltersInput,
+): string {
+  return JSON.stringify({
+    source: location.source,
+    lat: location.coordinates.lat,
+    lng: location.coordinates.lng,
+    radiusKm: filters.radiusKm,
+    openNow: filters.openNow,
+    priceBand: filters.priceBand,
+    category: filters.category,
+  });
+}

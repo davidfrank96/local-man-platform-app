@@ -1,9 +1,12 @@
 import type { z } from "zod";
 import type {
   adminUserSchema,
+  adminRiderSchema,
+  adminRidersQuerySchema,
   adminAnalyticsQuerySchema,
   adminAnalyticsRangeSchema,
   adminAnalyticsResponseDataSchema,
+  adminAnalyticsRiderMetricsSchema,
   adminAnalyticsRecentEventSchema,
   adminAnalyticsSummarySchema,
   adminAnalyticsVendorMetricSchema,
@@ -24,7 +27,25 @@ import type {
   ratingSchema,
   ratingSummarySchema,
   replaceVendorHoursRequestSchema,
+  publicRiderSuggestionSchema,
+  riderApplicationRequestSchema,
+  riderApplicationResponseDataSchema,
+  createAdminRiderRequestSchema,
   updateVendorRequestSchema,
+  updateAdminRiderRequestSchema,
+  riderContactHandoffRequestSchema,
+  riderContactHandoffResponseDataSchema,
+  riderContactIntentSchema,
+  riderDeliveryLocationModeSchema,
+  riderPaymentNoteTypeSchema,
+  riderSchema,
+  riderSuggestionsResponseDataSchema,
+  riderUnavailableReasonSchema,
+  riderUnavailableReportRequestSchema,
+  riderUnavailableReportResponseDataSchema,
+  riderUnavailableReportSchema,
+  riderVerificationStatusSchema,
+  riderVisibilityStatusSchema,
   userActionEventNameSchema,
   userActionEventSchema,
   operationalEventAreaSchema,
@@ -57,6 +78,34 @@ export type VendorFeaturedDish = z.infer<typeof vendorFeaturedDishSchema>;
 export type VendorImage = z.infer<typeof vendorImageSchema>;
 export type Rating = z.infer<typeof ratingSchema>;
 export type RatingSummary = z.infer<typeof ratingSummarySchema>;
+export type Rider = z.infer<typeof riderSchema>;
+export type RiderVerificationStatus = z.infer<typeof riderVerificationStatusSchema>;
+export type RiderVisibilityStatus = z.infer<typeof riderVisibilityStatusSchema>;
+export type RiderDeliveryLocationMode = z.infer<typeof riderDeliveryLocationModeSchema>;
+export type RiderPaymentNoteType = z.infer<typeof riderPaymentNoteTypeSchema>;
+export type RiderUnavailableReason = z.infer<typeof riderUnavailableReasonSchema>;
+export type RiderContactIntent = z.infer<typeof riderContactIntentSchema>;
+export type RiderUnavailableReport = z.infer<typeof riderUnavailableReportSchema>;
+export type PublicRiderSuggestion = z.infer<typeof publicRiderSuggestionSchema>;
+export type RiderSuggestionsResponseData = z.infer<typeof riderSuggestionsResponseDataSchema>;
+export type RiderContactHandoffRequest = z.infer<typeof riderContactHandoffRequestSchema>;
+export type RiderContactHandoffResponseData = z.infer<
+  typeof riderContactHandoffResponseDataSchema
+>;
+export type RiderUnavailableReportRequest = z.infer<
+  typeof riderUnavailableReportRequestSchema
+>;
+export type RiderUnavailableReportResponseData = z.infer<
+  typeof riderUnavailableReportResponseDataSchema
+>;
+export type RiderApplicationRequest = z.infer<typeof riderApplicationRequestSchema>;
+export type RiderApplicationResponseData = z.infer<
+  typeof riderApplicationResponseDataSchema
+>;
+export type AdminRider = z.infer<typeof adminRiderSchema>;
+export type AdminRidersQuery = z.infer<typeof adminRidersQuerySchema>;
+export type CreateAdminRiderRequest = z.infer<typeof createAdminRiderRequestSchema>;
+export type UpdateAdminRiderRequest = z.infer<typeof updateAdminRiderRequestSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AdminRole = AdminUser["role"];
 export type AuditActionType = z.infer<typeof auditActionTypeSchema>;
@@ -74,6 +123,7 @@ export type AdminOperationalLogsQuery = z.infer<typeof adminOperationalLogsQuery
 export type AdminAnalyticsSummary = z.infer<typeof adminAnalyticsSummarySchema>;
 export type AdminAnalyticsVendorMetric = z.infer<typeof adminAnalyticsVendorMetricSchema>;
 export type AdminAnalyticsDropoff = z.infer<typeof adminAnalyticsDropoffSchema>;
+export type AdminAnalyticsRiderMetrics = z.infer<typeof adminAnalyticsRiderMetricsSchema>;
 export type AdminAnalyticsRecentEvent = z.infer<typeof adminAnalyticsRecentEventSchema>;
 export type AdminAnalyticsResponseData = z.infer<typeof adminAnalyticsResponseDataSchema>;
 

@@ -37,6 +37,7 @@ import {
 import {
   buildDiscoveryReturnTo,
   buildDiscoverySearchParams,
+  buildNearbyBaseDatasetKey,
   buildNearbyRequestKey,
   buildVendorDetailHref,
   createNearbyFilters,
@@ -208,6 +209,11 @@ export function PublicDiscovery({
   const nearbyDataRef = useRef<NearbyVendorsResponseData | null>(null);
   const nearbyDataUpdatedAtRef = useRef<string | null>(null);
   const nearbyDataRequestKeyRef = useRef<string | null>(null);
+  const unsearchedNearbyDataCacheRef = useRef(new Map<string, {
+    data: NearbyVendorsResponseData;
+    requestKey: string;
+    updatedAt: string;
+  }>());
   const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
   const preferredSelectedVendorIdRef = useRef<string | null>(null);
   const restoredSnapshotNeedsLiveFetchRef = useRef(false);
@@ -246,10 +252,6 @@ export function PublicDiscovery({
     () =>
       buildDiscoverySearchParams(filters, activeLocationSource, defaultFilters.radiusKm).toString(),
     [activeLocationSource, filters],
-  );
-  const filterFormKey = useMemo(
-    () => JSON.stringify(filters),
-    [filters],
   );
   const resolvedLocationKey = useMemo(() => {
     if (!location || location.source === "default_city") {
@@ -687,6 +689,16 @@ export function PublicDiscovery({
 
         nearbyDataUpdatedAtRef.current = new Date().toISOString();
         nearbyDataRequestKeyRef.current = buildNearbyRequestKey(nextLocation, nextFilters);
+        if (nextFilters.search.trim().length === 0) {
+          unsearchedNearbyDataCacheRef.current.set(
+            buildNearbyBaseDatasetKey(nextLocation, nextFilters),
+            {
+              data: result,
+              requestKey: nearbyDataRequestKeyRef.current,
+              updatedAt: nearbyDataUpdatedAtRef.current,
+            },
+          );
+        }
         restoredSnapshotNeedsLiveFetchRef.current = false;
         setNearbyData(result);
         const nextSelectionSource =
@@ -1005,14 +1017,34 @@ export function PublicDiscovery({
     [location, locationDisplayLabel, locationStatus],
   );
 
-  const applyFilters = useCallback((nextFilters: DiscoveryFilters) => {
+  const applyFilters = useCallback((nextFilters: DiscoveryFilters, options?: {
+    keepPanelsOpen?: boolean;
+  }) => {
     recordSelectionIntent("filter");
+    if (
+      filters.search.trim().length > 0 &&
+      nextFilters.search.trim().length === 0 &&
+      activeFetchLocation
+    ) {
+      const cachedUnsearchedData = unsearchedNearbyDataCacheRef.current.get(
+        buildNearbyBaseDatasetKey(activeFetchLocation, nextFilters),
+      );
+
+      if (cachedUnsearchedData) {
+        nearbyDataRef.current = cachedUnsearchedData.data;
+        nearbyDataUpdatedAtRef.current = cachedUnsearchedData.updatedAt;
+        nearbyDataRequestKeyRef.current = cachedUnsearchedData.requestKey;
+        setNearbyData(cachedUnsearchedData.data);
+      }
+    }
     setFilters(nextFilters);
     setActiveVendorSection("nearby");
-    setDesktopFiltersOpen(false);
-    setMobileFiltersOpen(false);
-    setMobileMapFiltersOpen(false);
-  }, [recordSelectionIntent]);
+    if (!options?.keepPanelsOpen) {
+      setDesktopFiltersOpen(false);
+      setMobileFiltersOpen(false);
+      setMobileMapFiltersOpen(false);
+    }
+  }, [activeFetchLocation, filters.search, recordSelectionIntent]);
 
   const selectVendorById = useCallback((vendorId: string, source: "card" | "map" = "map") => {
     const vendor = vendorById.get(vendorId);
@@ -1150,7 +1182,6 @@ export function PublicDiscovery({
             <VendorFilters
               categories={categories}
               filters={filters}
-              key={`desktop-${filterFormKey}`}
               locationSource={activeLocationSource ?? null}
               panelOpen={desktopFiltersOpen}
               variant="desktopFloating"
@@ -1163,7 +1194,6 @@ export function PublicDiscovery({
             <VendorFilters
               categories={categories}
               filters={filters}
-              key={`mobile-${filterFormKey}`}
               locationSource={activeLocationSource ?? null}
               panelOpen={mobileFiltersOpen}
               variant="mobileFloating"
@@ -1447,7 +1477,6 @@ export function PublicDiscovery({
               <VendorFilters
                 categories={categories}
                 filters={filters}
-                key={`mobile-map-${filterFormKey}`}
                 locationSource={activeLocationSource ?? null}
                 panelOpen={mobileMapFiltersOpen}
                 variant="mobileFloating"

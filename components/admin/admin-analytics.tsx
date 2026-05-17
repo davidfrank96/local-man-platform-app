@@ -8,6 +8,7 @@ import {
 import { handleAppError } from "../../lib/errors/ui-error.ts";
 import {
   buildAnalyticsMetricCards,
+  buildRiderAnalyticsMetricCards,
   formatAnalyticsEventLabel,
   formatAnalyticsMetricValue,
 } from "../../lib/admin/analytics-view.ts";
@@ -153,6 +154,10 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
     () => (analytics ? buildAnalyticsMetricCards(analytics.summary) : []),
     [analytics],
   );
+  const riderMetricCards = useMemo(
+    () => (analytics ? buildRiderAnalyticsMetricCards(analytics.rider_metrics) : []),
+    [analytics],
+  );
   const recentEvents = analytics?.recent_events;
   const dropoff = analytics?.dropoff ?? null;
 
@@ -211,6 +216,24 @@ const AdminAnalyticsView = memo(function AdminAnalyticsView({
                 <small>{metric.note}</small>
               </article>
             ))}
+          </section>
+
+          <section className="admin-panel analytics-panel" aria-labelledby="rider-connect-analytics">
+            <div className="admin-section-header">
+              <div>
+                <h2 id="rider-connect-analytics">Rider Connect</h2>
+                <span>Admin-only rider profile status counts.</span>
+              </div>
+            </div>
+            <div className="analytics-summary-grid" aria-label="Rider Connect analytics cards">
+              {riderMetricCards.map((metric) => (
+                <article className="admin-metric-panel" key={metric.label}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                  <small>{metric.note}</small>
+                </article>
+              ))}
+            </div>
           </section>
 
           <div className="analytics-layout">

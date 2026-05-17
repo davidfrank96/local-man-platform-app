@@ -10,7 +10,8 @@ Local Man — Environment Variables
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key for RLS-protected public reads and the server-side admin login/session exchange against Supabase Auth.
 
 ## Server / Secure
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload/delete, public analytics event writes, public vendor rating writes, admin analytics reads, and server-side admin user creation/recovery.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only key required for privileged vendor image upload/delete, public analytics event writes, public vendor rating writes, Rider Connect server routes, admin analytics reads, and server-side admin user creation/recovery.
+- `RIDER_CONNECT_HASH_SECRET`: server-only HMAC secret for hashing Rider Connect customer/reporter phone values. Set this in staging and production. If omitted, the MVP falls back to `SUPABASE_SERVICE_ROLE_KEY`; rotating the fallback key changes future hashes and can reduce comparability with earlier contact/report rows.
 - `DATABASE_URL`: direct database connection string for migrations or server-only maintenance tasks.
 - `ADMIN_SEED_EMAIL`: optional initial admin account email for seed/setup workflows.
 - `ADMIN_SEED_PASSWORD`: optional initial admin account password for seed/setup workflows.
@@ -27,6 +28,8 @@ Local Man — Environment Variables
 - Browser admin and agent sessions are persisted in same-origin HTTP-only cookies, not `localStorage` or `sessionStorage`.
 - Browser admin API calls now authenticate through those cookies and `/api/admin/session`; callers no longer need to attach a bearer token manually.
 - Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.
+- Rider Connect application, suggestion, contact handoff, unavailable-report, and admin rider routes use server-side access. Public suggestion responses must never include rider phone or WhatsApp values.
+- `RIDER_CONNECT_HASH_SECRET` must never be exposed as `NEXT_PUBLIC_*`; it is used only on the server when storing Rider Connect phone hashes.
 - Team access creation and existing-user recovery use the server-only service role key and must not be called directly from the browser.
 - Server-side admin route authorization still supports bearer tokens for compatibility and targeted tests, but the primary browser flow is cookie-backed.
 - Current public map rendering uses MapLibre only when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. Otherwise it falls back to the local coordinate map.
@@ -60,3 +63,4 @@ Exact migration, seed, and nearby smoke test steps are documented in `docs/ops/R
 - Treat `NEXT_PUBLIC_MAP_STYLE_URL` as public browser configuration only. Do not embed server-only keys in that URL.
 - Document where each variable is used.
 - Keep separate values for local, staging, and production.
+- Set a stable `RIDER_CONNECT_HASH_SECRET` for each staging/production environment before live Rider Connect usage.

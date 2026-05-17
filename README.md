@@ -44,10 +44,18 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - no clustering in the current release
 - vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
 - lightweight vendor rating input with 1-5 stars, no comments, and one rating per vendor per anonymous browser identity
+- Rider Connect on vendor detail pages:
+  - `Request Rider` opens a disclaimer-gated handoff flow
+  - suggestions include only verified and visible independent riders
+  - suggestion responses exclude rider phone and WhatsApp values
+  - WhatsApp click-to-chat URLs are generated only for the selected rider after contact intent creation
+  - users can report a rider as unavailable for admin review
+  - Localman does not collect payment, assign deliveries, send WhatsApp messages, or guarantee delivery
 - public abuse protection on write-heavy and search-heavy routes:
   - `/api/events` rate limits repeated event floods and deduplicates immediate retry payloads
   - `/api/vendors/[slug]/ratings` rate limits repeated rating spam, collapses duplicate retry submissions, and rejects repeat ratings for the same vendor/browser identity
   - `/api/vendors/nearby` rate limits search-bearing abuse traffic without throttling normal default-city browsing
+  - Rider Connect application, suggestion, contact handoff, and unavailable-report routes are rate-limited server-side
 - local retention helpers:
   - recently viewed vendors
   - last selected vendor memory
@@ -78,6 +86,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - dedicated admin activity page for recent team activity
 - dedicated admin logs page for recent operational warnings, failures, degraded responses, and slow requests
 - admin team access page at `/admin/team`
+- admin rider management page at `/admin/riders` for creating manual rider profiles, reviewing independent rider applications, managing verification/visibility status, and checking unavailable-report signals
 - vendor registry with completeness badges
 - full Create Vendor page for both admins and agents
 - CSV vendor intake with the same schema and persistence contract as the full Create Vendor page
@@ -134,6 +143,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - [docs/qa-checklist.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/qa-checklist.md) - release and regression checklist
 - [docs/rbac.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rbac.md) - admin and agent role rules
 - [docs/ops/SECURITY.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/SECURITY.md) - auth/RBAC, Supabase grants/RLS, public write, cache, and secret-handling security notes
+- [docs/rider-connect.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rider-connect.md) - Rider Connect MVP model, privacy, abuse limits, copy rules, and QA checklist
 - [docs/audit-logs.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/audit-logs.md) - workspace audit logging behavior
 - [docs/analytics.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/analytics.md) - public event tracking and admin analytics reads
 - [docs/error-handling.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/error-handling.md) - shared error contract, toast system, and error boundary
@@ -147,6 +157,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `RIDER_CONNECT_HASH_SECRET` for staging/production Rider Connect phone hashing
 4. Set `NEXT_PUBLIC_MAP_STYLE_URL` if you want the real MapLibre map locally:
    - example: `https://api.maptiler.com/maps/openstreetmap/style.json?key=...`
    - if omitted, the app uses the built-in coordinate fallback map
@@ -175,6 +186,7 @@ Runtime safety note:
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+RIDER_CONNECT_HASH_SECRET=<server-only-rider-connect-phone-hash-secret>
 NEXT_PUBLIC_MAP_STYLE_URL=<browser-safe-maptiler-style-json-url>
 ```
 
@@ -200,8 +212,11 @@ Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `styl
 - admin user creation
 - public analytics event writes at `/api/events`
 - public vendor rating writes at `/api/vendors/[slug]/ratings`
+- Rider Connect application, suggestion, contact handoff, and unavailable-report routes
 - backend analytics and audit-log routes
 - server-side vendor image storage operations
+
+`RIDER_CONNECT_HASH_SECRET` is a server-only HMAC secret for Rider Connect customer/reporter phone hashes. Set it in staging and production. If omitted, the MVP falls back to `SUPABASE_SERVICE_ROLE_KEY`; rotating that fallback changes future hashes and can reduce comparability with earlier records.
 
 Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
 Authentication alone is not enough for workspace access: the authenticated user must already exist in `admin_users`.
@@ -292,6 +307,14 @@ Phase 6 currently covers:
 - admin-only analytics route at `/admin/analytics`
 - admin-only activity route at `/admin/activity`
 - admin-only logs route at `/admin/logs`
+- Rider Connect:
+  - public rider application at `/riders/apply`
+  - admin rider management at `/admin/riders`
+  - vendor-detail `Request Rider` flow
+  - safe verified/visible rider suggestions
+  - selected-rider WhatsApp handoff
+  - unavailable reporting
+  - no payment, dispatch, order tracking, rider app, or WhatsApp API sending
 - summary cards, vendor performance, drop-off signals, recent user events, and dedicated recent team activity review
 - operational warning and failure review from persisted structured logs
 - non-blocking tracking writes that must never interfere with public discovery
@@ -313,6 +336,7 @@ Current admin workspace behavior:
     - Analytics
     - Manage vendors
     - Create vendor
+    - Riders
     - Team access
     - Activity
     - Logs

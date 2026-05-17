@@ -115,6 +115,9 @@ const requiredPolicies = [
   { table: "admin_users", policy: "Admins can read admin users" },
   { table: "audit_logs", policy: "Admins can read audit logs" },
   { table: "operational_events", policy: "Admins can read operational events" },
+  { table: "riders", policy: "Admins can manage riders" },
+  { table: "rider_contact_intents", policy: "Admins can read rider contact intents" },
+  { table: "rider_unavailable_reports", policy: "Admins can read rider unavailable reports" },
   { table: "user_events", policy: "Admins can read user events" },
 ];
 const existingPolicies = new Set(
@@ -127,6 +130,9 @@ const existingPolicies = new Set(
         'admin_users',
         'audit_logs',
         'operational_events',
+        'riders',
+        'rider_contact_intents',
+        'rider_unavailable_reports',
         'user_events'
       );
   `).map(([table, policy]) => `${table}:${policy}`),
@@ -148,6 +154,9 @@ const requiredRlsTables = [
   "user_events",
   "operational_events",
   "app_schema_migrations",
+  "riders",
+  "rider_contact_intents",
+  "rider_unavailable_reports",
 ];
 const missingRlsTables = runRows(`
   select c.relname
@@ -185,6 +194,9 @@ const serviceTables = [
   "user_events",
   "operational_events",
   "app_schema_migrations",
+  "riders",
+  "rider_contact_intents",
+  "rider_unavailable_reports",
 ];
 
 function sqlValues(rows) {
@@ -210,6 +222,12 @@ const requiredTablePrivileges = [
   ["authenticated", "audit_logs", "INSERT"],
   ["authenticated", "user_events", "SELECT"],
   ["authenticated", "operational_events", "SELECT"],
+  ["authenticated", "riders", "SELECT"],
+  ["authenticated", "riders", "INSERT"],
+  ["authenticated", "riders", "UPDATE"],
+  ["authenticated", "riders", "DELETE"],
+  ["authenticated", "rider_contact_intents", "SELECT"],
+  ["authenticated", "rider_unavailable_reports", "SELECT"],
   ...serviceTables.flatMap((table) => [
     ["service_role", table, "SELECT"],
     ["service_role", table, "INSERT"],
@@ -225,7 +243,14 @@ const forbiddenTablePrivileges = [
   ]),
   ...["admin_users", "audit_logs", "user_events", "operational_events", "app_schema_migrations"]
     .map((table) => ["anon", table, "SELECT"]),
+  ...["riders", "rider_contact_intents", "rider_unavailable_reports"]
+    .map((table) => ["anon", table, "SELECT"]),
   ...["user_events", "operational_events", "app_schema_migrations"].flatMap((table) => [
+    ["authenticated", table, "INSERT"],
+    ["authenticated", table, "UPDATE"],
+    ["authenticated", table, "DELETE"],
+  ]),
+  ...["rider_contact_intents", "rider_unavailable_reports"].flatMap((table) => [
     ["authenticated", table, "INSERT"],
     ["authenticated", table, "UPDATE"],
     ["authenticated", table, "DELETE"],

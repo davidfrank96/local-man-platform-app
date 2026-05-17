@@ -135,11 +135,38 @@ Current automated coverage:
 - `tests/public-rating-route.test.ts`
 - `tests/e2e/app-smoke.spec.ts`
 
+### Rider Connect Logic
+Test:
+- public rider application page renders independent-rider and no-payment/no-guarantee copy
+- rider application rejects missing required fields, invalid phone values, missing consent, and missing independent-rider disclaimer
+- successful rider applications create `pending` and `hidden` rider rows only
+- admin rider APIs are protected from unauthenticated and unauthorized access
+- admins can list riders, view rider detail, update verification status, update visibility status, and edit safe profile fields
+- invalid rider status values and unsafe fields are rejected
+- public rider suggestions return only verified and visible riders
+- public rider suggestions never include rider phone, WhatsApp phone, full legal name, notes, or internal status fields
+- contact handoff requires disclaimer acceptance and a selected verified/visible rider
+- contact handoff stores a minimal contact intent, hashes customer phone, and does not persist raw customer phone or full address
+- contact handoff returns a WhatsApp URL for the selected rider only
+- unavailable reports validate reason values, hash optional reporter phone, and stay admin-review-only
+- Rider Connect application, suggestion, contact, and report routes return clean `TOO_MANY_REQUESTS` responses when rate limited
+- user-facing Rider Connect copy rejects payment, dispatch, courier, driver, and guarantee wording
+- Rider Connect does not add payments, order tracking, dispatch assignment, rider login, or WhatsApp API outbound sending
+
+Current automated coverage:
+- `tests/rider-connect-schemas.test.ts`
+- `tests/rider-application-route.test.ts`
+- `tests/admin-rider-routes.test.ts`
+- `tests/public-rider-routes.test.ts`
+- `tests/public-api-client.test.ts`
+- `tests/e2e/app-smoke.spec.ts`
+
 ### Abuse Protection Logic
 Test:
 - repeated invalid admin login attempts are rate limited
 - repeated public search abuse is rate limited without blocking normal default-city browsing
 - repeated public analytics event floods are rate limited without turning analytics failures into public UX failures
+- repeated Rider Connect applications, suggestions, contact handoffs, same-rider handoffs, and unavailable reports are rate limited without leaking private rider data
 - repeated identical event retries collapse into one upstream write
 - blocked responses expose structured `TOO_MANY_REQUESTS` or endpoint-safe degraded responses
 - hashed limiter logging never requires raw client IP assertions in tests
@@ -149,6 +176,8 @@ Current automated coverage:
 - `tests/public-event-route.test.ts`
 - `tests/public-nearby-route.test.ts`
 - `tests/public-rating-route.test.ts`
+- `tests/public-rider-routes.test.ts`
+- `tests/rider-application-route.test.ts`
 
 ### Observability Logic
 Test:
@@ -277,6 +306,10 @@ Manual admin UI smoke coverage:
 - remove the featured dish and confirm the list updates without a manual reload
 - deactivate the selected vendor with confirmation
 - open `/admin/team`
+- open `/admin/riders`
+- confirm only admins with `riders:manage` can access rider management
+- confirm rider search, verification filter, visibility filter, status badges, contact counts, report counts, and the independent-rider note render
+- update a rider verification or visibility status and confirm an audit log is written when audit logging is enabled
 - create a new admin or agent account
 - create the same account again and confirm role assignment succeeds without a stale error banner
 - confirm the list refreshes from `admin_users` without a full reload
@@ -288,6 +321,12 @@ Public detail follow-up after admin edits:
 - open the public vendor detail page for the edited vendor
 - confirm updated hours appear without waiting for a manual cache refresh
 - confirm a real uploaded image is preferred over a seed placeholder when one exists
+- open Request Rider
+- confirm the modal reminds users to call the vendor first
+- confirm the disclaimer says Localman connects users, vendors, and independent riders and does not collect payment or guarantee delivery
+- submit valid contact details and confirm only public-safe rider suggestions render
+- select one rider and confirm the handoff shows `Message rider`, `Try another rider`, and `Back to vendor`
+- confirm report-unavailable flow stores an admin-review report without exposing report data publicly
 
 Release-gate upload sequence:
 - run the targeted browser upload tests in `tests/e2e/app-smoke.spec.ts`
@@ -316,6 +355,7 @@ Run before signoff:
 - `npm run build`
 - `npm run smoke:nearby`
 - `npm run test:e2e`
+- targeted Rider Connect API/UI tests when Rider Connect code or copy changes
 
 Manual viewport checks:
 - `320px`

@@ -6,6 +6,7 @@ const agentRestrictedPaths = new Set([
   "/admin/activity",
   "/admin/logs",
   "/admin/team",
+  "/admin/riders",
 ]);
 
 export function getAdminHomePath(role: AdminRole): string {

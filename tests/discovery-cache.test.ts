@@ -16,6 +16,9 @@ import {
   writeCachedNearbyDiscoveryData,
 } from "../lib/public/discovery-offline-cache.ts";
 import {
+  buildNearbyRequestKey,
+} from "../lib/public/discovery-state.ts";
+import {
   getPublicDiscoveryCacheEnvironmentKey,
   PUBLIC_DISCOVERY_CACHE_VERSION,
 } from "../lib/public/discovery-cache-hygiene.ts";
@@ -527,4 +530,40 @@ test("restored snapshot still requires an authoritative fetch when freshness is 
     }),
     false,
   );
+});
+
+test("nearby request keys include radius, search, and category dimensions", () => {
+  const location = {
+    source: "precise" as const,
+    coordinates: {
+      lat: 9.08,
+      lng: 7.4,
+    },
+  };
+  const baseFilters = {
+    search: "",
+    radiusKm: 10,
+    openNow: false,
+    priceBand: "" as const,
+    category: "",
+  };
+  const clearedSearchKey = buildNearbyRequestKey(location, baseFilters);
+  const activeSearchKey = buildNearbyRequestKey(location, {
+    ...baseFilters,
+    search: "suya",
+  });
+  const widerRadiusKey = buildNearbyRequestKey(location, {
+    ...baseFilters,
+    radiusKm: 30,
+  });
+  const categoryKey = buildNearbyRequestKey(location, {
+    ...baseFilters,
+    category: "grill",
+  });
+
+  assert.notEqual(activeSearchKey, clearedSearchKey);
+  assert.notEqual(widerRadiusKey, clearedSearchKey);
+  assert.notEqual(categoryKey, clearedSearchKey);
+  assert.match(activeSearchKey, /"search":"suya"/);
+  assert.match(widerRadiusKey, /"radiusKm":30/);
 });

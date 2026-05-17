@@ -264,6 +264,22 @@ export function normalizeVendor(value: unknown, index: number): NormalizedVendor
         description: normalizeString(value.featured_dish.description),
       }
     : null;
+  const categories = Array.isArray(value.categories)
+    ? value.categories.flatMap((category) => {
+        if (!isObject(category)) {
+          return [];
+        }
+
+        const slug = normalizeString(category.slug);
+
+        return slug
+          ? [{
+              name: normalizeString(category.name),
+              slug,
+            }]
+          : [];
+      })
+    : undefined;
   const distanceKm = normalizeNumber(value.distance_km ?? value.distanceKm);
 
   if (name === "Unknown Vendor") {
@@ -290,6 +306,7 @@ export function normalizeVendor(value: unknown, index: number): NormalizedVendor
     distanceKm: distanceKm !== null && distanceKm >= 0 ? distanceKm : undefined,
     is_open_now: resolvedIsOpenNow === true,
     featured_dish: featuredDish,
+    ...(categories ? { categories } : {}),
     today_hours: todayHours,
     imageUrl: FALLBACK_VENDOR_IMAGE_URL,
     hasValidCoordinates,

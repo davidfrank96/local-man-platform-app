@@ -33,6 +33,55 @@ export const PUBLIC_NEARBY_SEARCH_RATE_LIMIT = {
   blockDurationMs: 2 * 60_000,
 } as const;
 
+export const PUBLIC_RIDER_APPLICATION_RATE_LIMIT = {
+  id: "public_rider_application",
+  maxRequests: 5,
+  windowMs: 60 * 60_000,
+  blockDurationMs: 60 * 60_000,
+} as const;
+
+export const PUBLIC_RIDER_SUGGESTIONS_RATE_LIMIT = {
+  id: "public_rider_suggestions",
+  maxRequests: 60,
+  windowMs: 10 * 60_000,
+  blockDurationMs: 5 * 60_000,
+} as const;
+
+export const PUBLIC_RIDER_CONTACT_RATE_LIMIT = {
+  id: "public_rider_contact",
+  maxRequests: 5,
+  windowMs: 60 * 60_000,
+  blockDurationMs: 60 * 60_000,
+} as const;
+
+export const PUBLIC_RIDER_CONTACT_VENDOR_RATE_LIMIT = {
+  id: "public_rider_contact_vendor",
+  maxRequests: 3,
+  windowMs: 60 * 60_000,
+  blockDurationMs: 60 * 60_000,
+} as const;
+
+export const PUBLIC_RIDER_CONTACT_RIDER_COOLDOWN_RATE_LIMIT = {
+  id: "public_rider_contact_rider_cooldown",
+  maxRequests: 1,
+  windowMs: 5 * 60_000,
+  blockDurationMs: 5 * 60_000,
+} as const;
+
+export const PUBLIC_RIDER_UNAVAILABLE_REPORT_RATE_LIMIT = {
+  id: "public_rider_unavailable_report",
+  maxRequests: 5,
+  windowMs: 60 * 60_000,
+  blockDurationMs: 60 * 60_000,
+} as const;
+
+export const PUBLIC_RIDER_UNAVAILABLE_REPORT_RIDER_RATE_LIMIT = {
+  id: "public_rider_unavailable_report_rider",
+  maxRequests: 2,
+  windowMs: 60 * 60_000,
+  blockDurationMs: 60 * 60_000,
+} as const;
+
 type RateLimitPolicy = {
   id: string;
   maxRequests: number;

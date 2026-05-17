@@ -1,9 +1,25 @@
 import type { NearbyVendorsResponseData, PriceBand } from "../../types/index.ts";
+import {
+  getSearchRelevanceScore,
+  normalizeSearchText,
+  type SearchMatchField,
+} from "./search.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 type DiscoveryRankableVendor = {
   vendor_id: string;
   name: string;
+  slug?: string | null;
+  short_description?: string | null;
+  area?: string | null;
+  featured_dish?: {
+    dish_name: string;
+    description: string | null;
+  } | null;
+  categories?: Array<{
+    name: string | null;
+    slug: string;
+  }>;
   is_open_now?: boolean | null;
   ranking_score?: number | null;
   distance_km?: number | null;
@@ -94,9 +110,48 @@ export function sortDiscoveryVendors(
   vendors: NearbyVendor[],
   filters: DiscoveryFiltersLike,
 ): NearbyVendor[] {
-  void filters;
+  const normalizedSearch = normalizeSearchText(filters.search);
 
-  return [...vendors].sort(compareDiscoveryVendors);
+  if (!normalizedSearch) {
+    return [...vendors].sort(compareDiscoveryVendors);
+  }
+
+  return vendors
+    .map((vendor) => ({
+      vendor,
+      searchScore: getSearchRelevanceScore(normalizedSearch, getDiscoverySearchFields(vendor)),
+    }))
+    .filter((entry) => entry.searchScore > 0)
+    .sort((left, right) => {
+      const searchRankDifference = right.searchScore - left.searchScore;
+      if (searchRankDifference !== 0) return searchRankDifference;
+
+      return compareDiscoveryVendors(left.vendor, right.vendor);
+    })
+    .map((entry) => entry.vendor);
+}
+
+function getDiscoverySearchFields(vendor: DiscoveryRankableVendor): SearchMatchField[] {
+  const dishFields = vendor.featured_dish
+    ? [
+        { kind: "dish" as const, value: vendor.featured_dish.dish_name },
+        { kind: "description" as const, value: vendor.featured_dish.description },
+      ]
+    : [];
+  const categoryFields =
+    vendor.categories?.flatMap((category) => [
+      { kind: "category" as const, value: category.name },
+      { kind: "category" as const, value: category.slug },
+    ]) ?? [];
+
+  return [
+    { kind: "name", value: vendor.name },
+    { kind: "slug", value: vendor.slug },
+    { kind: "description", value: vendor.short_description },
+    { kind: "area", value: vendor.area },
+    ...dishFields,
+    ...categoryFields,
+  ];
 }
 
 export function getPopularVendorIds(vendors: NearbyVendor[]): Set<string> {

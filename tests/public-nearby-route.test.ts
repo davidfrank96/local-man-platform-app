@@ -91,7 +91,7 @@ test.beforeEach(() => {
   resetAbuseProtectionStateForTests();
 });
 
-test("nearby candidate query pushes category, price, and search filters into Supabase", async () => {
+test("nearby candidate query pushes bounding category and price filters into Supabase", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = toUrl(input);
@@ -103,9 +103,10 @@ test("nearby candidate query pushes category, price, and search filters into Sup
 
     assert.equal(url.pathname, "/rest/v1/vendors");
     assert.match(url.searchParams.get("select") ?? "", /vendor_category_map!inner/);
+    assert.match(url.searchParams.get("select") ?? "", /vendor_categories!inner\(slug,name\)/);
     assert.equal(url.searchParams.get("vendor_category_map.vendor_categories.slug"), "eq.rice");
     assert.equal(url.searchParams.get("price_band"), "eq.budget");
-    assert.match(url.searchParams.get("or") ?? "", /name\.ilike/);
+    assert.equal(url.searchParams.get("or"), null);
     assert.equal(url.searchParams.get("is_active"), "eq.true");
     assert.equal(
       requestInit.next?.revalidate,
@@ -120,6 +121,7 @@ test("nearby candidate query pushes category, price, and search filters into Sup
           {
             vendor_categories: {
               slug: "rice",
+              name: "Rice",
             },
           },
         ],
@@ -148,7 +150,7 @@ test("nearby candidate query pushes category, price, and search filters into Sup
   }
 });
 
-test("nearby candidate query keeps the lighter select when no category filter is present", async () => {
+test("nearby candidate query keeps category summaries available for app-side search", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = toUrl(input);
@@ -160,6 +162,7 @@ test("nearby candidate query keeps the lighter select when no category filter is
 
     assert.equal(url.pathname, "/rest/v1/vendors");
     assert.doesNotMatch(url.searchParams.get("select") ?? "", /!inner/);
+    assert.match(url.searchParams.get("select") ?? "", /vendor_category_map\(vendor_categories\(slug,name\)\)/);
     assert.equal(url.searchParams.get("vendor_category_map.vendor_categories.slug"), null);
     assert.ok(
       (requestInit.next?.revalidate ?? Number.POSITIVE_INFINITY) <=
@@ -193,11 +196,8 @@ test("nearby route sanitizes injection-like search input and does not use the ra
     const url = toUrl(input);
 
     if (url.pathname === "/rest/v1/vendors") {
-      const orFilter = url.searchParams.get("or") ?? "";
-
-      assert.match(orFilter, /name\.ilike/);
-      assert.match(orFilter, /\*OR 11--\*/);
-      assert.doesNotMatch(orFilter, /'|=/);
+      assert.equal(url.searchParams.get("or"), null);
+      assert.equal(url.searchParams.get("search"), null);
 
       return Response.json([createCandidateVendor(0)]);
     }
@@ -215,7 +215,86 @@ test("nearby route sanitizes injection-like search input and does not use the ra
 
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
-    assert.ok(body.data.vendors.length <= 1);
+    assert.deepEqual(body.data.vendors, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("nearby route searches featured dishes and categories with strong matches first", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = toUrl(input);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      assert.equal(url.searchParams.get("or"), null);
+
+      return Response.json([
+        createCandidateVendor(0, {
+          id: "weak-description",
+          name: "Everyday Food",
+          slug: "everyday-food",
+          short_description: "Sometimes serves suya by request.",
+          longitude: 7.3986 + 0.001,
+        }),
+        createCandidateVendor(1, {
+          id: "dish-match",
+          name: "Evening Grill",
+          slug: "evening-grill",
+          short_description: "Chicken and chips.",
+          longitude: 7.3986 + 0.002,
+          vendor_featured_dishes: [
+            {
+              dish_name: "Beef suya",
+              description: "Peppered skewers",
+              is_featured: true,
+            },
+          ],
+        }),
+        createCandidateVendor(2, {
+          id: "category-match",
+          name: "Neighborhood Kitchen",
+          slug: "neighborhood-kitchen",
+          short_description: "Daily meals.",
+          longitude: 7.3986 + 0.003,
+          vendor_category_map: [
+            {
+              vendor_categories: {
+                slug: "suya",
+                name: "Suya",
+              },
+            },
+          ],
+        }),
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_vendor_usage_scores") {
+      return Response.json([]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const response = await nearbyRoute(
+      createNearbyNextRequest(
+        "http://localhost/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=30&search=suya",
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      body.data.vendors.map((vendor: { slug: string }) => vendor.slug),
+      ["neighborhood-kitchen", "evening-grill", "everyday-food"],
+    );
+    assert.deepEqual(body.data.vendors[0].categories, [
+      { name: "Suya", slug: "suya" },
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

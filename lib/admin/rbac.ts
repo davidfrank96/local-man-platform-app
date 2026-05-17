@@ -8,6 +8,7 @@ export const adminPermissions = [
   "platform_logs:read",
   "admin_users:manage",
   "vendor:delete",
+  "riders:manage",
 ] as const;
 
 export type AdminPermission = (typeof adminPermissions)[number];
@@ -34,6 +35,7 @@ export function hasAdminPermission(
     case "platform_logs:read":
     case "admin_users:manage":
     case "vendor:delete":
+    case "riders:manage":
       return false;
   }
 }

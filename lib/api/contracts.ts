@@ -11,6 +11,7 @@ export type AppErrorCode =
   | "AUTH_ERROR"
   | "SESSION_ERROR"
   | "USER_ALREADY_EXISTS"
+  | "CONFLICT"
   | "INVALID_PASSWORD"
   | "VALIDATION_ERROR"
   | "NETWORK_ERROR"
@@ -83,6 +84,54 @@ export const apiEndpoints = {
       "duplicate attempts must not update average_rating or review_count",
     ],
   },
+  getVendorRiderSuggestions: {
+    access: "public",
+    method: "GET",
+    path: "/api/vendors/[slug]/riders",
+    requestShape: "Route param: slug.",
+    responseShape:
+      "Public-safe rider suggestion cards for verified, visible independent riders. Response excludes rider phone, WhatsApp, legal name, private notes, and internal status fields.",
+    validationBoundary: [
+      "slug must match the documented slug format",
+      "riders must be verification_status=verified and visibility_status=visible",
+      "suggestions must not expose raw rider phone or WhatsApp values",
+      "server-side service-role reads must shape the response before returning it to public clients",
+    ],
+  },
+  createRiderContactHandoff: {
+    access: "public",
+    method: "POST",
+    path: "/api/vendors/[slug]/riders/contact",
+    requestShape:
+      "Route param: slug. JSON body with riderId, customerName, customerPhone, delivery location mode/address/area, order note, payment note type, and disclaimerAccepted=true.",
+    responseShape:
+      "Minimal contact intent id, public-safe selected rider card, and WhatsApp click-to-chat URL for the selected rider only.",
+    validationBoundary: [
+      "slug and riderId must be valid",
+      "disclaimerAccepted must be true",
+      "selected rider must be verified and visible",
+      "customer phone must be hashed before storage",
+      "response must not expose raw rider contact columns outside the selected WhatsApp URL",
+      "Localman must not collect payment, assign delivery, or auto-send WhatsApp messages",
+    ],
+  },
+  reportRiderUnavailable: {
+    access: "public",
+    method: "POST",
+    path: "/api/vendors/[slug]/riders/report-unavailable",
+    requestShape:
+      "Route param: slug. JSON body with riderId, unavailable reason, and optional reporter phone.",
+    responseShape:
+      "Minimal acknowledgement and report id for an admin-only rider availability report.",
+    validationBoundary: [
+      "slug and riderId must be valid",
+      "reason must be one of no_response, unavailable, wrong_number, or other",
+      "selected rider must still be verified and visible before accepting a public report",
+      "reporter phone must be hashed before storage",
+      "report data must never be publicly readable",
+      "one anonymous report must not auto-suspend or hide a rider",
+    ],
+  },
   getCategories: {
     access: "public",
     method: "GET",
@@ -132,6 +181,22 @@ export const apiEndpoints = {
       "slug must be unique",
       "coordinates must be valid numbers",
       "phone number must be sanitized",
+    ],
+  },
+  createAdminRider: {
+    access: "admin",
+    method: "POST",
+    path: "/api/admin/riders",
+    requestShape:
+      "JSON body with manual rider intake fields, status choices, operating areas, and consent_confirmed=true.",
+    responseShape: "Created admin rider profile with private fields for the protected admin workspace.",
+    validationBoundary: [
+      "admin authentication and riders:manage permission required",
+      "display_name, phone, whatsapp_phone, operating_areas, and consent confirmation are required",
+      "visible riders must also be verified",
+      "duplicate phone or WhatsApp values return 409 without creating a row",
+      "unsafe payment, identity, photo-upload, dispatch, and order fields must be rejected",
+      "create action must write a safe audit log without raw service credentials",
     ],
   },
   intakeVendors: {
