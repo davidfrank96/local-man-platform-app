@@ -33,6 +33,13 @@ export const PUBLIC_NEARBY_SEARCH_RATE_LIMIT = {
   blockDurationMs: 2 * 60_000,
 } as const;
 
+export const PUBLIC_RIDER_APPLICATION_RATE_LIMIT = {
+  id: "public_rider_application",
+  maxRequests: 5,
+  windowMs: 60 * 60_000,
+  blockDurationMs: 60 * 60_000,
+} as const;
+
 type RateLimitPolicy = {
   id: string;
   maxRequests: number;

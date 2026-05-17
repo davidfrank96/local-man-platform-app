@@ -297,6 +297,27 @@ export const riderUnavailableReportRequestSchema = z.object({
   reporterPhone: riderPhoneSchema.optional(),
 });
 
+export const riderApplicationRequestSchema = z.object({
+  displayName: z.string().trim().min(1).max(80),
+  fullName: z.string().trim().min(1).max(120),
+  phone: riderPhoneSchema,
+  whatsappPhone: riderPhoneSchema,
+  vehicleType: z.string().trim().min(1).max(80),
+  plateNumber: optionalRiderTextSchema(40),
+  operatingAreas: riderOperatingAreasSchema.min(1),
+  usualAvailableHours: z.string().trim().min(1).max(240),
+  consentAccepted: z.literal(true),
+  independentRiderDisclaimerAccepted: z.literal(true),
+});
+
+export const riderApplicationResponseDataSchema = z.object({
+  received: z.literal(true),
+  review_status: z.literal("pending_review"),
+  verification_status: z.literal("pending"),
+  visibility_status: z.literal("hidden"),
+  message: nonEmptyTextSchema,
+}).strict();
+
 export const adminUserSchema = z.object({
   id: uuidSchema,
   email: z.email(),

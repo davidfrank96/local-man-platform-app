@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   publicRiderSuggestionSchema,
+  riderApplicationRequestSchema,
+  riderApplicationResponseDataSchema,
   riderContactHandoffRequestSchema,
   riderPaymentNoteTypeSchema,
   riderSchema,
@@ -181,4 +183,73 @@ test("payment note contract stays limited to direct coordination states", () => 
   assert.equal(riderPaymentNoteTypeSchema.safeParse("pay_vendor_on_pickup").success, true);
   assert.equal(riderPaymentNoteTypeSchema.safeParse("cash_on_delivery").success, true);
   assert.equal(riderPaymentNoteTypeSchema.safeParse("localman_escrow").success, false);
+});
+
+test("rider application schema requires consent, disclaimer, and public-safe input", () => {
+  const validApplication = {
+    displayName: "Amina Rider",
+    fullName: "Amina Musa",
+    phone: "+2348000000000",
+    whatsappPhone: "+2348000000001",
+    vehicleType: "Bike",
+    plateNumber: "",
+    operatingAreas: ["Wuse", "Garki"],
+    usualAvailableHours: "Weekdays 10 AM - 7 PM",
+    consentAccepted: true,
+    independentRiderDisclaimerAccepted: true,
+  };
+
+  assert.equal(riderApplicationRequestSchema.safeParse(validApplication).success, true);
+  assert.equal(
+    riderApplicationRequestSchema.safeParse({
+      ...validApplication,
+      consentAccepted: false,
+    }).success,
+    false,
+  );
+  assert.equal(
+    riderApplicationRequestSchema.safeParse({
+      ...validApplication,
+      independentRiderDisclaimerAccepted: false,
+    }).success,
+    false,
+  );
+  assert.equal(
+    riderApplicationRequestSchema.safeParse({
+      ...validApplication,
+      phone: "invalid",
+    }).success,
+    false,
+  );
+  assert.equal(
+    riderApplicationRequestSchema.safeParse({
+      ...validApplication,
+      operatingAreas: [],
+    }).success,
+    false,
+  );
+});
+
+test("rider application response schema exposes only review status", () => {
+  assert.equal(
+    riderApplicationResponseDataSchema.safeParse({
+      received: true,
+      review_status: "pending_review",
+      verification_status: "pending",
+      visibility_status: "hidden",
+      message: "Application received.",
+    }).success,
+    true,
+  );
+  assert.equal(
+    riderApplicationResponseDataSchema.safeParse({
+      received: true,
+      review_status: "approved",
+      verification_status: "verified",
+      visibility_status: "visible",
+      message: "Visible.",
+      phone: "+2348000000000",
+    }).success,
+    false,
+  );
 });
