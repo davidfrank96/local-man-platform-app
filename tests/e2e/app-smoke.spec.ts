@@ -3282,8 +3282,16 @@ test.describe("Phase 3 browser smoke", () => {
     const homeFilters = page.getByTestId("mobile-home-filters");
     const homeSearch = homeFilters.locator('input[name="search"]');
     await expect(homeSearch).toBeVisible();
+    const riceSearchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("search") === "rice"
+      );
+    });
     await homeSearch.fill("rice");
-    await homeSearch.press("Enter");
+    await riceSearchResponse;
 
     await expect(page).toHaveURL(/q=rice/);
     await expect(page.locator(".vendor-card")).toHaveCount(1);
@@ -3302,8 +3310,16 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(`.discovery-map [data-vendor-id="${riceVendorId}"]`)).toBeVisible();
     await expect(page.locator(`.discovery-map [data-vendor-id="${suyaVendorId}"]`)).toHaveCount(0);
 
+    const suyaSearchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("search") === "suya"
+      );
+    });
     await mapSearch.fill("suya");
-    await mapSearch.press("Enter");
+    await suyaSearchResponse;
     await expect(page).toHaveURL(/q=suya/);
     await expect(mapSearch).toHaveValue("suya");
     await expect(page.locator(`.discovery-map [data-vendor-id="${suyaVendorId}"]`)).toBeVisible();
@@ -3315,11 +3331,27 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page).toHaveURL(/radius_km=30/);
     await expect(mapSearch).toHaveValue("suya");
 
+    const clearSearchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("radius_km") === "30" &&
+        !url.searchParams.has("search")
+      );
+    });
+    await mapSearch.fill("");
+    await clearSearchResponse;
+    await expect(page).not.toHaveURL(/q=suya/);
+    await expect(mapSearch).toHaveValue("");
+    await expect(page.locator(`.discovery-map [data-vendor-id="${riceVendorId}"]`)).toBeVisible();
+    await expect(page.locator(`.discovery-map [data-vendor-id="${suyaVendorId}"]`)).toBeVisible();
+
     await openMobileDiscoveryTab(page, "home");
     await expect(homeSearch).toBeVisible();
-    await expect(homeSearch).toHaveValue("suya");
-    await expect(page.locator(".vendor-card")).toHaveCount(1);
-    await expect(page.locator(".vendor-card").first().locator("h3")).toContainText("Suya Map Grill");
+    await expect(homeSearch).toHaveValue("");
+    await expect(page.locator(".vendor-card")).toHaveCount(2);
+    await expect(page.locator(".vendor-card").first().locator("h3")).toContainText("Rice Home Stall");
 
     await openMobileDiscoveryTab(page, "about");
     await expect(page.getByTestId("mobile-about-view")).toBeVisible();
@@ -3633,13 +3665,29 @@ test.describe("Phase 3 browser smoke", () => {
     await expect.poll(async () => page.locator(".vendor-card:visible").count()).toBe(1);
 
     const homeFilters = page.getByTestId("mobile-home-filters");
+    const impossibleSearchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        url.searchParams.get("search") === "zzzz-impossible"
+      );
+    });
     await homeFilters.locator('input[name="search"]').fill("zzzz-impossible");
-    await homeFilters.locator('input[name="search"]').press("Enter");
+    await impossibleSearchResponse;
     await expect(page.getByTestId("discovery-empty-state")).toContainText("Nothing matched your search.");
     await expect(page.getByTestId("discovery-empty-state")).toContainText("Try another vendor, dish, or area.");
 
+    const clearSearchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.pathname === "/api/vendors/nearby" &&
+        !url.searchParams.has("search")
+      );
+    });
     await homeFilters.locator('input[name="search"]').fill("");
-    await homeFilters.locator('input[name="search"]').press("Enter");
+    await clearSearchResponse;
     await expect.poll(async () => page.locator(".vendor-card:visible").count()).toBe(1);
 
     await homeFilters.locator('button[aria-label="Open filters"]').click();

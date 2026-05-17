@@ -12,6 +12,11 @@ import {
   getVendorAvailabilitySnapshot,
   type VendorHourWindow,
 } from "./hours.ts";
+import {
+  getSearchRelevanceScore,
+  normalizeSearchText,
+  type SearchMatchField,
+} from "./search.ts";
 
 export const DEFAULT_NEARBY_RADIUS_KM = 10;
 export const MAX_NEARBY_VENDOR_RESULTS = 50;
@@ -19,6 +24,11 @@ export const MAX_NEARBY_VENDOR_RESULTS = 50;
 export type NearbyVendorFeaturedDishSummary = {
   dish_name: string;
   description: string | null;
+};
+
+export type NearbyVendorCategorySummary = {
+  name: string | null;
+  slug: string;
 };
 
 export type VendorLocationRecord = {
@@ -43,6 +53,7 @@ export type VendorLocationRecord = {
   vendor_category_map?: Array<{
     vendor_categories: {
       slug: string;
+      name?: string | null;
     } | null;
   }> | null;
 };
@@ -63,11 +74,13 @@ export type NearbyVendorResult = {
   distance_km: number;
   is_open_now: boolean;
   featured_dish: NearbyVendorFeaturedDishSummary | null;
+  categories?: NearbyVendorCategorySummary[];
   today_hours: string;
 };
 
 type NearbyVendorSortable = NearbyVendorResult & {
   rawDistanceKm: number;
+  searchRelevanceScore: number;
 };
 
 export type VendorUsageScoreMap = Map<string, number>;
@@ -85,12 +98,47 @@ export function getNearbyBoundingBox(query: ResolvedNearbyVendorsQuery): Boundin
   );
 }
 
-function matchesSearch(vendor: VendorLocationRecord, search: string): boolean {
-  const normalizedSearch = search.toLowerCase();
+function getVendorCategorySummaries(
+  vendor: VendorLocationRecord,
+): NearbyVendorCategorySummary[] {
+  return (
+    vendor.vendor_category_map
+      ?.flatMap((mapping) => {
+        const category = mapping.vendor_categories;
 
-  return [vendor.name, vendor.short_description, vendor.area]
-    .filter(Boolean)
-    .some((value) => value?.toLowerCase().includes(normalizedSearch));
+        return category?.slug
+          ? [{
+              name: category.name ?? null,
+              slug: category.slug,
+            }]
+          : [];
+      }) ?? []
+  );
+}
+
+function getVendorSearchFields(vendor: VendorLocationRecord): SearchMatchField[] {
+  const dishFields =
+    vendor.vendor_featured_dishes?.flatMap((dish) => [
+      { kind: "dish" as const, value: dish.dish_name },
+      { kind: "description" as const, value: dish.description },
+    ]) ?? [];
+  const categoryFields = getVendorCategorySummaries(vendor).flatMap((category) => [
+    { kind: "category" as const, value: category.name },
+    { kind: "category" as const, value: category.slug },
+  ]);
+
+  return [
+    { kind: "name", value: vendor.name },
+    { kind: "slug", value: vendor.slug },
+    { kind: "description", value: vendor.short_description },
+    { kind: "area", value: vendor.area },
+    ...dishFields,
+    ...categoryFields,
+  ];
+}
+
+function getVendorSearchScore(vendor: VendorLocationRecord, search: string): number {
+  return getSearchRelevanceScore(search, getVendorSearchFields(vendor));
 }
 
 function matchesCategory(vendor: VendorLocationRecord, category: string): boolean {
@@ -134,6 +182,7 @@ export function findNearbyVendors(
     lng: query.lng,
   };
   const radiusKm = getEffectiveNearbyRadiusKm(query.radius_km);
+  const normalizedSearch = normalizeSearchText(query.search);
   const results: NearbyVendorSortable[] = [];
 
   for (const vendor of vendors) {
@@ -143,7 +192,10 @@ export function findNearbyVendors(
     if (query.price_band && vendor.price_band !== query.price_band) {
       continue;
     }
-    if (query.search && !matchesSearch(vendor, query.search)) {
+    const searchRelevanceScore = normalizedSearch
+      ? getVendorSearchScore(vendor, normalizedSearch)
+      : 0;
+    if (normalizedSearch && searchRelevanceScore <= 0) {
       continue;
     }
     if (query.category && !matchesCategory(vendor, query.category)) {
@@ -185,19 +237,30 @@ export function findNearbyVendors(
       distance_km: roundDistanceKm(rawDistanceKm),
       is_open_now: availability.isOpenNow,
       featured_dish: getFeaturedDishSummary(vendor),
+      categories: getVendorCategorySummaries(vendor),
       today_hours: availability.todayHours,
       rawDistanceKm,
+      searchRelevanceScore,
     };
 
     results.push(result);
   }
 
-  results.sort(compareDiscoveryVendors);
+  results.sort((left, right) => {
+    if (normalizedSearch) {
+      const searchRankDifference =
+        right.searchRelevanceScore - left.searchRelevanceScore;
+      if (searchRankDifference !== 0) return searchRankDifference;
+    }
+
+    return compareDiscoveryVendors(left, right);
+  });
 
   return results
     .slice(0, MAX_NEARBY_VENDOR_RESULTS)
-    .map(({ rawDistanceKm, ...vendor }) => {
+    .map(({ rawDistanceKm, searchRelevanceScore, ...vendor }) => {
       void rawDistanceKm;
+      void searchRelevanceScore;
       return vendor;
     });
 }

@@ -171,6 +171,47 @@ test("discovery sorting does not let search relevance override the ranking contr
   ]);
 });
 
+test("discovery search ranking prioritizes suya name, dish, and category matches", () => {
+  const weakDescriptionMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000002",
+    slug: "everyday-food",
+    name: "Everyday Food",
+    short_description: "Sometimes serves suya on request.",
+    distance_km: 0.4,
+    ranking_score: 20,
+  });
+  const dishMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000003",
+    slug: "evening-grill",
+    name: "Evening Grill",
+    featured_dish: {
+      dish_name: "Beef suya",
+      description: "Peppered skewers",
+    },
+    distance_km: 3,
+  });
+  const nameMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000004",
+    slug: "suya-palace",
+    name: "Suya Palace",
+    distance_km: 5,
+  });
+
+  const results = sortDiscoveryVendors(
+    [weakDescriptionMatch, dishMatch, nameMatch],
+    {
+      ...baseFilters,
+      search: "suya",
+    },
+  );
+
+  assert.deepEqual(results.map((vendor) => vendor.slug), [
+    "suya-palace",
+    "evening-grill",
+    "everyday-food",
+  ]);
+});
+
 test("discovery comparator sends unknown distances after finite distances", () => {
   const sorted = [
     createVendor({ vendor_id: "2", slug: "unknown-distance", distance_km: Number.NaN }),

@@ -113,6 +113,11 @@ export const nearbyVendorFeaturedDishSummarySchema = z.object({
   description: z.string().nullable(),
 });
 
+export const nearbyVendorCategorySummarySchema = z.object({
+  name: z.string().nullable(),
+  slug: slugSchema,
+});
+
 export const vendorImageSchema = z.object({
   id: uuidSchema,
   vendor_id: uuidSchema,
@@ -856,6 +861,7 @@ export const nearbyVendorsResponseDataSchema = z.object({
       distance_km: z.number().min(0),
       is_open_now: z.boolean(),
       featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),
+      categories: z.array(nearbyVendorCategorySummarySchema).optional(),
       today_hours: z.string(),
     }),
   ),

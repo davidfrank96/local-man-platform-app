@@ -12,6 +12,9 @@ import type {
   VendorCategory,
   VendorDetailResponseData,
 } from "../../types/index.ts";
+import { sanitizePublicSearchInput } from "./search.ts";
+
+export { sanitizePublicSearchInput } from "./search.ts";
 
 export type PublicNearbyFilters = {
   lat?: number;
@@ -26,22 +29,12 @@ export type PublicNearbyFilters = {
 
 export type PublicCategory = Pick<VendorCategory, "id" | "name" | "slug">;
 
-const MAX_PUBLIC_SEARCH_LENGTH = 100;
-
 function appendDefinedParam(params: URLSearchParams, key: string, value: unknown) {
   if (value === undefined || value === null || value === "") {
     return;
   }
 
   params.set(key, String(value));
-}
-
-export function sanitizePublicSearchInput(input: string | null | undefined): string {
-  if (typeof input !== "string") {
-    return "";
-  }
-
-  return input.trim().slice(0, MAX_PUBLIC_SEARCH_LENGTH);
 }
 
 function encodePublicSearchQuery(input: string): string {

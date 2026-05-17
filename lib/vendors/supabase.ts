@@ -62,6 +62,7 @@ const nearbyVendorBaseSelect = [
   "is_open_override",
   "vendor_hours(day_of_week,open_time,close_time,is_closed)",
   "vendor_featured_dishes(dish_name,description,is_featured)",
+  "vendor_category_map(vendor_categories(slug,name))",
 ].join(",");
 
 const vendorUsageEventTypes: VendorUsageEventType[] = [
@@ -257,12 +258,6 @@ async function fetchVendorUsageScoresFromEvents(
   return scores;
 }
 
-function sanitizeNearbySearchInput(search: string | null | undefined): string {
-  return String(search || "")
-    .replace(/[^\w\s-]/g, "")
-    .trim();
-}
-
 export async function fetchNearbyVendorCandidates(
   query: ResolvedNearbyVendorsQuery,
   config: SupabaseRestConfig,
@@ -270,7 +265,10 @@ export async function fetchNearbyVendorCandidates(
   const box = getNearbyBoundingBox(query);
   const url = new URL("/rest/v1/vendors", config.url);
   const select = query.category
-    ? `${nearbyVendorBaseSelect},vendor_category_map!inner(vendor_categories!inner(slug))`
+    ? nearbyVendorBaseSelect.replace(
+        "vendor_category_map(vendor_categories(slug,name))",
+        "vendor_category_map!inner(vendor_categories!inner(slug,name))",
+      )
     : nearbyVendorBaseSelect;
 
   url.searchParams.set("select", select);
@@ -289,16 +287,6 @@ export async function fetchNearbyVendorCandidates(
       url,
       "vendor_category_map.vendor_categories.slug",
       `eq.${query.category}`,
-    );
-  }
-
-  const safeSearch = sanitizeNearbySearchInput(query.search);
-
-  if (safeSearch) {
-    appendFilter(
-      url,
-      "or",
-      `(name.ilike.*${safeSearch}*,short_description.ilike.*${safeSearch}*,area.ilike.*${safeSearch}*)`,
     );
   }
 

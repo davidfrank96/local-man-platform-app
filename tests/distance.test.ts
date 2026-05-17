@@ -225,7 +225,7 @@ test("keeps open vendors ahead of closed vendors before ranking and distance", (
   );
 });
 
-test("keeps search as filtering while preserving nearby ranking order", () => {
+test("search ranking puts strong name matches ahead of weak area matches", () => {
   const vendors: VendorLocationRecord[] = [
     {
       ...baseVendor,
@@ -263,7 +263,64 @@ test("keeps search as filtering while preserving nearby ranking order", () => {
 
   assert.deepEqual(
     results.map((vendor) => vendor.vendor_id),
-    ["ranked-area-match", "prefix-name-match"],
+    ["prefix-name-match", "ranked-area-match"],
+  );
+});
+
+test("search matches featured dishes and categories before unrelated vendors", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "suya-dish",
+      name: "Evening Grill",
+      short_description: "Chicken and chips.",
+      latitude: 0,
+      longitude: 0.03,
+      vendor_featured_dishes: [
+        {
+          dish_name: "Beef suya",
+          description: "Peppered skewers",
+          is_featured: true,
+        },
+      ],
+    },
+    {
+      ...baseVendor,
+      id: "suya-category",
+      name: "Neighborhood Kitchen",
+      short_description: "Daily meals.",
+      latitude: 0,
+      longitude: 0.02,
+      vendor_category_map: [
+        {
+          vendor_categories: {
+            slug: "suya",
+            name: "Suya",
+          },
+        },
+      ],
+    },
+    {
+      ...baseVendor,
+      id: "unrelated",
+      name: "Rice Bowl",
+      short_description: "Jollof rice and stew.",
+      latitude: 0,
+      longitude: 0.01,
+    },
+  ];
+
+  const results = findNearbyVendors(vendors, {
+    lat: 0,
+    lng: 0,
+    location_source: "precise",
+    radius_km: 5,
+    search: "suya",
+  });
+
+  assert.deepEqual(
+    results.map((vendor) => vendor.vendor_id),
+    ["suya-category", "suya-dish"],
   );
 });
 

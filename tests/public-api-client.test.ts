@@ -96,6 +96,7 @@ test("public API client sanitizes and encodes special-character search input saf
 
 test("public API client trims and caps search input length", () => {
   assert.equal(sanitizePublicSearchInput("   jollof rice   "), "jollof rice");
+  assert.equal(sanitizePublicSearchInput("   jollof     rice   "), "jollof rice");
   assert.equal(sanitizePublicSearchInput(""), "");
   assert.equal(sanitizePublicSearchInput(null), "");
   assert.equal(sanitizePublicSearchInput("x".repeat(120)).length, 100);

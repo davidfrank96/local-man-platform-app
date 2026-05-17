@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { LocationSource, PriceBand } from "../../types/index.ts";
 import {
   sanitizePublicSearchInput,
@@ -19,7 +19,7 @@ type VendorFiltersProps = {
   filters: DiscoveryFilters;
   categories: PublicCategory[];
   locationSource?: LocationSource | null;
-  onChange: (filters: DiscoveryFilters) => void;
+  onChange: (filters: DiscoveryFilters, options?: { keepPanelsOpen?: boolean }) => void;
   variant?: "default" | "mobileFloating" | "desktopFloating";
   panelOpen?: boolean;
   onTogglePanel?: () => void;
@@ -27,6 +27,7 @@ type VendorFiltersProps = {
 
 const radiusOptions = [1, 5, 10, 30];
 const priceBands: PriceBand[] = ["budget", "standard", "premium"];
+const SEARCH_APPLY_DEBOUNCE_MS = 250;
 const defaultFilters: DiscoveryFilters = {
   search: "",
   radiusKm: 10,
@@ -56,7 +57,16 @@ export function VendorFilters({
   panelOpen = false,
   onTogglePanel,
 }: VendorFiltersProps) {
-  const [draftFilters, setDraftFilters] = useState<DiscoveryFilters>(filters);
+  const filtersStateKey = JSON.stringify(filters);
+  const [draftState, setDraftState] = useState<{
+    filters: DiscoveryFilters;
+    key: string;
+  }>(() => ({
+    filters,
+    key: filtersStateKey,
+  }));
+  const draftFilters = draftState.key === filtersStateKey ? draftState.filters : filters;
+  const searchApplyTimeoutRef = useRef<number | null>(null);
   const panelId = useId();
   const activeFilterCount = countActiveDiscoveryFilters(draftFilters);
   const isFloating = variant === "mobileFloating" || variant === "desktopFloating";
@@ -65,14 +75,96 @@ export function VendorFilters({
       ? "discovery-filters discovery-filters-mobile"
       : "discovery-filters discovery-filters-desktop";
 
+  useEffect(() => {
+    return () => {
+      if (searchApplyTimeoutRef.current !== null) {
+        window.clearTimeout(searchApplyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function clearPendingSearchApply() {
+    if (searchApplyTimeoutRef.current !== null) {
+      window.clearTimeout(searchApplyTimeoutRef.current);
+      searchApplyTimeoutRef.current = null;
+    }
+  }
+
+  function setDraftFilters(nextFilters: DiscoveryFilters) {
+    setDraftState({
+      filters: nextFilters,
+      key: filtersStateKey,
+    });
+  }
+
+  function updateDraftFilters(
+    updater: (current: DiscoveryFilters) => DiscoveryFilters,
+  ) {
+    setDraftFilters(updater(draftFilters));
+  }
+
+  function trackAppliedSearch(nextFilters: DiscoveryFilters) {
+    if (nextFilters.search.length === 0) {
+      return;
+    }
+
+    trackPublicUserAction({
+      event_type: "search_used",
+      page_path:
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/",
+      location_source: locationSource ?? null,
+      search_query: nextFilters.search,
+      filters: nextFilters,
+      metadata: { source: "typed_search" },
+    });
+  }
+
+  function applySearchFilters(nextDraftFilters: DiscoveryFilters, immediate: boolean) {
+    const nextFilters = {
+      ...nextDraftFilters,
+      search: sanitizePublicSearchInput(nextDraftFilters.search),
+    };
+
+    clearPendingSearchApply();
+
+    if (immediate || nextFilters.search.length === 0) {
+      onChange(nextFilters, { keepPanelsOpen: true });
+      if (nextFilters.search.length > 0) {
+        trackAppliedSearch(nextFilters);
+      }
+      return;
+    }
+
+    searchApplyTimeoutRef.current = window.setTimeout(() => {
+      searchApplyTimeoutRef.current = null;
+      onChange(nextFilters, { keepPanelsOpen: true });
+      trackAppliedSearch(nextFilters);
+    }, SEARCH_APPLY_DEBOUNCE_MS);
+  }
+
+  function updateSearchDraft(value: string) {
+    const nextFilters = {
+      ...draftFilters,
+      search: value,
+    };
+
+    setDraftFilters(nextFilters);
+    applySearchFilters(nextFilters, value.trim().length === 0);
+  }
+
   function clearFilters() {
+    clearPendingSearchApply();
     setDraftFilters(defaultFilters);
     onChange(defaultFilters);
   }
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    clearPendingSearchApply();
     const nextFilters = readFormFilters(event.currentTarget);
+    setDraftFilters(nextFilters);
 
     trackPublicUserAction({
       event_type: "filter_applied",
@@ -123,12 +215,7 @@ export function VendorFilters({
                 value={draftFilters.search}
                 name="search"
                 placeholder="Vendor, dish, or area"
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    search: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateSearchDraft(event.target.value)}
               />
             </label>
             <button
@@ -179,7 +266,7 @@ export function VendorFilters({
                   value={draftFilters.radiusKm}
                   name="radiusKm"
                   onChange={(event) =>
-                    setDraftFilters((current) => ({
+                    updateDraftFilters((current) => ({
                       ...current,
                       radiusKm: Number(event.target.value),
                     }))
@@ -198,7 +285,7 @@ export function VendorFilters({
                   value={draftFilters.priceBand}
                   name="priceBand"
                   onChange={(event) =>
-                    setDraftFilters((current) => ({
+                    updateDraftFilters((current) => ({
                       ...current,
                       priceBand: event.target.value as DiscoveryFilters["priceBand"],
                     }))
@@ -220,7 +307,7 @@ export function VendorFilters({
                 disabled={categories.length === 0}
                 name="category"
                 onChange={(event) =>
-                  setDraftFilters((current) => ({
+                  updateDraftFilters((current) => ({
                     ...current,
                     category: event.target.value,
                   }))
@@ -240,7 +327,7 @@ export function VendorFilters({
                 name="openNow"
                 type="checkbox"
                 onChange={(event) =>
-                  setDraftFilters((current) => ({
+                  updateDraftFilters((current) => ({
                     ...current,
                     openNow: event.target.checked,
                   }))
@@ -278,12 +365,7 @@ export function VendorFilters({
               value={draftFilters.search}
               name="search"
               placeholder="Vendor, dish, or area"
-              onChange={(event) =>
-                setDraftFilters((current) => ({
-                  ...current,
-                  search: event.target.value,
-                }))
-              }
+              onChange={(event) => updateSearchDraft(event.target.value)}
             />
           </label>
           <label className="field">
@@ -292,7 +374,7 @@ export function VendorFilters({
               value={draftFilters.radiusKm}
               name="radiusKm"
               onChange={(event) =>
-                setDraftFilters((current) => ({
+                updateDraftFilters((current) => ({
                   ...current,
                   radiusKm: Number(event.target.value),
                 }))
@@ -311,7 +393,7 @@ export function VendorFilters({
               value={draftFilters.priceBand}
               name="priceBand"
               onChange={(event) =>
-                setDraftFilters((current) => ({
+                updateDraftFilters((current) => ({
                   ...current,
                   priceBand: event.target.value as DiscoveryFilters["priceBand"],
                 }))
@@ -332,7 +414,7 @@ export function VendorFilters({
               disabled={categories.length === 0}
               name="category"
               onChange={(event) =>
-                setDraftFilters((current) => ({
+                updateDraftFilters((current) => ({
                   ...current,
                   category: event.target.value,
                 }))
@@ -352,7 +434,7 @@ export function VendorFilters({
               name="openNow"
               type="checkbox"
               onChange={(event) =>
-                setDraftFilters((current) => ({
+                updateDraftFilters((current) => ({
                   ...current,
                   openNow: event.target.checked,
                 }))
