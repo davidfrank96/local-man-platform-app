@@ -155,13 +155,16 @@ export function handleAppError(
     role?: ErrorVisibilityRole;
     context?: string;
     toast?: boolean;
+    log?: boolean;
   },
 ): VisibleError {
   const fallbackMessage = options?.fallbackMessage ?? "Something went wrong.";
   const role = options?.role ?? "user";
   const visibleError = handleApiError(error, fallbackMessage, role);
 
-  logClientError(error, fallbackMessage, options?.context);
+  if (options?.log !== false) {
+    logClientError(error, fallbackMessage, options?.context);
+  }
 
   if (options?.toast !== false) {
     showToast({

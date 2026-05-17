@@ -705,6 +705,16 @@ export const adminAnalyticsDropoffSchema = z.object({
   sessions_with_detail_without_action: z.coerce.number().int().min(0).nullable(),
 });
 
+export const adminAnalyticsRiderMetricsSchema = z.object({
+  total: z.coerce.number().int().min(0).default(0),
+  verified: z.coerce.number().int().min(0).default(0),
+  pending: z.coerce.number().int().min(0).default(0),
+  rejected: z.coerce.number().int().min(0).default(0),
+  visible: z.coerce.number().int().min(0).default(0),
+  hidden: z.coerce.number().int().min(0).default(0),
+  suspended: z.coerce.number().int().min(0).default(0),
+});
+
 export const adminAnalyticsRecentEventSchema = z.object({
   id: uuidSchema,
   event_type: analyticsEventTypeSchema,
@@ -726,6 +736,15 @@ export const adminAnalyticsResponseDataSchema = z.object({
     most_directions_clicks: z.array(adminAnalyticsVendorMetricSchema),
   }),
   dropoff: adminAnalyticsDropoffSchema,
+  rider_metrics: adminAnalyticsRiderMetricsSchema.default({
+    total: 0,
+    verified: 0,
+    pending: 0,
+    rejected: 0,
+    visible: 0,
+    hidden: 0,
+    suspended: 0,
+  }),
   recent_events: z.array(adminAnalyticsRecentEventSchema),
 });
 

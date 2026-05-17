@@ -77,6 +77,25 @@ function formatAdminErrorStatus(error: unknown, fallbackMessage: string): AdminF
   return createAdminFeedback("error", visibleError.message, visibleError.code, visibleError.detail);
 }
 
+function formatExpectedAdminErrorStatus(error: unknown, fallbackMessage: string): AdminFeedback {
+  const visibleError = handleAppError(error, {
+    fallbackMessage,
+    role: "admin",
+    context: "admin_rider_management",
+    log: false,
+  });
+  return createAdminFeedback("error", visibleError.message, visibleError.code, visibleError.detail);
+}
+
+function isExpectedCreateConflict(error: unknown): boolean {
+  return !!error &&
+    typeof error === "object" &&
+    "code" in error &&
+    "status" in error &&
+    error.code === "CONFLICT" &&
+    error.status === 409;
+}
+
 function formatDateTime(value: string | null): string {
   if (!value) {
     return "Not recorded";
@@ -349,7 +368,11 @@ export function AdminRiderManagement() {
       setIsCreateOpen(false);
       setFeedback(createAdminFeedback("success", `${createdRider.display_name} created.`));
     } catch (error) {
-      setFeedback(formatAdminErrorStatus(error, "Unable to create rider."));
+      setFeedback(
+        isExpectedCreateConflict(error)
+          ? formatExpectedAdminErrorStatus(error, "Unable to create rider.")
+          : formatAdminErrorStatus(error, "Unable to create rider."),
+      );
     } finally {
       setIsCreating(false);
     }

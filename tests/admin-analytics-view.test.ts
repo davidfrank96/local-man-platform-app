@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildAnalyticsMetricCards,
+  buildRiderAnalyticsMetricCards,
   formatAnalyticsEventLabel,
   formatAnalyticsMetricValue,
   getNextRecentAnalyticsEventCount,
@@ -34,6 +35,15 @@ const emptyAnalytics: AdminAnalyticsResponseData = {
     sessions_without_meaningful_interaction: null,
     sessions_with_search_without_vendor_click: null,
     sessions_with_detail_without_action: null,
+  },
+  rider_metrics: {
+    total: 0,
+    verified: 0,
+    pending: 0,
+    rejected: 0,
+    visible: 0,
+    hidden: 0,
+    suspended: 0,
   },
   recent_events: [],
 };
@@ -77,6 +87,23 @@ test("analytics view helpers expose recent activity and vendor performance", () 
   assert.equal(hasAnalyticsVendorPerformance(analytics), true);
   assert.equal(hasRecentAnalyticsEvents(analytics), true);
   assert.equal(formatAnalyticsEventLabel("vendor_selected"), "Vendor Selected");
+});
+
+test("analytics view helpers expose rider status cards", () => {
+  const riderCards = buildRiderAnalyticsMetricCards({
+    total: 7,
+    verified: 3,
+    pending: 2,
+    rejected: 1,
+    visible: 2,
+    hidden: 4,
+    suspended: 1,
+  });
+
+  assert.equal(riderCards.length, 7);
+  assert.equal(riderCards[0]?.label, "Total riders");
+  assert.equal(riderCards[0]?.value, "7");
+  assert.equal(riderCards.find((card) => card.label === "Visible riders")?.value, "2");
 });
 
 test("analytics view helpers paginate recent activity safely", () => {

@@ -6,6 +6,7 @@ import type {
   adminAnalyticsQuerySchema,
   adminAnalyticsRangeSchema,
   adminAnalyticsResponseDataSchema,
+  adminAnalyticsRiderMetricsSchema,
   adminAnalyticsRecentEventSchema,
   adminAnalyticsSummarySchema,
   adminAnalyticsVendorMetricSchema,
@@ -122,6 +123,7 @@ export type AdminOperationalLogsQuery = z.infer<typeof adminOperationalLogsQuery
 export type AdminAnalyticsSummary = z.infer<typeof adminAnalyticsSummarySchema>;
 export type AdminAnalyticsVendorMetric = z.infer<typeof adminAnalyticsVendorMetricSchema>;
 export type AdminAnalyticsDropoff = z.infer<typeof adminAnalyticsDropoffSchema>;
+export type AdminAnalyticsRiderMetrics = z.infer<typeof adminAnalyticsRiderMetricsSchema>;
 export type AdminAnalyticsRecentEvent = z.infer<typeof adminAnalyticsRecentEventSchema>;
 export type AdminAnalyticsResponseData = z.infer<typeof adminAnalyticsResponseDataSchema>;
 

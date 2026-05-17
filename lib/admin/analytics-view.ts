@@ -50,6 +50,20 @@ export function buildAnalyticsMetricCards(summary: AdminAnalyticsResponseData["s
   ];
 }
 
+export function buildRiderAnalyticsMetricCards(
+  riderMetrics: AdminAnalyticsResponseData["rider_metrics"],
+) {
+  return [
+    { label: "Total riders", value: formatAnalyticsMetricValue(riderMetrics.total), note: "Registered rider profiles" },
+    { label: "Verified riders", value: formatAnalyticsMetricValue(riderMetrics.verified), note: "Ready for visibility when enabled" },
+    { label: "Pending riders", value: formatAnalyticsMetricValue(riderMetrics.pending), note: "Awaiting admin review" },
+    { label: "Rejected riders", value: formatAnalyticsMetricValue(riderMetrics.rejected), note: "Not eligible for suggestions" },
+    { label: "Visible riders", value: formatAnalyticsMetricValue(riderMetrics.visible), note: "Eligible for public suggestions" },
+    { label: "Hidden riders", value: formatAnalyticsMetricValue(riderMetrics.hidden), note: "Not shown publicly" },
+    { label: "Suspended riders", value: formatAnalyticsMetricValue(riderMetrics.suspended), note: "Paused from suggestions" },
+  ];
+}
+
 export function hasAnalyticsVendorPerformance(data: AdminAnalyticsResponseData): boolean {
   return (
     data.vendor_performance.most_selected_vendors.length > 0 ||

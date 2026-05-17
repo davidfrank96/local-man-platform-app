@@ -741,6 +741,15 @@ async function mockAuthenticatedAdminWorkspace(
             sessions_with_search_without_vendor_click: null,
             sessions_with_detail_without_action: null,
           },
+          rider_metrics: {
+            total: 4,
+            verified: 2,
+            pending: 1,
+            rejected: 1,
+            visible: 2,
+            hidden: 1,
+            suspended: 1,
+          },
           recent_events: buildMockAnalyticsRecentEvents(analyticsRecentEventCount),
         },
         error: null,
@@ -2657,6 +2666,9 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.goto("/admin/analytics");
     await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rider Connect" })).toBeVisible();
+    await expect(page.getByText("Total riders")).toBeVisible();
+    await expect(page.getByText("Visible riders")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recent user events" })).toBeVisible();
     await expect(page.getByRole("button", { name: "View more activity" })).toHaveCount(0);
     await expect(page.locator(".admin-scroll-panel-events")).toBeVisible();

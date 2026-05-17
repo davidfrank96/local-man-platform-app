@@ -82,11 +82,13 @@ function createAnalyticsFetchMock(options?: {
   isAdmin?: boolean;
   events?: unknown[];
   vendors?: unknown[];
+  riders?: unknown[];
 }): typeof fetch {
   const {
     isAdmin = true,
     events = [],
     vendors = [],
+    riders = [],
   } = options ?? {};
 
   return (async (input: URL | RequestInfo) => {
@@ -120,6 +122,10 @@ function createAnalyticsFetchMock(options?: {
 
     if (url.pathname === "/rest/v1/vendors") {
       return Response.json(vendors);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json(riders);
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -216,6 +222,12 @@ test("admin analytics route aggregates summary and vendor metrics", async () => 
         slug: "test-vendor",
       },
     ],
+    riders: [
+      { verification_status: "verified", visibility_status: "visible" },
+      { verification_status: "verified", visibility_status: "hidden" },
+      { verification_status: "pending", visibility_status: "hidden" },
+      { verification_status: "rejected", visibility_status: "suspended" },
+    ],
   });
 
   try {
@@ -232,6 +244,13 @@ test("admin analytics route aggregates summary and vendor metrics", async () => 
     assert.equal(body.data.summary.vendor_detail_opens, 2);
     assert.equal(body.data.summary.searches_used, 1);
     assert.equal(body.data.summary.filters_applied, 2);
+    assert.equal(body.data.rider_metrics.total, 4);
+    assert.equal(body.data.rider_metrics.verified, 2);
+    assert.equal(body.data.rider_metrics.pending, 1);
+    assert.equal(body.data.rider_metrics.rejected, 1);
+    assert.equal(body.data.rider_metrics.visible, 1);
+    assert.equal(body.data.rider_metrics.hidden, 2);
+    assert.equal(body.data.rider_metrics.suspended, 1);
     assert.equal(
       body.data.vendor_performance.most_selected_vendors[0].vendor_name,
       "Test Vendor",
@@ -310,6 +329,13 @@ test("admin analytics route uses the aggregated rpc snapshot when available", as
       });
     }
 
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([
+        { verification_status: "verified", visibility_status: "visible" },
+        { verification_status: "pending", visibility_status: "hidden" },
+      ]);
+    }
+
     return Response.json({ message: "Unexpected request" }, { status: 500 });
   }) as typeof fetch;
 
@@ -323,6 +349,9 @@ test("admin analytics route uses the aggregated rpc snapshot when available", as
     assert.equal(body.success, true);
     assert.equal(body.data.summary.total_events, 9);
     assert.equal(body.data.summary.call_clicks, 1);
+    assert.equal(body.data.rider_metrics.total, 2);
+    assert.equal(body.data.rider_metrics.verified, 1);
+    assert.equal(body.data.rider_metrics.pending, 1);
     assert.equal(
       requestedUrls.some((value) =>
         new URL(value).pathname === "/rest/v1/rpc/get_admin_analytics_snapshot"),
@@ -392,6 +421,10 @@ test("admin analytics route caches aggregated rpc responses by range", async () 
         },
         recent_events: [],
       });
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([]);
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -642,6 +675,10 @@ test("admin analytics route uses service role credentials for analytics reads wh
       return Response.json([]);
     }
 
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([]);
+    }
+
     return Response.json({ message: "Unexpected request" }, { status: 500 });
   }) as typeof fetch;
 
@@ -740,6 +777,10 @@ test("admin analytics route paginates event reads so lower-volume call and direc
       ]);
     }
 
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([]);
+    }
+
     return Response.json({ message: "Unexpected request" }, { status: 500 });
   }) as typeof fetch;
 
@@ -797,6 +838,10 @@ test("admin analytics route uses bounded paginated user_events queries", async (
       return Response.json([]);
     }
 
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([]);
+    }
+
     return Response.json({ message: "Unexpected request" }, { status: 500 });
   }) as typeof fetch;
 
@@ -844,6 +889,10 @@ test("admin analytics route returns structured 504 on analytics timeout", async 
           role: "admin",
         },
       ]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([]);
     }
 
     if (url.pathname === "/rest/v1/user_events") {
