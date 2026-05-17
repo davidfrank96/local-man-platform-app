@@ -212,6 +212,66 @@ Notes:
 - The admin workspace reads these rows through `/api/admin/logs` and `/admin/logs` when `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true`.
 - Retention is intentionally bounded through `npm run db:prune:operational-events`, which defaults to a 30 day window unless overridden by `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`.
 
+## Table: riders
+- id: uuid, primary key
+- display_name: text, required
+- full_name: text nullable
+- phone: text, required
+- whatsapp_phone: text, required
+- photo_url: text nullable
+- vehicle_type: text nullable
+- plate_number: text nullable
+- operating_areas: text[] default empty
+- usual_available_hours: jsonb nullable
+- verification_status: text default `pending`
+- visibility_status: text default `hidden`
+- notes: text nullable
+- consent_accepted_at: timestamp nullable
+- created_at: timestamp
+- updated_at: timestamp
+
+Runtime rules:
+- `verification_status` must be `pending`, `verified`, or `rejected`.
+- `visibility_status` must be `hidden`, `visible`, or `suspended`.
+- Public applications are inserted as `pending` and `hidden`.
+- Riders become eligible for public suggestions only when both `verified` and `visible`.
+- Raw `phone` and `whatsapp_phone` are admin/server-only fields and are never returned from public suggestion APIs.
+- `usual_available_hours` stores listed/usual availability labels, not live availability.
+
+## Table: rider_contact_intents
+- id: uuid, primary key
+- vendor_id: uuid, foreign key to vendors
+- rider_id: uuid, foreign key to riders
+- customer_phone_hash: text nullable
+- delivery_area: text nullable
+- location_mode: text nullable
+- payment_note_type: text nullable
+- disclaimer_accepted_at: timestamp
+- whatsapp_link_generated_at: timestamp
+- request_metadata: jsonb nullable
+- created_at: timestamp
+
+Runtime rules:
+- Created only after a user accepts the Rider Connect disclaimer and selects a rider.
+- The selected rider must still be `verified` and `visible`.
+- `customer_phone_hash` is a server-side HMAC hash; raw customer phone is not stored.
+- Raw delivery address is used transiently to build the WhatsApp message and is not stored in a first-class column.
+- `request_metadata` remains minimal and must not store raw phone, full customer address, service-role keys, or private rider contact data.
+
+## Table: rider_unavailable_reports
+- id: uuid, primary key
+- rider_id: uuid, foreign key to riders
+- vendor_id: uuid nullable, foreign key to vendors
+- reason: text
+- reporter_phone_hash: text nullable
+- created_at: timestamp
+
+Runtime rules:
+- `reason` must be `no_response`, `unavailable`, `wrong_number`, `unsafe`, or `other`.
+- Optional reporter phone is hashed before storage.
+- Reports are admin-review signals only and do not auto-suspend riders.
+- Public users cannot read unavailable reports.
+
 ## Suggested Indexes
 - vendors.slug
 - vendors.city
@@ -239,6 +299,11 @@ Notes:
 - operational_events.area
 - operational_events.event
 - operational_events.route
+- riders.visibility_status and verification_status
+- riders.operating_areas
+- rider_contact_intents.vendor_id and created_at
+- rider_contact_intents.rider_id and created_at
+- rider_unavailable_reports.rider_id and created_at
 
 Current notes:
 - `vendors.is_open_now` is not a persisted column in this schema; open status is derived from `vendor_hours` and `is_open_override`, so there is no direct database index for `is_open_now`.
@@ -266,6 +331,8 @@ Admin users can:
 - read admin users
 - read and create audit logs
 - read operational events
+- manage rider profiles
+- read rider contact intents and unavailable reports
 
 ## Data API Grant Rules
 The public schema is intentionally explicit-grant only.
@@ -279,18 +346,24 @@ Public read grants exist for:
 - `vendor_images`
 - `ratings`
 
-Authenticated workspace grants exist for vendor-management mutations where RLS allows the current admin/agent role.
+Anon receives no direct table grants for Rider Connect tables because `riders` contains sensitive phone/WhatsApp fields. Public rider suggestions, contact handoffs, applications, and unavailable reports go through server routes that use service-role access and return shaped safe responses.
+
+Authenticated workspace grants exist for vendor and rider-management mutations where RLS allows the current admin/agent role.
 
 Service-role grants exist for:
 - admin/server route writes
 - analytics/event/rating writes
 - image upload/delete bookkeeping
+- Rider Connect application inserts, safe suggestion shaping, contact-intent writes, unavailable-report writes, and admin rider APIs
 - migration bookkeeping through `app_schema_migrations`
 
 Anon must not receive access to:
 - `admin_users`
 - `audit_logs`
 - `operational_events`
+- `riders`
+- `rider_contact_intents`
+- `rider_unavailable_reports`
 - `app_schema_migrations`
 
 Function execution is also explicit. RLS helper functions remain executable because policies call them during row checks; trigger/admin/RPC functions remain service_role-only unless a migration documents a narrower public need.
@@ -301,5 +374,7 @@ Potential future additions:
 - account-backed rating identity
 - vendor verification state
 - operating status events
+- distributed Rider Connect abuse limiter
+- account-backed rider availability/availability verification
 
 These are not Phase 1 deliverables.

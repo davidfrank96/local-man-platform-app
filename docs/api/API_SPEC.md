@@ -12,7 +12,7 @@ Initial route foundation:
 - `lib/api/contracts.ts`
 - `lib/api/responses.ts`
 
-The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, ranking-aware discovery ordering, featured dish summary selection, and compact `today_hours` output. Authenticated admin routes cover vendor create, update, deactivate, sub-resources, and audit-log behavior.
+The API foundation defines route files, access boundaries, request shapes, response shapes, and validation boundaries. `GET /api/vendors/nearby` includes the Supabase candidate query, dynamic distance calculation, radius filtering, ranking-aware discovery ordering, featured dish summary selection, and compact `today_hours` output. Authenticated admin routes cover vendor and rider management, sub-resources, and audit-log behavior.
 
 Media model:
 - vendor profile images live in `vendor_images`
@@ -206,6 +206,130 @@ Behavior:
 - returns `NOT_FOUND` when the vendor slug does not resolve to an active vendor
 - returns `UPSTREAM_ERROR` when the rating RPC or summary refresh fails
 
+### GET /api/vendors/:slug/riders
+Purpose: return public-safe Rider Connect suggestions for a vendor
+
+Route file:
+- `app/api/vendors/[slug]/riders/route.ts`
+
+Returns:
+- `vendor_slug`
+- `riders`, containing only:
+  - `rider_id`
+  - `display_name`
+  - `photo_url`
+  - `vehicle_type`
+  - `operating_areas`
+  - `usual_availability_label`
+
+Behavior:
+- requires a valid active vendor slug
+- returns only riders with `verification_status = verified` and `visibility_status = visible`
+- sorts riders matching the vendor area before other listed riders, then by display name
+- uses service-role server access so the public response can be safely shaped
+- does not expose rider phone, WhatsApp phone, full legal name, notes, or internal status fields
+- rate limits suggestion requests:
+  - threshold: `60` requests per `10` minutes per vendor-scope/client bucket
+  - block window: `5` minutes after exceeding the threshold
+- returns `NOT_FOUND` when the vendor slug does not resolve
+- returns `UPSTREAM_ERROR` when the Supabase rider or vendor lookup fails
+
+### POST /api/vendors/:slug/riders/contact
+Purpose: create a minimal Rider Connect contact intent and return the selected-rider WhatsApp handoff URL
+
+Route file:
+- `app/api/vendors/[slug]/riders/contact/route.ts`
+
+Request body:
+- `riderId`
+- `customerName`
+- `customerPhone`
+- `deliveryLocationMode`: `current_location` or `manual_address`
+- `deliveryAddress`
+- `deliveryArea`
+- `orderNote`
+- `paymentNoteType`: `coordinate_directly`, `already_paid_vendor`, `pay_vendor_on_pickup`, or `cash_on_delivery`
+- `disclaimerAccepted`: must be `true`
+
+Returns:
+- `intent_id`
+- `whatsapp_url`
+- safe selected rider card fields matching the public suggestion contract
+
+Behavior:
+- validates request params and body before database access
+- requires disclaimer acceptance
+- verifies the vendor exists and is active
+- verifies the selected rider is still `verified` and `visible`
+- stores a `rider_contact_intents` row only after validation
+- stores `customer_phone_hash`, not raw customer phone
+- stores delivery area and minimal request metadata only; raw customer address is used transiently for the WhatsApp message
+- generates a WhatsApp click-to-chat URL for the selected rider only
+- includes vendor phone, vendor address/map, customer name/phone/address, order note, payment note, and Localman disclaimer copy in the WhatsApp message
+- does not send WhatsApp messages through Localman
+- does not collect payment, assign delivery, create an order, or guarantee fulfilment
+- rate limits contact handoffs:
+  - general threshold: `5` per hour
+  - per-vendor threshold: `3` per hour
+  - same-rider cooldown: `1` per `5` minutes
+- returns `NOT_FOUND` when the vendor or selected rider does not resolve
+- returns `TOO_MANY_REQUESTS` with `Retry-After` when rate limited
+
+### POST /api/vendors/:slug/riders/report-unavailable
+Purpose: store a lightweight rider unavailable report for admin review
+
+Route file:
+- `app/api/vendors/[slug]/riders/report-unavailable/route.ts`
+
+Request body:
+- `riderId`
+- `reason`: `no_response`, `unavailable`, `wrong_number`, `unsafe`, or `other`
+- `reporterPhone`, optional
+
+Returns:
+- `received`
+- `report_id`
+- public-safe acknowledgement message
+
+Behavior:
+- validates vendor slug, rider id, reason, and optional reporter phone
+- verifies the vendor exists and the rider is still a reportable verified/visible rider
+- stores only `reporter_phone_hash` when a reporter phone is provided
+- does not expose report data publicly
+- does not auto-suspend or punish a rider from one anonymous report
+- rate limits unavailable reports:
+  - general threshold: `5` per hour
+  - same-rider threshold: `2` per hour
+
+### POST /api/riders/apply
+Purpose: accept public independent rider applications for admin review
+
+Route file:
+- `app/api/riders/apply/route.ts`
+
+Request body:
+- `displayName`
+- `fullName`
+- `phone`
+- `whatsappPhone`
+- `vehicleType`
+- `plateNumber`, optional
+- `operatingAreas`
+- `usualAvailableHours`
+- `consentAccepted`: must be `true`
+- `independentRiderDisclaimerAccepted`: must be `true`
+
+Behavior:
+- validates and sanitizes public rider application input
+- requires profile-storage consent and independent-rider disclaimer acceptance
+- writes to `public.riders` server-side with `verification_status = pending` and `visibility_status = hidden`
+- never makes a rider public automatically
+- does not collect photo upload, NIN, BVN, bank account, payment, wallet, password, delivery fee, or live location data
+- rate limits repeated public applications:
+  - threshold: `5` per hour
+  - block window: `1` hour after exceeding the threshold
+- returns a safe review-status response and never returns private DB fields or service-role details
+
 ### GET /api/categories
 Purpose: fetch filter categories
 
@@ -265,6 +389,77 @@ Admin endpoint rules:
 - Vendor list, create, update, and delete routes call typed admin vendor service methods.
 - Vendor create, update, and delete routes write audit logs.
 - Unexpected Supabase response shapes return `UPSTREAM_ERROR` without leaking raw parser failures.
+
+### GET /api/admin/riders
+List Rider Connect profiles and applications
+
+Route file:
+- `app/api/admin/riders/route.ts`
+
+Query params:
+- `limit`
+- `offset`
+- `search`
+- `verification_status`
+- `visibility_status`
+
+Behavior:
+- requires `riders:manage`
+- returns private/admin rider fields for the protected admin workspace
+- supports server-side status filters and safe search by name, phone, vehicle, plate, notes, or operating area
+- includes bounded contact-intent and unavailable-report counts when available
+
+### POST /api/admin/riders
+Create a Rider Connect profile from manual/admin intake
+
+Route file:
+- `app/api/admin/riders/route.ts`
+
+Behavior:
+- requires `riders:manage`
+- accepts manual intake fields: display name, optional full legal name, phone, WhatsApp phone, vehicle type, plate number, operating areas, usual available hours, notes, verification status, visibility status, and external consent confirmation
+- defaults new profiles to `verification_status = pending` and `visibility_status = hidden`
+- requires admin confirmation that the rider provided consent outside Localman
+- rejects unsafe fields such as photo upload, payment, bank, NIN, BVN, or dispatch/order data
+- rejects duplicate rider profiles when phone or WhatsApp already matches an existing rider
+- only allows `visibility_status = visible` when `verification_status = verified`
+- writes a `CREATE_RIDER` audit log with safe metadata only
+- does not approve individual deliveries, assign riders, process payments, or mediate disputes
+
+### GET /api/admin/riders/:id
+Fetch one Rider Connect profile
+
+Route file:
+- `app/api/admin/riders/[id]/route.ts`
+
+Behavior:
+- requires `riders:manage`
+- returns one admin rider profile plus contact/report counts
+- returns `NOT_FOUND` for missing rider ids
+
+### PATCH /api/admin/riders/:id
+Update managed Rider Connect profile fields
+
+Route file:
+- `app/api/admin/riders/[id]/route.ts`
+
+Behavior:
+- requires `riders:manage`
+- accepts only managed rider fields:
+  - display name
+  - full legal name
+  - phone
+  - WhatsApp phone
+  - vehicle type
+  - plate number
+  - operating areas
+  - usual available hours
+  - verification status
+  - visibility status
+  - notes
+- rejects invalid statuses and unsafe fields
+- writes audit logs for rider profile/status changes
+- does not approve individual deliveries, assign riders, process payments, or mediate disputes
 
 ### POST /api/admin/login
 Create a cookie-backed admin session
@@ -708,7 +903,7 @@ Notes:
 - request params and request bodies should be parsed through `lib/validation/` schemas before business logic runs
 
 ## Boundary Rules
-- Public endpoints are read-only.
+- Public reads stay public-safe; public writes are limited to intentionally supported no-login flows such as ratings, events, Rider Connect applications, contact handoffs, and unavailable reports.
 - Admin endpoints require Supabase admin authentication before business logic runs.
 - Route handlers should parse input at the edge, pass validated values to service code, and return the standard response shape.
 - Supabase query logic should not be embedded directly in route files once business logic is implemented.

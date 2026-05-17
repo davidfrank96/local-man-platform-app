@@ -20,10 +20,13 @@ Close Phase 6 `Usage Signals` with a stable analytics surface, discovery refinem
 - refine time-based theming without compromising card readability
 - keep admin vendor create, edit, deactivate, hours, dishes, and image flows stable
 - keep tests, docs, and runtime checks aligned with the shipped surface
+- document Rider Connect as a lightweight independent-rider WhatsApp handoff, with no payment, dispatch, or delivery guarantee model
 
 ## Out of Scope
 - delivery
 - payments
+- delivery dispatch and order tracking
+- rider login/app behavior
 - chat
 - loyalty
 - vendor self-signup
@@ -73,6 +76,8 @@ Phase 6 signal visibility is ready when:
 - Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and keeps search/category behavior as filtering rather than sponsored or opaque relevance ranking.
 - Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.
 - Public vendor detail now supports a lightweight 1-5 star rating flow that updates aggregate vendor rating state.
+- Rider Connect now supports public rider applications, admin rider management, vendor-detail Request Rider handoff, safe rider suggestions, contact intents, and unavailable reports.
+- Rider Connect suggestions exclude phone/WhatsApp values; contact/report phone values are hashed server-side.
 - Mobile discovery now uses a Home/Map/About bottom dock while desktop keeps the combined list/map layout.
 - Home and Map share one search/filter/radius/selected-vendor state; About does not render search or filters.
 - Public discovery cache hydration now rejects request-key mismatches, malformed vendor rows, and known mock/test vendor identities.
@@ -91,6 +96,7 @@ Phase 6 signal visibility is ready when:
 - Pilot quality still depends on complete and accurate vendor data entry.
 - Historical `user_events` rows may not include `session_id`, so exact session drop-off reporting can be incomplete until newer traffic accumulates.
 - Discovery retention is browser-local only and does not sync across devices.
+- Rider Connect abuse limits are currently in-memory and process-local, so distributed throttling remains future hardening.
 
 ## Readiness
 Phase 6 is functionally complete. Deployment readiness depends on keeping the regression gate, runtime gate, production environment configuration, and dependency audit green together.
@@ -101,6 +107,7 @@ Current release-gate notes:
 - real cross-vendor upload verification should be run against both local dev and local production runtime before promotion
 - mobile regression gates should cover dock tab state, shared Home/Map filters, radius filters, empty states, mock-cache rejection, invalid analytics vendor ids, and map refresh state
 - Supabase security gates should cover explicit grants, RLS, function execution grants, and fail-closed default privileges
+- Rider Connect release gates should cover safe copy, hidden/pending applications, verified/visible suggestion filtering, selected-rider-only WhatsApp handoff, hashed phone storage, and report-unavailable review signals
 - high-severity dependency audit findings remain deployment blockers even when functional checks pass
 
 ## Phase 5 Boundaries

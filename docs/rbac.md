@@ -14,6 +14,7 @@ Full workspace access:
 - logs
 - audit-log visibility
 - team access management
+- rider profile management
 - vendor create, edit, and deactivate flows
 - vendor images, dishes, hours, and CSV intake
 
@@ -34,6 +35,7 @@ Agent restrictions:
 - no operational-log access
 - no audit-log access
 - no team/admin-user management
+- no rider management
 - no vendor deactivation
 
 ## Enforcement layers
@@ -68,6 +70,7 @@ Key permission boundaries:
 - `audit_logs:read` -> admin only
 - `platform_logs:read` -> admin only
 - `admin_users:manage` -> admin only
+- `riders:manage` -> admin only
 - `vendor:delete` -> admin only
 
 General vendor create/edit flows remain available to both `admin` and `agent`.
@@ -84,5 +87,6 @@ Important behavior:
 - agents are valid workspace users but not full admins
 - audit log reads remain admin-only
 - vendor category mapping remains admin-only at the DB policy layer, so the server-controlled vendor intake flow performs that step safely
+- rider profile management remains admin-only; public Rider Connect suggestions and handoffs are shaped by server routes and do not expose admin rider fields to anon
 - explicit Supabase Data API grants expose only intended public tables to anon/authenticated roles; admin/internal tables are not anon-readable
 - `app_schema_migrations` remains service-role bookkeeping with a deny-all client RLS policy

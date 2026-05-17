@@ -12,6 +12,7 @@ import { writeAuditLogSafely } from "./audit-log-service.ts";
 import type {
   AdminRider,
   AdminRidersQuery,
+  CreateAdminRiderRequest,
   UpdateAdminRiderRequest,
 } from "../../types/index.ts";
 
@@ -56,6 +57,12 @@ const riderSelectColumns = [
 ].join(",");
 
 const maxAdminRiderFetchLimit = 1000;
+
+const duplicateRiderSchema = z.object({
+  id: z.string().uuid(),
+  phone: z.string().nullable().optional(),
+  whatsapp_phone: z.string().nullable().optional(),
+}).passthrough();
 
 function requireServiceConfig(
   config: AdminAuthConfig | null | undefined,
@@ -265,6 +272,24 @@ function createRiderDetailUrl(config: AdminAuthConfig, riderId: string): URL {
   });
 }
 
+function createRiderDuplicateUrl(
+  config: AdminAuthConfig,
+  column: "phone" | "whatsapp_phone",
+  phone: string,
+): URL {
+  return createRestUrl(config, "riders", {
+    select: "id,phone,whatsapp_phone",
+    [column]: `eq.${phone}`,
+    limit: "1",
+  });
+}
+
+function createRiderInsertUrl(config: AdminAuthConfig): URL {
+  return createRestUrl(config, "riders", {
+    select: riderSelectColumns,
+  });
+}
+
 function getChangedFields(previous: AdminRider, next: AdminRider): string[] {
   const changedFields: string[] = [];
   const trackedFields: Array<keyof UpdateAdminRiderRequest> = [
@@ -299,6 +324,103 @@ function createAuditMetadata(previous: AdminRider, next: AdminRider, changedFiel
     previous_visibility_status: previous.visibility_status,
     next_visibility_status: next.visibility_status,
   };
+}
+
+function createRiderCreateAuditMetadata(rider: AdminRider, areaCount: number) {
+  return {
+    rider_display_name: rider.display_name,
+    verification_status: rider.verification_status,
+    visibility_status: rider.visibility_status,
+    operating_area_count: areaCount,
+    vehicle_type: rider.vehicle_type,
+    consent_confirmed: Boolean(rider.consent_accepted_at),
+  };
+}
+
+function assertVisibleRiderIsVerified(
+  verificationStatus: AdminRider["verification_status"],
+  visibilityStatus: AdminRider["visibility_status"],
+) {
+  if (visibilityStatus !== "visible" || verificationStatus === "verified") {
+    return;
+  }
+
+  throw new AdminServiceError(
+    "VALIDATION_ERROR",
+    "Visible riders must be verified.",
+    400,
+    {
+      verification_status: verificationStatus,
+      visibility_status: visibilityStatus,
+    },
+    "Set verification status to verified before making the rider visible.",
+  );
+}
+
+function createRiderInsertPayload(data: CreateAdminRiderRequest) {
+  const verificationStatus = data.verification_status ?? "pending";
+  const visibilityStatus = data.visibility_status ?? "hidden";
+
+  assertVisibleRiderIsVerified(verificationStatus, visibilityStatus);
+
+  return {
+    display_name: data.display_name,
+    full_name: data.full_name ?? null,
+    phone: data.phone,
+    whatsapp_phone: data.whatsapp_phone,
+    vehicle_type: data.vehicle_type ?? null,
+    plate_number: data.plate_number ?? null,
+    operating_areas: data.operating_areas,
+    usual_available_hours: data.usual_available_hours ?? null,
+    verification_status: verificationStatus,
+    visibility_status: visibilityStatus,
+    notes: data.notes ?? null,
+    consent_accepted_at: data.consent_accepted_at ?? new Date().toISOString(),
+  };
+}
+
+async function assertRiderDoesNotExist(
+  data: Pick<CreateAdminRiderRequest, "phone" | "whatsapp_phone">,
+  context: ResolvedAdminRiderServiceContext,
+) {
+  const phones = Array.from(new Set([data.phone, data.whatsapp_phone]));
+  const duplicateChecks = phones.flatMap((phone) => [
+    fetchJson(
+      createRiderDuplicateUrl(context.config, "phone", phone),
+      {
+        method: "GET",
+        headers: createHeaders(context.session, context.config, ""),
+      },
+      context.fetchImpl,
+    ),
+    fetchJson(
+      createRiderDuplicateUrl(context.config, "whatsapp_phone", phone),
+      {
+        method: "GET",
+        headers: createHeaders(context.session, context.config, ""),
+      },
+      context.fetchImpl,
+    ),
+  ]);
+  const results = await Promise.all(duplicateChecks);
+  const duplicate = results
+    .flatMap((payload) => {
+      const parsed = z.array(duplicateRiderSchema).safeParse(payload);
+      return parsed.success ? parsed.data : [];
+    })
+    .find((row) => row.id);
+
+  if (!duplicate) {
+    return;
+  }
+
+  throw new AdminServiceError(
+    "CONFLICT",
+    "A rider with this phone or WhatsApp number already exists.",
+    409,
+    { rider_id: duplicate.id },
+    "Check the existing rider profile before creating a duplicate.",
+  );
 }
 
 function createResolvedContext(context: AdminRiderServiceContext): ResolvedAdminRiderServiceContext {
@@ -375,6 +497,49 @@ export async function getAdminRider(
   return rider;
 }
 
+export async function createAdminRider(
+  data: CreateAdminRiderRequest,
+  context: AdminRiderServiceContext,
+): Promise<AdminRider> {
+  const resolvedContext = createResolvedContext(context);
+  const insertPayload = createRiderInsertPayload(data);
+
+  await assertRiderDoesNotExist(data, resolvedContext);
+
+  const payload = await fetchJson(
+    createRiderInsertUrl(resolvedContext.config),
+    {
+      method: "POST",
+      headers: createHeaders(resolvedContext.session, resolvedContext.config),
+      body: JSON.stringify(insertPayload),
+    },
+    resolvedContext.fetchImpl,
+  );
+  const createdRider = parseRiderRow(
+    Array.isArray(payload)
+      ? payload.map((row) => ({
+          contact_intent_count: 0,
+          unavailable_report_count: 0,
+          ...row,
+        }))
+      : payload,
+  );
+
+  await writeAuditLogSafely(
+    {
+      action: "CREATE_RIDER",
+      entityType: "rider",
+      entityId: createdRider.id,
+      metadata: createRiderCreateAuditMetadata(createdRider, insertPayload.operating_areas.length),
+    },
+    resolvedContext,
+  );
+
+  const [riderWithCounts] = await loadRiderCounts([createdRider], resolvedContext);
+
+  return riderWithCounts ?? createdRider;
+}
+
 export async function updateAdminRider(
   riderId: string,
   data: UpdateAdminRiderRequest,
@@ -382,6 +547,11 @@ export async function updateAdminRider(
 ): Promise<AdminRider> {
   const resolvedContext = createResolvedContext(context);
   const previousRider = await getAdminRider(riderId, resolvedContext);
+  const nextVerificationStatus = data.verification_status ?? previousRider.verification_status;
+  const nextVisibilityStatus = data.visibility_status ?? previousRider.visibility_status;
+
+  assertVisibleRiderIsVerified(nextVerificationStatus, nextVisibilityStatus);
+
   const payload = await fetchJson(
     createRestUrl(resolvedContext.config, "riders", {
       id: `eq.${riderId}`,

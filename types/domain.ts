@@ -29,6 +29,7 @@ import type {
   publicRiderSuggestionSchema,
   riderApplicationRequestSchema,
   riderApplicationResponseDataSchema,
+  createAdminRiderRequestSchema,
   updateVendorRequestSchema,
   updateAdminRiderRequestSchema,
   riderContactHandoffRequestSchema,
@@ -102,6 +103,7 @@ export type RiderApplicationResponseData = z.infer<
 >;
 export type AdminRider = z.infer<typeof adminRiderSchema>;
 export type AdminRidersQuery = z.infer<typeof adminRidersQuerySchema>;
+export type CreateAdminRiderRequest = z.infer<typeof createAdminRiderRequestSchema>;
 export type UpdateAdminRiderRequest = z.infer<typeof updateAdminRiderRequestSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AdminRole = AdminUser["role"];

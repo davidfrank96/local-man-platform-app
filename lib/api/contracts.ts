@@ -11,6 +11,7 @@ export type AppErrorCode =
   | "AUTH_ERROR"
   | "SESSION_ERROR"
   | "USER_ALREADY_EXISTS"
+  | "CONFLICT"
   | "INVALID_PASSWORD"
   | "VALIDATION_ERROR"
   | "NETWORK_ERROR"
@@ -180,6 +181,22 @@ export const apiEndpoints = {
       "slug must be unique",
       "coordinates must be valid numbers",
       "phone number must be sanitized",
+    ],
+  },
+  createAdminRider: {
+    access: "admin",
+    method: "POST",
+    path: "/api/admin/riders",
+    requestShape:
+      "JSON body with manual rider intake fields, status choices, operating areas, and consent_confirmed=true.",
+    responseShape: "Created admin rider profile with private fields for the protected admin workspace.",
+    validationBoundary: [
+      "admin authentication and riders:manage permission required",
+      "display_name, phone, whatsapp_phone, operating_areas, and consent confirmation are required",
+      "visible riders must also be verified",
+      "duplicate phone or WhatsApp values return 409 without creating a row",
+      "unsafe payment, identity, photo-upload, dispatch, and order fields must be rejected",
+      "create action must write a safe audit log without raw service credentials",
     ],
   },
   intakeVendors: {

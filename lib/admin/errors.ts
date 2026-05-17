@@ -9,6 +9,7 @@ export type AdminServiceErrorCode =
   | "UPSTREAM_ERROR"
   | "AUTH_PROVIDER_ERROR"
   | "USER_ALREADY_EXISTS"
+  | "CONFLICT"
   | "INVALID_PASSWORD"
   | "VALIDATION_ERROR"
   | "NETWORK_ERROR"

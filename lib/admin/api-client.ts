@@ -15,6 +15,7 @@ import type {
   OperationalEvent,
   OperationalEventLevel,
   OperationalEventTimeWindow,
+  CreateAdminRiderRequest,
   CreateManagedVendorRequest,
   CreateVendorDishesRequest,
   PriceBand,
@@ -274,6 +275,9 @@ const adminAuditActions = new Set<AuditActionType>([
   "UPDATE_ADMIN_USER",
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
+  "CREATE_RIDER",
+  "UPDATE_RIDER",
+  "UPDATE_RIDER_STATUS",
 ]);
 
 type AdminApiClientOptions = {
@@ -785,6 +789,22 @@ export async function getAdminRider(
   const result = await requestAdminApi<{ rider: AdminRider }>(
     `/api/admin/riders/${riderId}`,
     options,
+  );
+
+  return result.rider;
+}
+
+export async function createManagedRider(
+  data: CreateAdminRiderRequest,
+  options: AdminApiClientOptions = {},
+): Promise<AdminRider> {
+  const result = await requestAdminApi<{ rider: AdminRider }>(
+    "/api/admin/riders",
+    options,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
   );
 
   return result.rider;

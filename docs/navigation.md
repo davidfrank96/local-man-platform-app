@@ -98,6 +98,7 @@ Default:
 - on desktop this also previews the vendor in the right-column map context
 - on mobile the selected vendor is visible on the Map tab
 - `View details` opens the vendor detail page
+- vendor detail exposes `Request Rider` for the Rider Connect handoff flow when users want to coordinate with an independent rider
 - `Back to map` returns to discovery
 - discovery search, filters, selected vendor, and scroll position are restored through query state plus a short-lived session snapshot
 - restored nearby vendor data is reused only when the snapshot is still fresh enough to trust
@@ -105,6 +106,8 @@ Default:
 - admin vendor create, update, deactivate, hours, image, and featured-dish mutations invalidate restored discovery vendor data
 - vendor-image uploads also invalidate restored discovery data because public vendor detail may now prefer the new storage-backed image
 - mobile Popular and Last selected retention actions use `Open` for direct detail navigation, while desktop can keep map-preview actions where the map is visible beside the list
+
+Rider Connect is detail-page UI, not discovery navigation. It must not change Home/Map/About tab state, map selection, or discovery restoration.
 
 ## Search and filter rules
 

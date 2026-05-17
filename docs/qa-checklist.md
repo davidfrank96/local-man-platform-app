@@ -70,6 +70,13 @@ Use this checklist before pushing or releasing UI work.
 - [ ] back to map restores discovery state
 - [ ] detail hero stays compact
 - [ ] images appear only on the detail page
+- [ ] Request Rider opens the Rider Connect modal
+- [ ] Rider Connect reminds users to call the vendor first
+- [ ] Rider Connect disclaimer states Localman connects users, vendors, and independent riders and does not collect payment or guarantee delivery
+- [ ] rider suggestions show only public-safe rider fields
+- [ ] Message rider opens only after a selected-rider handoff is created
+- [ ] Try another rider and Back to vendor work
+- [ ] report rider unavailable stores a review signal without exposing report data publicly
 
 ## Themes
 
@@ -94,9 +101,11 @@ Use this checklist before pushing or releasing UI work.
 - [ ] admin can access analytics
 - [ ] admin can access logs when operational-event storage is enabled
 - [ ] admin can access team management
+- [ ] admin can access rider management
 - [ ] agent cannot access analytics
 - [ ] agent cannot access logs
 - [ ] agent cannot access team management
+- [ ] agent cannot access rider management
 - [ ] agent cannot access audit logs
 
 ## Audit logs and analytics
@@ -129,6 +138,19 @@ Use this checklist before pushing or releasing UI work.
 - [ ] upload success is not accepted if the metadata row is missing
 - [ ] delete removes the storage object, removes the row, and updates the current image list
 - [ ] public vendor detail renders the uploaded storage-backed image after refresh
+
+## Rider Connect
+
+- [ ] `/riders/apply` renders independent-rider, no-payment, and no-guarantee copy
+- [ ] rider application requires consent and independent-rider disclaimer
+- [ ] successful rider application is stored as hidden and pending
+- [ ] `/admin/riders` renders search, verification filter, visibility filter, status badges, contact counts, report counts, and the independent-rider note
+- [ ] admin can update rider verification and visibility status
+- [ ] public suggestions include only verified and visible riders
+- [ ] public suggestions exclude rider phone and WhatsApp values
+- [ ] contact handoff hashes customer phone and stores minimal metadata
+- [ ] unavailable report hashes reporter phone when provided
+- [ ] Rider Connect copy avoids payment, dispatch, courier, driver, and guarantee wording
 
 ## CSV intake
 

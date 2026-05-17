@@ -14,14 +14,27 @@ This document records the current application security posture for release revie
 ## Public Writes
 
 - Public ratings do not require login, but one anonymous browser identity can rate a given vendor once.
+- Rider Connect public application, suggestion, contact handoff, and unavailable-report routes do not require login, but they are validated and rate-limited server-side.
 - Public event tracking is non-blocking and fire-and-forget.
 - `/api/events` validates referenced vendor ids before insert and skips stale/nonexistent vendors safely.
 - Abuse protection remains server-side and must not be treated as a browser-only guard.
+
+## Rider Connect Privacy and Abuse
+
+- Public rider suggestions are shaped by server routes and expose only rider id, display name, photo URL, vehicle type, operating areas, and usual availability label.
+- Public suggestion responses must not include rider phone, WhatsApp phone, full legal name, internal notes, or internal status fields.
+- Rider contact handoff returns a WhatsApp URL only after the user selects one rider and accepts the disclaimer.
+- Customer and reporter phone values are stored as HMAC hashes. Set `RIDER_CONNECT_HASH_SECRET` in staging and production as a server-only secret.
+- If `RIDER_CONNECT_HASH_SECRET` is missing, the MVP falls back to the service-role key for hashing; rotating that fallback changes future hashes and can reduce comparability with earlier records.
+- Raw customer phone and address are used transiently to build the WhatsApp message and must not be persisted in request metadata.
+- Unavailable reports are admin-review signals only; one anonymous report must not auto-suspend a rider.
+- Current Rider Connect rate limits are in-memory and process-local, so they are best-effort for a single app instance rather than distributed global abuse protection.
 
 ## Supabase Data API Grants
 
 - Public-schema access is explicit-grant only.
 - Public discovery read tables are granted only the access required for public reads.
+- Rider Connect tables are not granted to anon because rider phone/WhatsApp fields live in `public.riders`.
 - Admin/internal tables are not exposed to anon.
 - `app_schema_migrations` has RLS enabled and a deny-all client policy.
 - Service-role access is reserved for server routes, migrations, analytics/event writes, ratings, and storage/image bookkeeping.
@@ -45,5 +58,6 @@ This document records the current application security posture for release revie
 ## Secrets
 
 - Never expose `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, cookies, auth headers, or raw request bodies in client code or logs.
+- Never expose `RIDER_CONNECT_HASH_SECRET` in client code, logs, or `NEXT_PUBLIC_*` env vars.
 - `NEXT_PUBLIC_*` values are browser-visible and must contain only public-safe configuration.
 - `NEXT_PUBLIC_MAP_STYLE_URL` must use a browser-safe map style URL/token.

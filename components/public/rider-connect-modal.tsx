@@ -122,7 +122,7 @@ export function RiderConnectModal({
 
     setFeedback({
       type: "loading",
-      message: "Finding available independent riders...",
+      message: "Finding listed independent riders...",
     });
 
     try {
@@ -365,7 +365,7 @@ export function RiderConnectModal({
                   </div>
                 ) : (
                   <div className="discovery-empty-state">
-                    <strong>No riders available yet.</strong>
+                    <strong>No riders listed yet.</strong>
                     <p>Call {vendorName} directly, or try again later.</p>
                   </div>
                 )}

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   adminRiderSchema,
+  createAdminRiderRequestSchema,
   publicRiderSuggestionSchema,
   riderApplicationRequestSchema,
   riderApplicationResponseDataSchema,
@@ -23,6 +24,17 @@ const riderConnectMigrationPath = resolve(
   process.cwd(),
   "supabase/migrations/20260517090000_rider_connect_schema.sql",
 );
+
+const riderConnectUserFacingCopyPaths = [
+  "app/riders/apply/page.tsx",
+  "components/public/rider-application-form.tsx",
+  "components/public/rider-connect-modal.tsx",
+  "components/admin/admin-rider-management.tsx",
+].map((path) => resolve(process.cwd(), path));
+
+function forbiddenCopyPattern(...words: string[]): RegExp {
+  return new RegExp(words.join("\\s+"), "i");
+}
 
 test("rider status schemas accept only the intended lifecycle values", () => {
   assert.equal(riderVerificationStatusSchema.safeParse("pending").success, true);
@@ -220,6 +232,54 @@ test("admin rider update schema allows only managed profile and status fields", 
   assert.equal(updateAdminRiderRequestSchema.safeParse({}).success, false);
 });
 
+test("admin rider create schema requires consent and prevents visible unverified riders", () => {
+  const validCreateRequest = {
+    display_name: "Manual Rider",
+    full_name: "Manual Rider Legal",
+    phone: "+2348000000000",
+    whatsapp_phone: "+2348000000001",
+    vehicle_type: "Motorcycle",
+    plate_number: "RID-100",
+    operating_areas: ["Wuse", "Garki"],
+    usual_available_hours: "Weekdays 10 AM - 7 PM",
+    verification_status: "verified",
+    visibility_status: "visible",
+    notes: "Consent collected through manual intake.",
+    consent_confirmed: true,
+  };
+
+  assert.equal(createAdminRiderRequestSchema.safeParse(validCreateRequest).success, true);
+  assert.equal(
+    createAdminRiderRequestSchema.safeParse({
+      ...validCreateRequest,
+      consent_confirmed: false,
+    }).success,
+    false,
+  );
+  assert.equal(
+    createAdminRiderRequestSchema.safeParse({
+      ...validCreateRequest,
+      verification_status: "pending",
+      visibility_status: "visible",
+    }).success,
+    false,
+  );
+  assert.equal(
+    createAdminRiderRequestSchema.safeParse({
+      ...validCreateRequest,
+      operating_areas: [],
+    }).success,
+    false,
+  );
+  assert.equal(
+    createAdminRiderRequestSchema.safeParse({
+      ...validCreateRequest,
+      bank_account: "not allowed",
+    }).success,
+    false,
+  );
+});
+
 test("unavailable report request schema accepts only supported reasons", () => {
   const validReport = {
     riderId: "11111111-1111-4111-8111-111111111111",
@@ -345,4 +405,35 @@ test("rider application response schema exposes only review status", () => {
     }).success,
     false,
   );
+});
+
+test("rider connect user-facing copy stays liability-safe", () => {
+  const combined = riderConnectUserFacingCopyPaths
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
+
+  const forbiddenPhrases = [
+    forbiddenCopyPattern("Pay", "Now"),
+    forbiddenCopyPattern("Order", "Now"),
+    forbiddenCopyPattern("Book", "Delivery"),
+    forbiddenCopyPattern("guaranteed", "delivery"),
+    forbiddenCopyPattern("Localman", "courier"),
+    forbiddenCopyPattern("official", "driver"),
+    forbiddenCopyPattern("delivery", "confirmed"),
+    forbiddenCopyPattern("assigned", "driver"),
+    forbiddenCopyPattern("Localman", "Delivery"),
+    forbiddenCopyPattern("available", "now"),
+    forbiddenCopyPattern("dispatch", "confirmed"),
+  ];
+
+  for (const phrase of forbiddenPhrases) {
+    assert.doesNotMatch(combined, phrase);
+  }
+
+  assert.match(combined, /independent riders/i);
+  assert.match(combined, /Localman does not collect payment/i);
+  assert.match(combined, /Localman does not guarantee delivery/i);
+  assert.match(combined, /coordinate payment directly|coordinated directly/i);
+  assert.match(combined, /Please call the vendor first/i);
+  assert.match(combined, /Usually available|usual available/i);
 });

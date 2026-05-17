@@ -214,6 +214,9 @@ test("rider application page documents current MVP boundaries and omits forbidde
   assert.doesNotMatch(combined, /name="payment/i);
   assert.doesNotMatch(combined, /name="password/i);
   assert.doesNotMatch(combined, /become a Localman employee/i);
-  assert.doesNotMatch(combined, /official Localman driver/i);
+  assert.doesNotMatch(
+    combined,
+    new RegExp(["official", "Localman", "driver"].join("\\s+"), "i"),
+  );
   assert.doesNotMatch(combined, /guaranteed jobs/i);
 });

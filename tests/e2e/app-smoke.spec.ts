@@ -480,7 +480,9 @@ type MockAdminWorkspaceOptions = {
   vendorCount?: number;
   riderCount?: number;
   adminRequestLog?: string[];
+  riderCreatePayloads?: unknown[];
   riderUpdatePayloads?: unknown[];
+  duplicateRiderOnCreate?: boolean;
   vendorImageUploadPayloads?: string[];
   delayInitialImageGetUntilUpload?: boolean;
 };
@@ -1041,6 +1043,84 @@ async function mockAuthenticatedAdminWorkspace(
 
   await page.route(/\/api\/admin\/riders(?:\?.*)?$/, async (route) => {
     recordAdminRequest(route.request());
+    if (route.request().method() === "POST") {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      options.riderCreatePayloads?.push(payload);
+
+      if (options.duplicateRiderOnCreate) {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: false,
+            data: null,
+            error: {
+              code: "CONFLICT",
+              message: "A rider with this phone or WhatsApp number already exists.",
+              status: 409,
+            },
+          }),
+        });
+        return;
+      }
+
+      if (
+        payload.visibility_status === "visible" &&
+        payload.verification_status !== "verified"
+      ) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: false,
+            data: null,
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Visible riders must be verified.",
+              status: 400,
+            },
+          }),
+        });
+        return;
+      }
+
+      const createdRider = {
+        id: `81000000-0000-4000-8000-${String(mockRiders.length + 1).padStart(12, "0")}`,
+        display_name: payload.display_name,
+        full_name: payload.full_name ?? null,
+        phone: payload.phone,
+        whatsapp_phone: payload.whatsapp_phone,
+        photo_url: null,
+        vehicle_type: payload.vehicle_type ?? null,
+        plate_number: payload.plate_number ?? null,
+        operating_areas: payload.operating_areas ?? [],
+        usual_available_hours: payload.usual_available_hours ?? null,
+        verification_status: payload.verification_status ?? "pending",
+        visibility_status: payload.visibility_status ?? "hidden",
+        notes: payload.notes ?? null,
+        consent_accepted_at: "2026-05-17T12:00:00.000Z",
+        created_at: "2026-05-17T12:00:00.000Z",
+        updated_at: "2026-05-17T12:00:00.000Z",
+        contact_intent_count: 0,
+        unavailable_report_count: 0,
+      };
+
+      mockRiders = [createdRider, ...mockRiders];
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            rider: createdRider,
+          },
+          error: null,
+        }),
+      });
+      return;
+    }
+
     const requestUrl = new URL(route.request().url());
     const search = requestUrl.searchParams.get("search")?.trim().toLowerCase() ?? "";
     const verificationStatus = requestUrl.searchParams.get("verification_status") ?? "";
@@ -1534,7 +1614,19 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("Please call the vendor first")).toBeVisible();
     await expect(dialog.getByText("Localman only connects users")).toBeVisible();
-    await expect(dialog.getByText(/Order Now|Book Delivery|Pay Now|Localman Delivery|guaranteed delivery|assigned driver|official courier/i)).toHaveCount(0);
+    const forbiddenRiderCopy = [
+      ["Order", "Now"],
+      ["Book", "Delivery"],
+      ["Pay", "Now"],
+      ["Localman", "Delivery"],
+      ["guaranteed", "delivery"],
+      ["assigned", "driver"],
+      ["official", "courier"],
+    ].map((words) => new RegExp(words.join("\\s+"), "i"));
+
+    for (const copyPattern of forbiddenRiderCopy) {
+      await expect(dialog.getByText(copyPattern)).toHaveCount(0);
+    }
 
     await dialog.getByLabel("Customer name").fill("Ada");
     await dialog.getByLabel("Phone / WhatsApp").fill("+2348123456789");
@@ -2321,11 +2413,13 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
     const auditLogRequests: Array<{ userRole: string; action: string }> = [];
     const adminRequestLog: string[] = [];
+    const riderCreatePayloads: unknown[] = [];
     const riderUpdatePayloads: unknown[] = [];
 
     await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
       adminRequestLog,
       riderCount: 2,
+      riderCreatePayloads,
       riderUpdatePayloads,
     });
 
@@ -2334,6 +2428,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: "Riders" })).toBeVisible();
     await expect(page.locator(".admin-nav-link.active")).toContainText("Riders");
+    await expect(page.getByRole("button", { name: "Add Rider" })).toBeVisible();
     await expect(riderFiltersPanel.getByLabel("Search by name, phone, or area")).toBeVisible();
     await expect(riderFiltersPanel.getByLabel("Verification")).toBeVisible();
     await expect(riderFiltersPanel.getByLabel("Visibility")).toBeVisible();
@@ -2365,6 +2460,39 @@ test.describe("Phase 3 browser smoke", () => {
       visibility_status: "visible",
     });
 
+    const createPanel = page.locator('section[aria-labelledby="rider-create"]');
+    await createPanel.getByRole("button", { name: "Add Rider" }).click();
+    await expect(
+      createPanel.getByText("Creating a rider profile does not make them a Localman employee"),
+    ).toBeVisible();
+    await createPanel.getByLabel("Initial verification status").selectOption("verified");
+    await createPanel.getByLabel("Initial visibility status").selectOption("visible");
+    await createPanel.getByLabel("Display name").fill("Manual Rider");
+    await createPanel.getByLabel("Full legal name").fill("Manual Rider Legal");
+    await createPanel.getByLabel("Phone").fill("+2348123456789");
+    await createPanel.getByLabel("WhatsApp").fill("+2348123456790");
+    await createPanel.getByLabel("Vehicle type").fill("Motorcycle");
+    await createPanel.getByLabel("Plate number").fill("MAN-123");
+    await createPanel.getByLabel("Operating areas").fill("Wuse, Garki");
+    await createPanel.getByLabel("Usual available hours").fill("Weekdays 9am-6pm");
+    await createPanel.getByLabel("Internal notes").fill("Manual intake through external form.");
+    await createPanel.locator('input[type="checkbox"]').check();
+    await createPanel.getByRole("button", { name: "Create rider" }).click();
+
+    await expect(page.locator(".admin-status-copy")).toContainText("Manual Rider created.");
+    await expect(page.getByRole("button", { name: /Manual Rider/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Manual Rider/ })).toContainText("Verified");
+    await expect(page.getByRole("button", { name: /Manual Rider/ })).toContainText("Visible");
+    expect(riderCreatePayloads).toHaveLength(1);
+    expect(riderCreatePayloads[0]).toMatchObject({
+      display_name: "Manual Rider",
+      phone: "+2348123456789",
+      whatsapp_phone: "+2348123456790",
+      verification_status: "verified",
+      visibility_status: "visible",
+      consent_confirmed: true,
+    });
+
     const invalidUpdate = await page.evaluate(async () => {
       const response = await fetch("/api/admin/riders/81000000-0000-4000-8000-000000000001", {
         method: "PATCH",
@@ -2391,6 +2519,38 @@ test.describe("Phase 3 browser smoke", () => {
       errors.filter(
         (message) => !isExpectedAdminRiderInvalidStatusConsoleMessage(message),
       ),
+    );
+  });
+
+  test("admin rider create form surfaces duplicate rider conflicts", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+    const riderCreatePayloads: unknown[] = [];
+
+    await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+      duplicateRiderOnCreate: true,
+      riderCount: 1,
+      riderCreatePayloads,
+    });
+
+    await page.goto("/admin/riders");
+    const createPanel = page.locator('section[aria-labelledby="rider-create"]');
+    await createPanel.getByRole("button", { name: "Add Rider" }).click();
+    await createPanel.getByLabel("Display name").fill("Duplicate Rider");
+    await createPanel.getByLabel("Phone").fill("+2348100000001");
+    await createPanel.getByLabel("WhatsApp").fill("+2348110000001");
+    await createPanel.getByLabel("Operating areas").fill("Wuse");
+    await createPanel.locator('input[type="checkbox"]').check();
+    await createPanel.getByRole("button", { name: "Create rider" }).click();
+
+    await expect(page.locator(".admin-status-copy")).toContainText(
+      "A rider with this phone or WhatsApp number already exists.",
+    );
+    await expect(page.getByRole("button", { name: /Duplicate Rider/ })).toHaveCount(0);
+    expect(riderCreatePayloads).toHaveLength(1);
+
+    await expectNoClientErrors(
+      errors.filter((message) => !message.includes("status of 409")),
     );
   });
 

@@ -55,6 +55,7 @@ Handles:
 - navigation restoration
 - vendor detail rendering
 - lightweight public vendor rating
+- Rider Connect request flow on vendor detail pages
 - trust-first location display
 - time-based theming
 
@@ -72,6 +73,7 @@ Handles:
 - hours management
 - featured dish management
 - vendor image upload and removal
+- independent rider profile review and visibility management
 
 Admin browser enforcement rules:
 - privileged admin and agent reads and mutations go through protected `/api/admin/**` routes only
@@ -85,6 +87,7 @@ Handle:
 - public nearby vendor reads
 - public vendor detail reads
 - public vendor rating writes
+- public Rider Connect application, suggestion, contact handoff, and unavailable-report routes
 - non-blocking public event writes
 - reverse geocoding
 - authenticated admin writes
@@ -106,6 +109,9 @@ Stores:
 - audit_logs
 - user_events
 - operational_events
+- riders
+- rider_contact_intents
+- rider_unavailable_reports
 
 ## Architecture Principles
 1. Keep the public app read-heavy and simple.
@@ -122,7 +128,7 @@ Stores:
 4. `/api/vendors/nearby` returns nearby vendors
 5. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
 6. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
-7. User opens vendor detail, rates a vendor, or takes actions such as call and directions
+7. User opens vendor detail, rates a vendor, requests a rider, or takes actions such as call and directions
 
 Public rendering rules:
 - discovery/list surfaces use compact no-image vendor cards
@@ -198,6 +204,7 @@ Admin workspace routes:
 - `/admin/activity` for audit-log review
 - `/admin/logs` for operational warnings, failures, degraded responses, and slow requests
 - `/admin/team` for team access
+- `/admin/riders` for independent rider profile review
 - `/admin/vendors` for vendor registry and completeness review
 - `/admin/vendors/new` for vendor onboarding
 - `/admin/vendors/[id]` for focused edit workflows
@@ -208,8 +215,9 @@ Admin workspace routes:
 4. Missing hours, dishes, or images require explicit acknowledgement during creation
 5. Admin edits the selected vendor without changing the slug unless a manual URL change is intended
 6. Admin updates hours, dishes, and images against the selected vendor id
-7. Admin manages team access through `admin_users` and server-side auth user creation
-8. System logs write actions in the audit log
+7. Admin reviews rider applications and controls rider verification/visibility for future suggestion flows
+8. Admin manages team access through `admin_users` and server-side auth user creation
+9. System logs write actions in the audit log
 
 Admin workflow rules:
 - the vendor slug is created from the vendor name on first creation
@@ -224,6 +232,7 @@ Admin workflow rules:
   - Analytics
   - Manage vendors
   - Create vendor
+  - Riders
   - Team access
   - Activity
   - Logs
@@ -239,6 +248,10 @@ Current protected surfaces:
 - `/api/events`
 - `/api/vendors/[slug]/ratings`
 - `/api/vendors/nearby` when a search term is present
+- `/api/riders/apply`
+- `/api/vendors/[slug]/riders`
+- `/api/vendors/[slug]/riders/contact`
+- `/api/vendors/[slug]/riders/report-unavailable`
 
 Protection rules:
 - backend routes are authoritative; the browser does not enforce abuse limits
@@ -253,6 +266,10 @@ Current thresholds:
 - public events: `120` requests per `5` minutes, `2` minute block, `2` second duplicate collapse
 - public ratings: `8` requests per `10` minutes, `10` minute block, `60` second duplicate collapse
 - public nearby search: `45` search requests per `60` seconds, `2` minute block
+- rider applications: `5` requests per hour, `1` hour block
+- rider suggestions: `60` requests per `10` minutes, `5` minute block
+- rider contact handoffs: `5` requests per hour, plus `3` per vendor per hour and one same-rider contact per `5` minutes
+- rider unavailable reports: `5` requests per hour, plus `2` reports for the same rider per hour
 
 ## Runtime Observability
 
@@ -271,6 +288,7 @@ Current rules:
   - admin vendor mutation routes, including image and featured-dish writes
   - `/api/vendors/nearby`
   - `/api/vendors/[slug]/ratings`
+  - Rider Connect routes
   - `/api/events`
 - error serialization includes safe `errorName`, `errorMessage`, and optional `errorCode` fields
 - logger redaction removes secrets, tokens, cookies, raw request bodies, and database URLs from emitted metadata
@@ -290,6 +308,8 @@ Current rules:
   - `PUBLIC_NEARBY_SLOW`
   - `PUBLIC_NEARBY_ROUTE_FAILED`
   - `PUBLIC_VENDOR_RATING_FAILED`
+  - `PUBLIC_RIDER_CONTACT_HANDOFF_CREATED`
+  - `PUBLIC_RIDER_REPORT_RECEIVED`
 
 Current limitation:
 - console logging remains the primary output path, and operational-event storage is only a lightweight internal persistence layer rather than a centralized trace store
@@ -423,6 +443,44 @@ Rules:
 - summary ownership stays in Postgres so concurrent inserts do not depend on Node-side full-table recalculation
 - clearing cookies/local storage or using a new browser identity can create a new anonymous identity; that is an accepted limitation until account-based ratings exist
 
+## Rider Connect Pipeline
+
+Rider Connect is a lightweight WhatsApp handoff, not a dispatch or payments system.
+
+Public application path:
+
+1. a prospective independent rider applies at `/riders/apply`
+2. `/api/riders/apply` validates contact/profile fields, consent, and independent-rider disclaimer acceptance
+3. the server inserts a `riders` row with `verification_status = pending` and `visibility_status = hidden`
+4. admins review the profile at `/admin/riders`
+5. a rider becomes eligible for suggestions only when admin sets `verification_status = verified` and `visibility_status = visible`
+
+Vendor-detail handoff path:
+
+1. user opens a vendor detail page and selects `Request Rider`
+2. user enters contact details, delivery location mode/address or area, order note, payment coordination note, and accepts the disclaimer
+3. `/api/vendors/[slug]/riders` returns public-safe suggestions only
+4. the response excludes rider phone, WhatsApp phone, full legal name, notes, and internal status fields
+5. user selects one rider
+6. `/api/vendors/[slug]/riders/contact` verifies the selected rider is still verified and visible
+7. the server inserts a minimal `rider_contact_intents` row with a hashed customer phone
+8. the server builds a WhatsApp click-to-chat URL for the selected rider only
+9. user sends the WhatsApp message directly from their device
+
+Unavailable-report path:
+
+1. after handoff, the user may report the selected rider as unavailable
+2. `/api/vendors/[slug]/riders/report-unavailable` validates vendor/rider/reason
+3. optional reporter phone is hashed before storage
+4. `rider_unavailable_reports` stores the report for admin review
+5. one anonymous report never auto-suspends a rider
+
+Rules:
+- Localman does not collect payment, assign deliveries, create orders, send WhatsApp API messages, guarantee rider availability, or guarantee delivery.
+- Users are reminded to call the vendor first to confirm food availability and price.
+- Rider availability is described as usual/listed availability, not real-time live availability.
+- `RIDER_CONNECT_HASH_SECRET` should be set server-side in staging and production for phone hashing; service-role fallback exists only as an MVP fallback.
+
 ## Discovery Retention State
 
 The public app keeps a small amount of client-only memory:
@@ -507,6 +565,8 @@ Localman uses Supabase Data API/PostgREST through `supabase-js`, so the public-s
 - anon receives public write access only where an endpoint intentionally uses the public client path; current public writes are routed server-side
 - authenticated workspace mutation grants are still constrained by RLS policies and backend admin route checks
 - service_role keeps required server-side access for migrations, admin routes, analytics, event tracking, rating submission, and image storage bookkeeping
+- Rider Connect tables are not anon-readable because `riders` contains phone and WhatsApp fields; public suggestions are shaped through server routes
+- service_role keeps Rider Connect access for application inserts, public-safe suggestions, contact-intent writes, unavailable-report writes, and admin rider management APIs
 - `admin_users`, `audit_logs`, `operational_events`, and `app_schema_migrations` are not exposed to anon
 - `app_schema_migrations` has RLS enabled with a deny-all client policy; service_role keeps table privileges and bypasses RLS for migration bookkeeping
 - public helper functions required by RLS policies remain executable by Data API roles, while trigger/admin/RPC functions are restricted to service_role unless explicitly documented otherwise

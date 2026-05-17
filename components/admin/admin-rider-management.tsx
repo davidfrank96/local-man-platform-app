@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  createManagedRider,
   listAdminRiders,
   updateManagedRider,
 } from "../../lib/admin/api-client.ts";
@@ -9,6 +10,7 @@ import { useAdminSession } from "./admin-session-provider.tsx";
 import { handleAppError } from "../../lib/errors/ui-error.ts";
 import type {
   AdminRider,
+  CreateAdminRiderRequest,
   RiderVerificationStatus,
   RiderVisibilityStatus,
   UpdateAdminRiderRequest,
@@ -39,6 +41,10 @@ type RiderDraft = {
   verification_status: RiderVerificationStatus;
   visibility_status: RiderVisibilityStatus;
   notes: string;
+};
+
+type CreateRiderDraft = RiderDraft & {
+  consent_confirmed: boolean;
 };
 
 const verificationStatusLabels: Record<RiderVerificationStatus, string> = {
@@ -114,6 +120,23 @@ function createDraftFromRider(rider: AdminRider): RiderDraft {
   };
 }
 
+function createEmptyRiderDraft(): CreateRiderDraft {
+  return {
+    display_name: "",
+    full_name: "",
+    phone: "",
+    whatsapp_phone: "",
+    vehicle_type: "",
+    plate_number: "",
+    operating_areas: "",
+    usual_available_hours: "",
+    verification_status: "pending",
+    visibility_status: "hidden",
+    notes: "",
+    consent_confirmed: false,
+  };
+}
+
 function normalizeAreas(value: string): string[] {
   return value
     .split(/[\n,;]+/)
@@ -164,6 +187,23 @@ function buildRiderUpdatePayload(draft: RiderDraft): UpdateAdminRiderRequest {
   };
 }
 
+function buildRiderCreatePayload(draft: CreateRiderDraft): CreateAdminRiderRequest {
+  return {
+    display_name: draft.display_name.trim(),
+    full_name: normalizeOptionalText(draft.full_name),
+    phone: draft.phone.trim(),
+    whatsapp_phone: draft.whatsapp_phone.trim(),
+    vehicle_type: normalizeOptionalText(draft.vehicle_type),
+    plate_number: normalizeOptionalText(draft.plate_number),
+    operating_areas: normalizeAreas(draft.operating_areas),
+    usual_available_hours: normalizeHours(draft.usual_available_hours),
+    verification_status: draft.verification_status,
+    visibility_status: draft.visibility_status,
+    notes: normalizeOptionalText(draft.notes),
+    consent_confirmed: true,
+  };
+}
+
 export function AdminRiderManagement() {
   const { session } = useAdminSession();
   const [filters, setFilters] = useState<RiderFilters>({
@@ -174,7 +214,10 @@ export function AdminRiderManagement() {
   const [riders, setRiders] = useState<AdminRider[]>([]);
   const [selectedRider, setSelectedRider] = useState<AdminRider | null>(null);
   const [draft, setDraft] = useState<RiderDraft | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<CreateRiderDraft>(() => createEmptyRiderDraft());
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<AdminFeedback>(
     createAdminFeedback("neutral", "Loading rider applications…"),
@@ -283,7 +326,37 @@ export function AdminRiderManagement() {
     }
   }
 
+  async function handleCreateRider(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!createDraft.consent_confirmed) {
+      setFeedback(createAdminFeedback(
+        "error",
+        "Confirm the rider provided consent before creating a profile.",
+      ));
+      return;
+    }
+
+    setIsCreating(true);
+    setFeedback(createAdminFeedback("neutral", "Creating rider profile…"));
+
+    try {
+      const createdRider = await createManagedRider(buildRiderCreatePayload(createDraft));
+      setRiders((current) => [createdRider, ...current]);
+      setSelectedRider(createdRider);
+      setDraft(createDraftFromRider(createdRider));
+      setCreateDraft(createEmptyRiderDraft());
+      setIsCreateOpen(false);
+      setFeedback(createAdminFeedback("success", `${createdRider.display_name} created.`));
+    } catch (error) {
+      setFeedback(formatAdminErrorStatus(error, "Unable to create rider."));
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
   const canViewDebugInfo = session?.adminUser.role === "admin";
+  const isBusy = isLoading || isSaving || isCreating;
 
   return (
     <div className="admin-console">
@@ -293,7 +366,7 @@ export function AdminRiderManagement() {
       >
         <div className="admin-status-heading">
           <p className="eyebrow">Rider Connect</p>
-          <h2>{isLoading || isSaving ? "Working" : "Ready"}</h2>
+          <h2>{isBusy ? "Working" : "Ready"}</h2>
         </div>
         <div className="admin-status-copy-stack">
           <p className="admin-status-copy">{feedback.message}</p>
@@ -313,6 +386,200 @@ export function AdminRiderManagement() {
           appear in future rider suggestion flows. It does not assign deliveries
           or create employment.
         </p>
+      </section>
+
+      <section className="admin-panel" aria-labelledby="rider-create">
+        <div className="admin-section-header">
+          <div>
+            <p className="eyebrow">Manual intake</p>
+            <h2 id="rider-create">Create rider</h2>
+          </div>
+          <button
+            className="button-secondary"
+            type="button"
+            onClick={() => setIsCreateOpen((current) => !current)}
+          >
+            {isCreateOpen ? "Close" : "Add Rider"}
+          </button>
+        </div>
+
+        {isCreateOpen ? (
+          <form className="admin-form" onSubmit={handleCreateRider}>
+            <p>
+              Riders are independent. Creating a rider profile does not make
+              them a Localman employee and does not assign deliveries.
+            </p>
+            <div className="admin-filter-grid">
+              <label className="field">
+                <span>Initial verification status</span>
+                <select
+                  value={createDraft.verification_status}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      verification_status: event.target.value as RiderVerificationStatus,
+                    }))
+                  }
+                >
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Initial visibility status</span>
+                <select
+                  value={createDraft.visibility_status}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      visibility_status: event.target.value as RiderVisibilityStatus,
+                    }))
+                  }
+                >
+                  <option value="hidden">Hidden</option>
+                  <option value="visible">Visible</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Display name</span>
+                <input
+                  required
+                  value={createDraft.display_name}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      display_name: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Full legal name</span>
+                <input
+                  value={createDraft.full_name}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({ ...current, full_name: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Phone</span>
+                <input
+                  required
+                  value={createDraft.phone}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({ ...current, phone: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>WhatsApp</span>
+                <input
+                  required
+                  value={createDraft.whatsapp_phone}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      whatsapp_phone: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Vehicle type</span>
+                <input
+                  value={createDraft.vehicle_type}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({ ...current, vehicle_type: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Plate number</span>
+                <input
+                  value={createDraft.plate_number}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({ ...current, plate_number: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Operating areas</span>
+                <textarea
+                  required
+                  value={createDraft.operating_areas}
+                  placeholder="Wuse, Garki, Maitama"
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      operating_areas: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Usual available hours</span>
+                <textarea
+                  value={createDraft.usual_available_hours}
+                  placeholder="Weekdays 9am-6pm"
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      usual_available_hours: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Internal notes</span>
+                <textarea
+                  value={createDraft.notes}
+                  placeholder="Admin-only review notes"
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({ ...current, notes: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field field-wide">
+                <span>External consent confirmation</span>
+                <span className="checkbox-label">
+                  <input
+                    checked={createDraft.consent_confirmed}
+                    type="checkbox"
+                    onChange={(event) =>
+                      setCreateDraft((current) => ({
+                        ...current,
+                        consent_confirmed: event.target.checked,
+                      }))
+                    }
+                  />
+                  I confirm this rider provided consent to be listed/contacted
+                  through Localman Rider Connect.
+                </span>
+              </label>
+            </div>
+            <div className="action-row">
+              <button className="button-primary" disabled={isCreating} type="submit">
+                {isCreating ? "Creating..." : "Create rider"}
+              </button>
+              <button
+                className="button-secondary"
+                disabled={isCreating}
+                type="button"
+                onClick={() => setCreateDraft(createEmptyRiderDraft())}
+              >
+                Reset form
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="empty-state">
+            Use Add Rider for profiles collected through manual intake or an
+            external form. New profiles default to Pending and Hidden.
+          </p>
+        )}
       </section>
 
       <section className="admin-grid admin-grid-dashboard">

@@ -345,6 +345,36 @@ export const adminRidersQuerySchema = paginationQuerySchema.extend({
   visibility_status: riderVisibilityStatusSchema.optional(),
 });
 
+export const createAdminRiderRequestSchema = z
+  .object({
+    display_name: z.string().trim().min(1).max(80),
+    full_name: optionalRiderTextSchema(120),
+    phone: riderPhoneSchema,
+    whatsapp_phone: riderPhoneSchema,
+    vehicle_type: optionalRiderTextSchema(80),
+    plate_number: optionalRiderTextSchema(40),
+    operating_areas: riderOperatingAreasSchema.min(1),
+    usual_available_hours: adminRiderHoursInputSchema.optional(),
+    verification_status: riderVerificationStatusSchema.optional(),
+    visibility_status: riderVisibilityStatusSchema.optional(),
+    notes: optionalRiderTextSchema(1000),
+    consent_confirmed: z.literal(true),
+    consent_accepted_at: timestampSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const verificationStatus = value.verification_status ?? "pending";
+    const visibilityStatus = value.visibility_status ?? "hidden";
+
+    if (visibilityStatus === "visible" && verificationStatus !== "verified") {
+      context.addIssue({
+        code: "custom",
+        message: "Visible riders must be verified.",
+        path: ["visibility_status"],
+      });
+    }
+  });
+
 export const updateAdminRiderRequestSchema = z
   .object({
     display_name: z.string().trim().min(1).max(80).optional(),
@@ -387,6 +417,7 @@ export const auditActionTypeSchema = z.enum([
   "UPDATE_ADMIN_USER",
   "DELETE_ADMIN_USER",
   "CHANGE_ADMIN_USER_ROLE",
+  "CREATE_RIDER",
   "UPDATE_RIDER",
   "UPDATE_RIDER_STATUS",
 ]);

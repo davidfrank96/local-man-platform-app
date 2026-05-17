@@ -56,7 +56,9 @@ Small food businesses with:
 4. As a user, I want to see featured dishes and clear vendor cues so I can choose where to eat quickly.
 5. As a user, I want to call the vendor so I can confirm availability or reserve food.
 6. As a user, I want directions so I can navigate there easily.
-7. As an admin, I want to manually manage vendor data so listings stay accurate.
+7. As a user, I want to request an independent rider handoff from a vendor detail page so I can coordinate pickup directly outside Localman.
+8. As an admin, I want to manually manage vendor data so listings stay accurate.
+9. As an admin, I want to review independent rider applications and control rider visibility for future suggestions.
 
 ## MVP Features
 ### Public User Features
@@ -71,6 +73,7 @@ Small food businesses with:
 - call vendor button
 - directions button
 - ratings display
+- Request Rider flow on vendor detail pages with public-safe rider suggestions, disclaimer acceptance, WhatsApp click-to-chat handoff for the selected rider, and unavailable reporting
 - no-image vendor cards on discovery surfaces for faster loading and scanning
 
 ### Admin Features
@@ -83,10 +86,16 @@ Small food businesses with:
 - active/inactive visibility toggle
 - manual open/closed override
 - audit log for edits
+- rider application review and rider verification/visibility management
 
 ## Out of Scope for MVP
 - delivery logistics
+- official delivery dispatch
 - online payments
+- Localman-collected delivery payments
+- delivery/order tracking
+- rider app or rider login
+- rider availability or delivery guarantees
 - wallets
 - vendor self-signup
 - public user login

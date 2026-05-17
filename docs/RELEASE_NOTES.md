@@ -4,6 +4,20 @@
 
 This note summarizes the current branch behavior after the mobile discovery restructure, cache/security hardening, admin upload/session stabilization, and regression-lockdown coverage.
 
+### Rider Connect MVP
+
+- `/riders/apply` lets prospective independent riders submit profile details for admin review.
+- New rider applications remain `pending` and `hidden`; no rider becomes public automatically.
+- `/admin/riders` lets admins create riders from manual intake, search/filter riders, update verification and visibility status, edit safe rider fields, and review contact/report counts.
+- Admin rider create defaults to pending/hidden, requires external consent confirmation, rejects duplicate phone/WhatsApp values, and only allows visible riders when verified.
+- Vendor detail pages include `Request Rider`.
+- Public rider suggestions return only verified and visible riders and exclude rider phone, WhatsApp phone, full legal name, notes, and internal status fields.
+- Contact handoff creates a minimal `rider_contact_intents` row, hashes customer phone, and returns a WhatsApp click-to-chat URL for the selected rider only.
+- Unavailable reports create admin-review-only `rider_unavailable_reports` rows and do not auto-suspend riders.
+- Rider Connect routes are rate-limited for applications, suggestions, contact handoffs, same-rider cooldowns, and unavailable reports.
+- `RIDER_CONNECT_HASH_SECRET` is the server-only phone-hash secret for staging/production.
+- The MVP does not include payments, order tracking, delivery dispatch, rider login, live rider GPS, availability guarantees, delivery guarantees, or WhatsApp API outbound sending.
+
 ### Public Mobile Discovery
 
 - Mobile discovery now uses a fixed bottom dock with `Home`, `Map`, and `About`.
