@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { isSeedPlaceholderUrl } from "../../lib/vendors/images.ts";
+import { isAllowedPublicImageUrl } from "../../lib/vendors/images.ts";
 
 type VendorHeroImageProps = {
   imageUrl: string | null;
@@ -16,10 +16,9 @@ export function VendorHeroImage({
   alt,
 }: VendorHeroImageProps) {
   const [hasOriginalFailed, setHasOriginalFailed] = useState(false);
-  const isValidHttpImageUrl =
-    typeof imageUrl === "string" &&
-    imageUrl.startsWith("http") &&
-    !isSeedPlaceholderUrl(imageUrl);
+  const isValidHttpImageUrl = isAllowedPublicImageUrl(imageUrl, {
+    allowLocalPaths: false,
+  });
 
   if (!isValidHttpImageUrl) {
     return <span>No image available</span>;

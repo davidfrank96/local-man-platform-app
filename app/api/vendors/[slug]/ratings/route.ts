@@ -239,37 +239,6 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     return attachRequestIdHeader(routeParams.response, routeLog.requestId);
   }
 
-  const body = await validateJsonBody(request, createVendorRatingRequestSchema);
-
-  if (!body.success) {
-    logRouteEvent("warn", routeLog, {
-      event: "PUBLIC_VENDOR_RATING_REJECTED",
-      status: body.response.status,
-      message: "Vendor rating payload failed validation.",
-      vendorSlug: routeParams.data.slug,
-    });
-    return attachRequestIdHeader(body.response, routeLog.requestId);
-  }
-
-  const config = getRatingWriteConfig();
-
-  if (!config) {
-    logRouteEvent("error", routeLog, {
-      event: "PUBLIC_VENDOR_RATING_CONFIGURATION_ERROR",
-      status: 503,
-      message: "Vendor ratings are unavailable because write config is missing.",
-      vendorSlug: routeParams.data.slug,
-    });
-    return attachRequestIdHeader(
-      apiError(
-        "CONFIGURATION_ERROR",
-        "Supabase environment variables are required for vendor ratings.",
-        503,
-      ),
-      routeLog.requestId,
-    );
-  }
-
   const rateLimit = consumeRateLimit(request, {
     policy: PUBLIC_RATING_RATE_LIMIT,
   });
@@ -294,6 +263,43 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
             retry_after_seconds: rateLimit.retryAfterSeconds,
           },
           "Rating is temporarily rate limited to protect Local Man.",
+        ),
+        rateLimit,
+      ),
+      routeLog.requestId,
+    );
+  }
+
+  const body = await validateJsonBody(request, createVendorRatingRequestSchema);
+
+  if (!body.success) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_REJECTED",
+      status: body.response.status,
+      message: "Vendor rating payload failed validation.",
+      vendorSlug: routeParams.data.slug,
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(body.response, rateLimit),
+      routeLog.requestId,
+    );
+  }
+
+  const config = getRatingWriteConfig();
+
+  if (!config) {
+    logRouteEvent("error", routeLog, {
+      event: "PUBLIC_VENDOR_RATING_CONFIGURATION_ERROR",
+      status: 503,
+      message: "Vendor ratings are unavailable because write config is missing.",
+      vendorSlug: routeParams.data.slug,
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "CONFIGURATION_ERROR",
+          "Vendor ratings are unavailable.",
+          503,
         ),
         rateLimit,
       ),
@@ -392,7 +398,6 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
               "UPSTREAM_ERROR",
               "Unable to save vendor rating.",
               502,
-              error instanceof Error ? { message: error.message } : undefined,
             ),
             rateLimit,
           ),
@@ -484,7 +489,6 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
           "UPSTREAM_ERROR",
           "Unable to save vendor rating.",
           502,
-          error instanceof Error ? { message: error.message } : undefined,
         ),
         rateLimit,
       ),

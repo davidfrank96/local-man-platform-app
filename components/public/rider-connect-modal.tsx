@@ -8,6 +8,7 @@ import type {
   RiderContactHandoffResponseData,
   RiderUnavailableReason,
 } from "../../types/index.ts";
+import { isAllowedPublicImageUrl } from "../../lib/vendors/images.ts";
 import {
   createVendorRiderContactHandoff,
   fetchVendorRiderSuggestions,
@@ -332,36 +333,44 @@ export function RiderConnectModal({
                 {feedback.message ? <p className="form-note">{feedback.message}</p> : null}
                 {riders.length > 0 ? (
                   <div className="rider-suggestion-grid">
-                    {riders.map((rider) => (
-                      <article className="rider-suggestion-card" key={rider.rider_id}>
-                        {rider.photo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img alt={`${rider.display_name} profile`} src={rider.photo_url} />
-                        ) : (
-                          <div className="rider-suggestion-avatar" aria-hidden="true">
-                            {rider.display_name.slice(0, 1).toUpperCase()}
+                    {riders.map((rider) => {
+                      const riderPhotoUrl = isAllowedPublicImageUrl(rider.photo_url, {
+                        allowLocalPaths: false,
+                      })
+                        ? rider.photo_url
+                        : null;
+
+                      return (
+                        <article className="rider-suggestion-card" key={rider.rider_id}>
+                          {riderPhotoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img alt={`${rider.display_name} profile`} src={riderPhotoUrl} />
+                          ) : (
+                            <div className="rider-suggestion-avatar" aria-hidden="true">
+                              {rider.display_name.slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <h3>{rider.display_name}</h3>
+                            <p>{rider.vehicle_type ?? "Independent rider"}</p>
+                            <p>
+                              {rider.operating_areas.length > 0
+                                ? rider.operating_areas.join(", ")
+                                : "Operating areas not listed"}
+                            </p>
+                            <p>{rider.usual_availability_label ?? "Availability varies"}</p>
                           </div>
-                        )}
-                        <div>
-                          <h3>{rider.display_name}</h3>
-                          <p>{rider.vehicle_type ?? "Independent rider"}</p>
-                          <p>
-                            {rider.operating_areas.length > 0
-                              ? rider.operating_areas.join(", ")
-                              : "Operating areas not listed"}
-                          </p>
-                          <p>{rider.usual_availability_label ?? "Availability varies"}</p>
-                        </div>
-                        <button
-                          className="button-primary compact-button"
-                          disabled={feedback.type === "loading"}
-                          type="button"
-                          onClick={() => void handleRiderSelection(rider)}
-                        >
-                          Select rider
-                        </button>
-                      </article>
-                    ))}
+                          <button
+                            className="button-primary compact-button"
+                            disabled={feedback.type === "loading"}
+                            type="button"
+                            onClick={() => void handleRiderSelection(rider)}
+                          >
+                            Select rider
+                          </button>
+                        </article>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="discovery-empty-state">

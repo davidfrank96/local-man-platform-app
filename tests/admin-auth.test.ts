@@ -299,8 +299,7 @@ test("rejects authenticated users who do not have an explicit admin_users row", 
     assert.equal(result.response.status, 403);
     const payload = await result.response.json();
     assert.equal(payload.error.code, "FORBIDDEN");
-    assert.equal(payload.error.details.userId, "fresh-user-id");
-    assert.equal(payload.error.details.table, "admin_users");
+    assert.equal(payload.error.details, undefined);
   }
 
   assert.deepEqual(requests, [
@@ -360,7 +359,7 @@ test("ignores auth metadata role claims when admin_users access is missing", asy
     assert.equal(result.response.status, 403);
     const payload = await result.response.json();
     assert.equal(payload.error.code, "FORBIDDEN");
-    assert.equal(payload.error.details.userId, "fresh-user-id");
+    assert.equal(payload.error.details, undefined);
   }
 });
 
@@ -404,7 +403,7 @@ test("removed admin_users membership invalidates a cookie-backed session immedia
     const setCookies = result.response.headers.getSetCookie?.() ?? [];
 
     assert.equal(payload.error.code, "FORBIDDEN");
-    assert.equal(payload.error.details.userId, "removed-user-id");
+    assert.equal(payload.error.details, undefined);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=") && value.includes("Max-Age=0")), true);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=") && value.includes("Max-Age=0")), true);
   }

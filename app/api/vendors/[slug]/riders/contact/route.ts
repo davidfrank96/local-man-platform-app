@@ -71,18 +71,6 @@ export async function POST(
     return attachRequestIdHeader(routeParams.response, routeLog.requestId);
   }
 
-  const body = await validateJsonBody(request, riderContactHandoffRequestSchema);
-
-  if (!body.success) {
-    logRouteEvent("warn", routeLog, {
-      event: "PUBLIC_RIDER_CONTACT_REJECTED",
-      status: body.response.status,
-      message: "Rider contact handoff payload failed validation.",
-      vendorSlug: routeParams.data.slug,
-    });
-    return attachRequestIdHeader(body.response, routeLog.requestId);
-  }
-
   const publicContactRateLimit = consumeRateLimit(request, {
     policy: PUBLIC_RIDER_CONTACT_RATE_LIMIT,
     scope: "contact",
@@ -99,6 +87,21 @@ export async function POST(
       },
     });
     return rateLimitedContactResponse(publicContactRateLimit, routeLog.requestId);
+  }
+
+  const body = await validateJsonBody(request, riderContactHandoffRequestSchema);
+
+  if (!body.success) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_RIDER_CONTACT_REJECTED",
+      status: body.response.status,
+      message: "Rider contact handoff payload failed validation.",
+      vendorSlug: routeParams.data.slug,
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(body.response, publicContactRateLimit),
+      routeLog.requestId,
+    );
   }
 
   const vendorContactRateLimit = consumeRateLimit(request, {

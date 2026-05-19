@@ -336,6 +336,13 @@ function installMapDebug(
   latestVendorsRef: MutableRefObject<NearbyVendor[]>,
   markersRef: MutableRefObject<Record<string, VendorMarkerEntry>>,
 ) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PUBLIC_LOCALMAN_ENABLE_MAP_DEBUG !== "true"
+  ) {
+    return;
+  }
+
   const interactionHandlers = map as unknown as {
     boxZoom?: { isEnabled: () => boolean };
     doubleClickZoom?: { isEnabled: () => boolean };
@@ -658,7 +665,12 @@ export function MapLibreVendorMap({
         lastAction: null,
       };
       hasReportedVisibleMarkersRef.current = false;
-      window.__LOCAL_MAN_MAP_DEBUG__ = undefined;
+      if (
+        process.env.NODE_ENV !== "production" ||
+        process.env.NEXT_PUBLIC_LOCALMAN_ENABLE_MAP_DEBUG === "true"
+      ) {
+        window.__LOCAL_MAN_MAP_DEBUG__ = undefined;
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- map init must stay pinned to the style URL
   }, [styleUrl]);

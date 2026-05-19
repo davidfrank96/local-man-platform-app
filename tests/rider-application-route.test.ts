@@ -182,6 +182,7 @@ test("rider application route returns safe upstream errors without service detai
     assert.equal(response.status, 502);
     assert.equal(body.success, false);
     assert.equal(body.error.message, "Unable to submit rider application.");
+    assert.doesNotMatch(JSON.stringify(body), /permission denied/i);
     assert.doesNotMatch(JSON.stringify(body), /service-role-key/);
   } finally {
     globalThis.fetch = originalFetch;
