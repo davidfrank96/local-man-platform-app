@@ -7,6 +7,7 @@ import {
 import {
   getSupabaseServiceRoleConfig,
 } from "../vendors/supabase.ts";
+import { logStructuredEvent } from "../observability.ts";
 import type {
   PublicRiderSuggestion,
   RiderContactHandoffRequest,
@@ -95,6 +96,8 @@ const vendorRiderSelect = [
 ].join(",");
 
 const riderContactSelect = `${riderPublicSelect},whatsapp_phone`;
+
+let hasLoggedHashSecretFallback = false;
 
 function getRiderConnectConfig(): RiderConnectConfig {
   const config = getSupabaseServiceRoleConfig();
@@ -285,9 +288,20 @@ async function fetchReportableVisibleRider(
 function getHashSecret(config: RiderConnectConfig): string {
   const configuredSecret = process.env.RIDER_CONNECT_HASH_SECRET?.trim();
 
-  return configuredSecret && configuredSecret.length > 0
-    ? configuredSecret
-    : config.serviceRoleKey;
+  if (configuredSecret && configuredSecret.length > 0) {
+    return configuredSecret;
+  }
+
+  if (!hasLoggedHashSecretFallback) {
+    hasLoggedHashSecretFallback = true;
+    logStructuredEvent("warn", {
+      type: "RIDER_CONNECT_HASH_SECRET_FALLBACK",
+      message:
+        "RIDER_CONNECT_HASH_SECRET is not set; Rider Connect phone hashes are using the service-role fallback.",
+    });
+  }
+
+  return config.serviceRoleKey;
 }
 
 function hashPhoneForStorage(

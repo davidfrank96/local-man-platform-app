@@ -254,7 +254,10 @@ test("public event route returns 400 for invalid json", async () => {
     );
 
     assert.equal(response.status, 400);
-    assert.equal(await response.text(), "Bad Request");
+    const body = await response.json();
+    assert.equal(body.success, false);
+    assert.equal(body.error.message, "Invalid input.");
+    assert.doesNotMatch(JSON.stringify(body), /not-json/);
   } finally {
     restoreEnv();
   }

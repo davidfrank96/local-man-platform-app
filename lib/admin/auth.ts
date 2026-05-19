@@ -13,6 +13,7 @@ import {
   type AdminPermission,
   type AdminRole,
 } from "./rbac.ts";
+import { validateAdminUnsafeRequestOrigin } from "./origin.ts";
 
 export type AdminAuthConfig = {
   supabaseUrl: string;
@@ -232,6 +233,15 @@ export async function requireAdmin(
     allowCookieRefresh = false,
   }: RequireAdminOptions = {},
 ): Promise<AdminAuthResult> {
+  const originFailure = validateAdminUnsafeRequestOrigin(request);
+
+  if (originFailure) {
+    return {
+      success: false,
+      response: originFailure,
+    };
+  }
+
   const bearerToken = getBearerToken(request);
   const requestId = getOrCreateRequestId(request);
 
@@ -324,11 +334,6 @@ export async function requireAdmin(
         code: "FORBIDDEN",
         message: "Your account does not have access.",
         status: 403,
-        details: {
-          userId: user.id,
-          email: user.email ?? null,
-          table: "admin_users",
-        },
         clearCookies: usingCookieSession,
       });
     }
@@ -359,8 +364,7 @@ export async function requireAdmin(
           ? "Admin session expired. Sign in again."
           : error.message,
         status: error.code === "AUTH_ERROR" ? 401 : error.status ?? 401,
-        details: error.details,
-        detail: error.detail,
+        detail: error.code === "AUTH_ERROR" ? undefined : error.detail,
         clearCookies: true,
       });
     }
@@ -375,7 +379,6 @@ export async function requireAdmin(
         "UPSTREAM_ERROR",
         "Unable to verify admin session.",
         502,
-        error instanceof Error ? { message: error.message } : undefined,
       ),
     };
   }

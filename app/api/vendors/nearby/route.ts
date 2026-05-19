@@ -3,6 +3,7 @@ import { apiError, apiSuccess } from "../../../../lib/api/responses.ts";
 import {
   applyRateLimitResponseHeaders,
   consumeRateLimit,
+  PUBLIC_NEARBY_READ_RATE_LIMIT,
   PUBLIC_NEARBY_SEARCH_RATE_LIMIT,
   type RateLimitDecision,
 } from "../../../../lib/api/abuse-protection.ts";
@@ -35,6 +36,38 @@ export async function GET(request: NextRequest) {
     route: "/api/vendors/nearby",
     area: "public_discovery",
   });
+  const readRateLimit = consumeRateLimit(request, {
+    policy: PUBLIC_NEARBY_READ_RATE_LIMIT,
+    scope: "nearby",
+    useClientCookie: false,
+  });
+
+  if (!readRateLimit.allowed) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_NEARBY_READ_RATE_LIMITED",
+      status: 429,
+      message: "Nearby request was rate limited.",
+      metadata: {
+        retryAfterSeconds: readRateLimit.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiError(
+          "TOO_MANY_REQUESTS",
+          "Too many nearby requests. Please wait before trying again.",
+          429,
+          {
+            retry_after_seconds: readRateLimit.retryAfterSeconds,
+          },
+          "Nearby discovery is temporarily rate limited to protect Local Man.",
+        ),
+        readRateLimit,
+      ),
+      routeLog.requestId,
+    );
+  }
+
   const sanitizedSearchParams = new URLSearchParams(request.nextUrl.searchParams);
   const safeSearch = sanitizeNearbySearchInput(
     request.nextUrl.searchParams.get("search"),
@@ -57,7 +90,10 @@ export async function GET(request: NextRequest) {
       status: query.response.status,
       message: "Nearby request validation failed.",
     });
-    return attachRequestIdHeader(query.response, routeLog.requestId);
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(query.response, readRateLimit),
+      routeLog.requestId,
+    );
   }
 
   const resolvedSearch = resolveNearbySearchLocation(query.data);
@@ -103,10 +139,13 @@ export async function GET(request: NextRequest) {
       message: "Nearby search is unavailable because public Supabase config is missing.",
     });
     return attachRequestIdHeader(
-      apiError(
-        "CONFIGURATION_ERROR",
-        "Supabase public environment variables are required for nearby vendor search.",
-        503,
+      applyRateLimitResponseHeaders(
+        apiError(
+          "CONFIGURATION_ERROR",
+          "Nearby vendor search is unavailable.",
+          503,
+        ),
+        activeSearchRateLimit ?? readRateLimit,
       ),
       routeLog.requestId,
     );
@@ -165,7 +204,7 @@ export async function GET(request: NextRequest) {
     return attachRequestIdHeader(
       activeSearchRateLimit
         ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
-        : response,
+        : applyRateLimitResponseHeaders(response, readRateLimit),
       routeLog.requestId,
     );
   } catch (error) {
@@ -190,7 +229,7 @@ export async function GET(request: NextRequest) {
     return attachRequestIdHeader(
       activeSearchRateLimit
         ? applyRateLimitResponseHeaders(response, activeSearchRateLimit)
-        : response,
+        : applyRateLimitResponseHeaders(response, readRateLimit),
       routeLog.requestId,
     );
   }

@@ -104,11 +104,11 @@ test.describe("Layout stress", () => {
 
     const vendors = Array.from({ length: 12 }, (_, index) =>
       createMockNearbyVendor(index, {
-        name: longText("ULTRALONGVENDORNAMEWITHOUTSPACES_", 140),
+        name: longText(index === 0 ? "RICE_ULTRALONGVENDORNAMEWITHOUTSPACES_" : "ULTRALONGVENDORNAMEWITHOUTSPACES_", 140),
         short_description: longText("Y", 240),
         area: longText("EXTREMELY_LONG_AREA_", 120),
         featured_dish: {
-          dish_name: longText("ULTRALONGDISHWITHOUTSPACES_", 120),
+          dish_name: longText(index === 0 ? "RICE_ULTRALONGDISHWITHOUTSPACES_" : "ULTRALONGDISHWITHOUTSPACES_", 120),
           description: null,
         },
       }),

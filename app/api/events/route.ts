@@ -11,6 +11,7 @@ import {
   createRouteLogContext,
   logRouteEvent,
 } from "../../../lib/observability.ts";
+import { readJsonBody } from "../../../lib/api/validation.ts";
 import { userActionEventSchema } from "../../../lib/validation/index.ts";
 
 type EventWriteConfig = {
@@ -123,6 +124,47 @@ export async function POST(request: Request) {
     route: "/api/events",
     area: "api",
   });
+  const rateLimit = consumeRateLimit(request, {
+    policy: PUBLIC_EVENT_RATE_LIMIT,
+    scope: "events",
+  });
+
+  if (!rateLimit.allowed) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_EVENT_RATE_LIMITED",
+      message: "Public event tracking request was rate limited.",
+      status: 202,
+      metadata: {
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: false, reason: "rate_limited" }, 202),
+        rateLimit,
+      ),
+      routeLog.requestId,
+    );
+  }
+
+  const payload = await readJsonBody(request);
+
+  if (!payload.success) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_EVENT_TRACKING_SKIPPED",
+      message: "Tracking skipped because request JSON was invalid or too large.",
+      status: payload.response.status,
+      metadata: {
+        reason: payload.response.status === 413 ? "payload_too_large" : "invalid_payload",
+        contentType: request.headers.get("content-type"),
+      },
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(payload.response, rateLimit),
+      routeLog.requestId,
+    );
+  }
+
   const config = getEventWriteConfig();
 
   if (!config) {
@@ -135,35 +177,15 @@ export async function POST(request: Request) {
       },
     });
     return attachRequestIdHeader(
-      apiSuccess({ accepted: false, reason: "tracking_unconfigured" }, 202),
+      applyRateLimitResponseHeaders(
+        apiSuccess({ accepted: false, reason: "tracking_unconfigured" }, 202),
+        rateLimit,
+      ),
       routeLog.requestId,
     );
   }
 
-  let payload: unknown;
-  let rawBody = "";
-
-  try {
-    rawBody = await request.text();
-    payload = JSON.parse(rawBody);
-  } catch {
-    logRouteEvent("warn", routeLog, {
-      event: "PUBLIC_EVENT_TRACKING_SKIPPED",
-      message: "Tracking skipped because request JSON was invalid.",
-      status: 400,
-      metadata: {
-        reason: "invalid_payload",
-        contentType: request.headers.get("content-type"),
-        bodyBytes: rawBody.length,
-      },
-    });
-    return attachRequestIdHeader(
-      new Response("Bad Request", { status: 400 }),
-      routeLog.requestId,
-    );
-  }
-
-  const parsedEvent = userActionEventSchema.safeParse(payload);
+  const parsedEvent = userActionEventSchema.safeParse(payload.data);
 
   if (!parsedEvent.success) {
     logRouteEvent("warn", routeLog, {
@@ -182,31 +204,6 @@ export async function POST(request: Request) {
   }
 
   const event = parsedEvent.data;
-  const rateLimit = consumeRateLimit(request, {
-    policy: PUBLIC_EVENT_RATE_LIMIT,
-    sessionHint: event.session_id ?? null,
-  });
-
-  if (!rateLimit.allowed) {
-    logRouteEvent("warn", routeLog, {
-      event: "PUBLIC_EVENT_RATE_LIMITED",
-      message: "Public event tracking request was rate limited.",
-      status: 202,
-      metadata: {
-        eventType: event.event_type,
-        sessionIdPresent: Boolean(event.session_id),
-        vendorId: event.vendor_id ?? null,
-        vendorSlug: event.vendor_slug ?? null,
-      },
-    });
-    return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(
-        apiSuccess({ accepted: false, reason: "rate_limited" }, 202),
-        rateLimit,
-      ),
-      routeLog.requestId,
-    );
-  }
 
   const dedupeKey = [
     rateLimit.identityKey,

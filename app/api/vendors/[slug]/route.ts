@@ -1,10 +1,16 @@
 import { apiError, apiSuccess } from "../../../../lib/api/responses.ts";
+import {
+  applyRateLimitResponseHeaders,
+  consumeRateLimit,
+  PUBLIC_VENDOR_DETAIL_RATE_LIMIT,
+} from "../../../../lib/api/abuse-protection.ts";
 import { validateInput } from "../../../../lib/api/validation.ts";
 import {
   fetchVendorDetailBySlugFromSupabase,
   getSupabaseRestConfig,
 } from "../../../../lib/vendors/supabase.ts";
 import { vendorSlugParamsSchema } from "../../../../lib/validation/index.ts";
+import { logStructuredEvent } from "../../../../lib/observability.ts";
 
 type VendorRouteContext = {
   params: Promise<{
@@ -13,19 +19,42 @@ type VendorRouteContext = {
 };
 
 export async function GET(_request: Request, { params }: VendorRouteContext) {
+  const rateLimit = consumeRateLimit(_request, {
+    policy: PUBLIC_VENDOR_DETAIL_RATE_LIMIT,
+    scope: "vendor-detail",
+    useClientCookie: false,
+  });
+
+  if (!rateLimit.allowed) {
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "TOO_MANY_REQUESTS",
+        "Too many vendor detail requests. Please wait before trying again.",
+        429,
+        {
+          retry_after_seconds: rateLimit.retryAfterSeconds,
+        },
+      ),
+      rateLimit,
+    );
+  }
+
   const routeParams = validateInput(vendorSlugParamsSchema, await params);
 
   if (!routeParams.success) {
-    return routeParams.response;
+    return applyRateLimitResponseHeaders(routeParams.response, rateLimit);
   }
 
   const config = getSupabaseRestConfig();
 
   if (!config) {
-    return apiError(
-      "CONFIGURATION_ERROR",
-      "Supabase public environment variables are required for vendor detail.",
-      503,
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "CONFIGURATION_ERROR",
+        "Vendor detail is unavailable.",
+        503,
+      ),
+      rateLimit,
     );
   }
 
@@ -36,16 +65,29 @@ export async function GET(_request: Request, { params }: VendorRouteContext) {
     );
 
     if (!vendor) {
-      return apiError("NOT_FOUND", "Vendor was not found.", 404);
+      return applyRateLimitResponseHeaders(
+        apiError("NOT_FOUND", "Vendor was not found.", 404),
+        rateLimit,
+      );
     }
 
-    return apiSuccess({ vendor });
+    return applyRateLimitResponseHeaders(apiSuccess({ vendor }), rateLimit);
   } catch (error) {
-    return apiError(
-      "UPSTREAM_ERROR",
-      "Unable to fetch vendor detail.",
-      502,
-      error instanceof Error ? { message: error.message } : undefined,
+    logStructuredEvent("error", {
+      type: "PUBLIC_VENDOR_DETAIL_FAILED",
+      area: "public_discovery",
+      route: "/api/vendors/[slug]",
+      message: "Public vendor detail route failed.",
+      vendorSlug: routeParams.data.slug,
+      error,
+    });
+    return applyRateLimitResponseHeaders(
+      apiError(
+        "UPSTREAM_ERROR",
+        "Unable to fetch vendor detail.",
+        502,
+      ),
+      rateLimit,
     );
   }
 }

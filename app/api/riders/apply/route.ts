@@ -96,17 +96,6 @@ export async function POST(request: Request) {
     route: "/api/riders/apply",
     area: "rider_connect",
   });
-  const body = await validateJsonBody(request, riderApplicationRequestSchema);
-
-  if (!body.success) {
-    logRouteEvent("warn", routeLog, {
-      event: "RIDER_APPLICATION_REJECTED",
-      status: body.response.status,
-      message: "Rider application payload failed validation.",
-    });
-    return attachRequestIdHeader(body.response, routeLog.requestId);
-  }
-
   const rateLimit = consumeRateLimit(request, {
     policy: PUBLIC_RIDER_APPLICATION_RATE_LIMIT,
     scope: "apply",
@@ -134,6 +123,20 @@ export async function POST(request: Request) {
         ),
         rateLimit,
       ),
+      routeLog.requestId,
+    );
+  }
+
+  const body = await validateJsonBody(request, riderApplicationRequestSchema);
+
+  if (!body.success) {
+    logRouteEvent("warn", routeLog, {
+      event: "RIDER_APPLICATION_REJECTED",
+      status: body.response.status,
+      message: "Rider application payload failed validation.",
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(body.response, rateLimit),
       routeLog.requestId,
     );
   }
@@ -170,7 +173,6 @@ export async function POST(request: Request) {
           "UPSTREAM_ERROR",
           "Unable to submit rider application.",
           502,
-          error instanceof Error ? { message: error.message } : undefined,
           "Please try again later.",
         ),
         rateLimit,

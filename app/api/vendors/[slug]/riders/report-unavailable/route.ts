@@ -70,18 +70,6 @@ export async function POST(
     return attachRequestIdHeader(routeParams.response, routeLog.requestId);
   }
 
-  const body = await validateJsonBody(request, riderUnavailableReportRequestSchema);
-
-  if (!body.success) {
-    logRouteEvent("warn", routeLog, {
-      event: "PUBLIC_RIDER_REPORT_REJECTED",
-      status: body.response.status,
-      message: "Rider unavailable report payload failed validation.",
-      vendorSlug: routeParams.data.slug,
-    });
-    return attachRequestIdHeader(body.response, routeLog.requestId);
-  }
-
   const reportRateLimit = consumeRateLimit(request, {
     policy: PUBLIC_RIDER_UNAVAILABLE_REPORT_RATE_LIMIT,
     scope: "unavailable-report",
@@ -98,6 +86,21 @@ export async function POST(
       },
     });
     return rateLimitedReportResponse(reportRateLimit, routeLog.requestId);
+  }
+
+  const body = await validateJsonBody(request, riderUnavailableReportRequestSchema);
+
+  if (!body.success) {
+    logRouteEvent("warn", routeLog, {
+      event: "PUBLIC_RIDER_REPORT_REJECTED",
+      status: body.response.status,
+      message: "Rider unavailable report payload failed validation.",
+      vendorSlug: routeParams.data.slug,
+    });
+    return attachRequestIdHeader(
+      applyRateLimitResponseHeaders(body.response, reportRateLimit),
+      routeLog.requestId,
+    );
   }
 
   const riderReportRateLimit = consumeRateLimit(request, {

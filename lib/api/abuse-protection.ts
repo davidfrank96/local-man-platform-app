@@ -33,6 +33,34 @@ export const PUBLIC_NEARBY_SEARCH_RATE_LIMIT = {
   blockDurationMs: 2 * 60_000,
 } as const;
 
+export const PUBLIC_NEARBY_READ_RATE_LIMIT = {
+  id: "public_nearby_read",
+  maxRequests: 180,
+  windowMs: 60_000,
+  blockDurationMs: 2 * 60_000,
+} as const;
+
+export const PUBLIC_CATEGORIES_RATE_LIMIT = {
+  id: "public_categories",
+  maxRequests: 120,
+  windowMs: 60_000,
+  blockDurationMs: 2 * 60_000,
+} as const;
+
+export const PUBLIC_VENDOR_DETAIL_RATE_LIMIT = {
+  id: "public_vendor_detail",
+  maxRequests: 180,
+  windowMs: 60_000,
+  blockDurationMs: 2 * 60_000,
+} as const;
+
+export const PUBLIC_REVERSE_GEOCODE_RATE_LIMIT = {
+  id: "public_reverse_geocode",
+  maxRequests: 60,
+  windowMs: 5 * 60_000,
+  blockDurationMs: 5 * 60_000,
+} as const;
+
 export const PUBLIC_RIDER_APPLICATION_RATE_LIMIT = {
   id: "public_rider_application",
   maxRequests: 5,

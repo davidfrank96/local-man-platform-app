@@ -14,6 +14,13 @@ type VendorResponsiveImageSources = {
 
 const SUPABASE_VENDOR_IMAGE_PUBLIC_PREFIX = "/storage/v1/object/public/vendor-images/";
 const SUPABASE_VENDOR_IMAGE_RENDER_PREFIX = "/storage/v1/render/image/public/vendor-images/";
+const SUPABASE_PUBLIC_STORAGE_PREFIX = "/storage/v1/object/public/";
+const SUPABASE_RENDER_STORAGE_PREFIX = "/storage/v1/render/image/public/";
+
+type PublicImageAllowlistOptions = {
+  allowLocalPaths?: boolean;
+  allowSeedPlaceholders?: boolean;
+};
 
 function normalizeTransformDimension(value: number | undefined): number | null {
   if (!value || !Number.isFinite(value)) {
@@ -25,6 +32,61 @@ function normalizeTransformDimension(value: number | undefined): number | null {
 
 export function isSeedPlaceholderUrl(imageUrl: string): boolean {
   return imageUrl.startsWith("/seed-images/");
+}
+
+function getConfiguredSupabaseOrigin(): string | null {
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(configuredUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
+function isSupabaseStorageUrl(url: URL): boolean {
+  const configuredOrigin = getConfiguredSupabaseOrigin();
+  const hostLooksLikeSupabase = url.hostname.endsWith(".supabase.co");
+  const originIsConfiguredSupabase = configuredOrigin !== null && url.origin === configuredOrigin;
+  const pathLooksLikePublicStorage =
+    url.pathname.startsWith(SUPABASE_PUBLIC_STORAGE_PREFIX) ||
+    url.pathname.startsWith(SUPABASE_RENDER_STORAGE_PREFIX);
+
+  return pathLooksLikePublicStorage && (originIsConfiguredSupabase || hostLooksLikeSupabase);
+}
+
+export function isAllowedPublicImageUrl(
+  imageUrl: string | null | undefined,
+  {
+    allowLocalPaths = true,
+    allowSeedPlaceholders = false,
+  }: PublicImageAllowlistOptions = {},
+): imageUrl is string {
+  const normalizedUrl = typeof imageUrl === "string" ? imageUrl.trim() : "";
+
+  if (!normalizedUrl) {
+    return false;
+  }
+
+  if (normalizedUrl.startsWith("/")) {
+    if (!allowLocalPaths || normalizedUrl.startsWith("//")) {
+      return false;
+    }
+
+    return allowSeedPlaceholders || !isSeedPlaceholderUrl(normalizedUrl);
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+
+    return parsedUrl.protocol === "https:" && isSupabaseStorageUrl(parsedUrl);
+  } catch {
+    return false;
+  }
 }
 
 export function buildVendorImagePublicUrl(baseUrl: string, storageObjectPath: string): string {

@@ -171,7 +171,7 @@ test("admin login route denies authenticated users without an explicit admin_use
 
     assert.equal(response.status, 403);
     assert.equal(payload.error.code, "FORBIDDEN");
-    assert.equal(payload.error.details.userId, "auth-only-id");
+    assert.equal(payload.error.details, undefined);
     assert.equal(setCookies.length, 0);
   } finally {
     Object.defineProperty(globalThis, "fetch", {
@@ -422,7 +422,7 @@ test("admin session route clears cookies when admin_users membership has been re
 
     assert.equal(response.status, 403);
     assert.equal(payload.error.code, "FORBIDDEN");
-    assert.equal(payload.error.details.userId, "removed-user-id");
+    assert.equal(payload.error.details, undefined);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=") && value.includes("Max-Age=0")), true);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=") && value.includes("Max-Age=0")), true);
   } finally {

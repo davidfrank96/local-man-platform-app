@@ -11,6 +11,7 @@ import {
   getAdminAuthConfig,
   requireAdmin,
 } from "../../../../lib/admin/auth.ts";
+import { validateAdminUnsafeRequestOrigin } from "../../../../lib/admin/origin.ts";
 import {
   appendAdminSessionCookies,
   signInAdminCookieSession,
@@ -33,6 +34,17 @@ export async function POST(request: Request) {
     route: "/api/admin/login",
     area: "auth",
   });
+  const originFailure = validateAdminUnsafeRequestOrigin(request);
+
+  if (originFailure) {
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_LOGIN_ORIGIN_REJECTED",
+      status: originFailure.status,
+      message: "Admin login request origin was rejected.",
+    });
+    return attachRequestIdHeader(originFailure, routeLog.requestId);
+  }
+
   const body = await validateJsonBody(request, adminLoginRequestSchema);
 
   if (!body.success) {
@@ -93,7 +105,7 @@ export async function POST(request: Request) {
       applyRateLimitResponseHeaders(
         apiError(
           "CONFIGURATION_ERROR",
-          "Supabase environment variables are required for admin authentication.",
+          "Admin authentication is unavailable.",
           503,
         ),
         rateLimit,
@@ -183,10 +195,8 @@ export async function POST(request: Request) {
       applyRateLimitResponseHeaders(
         apiError(
           mapped.code,
-          mapped.message,
+          "Admin authentication failed.",
           mapped.status ?? 500,
-          mapped.details,
-          mapped.detail,
         ),
         rateLimit,
       ),
