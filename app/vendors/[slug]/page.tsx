@@ -4,6 +4,7 @@ import { sanitizePublicReturnPath } from "../../../lib/public/navigation.ts";
 import {
   fetchVendorDetailBySlugFromSupabase,
   getSupabaseRestConfig,
+  getSupabaseServiceRoleConfig,
 } from "../../../lib/vendors/supabase.ts";
 import type { LocationSource } from "../../../types/index.ts";
 
@@ -30,6 +31,7 @@ export default async function VendorDetailPage({
   const { slug } = await params;
   const { returnTo, location_source } = await searchParams;
   const config = getSupabaseRestConfig();
+  const serviceRoleConfig = getSupabaseServiceRoleConfig();
 
   if (!config) {
     return (
@@ -46,7 +48,9 @@ export default async function VendorDetailPage({
   let vendor;
 
   try {
-    vendor = await fetchVendorDetailBySlugFromSupabase(slug, config);
+    vendor = await fetchVendorDetailBySlugFromSupabase(slug, config, {
+      serviceRoleConfig,
+    });
   } catch {
     return (
       <main className="page-shell narrow-shell">

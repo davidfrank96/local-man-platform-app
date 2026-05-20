@@ -13,6 +13,7 @@ import {
   fetchAdminAnalytics,
   fetchAdminAuditLogs,
   fetchAdminOperationalLogs,
+  getAdminVendorRatingSignalSummary,
   listAdminUsers,
   listAdminVendorDishes,
   listAdminVendorHours,
@@ -199,6 +200,42 @@ test("admin API client sends same-origin requests without exposing bearer tokens
   assert.equal(url.searchParams.get("area"), "Wuse");
   assert.equal(url.searchParams.get("is_active"), "true");
   assert.equal(url.searchParams.get("price_band"), "budget");
+});
+
+test("admin API client reads vendor rating signal summaries through protected app route", async () => {
+  const requestedUrls: string[] = [];
+  const requestedHeaders: Headers[] = [];
+
+  const result = await getAdminVendorRatingSignalSummary(vendorId, {
+    fetchImpl: (async (input: URL | RequestInfo, init?: RequestInit) => {
+      requestedUrls.push(String(input));
+      requestedHeaders.push(new Headers(init?.headers));
+
+      return Response.json({
+        success: true,
+        data: {
+          signal_summary: {
+            positive_signal_count: 5,
+            neutral_signal_count: 2,
+            negative_signal_count: 3,
+            food_safety_concern_count: 1,
+            poor_hygiene_count: 1,
+            vendor_unavailable_count: 1,
+            recent_signal_count: 4,
+          },
+        },
+        error: null,
+      });
+    }) as typeof fetch,
+  });
+
+  assert.equal(result.positive_signal_count, 5);
+  assert.equal(result.negative_signal_count, 3);
+  assert.equal(
+    new URL(requestedUrls[0], "http://localhost").pathname,
+    `/api/admin/vendors/${vendorId}/rating-signals`,
+  );
+  assert.equal(requestedHeaders[0]?.get("authorization"), null);
 });
 
 test("admin API client restores the server session and retries once after a 401", async () => {

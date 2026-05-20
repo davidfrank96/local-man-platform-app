@@ -127,6 +127,18 @@ export function VendorDetail({
                   vendor.rating_summary.average_rating,
                   vendor.rating_summary.review_count,
                 )}
+                {vendor.rating_badges.length > 0 ? (
+                  <span
+                    aria-label="Localman confidence badges"
+                    className="vendor-confidence-badges"
+                  >
+                    {vendor.rating_badges.map((badge) => (
+                      <span className="vendor-confidence-badge" key={badge.slug}>
+                        {badge.label}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </dd>
             </div>
             <div>

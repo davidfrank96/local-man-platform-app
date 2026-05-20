@@ -51,6 +51,17 @@ This note summarizes the current branch behavior after the mobile discovery rest
 - Stale or nonexistent vendor ids are skipped safely with sanitized operational logging instead of triggering database foreign-key failures.
 - Valid vendor events still feed admin analytics and usage-signal ranking.
 
+### Rating Signals
+
+- Star ratings remain the primary public rating signal.
+- Users may optionally choose up to two predefined rating signals after selecting a star rating.
+- No free-text reviews, public complaint pages, or public accusation feeds are included.
+- Rating signals are stored in isolated catalog/selection tables instead of on `public.ratings`.
+- Public confidence badges are positive-only, thresholded, capped, and secondary to the star rating.
+- One-off ratings and duplicate retries cannot create or inflate confidence badges.
+- Negative and neutral signals remain internal/admin-only and are not exposed through public vendor detail responses.
+- Admin vendor edit can show aggregate-only signal counts for operational awareness without rating identities, anonymous hashes, IPs, or per-rating rows.
+
 ### Admin Session and Vendor Images
 
 - Admin sessions are cookie-backed and validated through `/api/admin/session`.

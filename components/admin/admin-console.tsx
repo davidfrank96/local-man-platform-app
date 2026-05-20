@@ -17,6 +17,7 @@ import {
   createAdminVendorDishes,
   createAdminVendorImages,
   deactivateAdminVendor,
+  getAdminVendorRatingSignalSummary,
   listAdminVendorDishes,
   listAdminVendorImages,
   listAdminVendorHours,
@@ -53,6 +54,7 @@ import type {
   CreateVendorDishesRequest,
   ReplaceVendorHoursRequest,
   UpdateVendorRequest,
+  AdminRatingSignalSummary,
   VendorFeaturedDish,
   VendorHours,
   VendorImage,
@@ -182,10 +184,14 @@ export function AdminConsole({
       ? (readVendorArtifactCache(workspaceCacheScope, initialCachedVendorId, "dishes") as VendorFeaturedDish[] | null) ?? []
       : [],
   );
+  const [vendorSignalSummary, setVendorSignalSummary] = useState<AdminRatingSignalSummary | null>(null);
+  const [isVendorSignalSummaryLoading, setIsVendorSignalSummaryLoading] = useState(false);
+  const [vendorSignalSummaryError, setVendorSignalSummaryError] = useState<string | null>(null);
   const [vendorCategories, setVendorCategories] = useState<PublicCategory[]>([]);
   const vendorImagesRequestId = useRef(0);
   const vendorHoursRequestId = useRef(0);
   const vendorDishesRequestId = useRef(0);
+  const vendorSignalSummaryRequestId = useRef(0);
   // These flags shape the visible workspace only. Any restricted read or
   // mutation still has to survive backend RBAC checks on `/api/admin/**`.
   const canReadAnalytics = hasAdminPermission(role, "analytics:read");
@@ -356,6 +362,42 @@ export function AdminConsole({
     }
   }, [session, workspaceCacheScope]);
 
+  const loadVendorSignalSummary = useCallback(async function loadVendorSignalSummary(
+    vendorId: string | null,
+  ) {
+    const requestId = ++vendorSignalSummaryRequestId.current;
+
+    if (!vendorId || !session || !canReadAnalytics) {
+      setVendorSignalSummary(null);
+      setIsVendorSignalSummaryLoading(false);
+      setVendorSignalSummaryError(null);
+      return;
+    }
+
+    setVendorSignalSummary(null);
+    setVendorSignalSummaryError(null);
+    setIsVendorSignalSummaryLoading(true);
+
+    try {
+      const summary = await getAdminVendorRatingSignalSummary(vendorId);
+
+      if (requestId === vendorSignalSummaryRequestId.current) {
+        setVendorSignalSummary(summary);
+      }
+    } catch (error) {
+      if (requestId === vendorSignalSummaryRequestId.current) {
+        setVendorSignalSummary(null);
+        setVendorSignalSummaryError(
+          formatAdminErrorStatus(error, "Unable to load rating signal summary."),
+        );
+      }
+    } finally {
+      if (requestId === vendorSignalSummaryRequestId.current) {
+        setIsVendorSignalSummaryLoading(false);
+      }
+    }
+  }, [canReadAnalytics, session]);
+
   useEffect(() => {
     if (!shouldLoadVendorArtifacts) {
       return;
@@ -409,6 +451,28 @@ export function AdminConsole({
       window.clearTimeout(timeout);
     };
   }, [loadVendorDishes, selectedVendor?.id, shouldLoadVendorArtifacts]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!shouldLoadVendorArtifacts || !canReadAnalytics) {
+        setVendorSignalSummary(null);
+        setIsVendorSignalSummaryLoading(false);
+        setVendorSignalSummaryError(null);
+        return;
+      }
+
+      void loadVendorSignalSummary(selectedVendor?.id ?? null);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    canReadAnalytics,
+    loadVendorSignalSummary,
+    selectedVendor?.id,
+    shouldLoadVendorArtifacts,
+  ]);
 
   const runAdminAction = useCallback(async function runAdminAction<T>(
     action: () => Promise<T>,
@@ -1060,11 +1124,15 @@ export function AdminConsole({
           />
           <EditVendorWorkspace
             canDeleteVendor={canDeleteVendor}
+            canReadRatingSignals={canReadAnalytics}
             disabled={isLoading}
+            isVendorSignalSummaryLoading={isVendorSignalSummaryLoading}
             selectedVendor={selectedVendor}
             vendorDishes={vendorDishes}
             vendorHours={vendorHours}
             vendorImages={vendorImages}
+            vendorSignalSummary={vendorSignalSummary}
+            vendorSignalSummaryError={vendorSignalSummaryError}
             onUpdateVendor={handleUpdateVendor}
             onDeactivateVendor={handleDeactivateVendor}
             onReplaceHours={handleReplaceHours}

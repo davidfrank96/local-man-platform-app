@@ -100,11 +100,160 @@ test("public vendor ratings route saves a rating and returns updated summary", a
       target_score: 4,
       target_source_type: "public_simple_rating",
       target_anonymous_client_hash: (calls[1]?.body as Record<string, unknown>).target_anonymous_client_hash,
+      target_signal_tags: [],
     });
     assert.match(
       String((calls[1]?.body as Record<string, unknown>).target_anonymous_client_hash),
       /^[a-f0-9]{64}$/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route persists validated signal tags through the ratings RPC", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  const rpcBodies: Array<Record<string, unknown>> = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      rpcBodies.push(body);
+
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 5,
+        review_count: 1,
+        duplicate: false,
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "localman_public_client=anonymous-client-signals",
+        },
+        body: JSON.stringify({
+          score: 5,
+          signals: ["good_food", "fast_service"],
+        }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.deepEqual(rpcBodies[0]?.target_signal_tags, ["good_food", "fast_service"]);
+    assert.equal("signals" in body.data, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route rejects invalid signal payloads before upstream writes", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  const invalidPayloads = [
+    { score: 5, signals: ["unknown_signal"] },
+    { score: 5, signals: ["good_food", "good_food"] },
+    { score: 5, signals: ["good_food", "fast_service", "fair_price"] },
+    { score: 5, signals: ["poor_hygiene"] },
+    { score: 3, signals: ["good_food"] },
+  ];
+
+  let upstreamCallCount = 0;
+  globalThis.fetch = (async () => {
+    upstreamCallCount += 1;
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    for (const [index, payload] of invalidPayloads.entries()) {
+      const response = await vendorRatingsRoute(
+        new Request("http://localhost/api/vendors/test-vendor/ratings", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": `203.0.113.${40 + index}`,
+          },
+          body: JSON.stringify(payload),
+        }),
+        {
+          params: Promise.resolve({ slug: "test-vendor" }),
+        },
+      );
+      const body = await response.json();
+
+      assert.equal(response.status, 400);
+      assert.equal(body.success, false);
+      assert.equal(body.error.code, "VALIDATION_ERROR");
+      assert.equal(JSON.stringify(body).includes(String(payload.signals[0])), false);
+    }
+
+    assert.equal(upstreamCallCount, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route rejects signal-only payloads before upstream writes", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  let upstreamCallCount = 0;
+
+  globalThis.fetch = (async () => {
+    upstreamCallCount += 1;
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.41",
+        },
+        body: JSON.stringify({
+          signals: ["good_food"],
+        }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.equal(JSON.stringify(body).includes("good_food"), false);
+    assert.equal(upstreamCallCount, 0);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -167,6 +316,151 @@ test("public vendor ratings route rejects duplicate ratings for the same anonymo
       review_count: 3,
     });
     assert.equal(ratingsInsertCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route preserves duplicate semantics for signal submissions", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  let ratingsInsertCount = 0;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      ratingsInsertCount += 1;
+      assert.deepEqual(
+        (JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>).target_signal_tags,
+        ["good_food", "fast_service"],
+      );
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.33,
+        review_count: 3,
+        duplicate: true,
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "localman_public_client=anonymous-client-1",
+        },
+        body: JSON.stringify({
+          score: 5,
+          signals: ["good_food", "fast_service"],
+        }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 409);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.equal(body.error.details.duplicate, true);
+    assert.equal("signals" in body.error.details, false);
+    assert.equal(ratingsInsertCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route collapses reordered signal retry submissions", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+  let ratingsInsertCount = 0;
+  const rpcBodies: Array<Record<string, unknown>> = [];
+  let resolveInsert: (() => void) | undefined;
+  const insertReady = new Promise<void>((resolve) => {
+    resolveInsert = resolve;
+  });
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      ratingsInsertCount += 1;
+      rpcBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      await insertReady;
+      return Response.json({
+        vendor_id: vendorId,
+        average_rating: 4.5,
+        review_count: 6,
+        duplicate: false,
+      });
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const createRequest = (signals: string[]) =>
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.33",
+        },
+        body: JSON.stringify({
+          score: 5,
+          signals,
+        }),
+      });
+
+    const firstPromise = vendorRatingsRoute(createRequest(["good_food", "fast_service"]), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+    const secondPromise = vendorRatingsRoute(createRequest(["fast_service", "good_food"]), {
+      params: Promise.resolve({ slug: "test-vendor" }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(resolveInsert);
+    resolveInsert();
+
+    const [firstResponse, secondResponse] = await Promise.all([firstPromise, secondPromise]);
+    const firstBody = await firstResponse.json();
+    const secondBody = await secondResponse.json();
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 200);
+    assert.equal(ratingsInsertCount, 1);
+    assert.deepEqual(rpcBodies[0]?.target_signal_tags, ["good_food", "fast_service"]);
+    assert.deepEqual(secondBody.data, firstBody.data);
+    assert.equal("signals" in firstBody.data, false);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -564,6 +858,68 @@ test("public vendor ratings route returns a controlled upstream error when the r
     );
   } finally {
     console.error = originalError;
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor ratings route does not leak RPC signal validation details", async () => {
+  const restoreEnv = setRatingEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const method = init?.method ?? "GET";
+
+    if (url.pathname === "/rest/v1/vendors" && method === "GET") {
+      return Response.json([
+        {
+          id: vendorId,
+          slug: "test-vendor",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/submit_public_vendor_rating" && method === "POST") {
+      return Response.json(
+        {
+          message: "inactive rating_signal_options row rejected tag good_food",
+          details: "internal table rating_signal_selections failed",
+        },
+        { status: 400 },
+      );
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorRatingsRoute(
+      new Request("http://localhost/api/vendors/test-vendor/ratings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "localman_public_client=anonymous-client-rpc-reject",
+        },
+        body: JSON.stringify({
+          score: 5,
+          signals: ["good_food"],
+        }),
+      }),
+      {
+        params: Promise.resolve({ slug: "test-vendor" }),
+      },
+    );
+    const body = await response.json();
+    const serializedBody = JSON.stringify(body);
+
+    assert.equal(response.status, 502);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "UPSTREAM_ERROR");
+    assert.equal(serializedBody.includes("rating_signal_options"), false);
+    assert.equal(serializedBody.includes("rating_signal_selections"), false);
+    assert.equal(serializedBody.includes("good_food"), false);
+  } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
   }

@@ -14,6 +14,9 @@ import {
   DELETE as deleteVendorRoute,
   PUT as updateVendorRoute,
 } from "../app/api/admin/vendors/[id]/route.ts";
+import {
+  GET as getVendorRatingSignalSummaryRoute,
+} from "../app/api/admin/vendors/[id]/rating-signals/route.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000001";
 const secondVendorId = "00000000-0000-4000-8000-000000000002";
@@ -162,6 +165,20 @@ function createAdminFetchMock(
 
     if (url.pathname === "/rest/v1/audit_logs") {
       return new Response(null, { status: 201 });
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_admin_vendor_rating_signal_summary") {
+      return Response.json([
+        {
+          positive_signal_count: 5,
+          neutral_signal_count: 2,
+          negative_signal_count: 3,
+          food_safety_concern_count: 1,
+          poor_hygiene_count: 1,
+          vendor_unavailable_count: 1,
+          recent_signal_count: 4,
+        },
+      ]);
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });
@@ -849,6 +866,124 @@ test("agent delete vendor route is forbidden", async () => {
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin can read aggregate-only vendor rating signal summary", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const requestedBodies: unknown[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/rpc/get_admin_vendor_rating_signal_summary") {
+      requestedBodies.push(JSON.parse(String(init?.body ?? "{}")));
+    }
+
+    return createAdminFetchMock(calls)(input, init);
+  }) as typeof fetch;
+
+  try {
+    const response = await getVendorRatingSignalSummaryRoute(
+      new Request(`http://localhost/api/admin/vendors/${vendorId}/rating-signals`, {
+        method: "GET",
+        headers: {
+          authorization: "Bearer admin-token",
+        },
+      }),
+      {
+        params: Promise.resolve({ id: vendorId }),
+      },
+    );
+    const body = await response.json();
+    const serializedBody = JSON.stringify(body);
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(body.data.signal_summary, {
+      positive_signal_count: 5,
+      neutral_signal_count: 2,
+      negative_signal_count: 3,
+      food_safety_concern_count: 1,
+      poor_hygiene_count: 1,
+      vendor_unavailable_count: 1,
+      recent_signal_count: 4,
+    });
+    assert.deepEqual(requestedBodies, [
+      {
+        target_vendor_id: vendorId,
+      },
+    ]);
+    assert.equal(serializedBody.includes("anonymous_client_hash"), false);
+    assert.equal(serializedBody.includes("rating_id"), false);
+    assert.equal(serializedBody.includes("source_type"), false);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "POST /rest/v1/rpc/get_admin_vendor_rating_signal_summary",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("agent cannot read vendor rating signal summary", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await getVendorRatingSignalSummaryRoute(
+      new Request(`http://localhost/api/admin/vendors/${vendorId}/rating-signals`, {
+        method: "GET",
+        headers: {
+          authorization: "Bearer agent-token",
+        },
+      }),
+      {
+        params: Promise.resolve({ id: vendorId }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(body.error.code, "FORBIDDEN");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("unauthenticated users cannot read vendor rating signal summary", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await getVendorRatingSignalSummaryRoute(
+      new Request(`http://localhost/api/admin/vendors/${vendorId}/rating-signals`, {
+        method: "GET",
+      }),
+      {
+        params: Promise.resolve({ id: vendorId }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 401);
+    assert.equal(body.error.code, "UNAUTHORIZED");
+    assert.deepEqual(calls, []);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

@@ -147,6 +147,37 @@ Notes:
 - new public rating writes include a SHA-256 anonymous browser identity hash.
 - `ratings_vendor_anonymous_client_hash_idx` enforces one rating per vendor per anonymous hash when the hash is present.
 - legacy rows may have `anonymous_client_hash = null` and remain part of aggregate rating history.
+- rating signals are intentionally not stored on `ratings` because `ratings` has public-facing summary use.
+
+## Table: rating_signal_options
+- id: uuid, primary key
+- slug: text, unique
+- label: text
+- signal_type: text
+- score_min: integer
+- score_max: integer
+- is_public_positive: boolean default false
+- is_active: boolean default true
+- sort_order: integer default 0
+- created_at: timestamp
+
+Runtime rules:
+- Options are the predefined rating-signal catalog; arbitrary strings and free-text reviews are not allowed.
+- Positive signals are allowed only for 4-5 star ratings, neutral signals only for 3 star ratings, and negative signals only for 1-2 star ratings.
+- Only positive options can be public badge candidates.
+
+## Table: rating_signal_selections
+- id: uuid, primary key
+- rating_id: uuid, foreign key to ratings, on delete cascade
+- signal_option_id: uuid, foreign key to rating_signal_options
+- created_at: timestamp
+
+Runtime rules:
+- Signal selections must reference an existing rating and active signal option.
+- A rating can have at most two signal selections.
+- `(rating_id, signal_option_id)` is unique.
+- Raw signal selections are internal. Public routes receive only shaped rating summaries and conservative positive confidence badges.
+- Negative and neutral signal selections remain admin-only operational visibility and must not be exposed through public vendor detail or badge payloads.
 
 ## Table: user_events
 - id: uuid, primary key
@@ -286,6 +317,10 @@ Runtime rules:
 - vendor_featured_dishes.vendor_id
 - vendor_images.vendor_id and sort_order
 - ratings.vendor_id
+- rating_signal_options.slug
+- rating_signal_options.is_active, signal_type, and sort_order
+- rating_signal_selections.rating_id
+- rating_signal_selections.signal_option_id
 - user_events.event_type and timestamp
 - user_events.vendor_id and timestamp
 - user_events.session_id and timestamp

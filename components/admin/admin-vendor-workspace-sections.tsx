@@ -33,6 +33,7 @@ import {
 import { slugPattern } from "../../lib/validation/common.ts";
 import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
 import type {
+  AdminRatingSignalSummary,
   CreateManagedVendorRequest,
   CreateVendorDishesRequest,
   ReplaceVendorHoursRequest,
@@ -661,11 +662,15 @@ export function AdminCreateVendorSection({
 
 export function EditVendorWorkspace({
   canDeleteVendor,
+  canReadRatingSignals,
   disabled,
+  isVendorSignalSummaryLoading,
   selectedVendor,
   vendorHours,
   vendorImages,
   vendorDishes,
+  vendorSignalSummary,
+  vendorSignalSummaryError,
   onUpdateVendor,
   onDeactivateVendor,
   onReplaceHours,
@@ -675,6 +680,10 @@ export function EditVendorWorkspace({
   onDeleteDish,
 }: Omit<AdminFormProps, "onCreateVendor"> & {
   canDeleteVendor: boolean;
+  canReadRatingSignals: boolean;
+  isVendorSignalSummaryLoading: boolean;
+  vendorSignalSummary: AdminRatingSignalSummary | null;
+  vendorSignalSummaryError: string | null;
 }) {
   const completenessLabels = useMemo(
     () =>
@@ -735,6 +744,13 @@ export function EditVendorWorkspace({
         ) : (
           <p className="form-note">This vendor currently has hours, images, and featured dishes.</p>
         )}
+        {canReadRatingSignals ? (
+          <RatingSignalInsightsPanel
+            error={vendorSignalSummaryError}
+            isLoading={isVendorSignalSummaryLoading}
+            summary={vendorSignalSummary}
+          />
+        ) : null}
         <nav className="admin-section-tabs" aria-label="Vendor edit sections">
           <a href="#edit-basic-details">Basic details</a>
           <a href="#edit-hours">Hours</a>
@@ -790,6 +806,59 @@ export function EditVendorWorkspace({
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function RatingSignalInsightsPanel({
+  error,
+  isLoading,
+  summary,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  summary: AdminRatingSignalSummary | null;
+}) {
+  const metrics: Array<[string, number]> = summary
+    ? [
+        ["Positive signals", summary.positive_signal_count],
+        ["Neutral signals", summary.neutral_signal_count],
+        ["Negative/internal signals", summary.negative_signal_count],
+        ["Food safety concern", summary.food_safety_concern_count],
+        ["Poor hygiene", summary.poor_hygiene_count],
+        ["Vendor unavailable", summary.vendor_unavailable_count],
+        ["Recent 30 days", summary.recent_signal_count],
+      ]
+    : [];
+
+  return (
+    <section className="admin-rating-signal-panel" aria-labelledby="rating-signal-insights">
+      <div className="admin-section-header">
+        <div>
+          <p className="eyebrow">Internal signals</p>
+          <h3 id="rating-signal-insights">Rating signal insights</h3>
+        </div>
+      </div>
+      <p className="admin-rating-signal-note">
+        Admin-only aggregate counts for operational moderation. This does not expose rating identities,
+        anonymous hashes, IPs, or per-rating signal rows.
+      </p>
+      {isLoading ? (
+        <p className="empty-state">Loading signal summary…</p>
+      ) : error ? (
+        <p className="field-error">{error}</p>
+      ) : summary ? (
+        <dl className="admin-rating-signal-grid">
+          {metrics.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="empty-state">No rating signal data loaded yet.</p>
+      )}
     </section>
   );
 }

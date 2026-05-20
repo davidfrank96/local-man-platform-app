@@ -101,7 +101,11 @@ Local Man — UI Rules
 - visible primary actions near top
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
 - compact summary cards or chips are preferred when they reduce scrolling without hiding information
-- lightweight star rating input may appear here, but it must stay compact and comment-free
+- lightweight star rating input may appear here, but it must stay compact and free of text boxes
+- rating signals are optional quick tags after star selection; use neutral prompts such as `What stood out?`, `What could be better?`, and `What went wrong?`
+- public confidence badges should be small, secondary chips near the rating summary, not certification, warnings, or platform guarantees
+- public confidence badges must stay positive-only and must not expose raw counts or per-rating signal data
+- do not use public rating-signal wording such as complaints, accusations, dirty vendor, unsafe vendor, dangerous vendor, public reports, community warnings, or blacklist language
 - weekly hours clearly structured
 - public hours should display in 12-hour AM/PM format
 - featured dishes visually separated

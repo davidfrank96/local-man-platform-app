@@ -117,6 +117,10 @@ Test:
 - invalid scores are rejected
 - unknown vendor slug returns `NOT_FOUND`
 - rating RPC failures return `UPSTREAM_ERROR`
+- star-only rating payloads remain valid
+- optional predefined rating signals submit with the rating atomically
+- signal-only payloads are rejected before any upstream write
+- unknown, inactive, duplicate, excessive, or score-mismatched signals are rejected
 - vendor lookup connectivity failures return `UPSTREAM_ERROR`
 - first anonymous browser rating for a vendor succeeds
 - second rating for the same vendor and anonymous browser identity returns a clean duplicate response and does not update the aggregate
@@ -128,11 +132,18 @@ Test:
 - vendor cards and detail continue to show `New` when no ratings exist
 - repeated rating spam from one client is rate limited
 - duplicate sequential and concurrent rating retries collapse into one upstream write
+- reordered duplicate signal retries collapse into one upstream write and cannot inflate signal counts
 - public rating controls disable after success and stay disabled on refresh using client-side storage
 - route returns the database-owned post-write summary instead of recomputing ratings client-side
+- public confidence badges appear only as thresholded positive summaries
+- public badge responses do not expose negative signals, neutral signals, raw counts, per-rating rows, or anonymous hashes
+- public copy avoids complaint, accusation, safety-warning, certification, or blacklist framing
+- admin signal visibility stays aggregate-only and access-controlled
 
 Current automated coverage:
 - `tests/public-rating-route.test.ts`
+- `tests/public-routes.test.ts`
+- `tests/rating-signals.test.ts`
 - `tests/e2e/app-smoke.spec.ts`
 
 ### Rider Connect Logic
