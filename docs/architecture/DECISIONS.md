@@ -31,7 +31,7 @@ Local Man — Architecture and Product Decisions
 ### Decision 006
 **Decision:** Ratings will exist in MVP but stay lightweight.
 **Reason:** Social proof helps discovery, but moderation complexity must stay low.
-**Impact:** Full review systems are deferred.
+**Impact:** Star ratings remain primary, optional rating signals are predefined and limited, public confidence badges stay conservative and positive-only, and full review systems are deferred.
 
 ### Decision 007
 **Decision:** Supabase will handle database, admin auth, and storage in MVP.

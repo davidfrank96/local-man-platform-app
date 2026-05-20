@@ -5,6 +5,7 @@ import {
 import { getVendorAvailabilitySnapshot } from "./hours.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import {
+  publicRatingBadgeSchema,
   vendorCategorySchema,
   vendorDetailResponseDataSchema,
 } from "../validation/index.ts";
@@ -16,6 +17,7 @@ import type {
   VendorFeaturedDish,
   VendorHours,
   VendorImage,
+  PublicRatingBadge,
 } from "../../types/index.ts";
 import type { VendorUsageScoreMap } from "./nearby.ts";
 
@@ -355,6 +357,9 @@ export async function fetchPublicCategoriesFromSupabase(
 export async function fetchVendorDetailBySlugFromSupabase(
   slug: string,
   config: SupabaseRestConfig,
+  options?: {
+    serviceRoleConfig?: SupabaseServiceRoleConfig | null;
+  },
 ): Promise<VendorDetailResponseData | null> {
   const url = new URL("/rest/v1/vendors", config.url);
   url.searchParams.set(
@@ -399,6 +404,10 @@ export async function fetchVendorDetailBySlugFromSupabase(
   const featuredDishes =
     vendor.vendor_featured_dishes?.filter((dish) => dish.is_featured) ?? [];
   const availability = getVendorAvailabilitySnapshot(hours, vendor.is_open_override);
+  const ratingBadges = await fetchPublicRatingBadgesForVendor(
+    vendor.id,
+    options?.serviceRoleConfig ?? null,
+  );
 
   return vendorDetailResponseDataSchema.parse({
     ...vendor,
@@ -412,5 +421,30 @@ export async function fetchVendorDetailBySlugFromSupabase(
       average_rating: vendor.average_rating,
       review_count: vendor.review_count,
     },
+    rating_badges: ratingBadges,
   });
+}
+
+export async function fetchPublicRatingBadgesForVendor(
+  vendorId: string,
+  config: SupabaseServiceRoleConfig | null,
+): Promise<PublicRatingBadge[]> {
+  if (!config) {
+    return [];
+  }
+
+  try {
+    const rows = await callSupabaseServiceRoleRpc<unknown[]>(
+      "get_public_vendor_rating_badges",
+      {
+        target_vendor_id: vendorId,
+      },
+      config,
+      "Supabase public rating badge RPC failed",
+    );
+
+    return rows.map((row) => publicRatingBadgeSchema.parse(row));
+  } catch {
+    return [];
+  }
 }

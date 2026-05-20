@@ -158,6 +158,7 @@ Returns:
 - featured dishes
 - images with browser-ready public `image_url` values
 - rating summary
+- conservative positive-only `rating_badges` when threshold rules are met
 
 Behavior:
 - Returns `NOT_FOUND` when no active vendor matches the slug.
@@ -167,6 +168,8 @@ Behavior:
 - Public discovery cards, the selected vendor panel, and the detail page also resolve their status labels through that same helper, so a cached boolean cannot contradict the visible `today_hours` window.
 - When a `vendor_images` row has `storage_object_path` but no usable `image_url`, the server normalizes it into a public bucket URL before returning the vendor detail payload.
 - Missing hours, featured dishes, or images must not cause the detail route to fail.
+- `rating_badges` contains only approved public confidence badge summaries: `slug` and `label`.
+- Public vendor detail responses must not include negative signals, neutral signals, raw signal counts, per-rating signal rows, anonymous hashes, or moderation metadata.
 
 Detail image shape:
 - `images` contains vendor profile image records for that vendor
@@ -181,6 +184,7 @@ Route file:
 
 Request body:
 - `score`: integer from `1` to `5`
+- `signals`: optional array of up to two predefined signal slugs
 
 Returns:
 - resolved `vendor_id`
@@ -192,12 +196,16 @@ Behavior:
 - no login required for the lightweight public rating flow
 - one anonymous browser identity may rate a specific vendor once
 - anonymous rating identity is stored in the existing public client cookie and written to the database only as a server-side SHA-256 hash
-- validates the vendor slug and rating score
+- validates the vendor slug, rating score, and optional rating signals
+- star-only rating payloads remain valid
+- optional signals must be predefined, unique, active, score-compatible, and limited to two
 - resolves the active vendor id first, then submits the write through the server-only `submit_public_vendor_rating` RPC
 - database-side aggregation owns `vendors.average_rating` and `vendors.review_count`
 - the response returns the authoritative post-write summary from the database instead of recalculating scores in Node
-- release requires both `supabase/migrations/20260507193000_public_rating_submission_rpc.sql` and `supabase/migrations/20260512003000_public_rating_anonymous_identity.sql` to be applied so the ratings RPC, summary refresh function, anonymous hash column, and vendor/hash unique index exist
-- does not support review comments
+- release requires the public rating RPC migrations and rating-signal migrations so the ratings RPC, summary refresh function, anonymous hash column, vendor/hash unique index, signal catalog, signal selections, and public badge aggregation exist
+- does not support free-text reviews
+- raw signal selections are stored in isolated internal tables, not on `public.ratings`
+- public responses never include negative/neutral signals, raw signal counts, or per-rating signal data
 - abuse protection:
   - threshold: `8` accepted submissions per `10` minutes per client/IP
   - block window: `10` minutes after exceeding the threshold

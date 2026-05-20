@@ -43,7 +43,8 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - vendor-card selection may gently focus the map
   - no clustering in the current release
 - vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
-- lightweight vendor rating input with 1-5 stars, no comments, and one rating per vendor per anonymous browser identity
+- lightweight vendor rating input with 1-5 stars, optional predefined rating signals, no free-text reviews, and one rating per vendor per anonymous browser identity
+- conservative public confidence badges may appear on vendor detail only after thresholded positive rating-signal evidence; negative and neutral signals remain internal/admin-only
 - Rider Connect on vendor detail pages:
   - `Request Rider` opens a disclaimer-gated handoff flow
   - suggestions include only verified and visible independent riders
@@ -53,7 +54,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - Localman does not collect payment, assign deliveries, send WhatsApp messages, or guarantee delivery
 - public abuse protection on write-heavy and search-heavy routes:
   - `/api/events` rate limits repeated event floods and deduplicates immediate retry payloads
-  - `/api/vendors/[slug]/ratings` rate limits repeated rating spam, collapses duplicate retry submissions, and rejects repeat ratings for the same vendor/browser identity
+  - `/api/vendors/[slug]/ratings` rate limits repeated rating spam, collapses duplicate retry submissions, validates optional rating signals, and rejects repeat ratings for the same vendor/browser identity
   - `/api/vendors/nearby` rate limits search-bearing abuse traffic without throttling normal default-city browsing
   - Rider Connect application, suggestion, contact handoff, and unavailable-report routes are rate-limited server-side
 - local retention helpers:
@@ -236,7 +237,7 @@ Server-side runtime logging is standardized through `lib/observability.ts`:
 Public abuse protection is centralized server-side in the API layer:
 - `/api/admin/login`: `5` attempts per `10` minutes per IP/email with a `15` minute block window
 - `/api/events`: `120` accepted requests per `5` minutes per client/IP with a short duplicate-submission collapse window
-- `/api/vendors/[slug]/ratings`: one accepted submission per vendor per anonymous browser identity, plus `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse
+- `/api/vendors/[slug]/ratings`: one accepted submission per vendor per anonymous browser identity, plus `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse and max-two predefined rating signals
 - `/api/vendors/nearby` search requests only: `45` requests per minute per client/IP with a `2` minute block window
 - public limiter correlation may issue a non-privileged HTTP-only cookie so repeated browser abuse cannot avoid the per-IP bucket simply by retrying
 - the current limiter is in-memory and process-local, so it is best-effort for a single app instance rather than a distributed global throttle
@@ -293,7 +294,7 @@ Phase 6 currently covers:
   - recently viewed vendors
   - last selected vendor memory
   - popular vendors near you
-- simple public vendor ratings with aggregate score display and one anonymous browser rating per vendor
+- simple public vendor ratings with aggregate score display, optional predefined rating signals, conservative confidence badges, and one anonymous browser rating per vendor
 - tracked events:
   - `session_started`
   - `first_interaction`

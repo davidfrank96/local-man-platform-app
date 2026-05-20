@@ -12,6 +12,7 @@ import type {
   AuditLog,
   AdminAnalyticsRange,
   AdminAnalyticsResponseData,
+  AdminRatingSignalSummary,
   OperationalEvent,
   OperationalEventLevel,
   OperationalEventTimeWindow,
@@ -762,6 +763,20 @@ export async function fetchAdminOperationalLogs(
     buildOperationalLogsPath(normalizedFilters),
     options,
   );
+}
+
+export async function getAdminVendorRatingSignalSummary(
+  vendorId: string,
+  options: AdminApiClientOptions = {},
+): Promise<AdminRatingSignalSummary> {
+  const result = await requestAdminApi<{
+    signal_summary: AdminRatingSignalSummary;
+  }>(
+    `/api/admin/vendors/${vendorId}/rating-signals`,
+    options,
+  );
+
+  return result.signal_summary;
 }
 
 export async function listAdminRiders(

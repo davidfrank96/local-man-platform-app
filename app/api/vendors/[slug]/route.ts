@@ -8,6 +8,7 @@ import { validateInput } from "../../../../lib/api/validation.ts";
 import {
   fetchVendorDetailBySlugFromSupabase,
   getSupabaseRestConfig,
+  getSupabaseServiceRoleConfig,
 } from "../../../../lib/vendors/supabase.ts";
 import { vendorSlugParamsSchema } from "../../../../lib/validation/index.ts";
 import { logStructuredEvent } from "../../../../lib/observability.ts";
@@ -46,6 +47,7 @@ export async function GET(_request: Request, { params }: VendorRouteContext) {
   }
 
   const config = getSupabaseRestConfig();
+  const serviceRoleConfig = getSupabaseServiceRoleConfig();
 
   if (!config) {
     return applyRateLimitResponseHeaders(
@@ -62,6 +64,9 @@ export async function GET(_request: Request, { params }: VendorRouteContext) {
     const vendor = await fetchVendorDetailBySlugFromSupabase(
       routeParams.data.slug,
       config,
+      {
+        serviceRoleConfig,
+      },
     );
 
     if (!vendor) {

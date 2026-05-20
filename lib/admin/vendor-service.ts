@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  adminRatingSignalSummarySchema,
   adminVendorSummarySchema,
   vendorCategorySchema,
   vendorFeaturedDishSchema,
@@ -39,6 +40,7 @@ import type {
   UpdateVendorRequest,
   VendorIdParams,
   VendorImageMetadataRequest,
+  AdminRatingSignalSummary,
 } from "../../types/index.ts";
 
 export type VendorRecord = z.infer<typeof vendorSchema>;
@@ -47,6 +49,7 @@ export type VendorCategoryRecord = z.infer<typeof vendorCategorySchema>;
 export type VendorHoursRecord = z.infer<typeof vendorHoursSchema>;
 export type VendorImageRecord = z.infer<typeof vendorImageSchema>;
 export type VendorFeaturedDishRecord = z.infer<typeof vendorFeaturedDishSchema>;
+export type AdminRatingSignalSummaryRecord = z.infer<typeof adminRatingSignalSummarySchema>;
 export type VendorDuplicateCandidateRecord = Pick<
   VendorRecord,
   "id" | "name" | "slug" | "address_text" | "area" | "latitude" | "longitude"
@@ -257,6 +260,29 @@ function parseReturnedImage(payload: unknown): VendorImageRecord {
 
 function parseReturnedDishes(payload: unknown): VendorFeaturedDishRecord[] {
   return parseSupabasePayload(z.array(vendorFeaturedDishSchema), payload);
+}
+
+function getEmptyAdminRatingSignalSummary(): AdminRatingSignalSummary {
+  return {
+    positive_signal_count: 0,
+    neutral_signal_count: 0,
+    negative_signal_count: 0,
+    food_safety_concern_count: 0,
+    poor_hygiene_count: 0,
+    vendor_unavailable_count: 0,
+    recent_signal_count: 0,
+  };
+}
+
+function parseReturnedAdminRatingSignalSummary(
+  payload: unknown,
+): AdminRatingSignalSummary {
+  const rows = parseSupabasePayload(
+    z.array(adminRatingSignalSummarySchema),
+    payload,
+  );
+
+  return rows[0] ?? getEmptyAdminRatingSignalSummary();
 }
 
 function parseReturnedCategories(payload: unknown): VendorCategoryRecord[] {
@@ -482,6 +508,43 @@ export async function listVendors(
       count: vendors.length,
     },
   };
+}
+
+export async function getAdminVendorRatingSignalSummary(
+  params: VendorIdParams,
+  {
+    config = getAdminAuthConfig(),
+    fetchImpl = fetch,
+  }: AdminVendorServiceContext,
+): Promise<AdminRatingSignalSummary> {
+  const resolvedConfig = requireServiceConfig(config);
+  const serviceRoleKey = resolvedConfig.supabaseServiceRoleKey?.trim();
+
+  if (!serviceRoleKey) {
+    throw new AdminServiceError(
+      "CONFIGURATION_ERROR",
+      "A service role key is required to read admin rating signal summaries.",
+      503,
+    );
+  }
+
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "rpc/get_admin_vendor_rating_signal_summary"),
+    {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        target_vendor_id: params.id,
+      }),
+    },
+    fetchImpl,
+  );
+
+  return parseReturnedAdminRatingSignalSummary(payload);
 }
 
 export async function listVendorCategories(

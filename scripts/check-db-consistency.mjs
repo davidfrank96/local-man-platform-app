@@ -115,6 +115,8 @@ const requiredPolicies = [
   { table: "admin_users", policy: "Admins can read admin users" },
   { table: "audit_logs", policy: "Admins can read audit logs" },
   { table: "operational_events", policy: "Admins can read operational events" },
+  { table: "rating_signal_options", policy: "Admins can manage rating signal options" },
+  { table: "rating_signal_selections", policy: "Admins can read rating signal selections" },
   { table: "riders", policy: "Admins can manage riders" },
   { table: "rider_contact_intents", policy: "Admins can read rider contact intents" },
   { table: "rider_unavailable_reports", policy: "Admins can read rider unavailable reports" },
@@ -130,6 +132,8 @@ const existingPolicies = new Set(
         'admin_users',
         'audit_logs',
         'operational_events',
+        'rating_signal_options',
+        'rating_signal_selections',
         'riders',
         'rider_contact_intents',
         'rider_unavailable_reports',
@@ -154,6 +158,8 @@ const requiredRlsTables = [
   "user_events",
   "operational_events",
   "app_schema_migrations",
+  "rating_signal_options",
+  "rating_signal_selections",
   "riders",
   "rider_contact_intents",
   "rider_unavailable_reports",
@@ -194,6 +200,8 @@ const serviceTables = [
   "user_events",
   "operational_events",
   "app_schema_migrations",
+  "rating_signal_options",
+  "rating_signal_selections",
   "riders",
   "rider_contact_intents",
   "rider_unavailable_reports",
@@ -243,6 +251,23 @@ const forbiddenTablePrivileges = [
   ]),
   ...["admin_users", "audit_logs", "user_events", "operational_events", "app_schema_migrations"]
     .map((table) => ["anon", table, "SELECT"]),
+  ...["rating_signal_options", "rating_signal_selections"].map((table) => [
+    "anon",
+    table,
+    "SELECT",
+  ]),
+  ...["rating_signal_options", "rating_signal_selections"].flatMap((table) => [
+    ["public", table, "SELECT"],
+    ["public", table, "INSERT"],
+    ["public", table, "UPDATE"],
+    ["public", table, "DELETE"],
+  ]),
+  ...["rating_signal_options", "rating_signal_selections"].flatMap((table) => [
+    ["authenticated", table, "SELECT"],
+    ["authenticated", table, "INSERT"],
+    ["authenticated", table, "UPDATE"],
+    ["authenticated", table, "DELETE"],
+  ]),
   ...["riders", "rider_contact_intents", "rider_unavailable_reports"]
     .map((table) => ["anon", table, "SELECT"]),
   ...["user_events", "operational_events", "app_schema_migrations"].flatMap((table) => [
@@ -298,7 +323,10 @@ const requiredFunctionPrivileges = [
   ["service_role", "public.sync_vendor_rating_summary()"],
   ["service_role", "public.get_admin_analytics_snapshot(timestamp with time zone, integer)"],
   ["service_role", "public.get_vendor_usage_scores(uuid[])"],
-  ["service_role", "public.submit_public_vendor_rating(uuid, integer, text, text)"],
+  ["service_role", "public.submit_public_vendor_rating(uuid, integer, text, text, text[])"],
+  ["service_role", "public.enforce_rating_signal_selection_rules()"],
+  ["service_role", "public.get_public_vendor_rating_badges(uuid)"],
+  ["service_role", "public.get_admin_vendor_rating_signal_summary(uuid)"],
 ];
 const forbiddenFunctionPrivileges = [
   "public.set_updated_at()",
@@ -306,7 +334,10 @@ const forbiddenFunctionPrivileges = [
   "public.sync_vendor_rating_summary()",
   "public.get_admin_analytics_snapshot(timestamp with time zone, integer)",
   "public.get_vendor_usage_scores(uuid[])",
-  "public.submit_public_vendor_rating(uuid, integer, text, text)",
+  "public.submit_public_vendor_rating(uuid, integer, text, text, text[])",
+  "public.enforce_rating_signal_selection_rules()",
+  "public.get_public_vendor_rating_badges(uuid)",
+  "public.get_admin_vendor_rating_signal_summary(uuid)",
 ].flatMap((signature) => [
   ["anon", signature],
   ["authenticated", signature],

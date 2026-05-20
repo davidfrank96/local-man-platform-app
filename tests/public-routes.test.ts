@@ -28,6 +28,23 @@ function setPublicEnv(): () => void {
   };
 }
 
+function setPublicEnvWithServiceRole(): () => void {
+  const restorePublicEnv = setPublicEnv();
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+  return () => {
+    if (previousServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+    }
+
+    restorePublicEnv();
+  };
+}
+
 function createDailyHours(vendor_id: string) {
   return Array.from({ length: 7 }, (_, day_of_week) => ({
     id: `20000000-0000-4000-8000-00000000000${day_of_week + 1}`,
@@ -179,6 +196,174 @@ test("public vendor detail route returns transformed vendor detail", async () =>
       review_count: 5,
     });
     assert.equal(fetchOptions[0]?.cache, "no-store");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor detail route returns conservative public rating badges only", async () => {
+  const restoreEnv = setPublicEnvWithServiceRole();
+  const originalFetch = globalThis.fetch;
+  const requestedPaths: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    requestedPaths.push(url.pathname);
+
+    if (url.pathname === "/rest/v1/rpc/get_public_vendor_rating_badges") {
+      assert.equal(init?.method, "POST");
+      assert.equal(
+        (init?.headers as Record<string, string> | undefined)?.authorization,
+        "Bearer service-role-key",
+      );
+
+      return Response.json([
+        {
+          slug: "good_food",
+          label: "Good food",
+        },
+        {
+          slug: "fast_service",
+          label: "Fast service",
+        },
+      ]);
+    }
+
+    assert.equal(url.pathname, "/rest/v1/vendors");
+    assert.equal(url.searchParams.get("slug"), "eq.badged-vendor");
+
+    return Response.json([
+      {
+        id: vendorId,
+        name: "Badged Vendor",
+        slug: "badged-vendor",
+        short_description: "Test vendor",
+        phone_number: "+2340000000000",
+        address_text: "Test address",
+        city: "Abuja",
+        area: "Wuse",
+        state: "FCT",
+        country: "Nigeria",
+        latitude: 9.0813,
+        longitude: 7.4694,
+        price_band: "budget",
+        average_rating: 4.8,
+        review_count: 8,
+        is_active: true,
+        is_open_override: true,
+        created_at: timestamp,
+        updated_at: timestamp,
+        vendor_hours: createDailyHours(vendorId),
+        vendor_category_map: [],
+        vendor_featured_dishes: [],
+        vendor_images: [],
+      },
+    ]);
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorDetailRoute(
+      new Request("http://localhost/api/vendors/badged-vendor"),
+      {
+        params: Promise.resolve({ slug: "badged-vendor" }),
+      },
+    );
+    const body = await response.json();
+    const serializedBody = JSON.stringify(body);
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(body.data.vendor.rating_badges, [
+      {
+        slug: "good_food",
+        label: "Good food",
+      },
+      {
+        slug: "fast_service",
+        label: "Fast service",
+      },
+    ]);
+    assert.equal(requestedPaths.includes("/rest/v1/rpc/get_public_vendor_rating_badges"), true);
+    assert.equal(serializedBody.includes("Poor hygiene"), false);
+    assert.equal(serializedBody.includes("average_food"), false);
+    assert.equal(serializedBody.includes("signal_rating_count"), false);
+    assert.equal(serializedBody.includes("negative_signal_count"), false);
+    assert.equal(serializedBody.includes("food_safety_concern_count"), false);
+    assert.equal(serializedBody.includes("rating_signal_selections"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("public vendor detail route drops unsafe rating badge RPC output", async () => {
+  const restoreEnv = setPublicEnvWithServiceRole();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/rpc/get_public_vendor_rating_badges") {
+      return Response.json([
+        {
+          slug: "poor_hygiene",
+          label: "Poor hygiene",
+        },
+        {
+          slug: "good_food",
+          label: "Good food",
+          signal_rating_count: 9,
+        },
+      ]);
+    }
+
+    assert.equal(url.pathname, "/rest/v1/vendors");
+    assert.equal(url.searchParams.get("slug"), "eq.unsafe-badge-vendor");
+
+    return Response.json([
+      {
+        id: vendorId,
+        name: "Unsafe Badge Vendor",
+        slug: "unsafe-badge-vendor",
+        short_description: "Test vendor",
+        phone_number: "+2340000000000",
+        address_text: "Test address",
+        city: "Abuja",
+        area: "Wuse",
+        state: "FCT",
+        country: "Nigeria",
+        latitude: 9.0813,
+        longitude: 7.4694,
+        price_band: "budget",
+        average_rating: 4.8,
+        review_count: 8,
+        is_active: true,
+        is_open_override: true,
+        created_at: timestamp,
+        updated_at: timestamp,
+        vendor_hours: createDailyHours(vendorId),
+        vendor_category_map: [],
+        vendor_featured_dishes: [],
+        vendor_images: [],
+      },
+    ]);
+  }) as typeof fetch;
+
+  try {
+    const response = await vendorDetailRoute(
+      new Request("http://localhost/api/vendors/unsafe-badge-vendor"),
+      {
+        params: Promise.resolve({ slug: "unsafe-badge-vendor" }),
+      },
+    );
+    const body = await response.json();
+    const serializedBody = JSON.stringify(body);
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(body.data.vendor.rating_badges, []);
+    assert.equal(serializedBody.includes("poor_hygiene"), false);
+    assert.equal(serializedBody.includes("Poor hygiene"), false);
+    assert.equal(serializedBody.includes("signal_rating_count"), false);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

@@ -868,6 +868,29 @@ async function mockAuthenticatedAdminWorkspace(
     });
   });
 
+  await page.route(/\/api\/admin\/vendors\/[^/]+\/rating-signals(?:\?.*)?$/, async (route) => {
+    recordAdminRequest(route.request());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          signal_summary: {
+            positive_signal_count: 5,
+            neutral_signal_count: 2,
+            negative_signal_count: 3,
+            food_safety_concern_count: 1,
+            poor_hygiene_count: 1,
+            vendor_unavailable_count: 1,
+            recent_signal_count: 4,
+          },
+        },
+        error: null,
+      }),
+    });
+  });
+
   await page.route(/\/api\/admin\/vendors\/[^/]+\/hours(?:\?.*)?$/, async (route) => {
     recordAdminRequest(route.request());
     await route.fulfill({
@@ -1703,9 +1726,11 @@ test.describe("Phase 3 browser smoke", () => {
   test("vendor rating controls disable after one anonymous browser rating", async ({ page }) => {
     const errors = trackClientErrors(page);
     let ratingRequestCount = 0;
+    const ratingRequestBodies: unknown[] = [];
 
     await page.route("**/api/vendors/jabi-office-lunch-bowl/ratings", async (route) => {
       ratingRequestCount += 1;
+      ratingRequestBodies.push(route.request().postDataJSON());
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -1727,9 +1752,21 @@ test.describe("Phase 3 browser smoke", () => {
 
     const fiveStarButton = page.getByRole("button", { name: "Rate 5 stars" });
     await fiveStarButton.click();
+    const ratingPrompt = page.getByRole("dialog", { name: "What stood out?" });
+    await expect(ratingPrompt).toBeVisible();
+    await expect(ratingPrompt.getByRole("button", { name: "Good food" })).toBeVisible();
+    await expect(ratingPrompt.getByRole("button", { name: "Poor hygiene" })).toHaveCount(0);
+    await ratingPrompt.getByRole("button", { name: "Good food" }).click();
+    await ratingPrompt.getByRole("button", { name: "Fast service" }).click();
+    await expect(ratingPrompt.getByRole("button", { name: "Fair price" })).toBeDisabled();
+    await ratingPrompt.getByRole("button", { name: "Submit rating" }).click();
     await expect(page.getByText("Rating saved. Thanks for helping other customers.")).toBeVisible();
     await expect(fiveStarButton).toBeDisabled();
     await expect.poll(() => ratingRequestCount).toBe(1);
+    expect(ratingRequestBodies[0]).toMatchObject({
+      score: 5,
+      signals: ["good_food", "fast_service"],
+    });
 
     await page.reload();
     await expect(page.locator(".vendor-rating-status")).toHaveText(
@@ -1737,6 +1774,49 @@ test.describe("Phase 3 browser smoke", () => {
     );
     await expect(page.getByRole("button", { name: "Rate 5 stars" })).toBeDisabled();
     await expect.poll(() => ratingRequestCount).toBe(1);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("vendor rating prompt supports optional skip on mobile without text reviews", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const ratingRequestBodies: unknown[] = [];
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/ratings", async (route) => {
+      ratingRequestBodies.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            vendor_id: "20000000-0000-4000-8000-000000000008",
+            rating_summary: {
+              average_rating: 3,
+              review_count: 1,
+            },
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+    await page.getByRole("button", { name: "Rate 3 stars" }).click();
+
+    const ratingPrompt = page.getByRole("dialog", { name: "What could be better?" });
+    await expect(ratingPrompt).toBeVisible();
+    await expect(ratingPrompt.getByRole("button", { name: "Average food" })).toBeVisible();
+    await expect(ratingPrompt.getByRole("button", { name: "Hard to find" })).toBeVisible();
+    await expect(ratingPrompt.locator("input, textarea")).toHaveCount(0);
+
+    await ratingPrompt.getByRole("button", { name: "Skip" }).click();
+    await expect(page.getByText("Rating saved. Thanks for helping other customers.")).toBeVisible();
+    expect(ratingRequestBodies[0]).toMatchObject({
+      score: 3,
+      signals: [],
+    });
 
     await expectNoClientErrors(errors);
   });
@@ -2730,6 +2810,8 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.getByRole("link", { name: "Open edit workspace" }).click();
     await expect(page).toHaveURL(/\/admin\/vendors\/60000000-0000-4000-8000-000000000001$/);
+    await expect(page.getByRole("heading", { name: "Rating signal insights" })).toBeVisible();
+    await expect(page.getByText("Food safety concern")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Vendor images", exact: true })).toBeVisible();
     await expect
       .poll(() => adminRequestLog.filter((entry) => artifactRequestPattern.test(entry)).length)

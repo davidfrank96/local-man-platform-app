@@ -424,21 +424,26 @@ Tracked event types:
 
 Public vendor ratings use this path:
 
-1. user submits a 1-5 star score on vendor detail
-2. `/api/vendors/[slug]/ratings` validates the score and resolves the vendor by slug
+1. user submits a 1-5 star score on vendor detail, optionally choosing up to two predefined rating signals
+2. `/api/vendors/[slug]/ratings` validates the score, validates any signal tags, and resolves the vendor by slug
 3. server gets or creates the public anonymous client cookie and hashes it before the database write
-4. server calls a database-side `submit_public_vendor_rating` RPC with the resolved vendor id, score, source type, and anonymous client hash
-5. Postgres inserts the `ratings` row only when `(vendor_id, anonymous_client_hash)` has not already been used, then refreshes `vendors.average_rating` / `vendors.review_count`
+4. server calls a database-side `submit_public_vendor_rating` RPC with the resolved vendor id, score, source type, anonymous client hash, and optional signal tags
+5. Postgres inserts the `ratings` row only when `(vendor_id, anonymous_client_hash)` has not already been used, stores validated signal selections in isolated signal tables, then refreshes `vendors.average_rating` / `vendors.review_count`
 6. duplicate attempts return HTTP `409` with the current database-owned summary and do not update the aggregate
 7. the route returns the authoritative post-write summary from the database
 8. public discovery and detail render `★ <rating>` when ratings exist or `New` when they do not
+9. vendor detail may render conservative positive-only confidence badges when server-side thresholds are met
 
 Rules:
 - rollout requires the ratings RPC migration and the anonymous identity migration to be applied before the route is released
 - no login is required for the current lightweight rating flow
 - one anonymous browser identity may rate a specific vendor once, while still rating other vendors once each
 - client-side storage disables repeat clicks after success, but server/database duplicate enforcement is authoritative
-- no comments or full review system exist yet
+- star ratings remain primary; rating signals are optional support tags, not a public review platform
+- no free-text reviews, public complaint pages, or public accusation feeds exist
+- positive public confidence badges are deterministic, thresholded, limited to three badges, and must not expose raw counts
+- negative and neutral signals stay internal/admin-only and must not appear in public vendor payloads or public badge output
+- one rating cannot create a public badge; repeated duplicate retries cannot inflate signal counts
 - rating writes stay separate from `user_events`
 - summary ownership stays in Postgres so concurrent inserts do not depend on Node-side full-table recalculation
 - clearing cookies/local storage or using a new browser identity can create a new anonymous identity; that is an accepted limitation until account-based ratings exist

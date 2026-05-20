@@ -17,6 +17,20 @@ import {
   isNigerianPhoneNumber,
   normalizeNigerianPhoneNumber,
 } from "../phone.ts";
+import {
+  isRatingSignalAllowedForScore,
+  positiveRatingSignalSlugs,
+  ratingSignalSlugs,
+} from "../ratings/signals.ts";
+
+export {
+  isRatingSignalAllowedForScore,
+  negativeRatingSignalSlugs,
+  neutralRatingSignalSlugs,
+  positiveRatingSignalSlugs,
+  ratingSignalOptions,
+  ratingSignalSlugs,
+} from "../ratings/signals.ts";
 
 export const locationSourceSchema = z.enum([
   "precise",
@@ -145,6 +159,82 @@ export const ratingSummarySchema = z.object({
   average_rating: z.coerce.number().min(0).max(5),
   review_count: z.coerce.number().int().min(0),
 });
+
+export const ratingSignalTypeSchema = z.enum(["positive", "neutral", "negative"]);
+export const ratingSignalSlugSchema = z.enum(ratingSignalSlugs);
+export const publicRatingBadgeSlugSchema = z.enum(positiveRatingSignalSlugs);
+
+export const ratingSignalOptionSchema = z.object({
+  id: uuidSchema,
+  slug: ratingSignalSlugSchema,
+  label: nonEmptyTextSchema,
+  signal_type: ratingSignalTypeSchema,
+  score_min: z.coerce.number().int().min(1).max(5),
+  score_max: z.coerce.number().int().min(1).max(5),
+  is_public_positive: z.boolean(),
+  is_active: z.boolean(),
+  sort_order: z.coerce.number().int().min(0),
+  created_at: timestampSchema,
+});
+
+export const ratingSignalSelectionSchema = z.object({
+  id: uuidSchema,
+  rating_id: uuidSchema,
+  signal_option_id: uuidSchema,
+  created_at: timestampSchema,
+});
+
+export const publicRatingBadgeSchema = z.object({
+  slug: publicRatingBadgeSlugSchema,
+  label: nonEmptyTextSchema,
+}).strict();
+
+export const adminRatingSignalSummarySchema = z.object({
+  positive_signal_count: z.coerce.number().int().min(0),
+  neutral_signal_count: z.coerce.number().int().min(0),
+  negative_signal_count: z.coerce.number().int().min(0),
+  food_safety_concern_count: z.coerce.number().int().min(0),
+  poor_hygiene_count: z.coerce.number().int().min(0),
+  vendor_unavailable_count: z.coerce.number().int().min(0),
+  recent_signal_count: z.coerce.number().int().min(0),
+}).strict();
+
+export const ratingSignalSelectionInputSchema = z
+  .array(ratingSignalSlugSchema)
+  .max(2, "Choose at most two rating signals.")
+  .superRefine((signals, context) => {
+    const seenSignals = new Set<string>();
+
+    signals.forEach((signal, index) => {
+      if (seenSignals.has(signal)) {
+        context.addIssue({
+          code: "custom",
+          message: "Rating signals must be unique.",
+          path: [index],
+        });
+      }
+
+      seenSignals.add(signal);
+    });
+  });
+
+export const ratingSignalSubmissionSchema = z
+  .object({
+    score: z.coerce.number().int().min(1).max(5),
+    signals: ratingSignalSelectionInputSchema.default([]),
+  })
+  .strict()
+  .superRefine((submission, context) => {
+    submission.signals.forEach((signal, index) => {
+      if (!isRatingSignalAllowedForScore(submission.score, signal)) {
+        context.addIssue({
+          code: "custom",
+          message: "Rating signal is not allowed for this star rating.",
+          path: ["signals", index],
+        });
+      }
+    });
+  });
 
 export const riderVerificationStatusSchema = z.enum([
   "pending",
@@ -814,9 +904,7 @@ export const vendorImageMetadataRequestSchema = z.object({
   ).min(1),
 });
 
-export const createVendorRatingRequestSchema = z.object({
-  score: z.coerce.number().int().min(1).max(5),
-});
+export const createVendorRatingRequestSchema = ratingSignalSubmissionSchema;
 
 export const vendorRatingResponseDataSchema = z.object({
   vendor_id: uuidSchema,
@@ -850,6 +938,7 @@ export const vendorDetailResponseDataSchema = vendorSchema.extend({
   is_open_now: z.boolean(),
   today_hours: z.string(),
   rating_summary: ratingSummarySchema,
+  rating_badges: z.array(publicRatingBadgeSchema),
 });
 
 export const nearbyVendorsResponseDataSchema = z.object({

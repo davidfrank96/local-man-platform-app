@@ -192,6 +192,7 @@ function duplicateRatingResponse(
 async function submitPublicVendorRating(
   vendorId: string,
   score: number,
+  signalTags: string[],
   anonymousClientHash: string,
   config: RatingWriteConfig,
 ): Promise<RatingSubmissionResult | null> {
@@ -205,19 +206,14 @@ async function submitPublicVendorRating(
         target_score: score,
         target_source_type: "public_simple_rating",
         target_anonymous_client_hash: anonymousClientHash,
+        target_signal_tags: signalTags,
       }),
     },
   );
   const payload = await readJson(response);
 
   if (!response.ok) {
-    throw new Error(
-      `Rating submission failed: ${response.status} ${
-        typeof payload === "object" && payload !== null && "message" in payload
-          ? String((payload as { message?: unknown }).message ?? "")
-          : ""
-      }`.trim(),
-    );
+    throw new Error(`Rating submission failed: ${response.status}`);
   }
 
   return normalizeRatingSubmissionPayload(payload);
@@ -280,7 +276,16 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       vendorSlug: routeParams.data.slug,
     });
     return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(body.response, rateLimit),
+      applyRateLimitResponseHeaders(
+        apiError(
+          "VALIDATION_ERROR",
+          "Invalid rating input.",
+          body.response.status,
+          undefined,
+          "Check the star rating and selected signals.",
+        ),
+        rateLimit,
+      ),
       routeLog.requestId,
     );
   }
@@ -350,6 +355,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
         rateLimit.identityKey,
         vendor.id,
         String(body.data.score),
+        [...body.data.signals].sort().join(","),
       ].join("|"),
       60_000,
     );
@@ -369,6 +375,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
           vendorSlug: routeParams.data.slug,
           metadata: {
             score: body.data.score,
+            signalCount: body.data.signals.length,
             duplicate: payload.duplicate,
           },
         });
@@ -409,6 +416,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
     const ratingSummary = await submitPublicVendorRating(
       vendor.id,
       body.data.score,
+      body.data.signals,
       anonymousClientHash,
       config,
     );
@@ -443,6 +451,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
         vendorSlug: routeParams.data.slug,
         metadata: {
           score: body.data.score,
+          signalCount: body.data.signals.length,
           reviewCount: ratingSummary.review_count,
           averageRating: ratingSummary.average_rating,
         },
@@ -462,6 +471,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       vendorSlug: routeParams.data.slug,
       metadata: {
         score: body.data.score,
+        signalCount: body.data.signals.length,
         reviewCount: ratingSummary.review_count,
         averageRating: ratingSummary.average_rating,
       },
@@ -480,6 +490,7 @@ export async function POST(request: Request, { params }: VendorRatingsRouteConte
       vendorSlug: routeParams.data.slug,
       metadata: {
         score: body.data.score,
+        signalCount: body.data.signals.length,
       },
       error,
     });

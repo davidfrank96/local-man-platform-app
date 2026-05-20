@@ -4,6 +4,10 @@ import { useState, useSyncExternalStore } from "react";
 import type { AppErrorCode } from "../../lib/api/contracts.ts";
 import { AppError } from "../../lib/errors/app-error.ts";
 import { handleAppError } from "../../lib/errors/ui-error.ts";
+import {
+  getRatingSignalPromptForScore,
+  type RatingSignalSlug,
+} from "../../lib/ratings/signals.ts";
 import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
 
 type VendorRatingProps = {
@@ -121,14 +125,53 @@ export function VendorRating({
   const [statusOverride, setStatusOverride] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasRatedFromSubmission, setHasRatedFromSubmission] = useState(false);
+  const [pendingScore, setPendingScore] = useState<number | null>(null);
+  const [selectedSignals, setSelectedSignals] = useState<RatingSignalSlug[]>([]);
   const hasRated = hasStoredRating || hasRatedFromSubmission;
+  const ratingPrompt =
+    pendingScore === null ? null : getRatingSignalPromptForScore(pendingScore);
   const status =
     statusOverride ??
     (hasRated
       ? "You've already rated this vendor."
       : "Tap a star to rate this vendor.");
 
-  async function submitRating(score: number) {
+  function beginRating(score: number) {
+    if (hasRated) {
+      setStatusOverride("You've already rated this vendor.");
+      return;
+    }
+
+    setPendingScore(score);
+    setSelectedSignals([]);
+    setStatusOverride("Choose up to 2 tags, or skip.");
+  }
+
+  function toggleSignal(signal: RatingSignalSlug) {
+    setSelectedSignals((currentSignals) => {
+      if (currentSignals.includes(signal)) {
+        return currentSignals.filter((currentSignal) => currentSignal !== signal);
+      }
+
+      if (currentSignals.length >= 2) {
+        return currentSignals;
+      }
+
+      return [...currentSignals, signal];
+    });
+  }
+
+  function closePrompt() {
+    if (isSubmitting) {
+      return;
+    }
+
+    setPendingScore(null);
+    setSelectedSignals([]);
+    setStatusOverride(null);
+  }
+
+  async function submitRating(score: number, signals: RatingSignalSlug[] = []) {
     if (hasRated) {
       setStatusOverride("You've already rated this vendor.");
       return;
@@ -143,7 +186,7 @@ export function VendorRating({
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ score }),
+        body: JSON.stringify({ score, signals }),
       });
       const payload = (await response.json()) as RatingApiPayload;
 
@@ -163,6 +206,8 @@ export function VendorRating({
 
         markVendorRated(vendorId);
         setHasRatedFromSubmission(true);
+        setPendingScore(null);
+        setSelectedSignals([]);
         setStatusOverride(payload.error.message ?? "You've already rated this vendor.");
         return;
       }
@@ -185,6 +230,8 @@ export function VendorRating({
       });
       markVendorRated(vendorId);
       setHasRatedFromSubmission(true);
+      setPendingScore(null);
+      setSelectedSignals([]);
       setStatusOverride("Rating saved. Thanks for helping other customers.");
     } catch (error) {
       setStatusOverride(
@@ -204,6 +251,7 @@ export function VendorRating({
     summary.reviewCount > 0
       ? `${summaryLabel} from ${formatRatingCount(summary.reviewCount)}`
       : "New vendor";
+  const promptTitleId = "vendor-rating-prompt-title";
 
   return (
     <div className="vendor-rating-card">
@@ -219,7 +267,7 @@ export function VendorRating({
             type="button"
             disabled={isSubmitting || hasRated}
             aria-label={`Rate ${score} star${score === 1 ? "" : "s"}`}
-            onClick={() => void submitRating(score)}
+            onClick={() => beginRating(score)}
           >
             {score}★
           </button>
@@ -228,6 +276,73 @@ export function VendorRating({
       <p className="vendor-rating-status" aria-live="polite">
         {status}
       </p>
+      {pendingScore !== null && ratingPrompt ? (
+        <div className="vendor-rating-prompt-backdrop">
+          <section
+            aria-labelledby={promptTitleId}
+            aria-modal="true"
+            className="vendor-rating-prompt"
+            role="dialog"
+          >
+            <div className="vendor-rating-prompt-header">
+              <div>
+                <p>Optional tags for {pendingScore}★</p>
+                <h3 id={promptTitleId}>{ratingPrompt.title}</h3>
+              </div>
+              <button
+                aria-label="Close rating prompt"
+                className="vendor-rating-prompt-close"
+                disabled={isSubmitting}
+                onClick={closePrompt}
+                type="button"
+              >
+                x
+              </button>
+            </div>
+            <p className="vendor-rating-prompt-copy">
+              Choose up to 2 quick tags. No text box is needed.
+            </p>
+            <div className="vendor-rating-signal-list" role="group" aria-label="Rating tags">
+              {ratingPrompt.options.map((option) => {
+                const isSelected = selectedSignals.includes(option.slug);
+                const isDisabled =
+                  isSubmitting || (!isSelected && selectedSignals.length >= 2);
+
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className={`vendor-rating-signal${isSelected ? " is-selected" : ""}`}
+                    disabled={isDisabled}
+                    key={option.slug}
+                    onClick={() => toggleSignal(option.slug)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="vendor-rating-prompt-actions">
+              <button
+                className="vendor-rating-prompt-secondary"
+                disabled={isSubmitting}
+                onClick={() => void submitRating(pendingScore, [])}
+                type="button"
+              >
+                Skip
+              </button>
+              <button
+                className="vendor-rating-prompt-primary"
+                disabled={isSubmitting}
+                onClick={() => void submitRating(pendingScore, selectedSignals)}
+                type="button"
+              >
+                {isSubmitting ? "Saving…" : "Submit rating"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
