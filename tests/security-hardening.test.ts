@@ -49,6 +49,26 @@ function setPublicEnv(): () => void {
   };
 }
 
+function overrideNodeEnvForTest(value: string): () => void {
+  const previousDescriptor = Object.getOwnPropertyDescriptor(process.env, "NODE_ENV");
+
+  Object.defineProperty(process.env, "NODE_ENV", {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value,
+  });
+
+  return () => {
+    if (previousDescriptor) {
+      Object.defineProperty(process.env, "NODE_ENV", previousDescriptor);
+      return;
+    }
+
+    Reflect.deleteProperty(process.env, "NODE_ENV");
+  };
+}
+
 test.beforeEach(() => {
   resetAbuseProtectionStateForTests();
 });
@@ -227,6 +247,84 @@ test("admin unsafe requests reject cross-origin mutations but allow same-origin"
   assert.ok(crossOrigin);
   assert.equal(crossOrigin.status, 403);
   assert.doesNotMatch(JSON.stringify(await crossOrigin.json()), /admin_users|service-role/i);
+});
+
+test("admin origin validation accepts production proxy origins without allowing cross-origin requests", async () => {
+  const restoreNodeEnv = overrideNodeEnvForTest("production");
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  process.env.NEXT_PUBLIC_APP_URL = "https://local-man.example";
+
+  try {
+    const forwardedSameOrigin = validateAdminUnsafeRequestOrigin(
+      new Request("http://127.0.0.1:8080/api/admin/login", {
+        method: "POST",
+        headers: {
+          host: "127.0.0.1:8080",
+          origin: "https://local-man.example",
+          "x-forwarded-host": "local-man.example",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+    const refererFallback = validateAdminUnsafeRequestOrigin(
+      new Request("http://127.0.0.1:8080/api/admin/login", {
+        method: "POST",
+        headers: {
+          host: "127.0.0.1:8080",
+          referer: "https://local-man.example/admin/login",
+          "x-forwarded-host": "local-man.example",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+    const configuredAppOrigin = validateAdminUnsafeRequestOrigin(
+      new Request("http://127.0.0.1:8080/api/admin/login", {
+        method: "POST",
+        headers: {
+          host: "127.0.0.1:8080",
+          origin: "https://local-man.example",
+        },
+      }),
+    );
+    const crossOrigin = validateAdminUnsafeRequestOrigin(
+      new Request("http://127.0.0.1:8080/api/admin/login", {
+        method: "POST",
+        headers: {
+          host: "127.0.0.1:8080",
+          origin: "https://evil.example",
+          "x-forwarded-host": "local-man.example",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+    const missingOriginAndReferer = validateAdminUnsafeRequestOrigin(
+      new Request("http://127.0.0.1:8080/api/admin/login", {
+        method: "POST",
+        headers: {
+          host: "127.0.0.1:8080",
+          "x-forwarded-host": "local-man.example",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+
+    assert.equal(forwardedSameOrigin, null);
+    assert.equal(refererFallback, null);
+    assert.equal(configuredAppOrigin, null);
+    assert.ok(crossOrigin);
+    assert.equal(crossOrigin.status, 403);
+    assert.ok(missingOriginAndReferer);
+    assert.equal(missingOriginAndReferer.status, 403);
+  } finally {
+    restoreNodeEnv();
+
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+  }
 });
 
 test("Rider Connect hash secret is documented as server-only config", () => {
