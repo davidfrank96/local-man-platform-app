@@ -20,6 +20,26 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
+function overrideNodeEnvForTest(value: string): () => void {
+  const previousDescriptor = Object.getOwnPropertyDescriptor(process.env, "NODE_ENV");
+
+  Object.defineProperty(process.env, "NODE_ENV", {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value,
+  });
+
+  return () => {
+    if (previousDescriptor) {
+      Object.defineProperty(process.env, "NODE_ENV", previousDescriptor);
+      return;
+    }
+
+    Reflect.deleteProperty(process.env, "NODE_ENV");
+  };
+}
+
 test.beforeEach(() => {
   resetAbuseProtectionStateForTests();
   resetOperationalEventPersistenceForTests();
@@ -116,6 +136,96 @@ test("admin login route sets httpOnly session cookies after a valid login", asyn
       configurable: true,
       value: originalFetch,
     });
+  }
+});
+
+test("admin login route accepts same-origin production proxy headers", async () => {
+  const originalFetch = globalThis.fetch;
+  const restoreNodeEnv = overrideNodeEnvForTest("production");
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  process.env.NEXT_PUBLIC_APP_URL = "https://local-man.example";
+
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname === "/auth/v1/token") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        assert.equal(body.email, "admin@example.com");
+        assert.equal(body.password, "secret");
+
+        return Response.json({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_in: 3600,
+          user: {
+            id: "admin-id",
+            email: "admin@example.com",
+          },
+        });
+      }
+
+      if (url.pathname === "/auth/v1/user") {
+        return Response.json({
+          id: "admin-id",
+          email: "admin@example.com",
+        });
+      }
+
+      if (url.pathname === "/rest/v1/admin_users") {
+        return Response.json([
+          {
+            id: "admin-id",
+            email: "admin@example.com",
+            full_name: "Admin User",
+            role: "admin",
+          },
+        ]);
+      }
+
+      throw new Error(`Unexpected fetch: ${url.pathname}`);
+    }) as typeof fetch,
+  });
+
+  try {
+    const response = await loginAdmin(new Request("http://127.0.0.1:8080/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "admin@example.com",
+        password: "secret",
+      }),
+      headers: {
+        "content-type": "application/json",
+        host: "127.0.0.1:8080",
+        origin: "https://local-man.example",
+        "x-forwarded-host": "local-man.example",
+        "x-forwarded-proto": "https",
+      },
+    }));
+
+    const payload = await response.json();
+    const setCookies = response.headers.getSetCookie?.() ?? [response.headers.get("set-cookie") ?? ""];
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.data.adminUser.role, "admin");
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_access=")), true);
+    assert.equal(setCookies.some((value) => value.includes("HttpOnly")), true);
+    assert.equal(setCookies.some((value) => value.includes("SameSite=Lax")), true);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+    });
+
+    restoreNodeEnv();
+
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
   }
 });
 
