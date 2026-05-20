@@ -1,5 +1,6 @@
 import type { ApiResponse } from "../api/responses.ts";
 import { DEFAULT_CITY_LOCATION } from "../location/user-location.ts";
+import { getNigerianPhoneTelHref } from "../phone.ts";
 import type {
   LocationSource,
   NearbyVendorsResponseData,
@@ -133,8 +134,13 @@ export function getDirectionsUrl(latitude: number, longitude: number): string {
 export function getPhoneHref(phoneNumber: string | null): string | null {
   if (!phoneNumber) return null;
 
-  const normalized = phoneNumber.replace(/[^\d+]/g, "");
+  const nigerianTelHref = getNigerianPhoneTelHref(phoneNumber);
 
+  if (nigerianTelHref) {
+    return nigerianTelHref;
+  }
+
+  const normalized = phoneNumber.replace(/[^\d+]/g, "");
   return normalized.length > 0 ? `tel:${normalized}` : null;
 }
 

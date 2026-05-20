@@ -13,6 +13,10 @@ import {
   timestampSchema,
   uuidSchema,
 } from "./common.ts";
+import {
+  isNigerianPhoneNumber,
+  normalizeNigerianPhoneNumber,
+} from "../phone.ts";
 
 export const locationSourceSchema = z.enum([
   "precise",
@@ -177,9 +181,23 @@ export const riderUnavailableReasonSchema = z.enum([
 const riderPhoneSchema = z
   .string()
   .trim()
-  .min(7)
+  .min(1)
   .max(32)
-  .regex(/^\+?[0-9][0-9\s().-]{6,31}$/, "Use a valid phone number.");
+  .refine(isNigerianPhoneNumber, "Use a valid Nigerian phone number.")
+  .transform((value) => normalizeNigerianPhoneNumber(value) ?? value);
+
+const optionalNigerianPhoneSchema = optionalTextSchema
+  .superRefine((value, context) => {
+    if (typeof value === "string" && !isNigerianPhoneNumber(value)) {
+      context.addIssue({
+        code: "custom",
+        message: "Use a valid Nigerian phone number.",
+      });
+    }
+  })
+  .transform((value) =>
+    typeof value === "string" ? normalizeNigerianPhoneNumber(value) ?? value : value
+  );
 
 const riderOperatingAreasSchema = z
   .array(z.string().trim().min(1).max(80))
@@ -588,7 +606,7 @@ export const createVendorRequestSchema = z.object({
   name: nonEmptyTextSchema,
   slug: slugSchema,
   short_description: optionalTextSchema,
-  phone_number: optionalTextSchema,
+  phone_number: optionalNigerianPhoneSchema,
   address_text: optionalTextSchema,
   city: optionalTextSchema,
   area: optionalTextSchema,

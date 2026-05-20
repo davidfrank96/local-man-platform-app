@@ -8,6 +8,10 @@ import {
   getSupabaseServiceRoleConfig,
 } from "../vendors/supabase.ts";
 import { logStructuredEvent } from "../observability.ts";
+import {
+  formatNigerianPhoneForDisplay,
+  normalizeNigerianPhoneNumber,
+} from "../phone.ts";
 import type {
   PublicRiderSuggestion,
   RiderContactHandoffRequest,
@@ -309,7 +313,15 @@ function hashPhoneForStorage(
   config: RiderConnectConfig,
   purpose: "contact" | "unavailable_report",
 ): string {
-  const normalizedPhone = phone.replace(/[^\d+]/g, "");
+  const normalizedPhone = normalizeNigerianPhoneNumber(phone);
+
+  if (!normalizedPhone) {
+    throw new RiderConnectServiceError(
+      "UPSTREAM_ERROR",
+      "Rider Connect phone normalization failed.",
+      502,
+    );
+  }
 
   return createHmac("sha256", getHashSecret(config))
     .update(`localman-rider-connect:${purpose}:${normalizedPhone}`)
@@ -349,8 +361,22 @@ function formatPaymentNote(type: RiderPaymentNoteType): string {
   }
 }
 
+function formatPhoneForMessage(phone: string | null | undefined, fallback: string): string {
+  return formatNigerianPhoneForDisplay(phone) ?? phone ?? fallback;
+}
+
 function createWhatsAppPhonePath(phone: string): string {
-  return phone.replace(/[^\d]/g, "");
+  const normalizedPhone = normalizeNigerianPhoneNumber(phone);
+
+  if (!normalizedPhone) {
+    throw new RiderConnectServiceError(
+      "UPSTREAM_ERROR",
+      "Selected rider WhatsApp number is not valid.",
+      502,
+    );
+  }
+
+  return normalizedPhone;
 }
 
 function buildWhatsAppMessage(
@@ -374,7 +400,7 @@ function buildWhatsAppMessage(
     "Vendor:",
     vendor.name,
     "Vendor phone:",
-    vendor.phone_number ?? "Vendor phone not listed",
+    formatPhoneForMessage(vendor.phone_number, "Vendor phone not listed"),
     "Pickup address:",
     createVendorAddress(vendor),
     "Pickup map:",
@@ -388,7 +414,7 @@ function buildWhatsAppMessage(
     "My name:",
     request.customerName,
     "My phone:",
-    request.customerPhone,
+    formatPhoneForMessage(request.customerPhone, "Customer phone not provided"),
     "",
     "Order note:",
     orderNote,
@@ -553,11 +579,11 @@ export async function createRiderContactHandoff(
   }
 
   const rider = toPublicRiderSuggestion(riderRow);
-  const intentId = await insertContactIntent(vendor, rider, request, config);
   const whatsappUrl = createWhatsAppUrl(
     riderRow.whatsapp_phone,
     buildWhatsAppMessage(vendor, rider, request),
   );
+  const intentId = await insertContactIntent(vendor, rider, request, config);
 
   return riderContactHandoffResponseDataSchema.parse({
     intent_id: intentId,

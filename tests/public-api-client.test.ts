@@ -104,6 +104,8 @@ test("public API client trims and caps search input length", () => {
 
 test("public API client creates call and directions links", () => {
   assert.equal(getPhoneHref("+234 800 000 0000"), "tel:+2348000000000");
+  assert.equal(getPhoneHref("08000000000"), "tel:+2348000000000");
+  assert.equal(getPhoneHref("2348000000000"), "tel:+2348000000000");
   assert.equal(getPhoneHref(null), null);
 
   const directionsUrl = new URL(getDirectionsUrl(9.0813, 7.4694));

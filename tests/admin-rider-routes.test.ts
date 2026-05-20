@@ -262,8 +262,8 @@ test("admin can view one rider with admin-private fields", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
-    assert.equal(body.data.rider.phone, "+2348012345678");
-    assert.equal(body.data.rider.whatsapp_phone, "+2348012345678");
+    assert.equal(body.data.rider.phone, "2348012345678");
+    assert.equal(body.data.rider.whatsapp_phone, "2348012345678");
     assert.equal(body.data.rider.notes, "New application");
     assert.ok(calls.includes("GET /rest/v1/riders"));
   } finally {
@@ -315,13 +315,13 @@ test("admin can create rider with hidden pending defaults and audit log", async 
     assert.equal(validBody.data.rider.id, createdRiderId);
     assert.equal(validBody.data.rider.verification_status, "pending");
     assert.equal(validBody.data.rider.visibility_status, "hidden");
-    assert.equal(validBody.data.rider.phone, "+2348011111111");
+    assert.equal(validBody.data.rider.phone, "2348011111111");
     assert.equal(createBodies.length, 1);
     assert.deepEqual(createBodies[0], {
       display_name: "Manual Rider",
       full_name: null,
-      phone: "+2348011111111",
-      whatsapp_phone: "+2348022222222",
+      phone: "2348011111111",
+      whatsapp_phone: "2348022222222",
       vehicle_type: null,
       plate_number: null,
       operating_areas: ["Wuse", "Garki"],
@@ -409,7 +409,7 @@ test("admin rider create rejects duplicate phone or WhatsApp safely", async () =
     const response = await createRiderRoute(
       createRequest("/api/admin/riders", "POST", {
         display_name: "Duplicate Rider",
-        phone: "+2348012345678",
+        phone: "08012345678",
         whatsapp_phone: "+2348099999999",
         operating_areas: ["Wuse"],
         consent_confirmed: true,

@@ -94,7 +94,7 @@ test("contact handoff schema requires current contact details and accepted discl
   const validRequest = {
     riderId: "11111111-1111-4111-8111-111111111111",
     customerName: "Ada",
-    customerPhone: "+2348000000000",
+    customerPhone: "08000000000",
     deliveryLocationMode: "manual_address",
     deliveryAddress: "12 Ademola Adetokunbo Crescent",
     deliveryArea: "Wuse 2",
@@ -103,7 +103,9 @@ test("contact handoff schema requires current contact details and accepted discl
     disclaimerAccepted: true,
   };
 
-  assert.equal(riderContactHandoffRequestSchema.safeParse(validRequest).success, true);
+  const parsedRequest = riderContactHandoffRequestSchema.parse(validRequest);
+
+  assert.equal(parsedRequest.customerPhone, "2348000000000");
   assert.equal(
     riderContactHandoffRequestSchema.safeParse({
       ...validRequest,
@@ -203,19 +205,19 @@ test("rider database schema keeps private contact fields separate from public ca
 });
 
 test("admin rider update schema allows only managed profile and status fields", () => {
-  assert.equal(
-    updateAdminRiderRequestSchema.safeParse({
-      display_name: "Amina Rider",
-      phone: "+2348000000000",
-      whatsapp_phone: "+2348000000001",
-      operating_areas: ["Wuse", "Garki"],
-      usual_available_hours: "Weekdays 10 AM - 7 PM",
-      verification_status: "verified",
-      visibility_status: "visible",
-      notes: "Reviewed by admin.",
-    }).success,
-    true,
-  );
+  const parsedUpdate = updateAdminRiderRequestSchema.parse({
+    display_name: "Amina Rider",
+    phone: "08000000000",
+    whatsapp_phone: "+2348000000001",
+    operating_areas: ["Wuse", "Garki"],
+    usual_available_hours: "Weekdays 10 AM - 7 PM",
+    verification_status: "verified",
+    visibility_status: "visible",
+    notes: "Reviewed by admin.",
+  });
+
+  assert.equal(parsedUpdate.phone, "2348000000000");
+  assert.equal(parsedUpdate.whatsapp_phone, "2348000000001");
   assert.equal(
     updateAdminRiderRequestSchema.safeParse({
       verification_status: "approved",
@@ -248,7 +250,10 @@ test("admin rider create schema requires consent and prevents visible unverified
     consent_confirmed: true,
   };
 
-  assert.equal(createAdminRiderRequestSchema.safeParse(validCreateRequest).success, true);
+  const parsedCreate = createAdminRiderRequestSchema.parse(validCreateRequest);
+
+  assert.equal(parsedCreate.phone, "2348000000000");
+  assert.equal(parsedCreate.whatsapp_phone, "2348000000001");
   assert.equal(
     createAdminRiderRequestSchema.safeParse({
       ...validCreateRequest,
@@ -288,7 +293,12 @@ test("unavailable report request schema accepts only supported reasons", () => {
     reporterPhone: "+2348000000000",
   };
 
-  assert.equal(riderUnavailableReportRequestSchema.safeParse(validReport).success, true);
+  const parsedReport = riderUnavailableReportRequestSchema.parse({
+    ...validReport,
+    reporterPhone: "08000000000",
+  });
+
+  assert.equal(parsedReport.reporterPhone, "2348000000000");
   assert.equal(
     riderUnavailableReportRequestSchema.safeParse({
       ...validReport,
@@ -352,7 +362,13 @@ test("rider application schema requires consent, disclaimer, and public-safe inp
     independentRiderDisclaimerAccepted: true,
   };
 
-  assert.equal(riderApplicationRequestSchema.safeParse(validApplication).success, true);
+  const parsedApplication = riderApplicationRequestSchema.parse({
+    ...validApplication,
+    phone: "08000000000",
+  });
+
+  assert.equal(parsedApplication.phone, "2348000000000");
+  assert.equal(parsedApplication.whatsappPhone, "2348000000001");
   assert.equal(
     riderApplicationRequestSchema.safeParse({
       ...validApplication,

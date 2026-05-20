@@ -151,8 +151,8 @@ test("rider application route stores applications as hidden and pending only", a
     assert.equal(write.init?.headers && (write.init.headers as Record<string, string>).apikey, "service-role-key");
     assert.equal(write.body.display_name, "Amina Rider");
     assert.equal(write.body.full_name, "Amina Musa");
-    assert.equal(write.body.phone, "+2348000000000");
-    assert.equal(write.body.whatsapp_phone, "+2348000000001");
+    assert.equal(write.body.phone, "2348000000000");
+    assert.equal(write.body.whatsapp_phone, "2348000000001");
     assert.deepEqual(write.body.operating_areas, ["Wuse", "Garki"]);
     assert.deepEqual(write.body.usual_available_hours, {
       label: "Weekdays 10 AM - 7 PM",

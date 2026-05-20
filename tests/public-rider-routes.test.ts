@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
 import {
   GET as riderSuggestionsRoute,
@@ -247,7 +248,12 @@ test("rider contact endpoint creates minimal intent and returns selected WhatsAp
     }
 
     if (url.pathname === "/rest/v1/riders") {
-      return Response.json([selectedRiderRow]);
+      return Response.json([
+        {
+          ...selectedRiderRow,
+          whatsapp_phone: "08111111111",
+        },
+      ]);
     }
 
     if (url.pathname === "/rest/v1/rider_contact_intents") {
@@ -266,7 +272,7 @@ test("rider contact endpoint creates minimal intent and returns selected WhatsAp
     const response = await riderContactRoute(
       createRequest(
         "/api/vendors/jabi-office-lunch-bowl/riders/contact",
-        createValidContactPayload(),
+        createValidContactPayload({ customerPhone: "08123456789" }),
       ),
       { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
     );
@@ -284,6 +290,10 @@ test("rider contact endpoint creates minimal intent and returns selected WhatsAp
     assert.equal(serialized.includes("full_name"), false);
     assert.equal(serialized.includes("notes"), false);
     assert.equal(insertBody.customer_phone_hash, hashLike(insertBody.customer_phone_hash));
+    assert.equal(
+      insertBody.customer_phone_hash,
+      createRiderPhoneHash("contact", "2348123456789"),
+    );
     assert.notEqual(insertBody.customer_phone_hash, "+2348123456789");
     assert.equal(JSON.stringify(insertBody).includes("25 Ademola"), false);
     assert.match(message, /Vendor phone:\n\+2348000000000/);
@@ -450,6 +460,10 @@ test("rider unavailable report endpoint validates and stores a hashed report", a
     assert.equal(reportBody.vendor_id, vendorId);
     assert.equal(reportBody.reason, "no_response");
     assert.equal(reportBody.reporter_phone_hash, hashLike(reportBody.reporter_phone_hash));
+    assert.equal(
+      reportBody.reporter_phone_hash,
+      createRiderPhoneHash("unavailable_report", "2348123456789"),
+    );
     assert.equal(serialized.includes("+2348123456789"), false);
     assert.equal(serialized.includes("whatsapp_phone"), false);
   } finally {
@@ -599,4 +613,13 @@ function hashLike(value: unknown): unknown {
   assert.equal(typeof value, "string");
   assert.match(value as string, /^[a-f0-9]{64}$/);
   return value;
+}
+
+function createRiderPhoneHash(
+  purpose: "contact" | "unavailable_report",
+  normalizedPhone: string,
+): string {
+  return createHmac("sha256", "service-role-key")
+    .update(`localman-rider-connect:${purpose}:${normalizedPhone}`)
+    .digest("hex");
 }

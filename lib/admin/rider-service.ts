@@ -9,6 +9,7 @@ import {
 } from "./auth.ts";
 import { AdminServiceError } from "./errors.ts";
 import { writeAuditLogSafely } from "./audit-log-service.ts";
+import { getNigerianPhoneStorageVariants } from "../phone.ts";
 import type {
   AdminRider,
   AdminRidersQuery,
@@ -383,7 +384,9 @@ async function assertRiderDoesNotExist(
   data: Pick<CreateAdminRiderRequest, "phone" | "whatsapp_phone">,
   context: ResolvedAdminRiderServiceContext,
 ) {
-  const phones = Array.from(new Set([data.phone, data.whatsapp_phone]));
+  const phones = Array.from(new Set(
+    [data.phone, data.whatsapp_phone].flatMap(getNigerianPhoneStorageVariants),
+  ));
   const duplicateChecks = phones.flatMap((phone) => [
     fetchJson(
       createRiderDuplicateUrl(context.config, "phone", phone),
