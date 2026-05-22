@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -112,6 +113,11 @@ const LOCALMAN_WEBSITE_URL =
   process.env.NEXT_PUBLIC_LOCALMAN_WEBSITE_URL ?? "https://localman.app";
 const LOCALMAN_SUPPORT_EMAIL =
   process.env.NEXT_PUBLIC_LOCALMAN_SUPPORT_EMAIL ?? "support@localman.app";
+const LOCALMAN_BRAND_ICON_SRC = "/branding/localman-brand-icon.png";
+
+function isLocalmanBrandTitle(title: string): boolean {
+  return title.trim().replace(/\s+/g, "").toLowerCase() === "localman";
+}
 
 function getDiscoveryEmptyStateCopy(
   filters: DiscoveryFilters,
@@ -206,6 +212,7 @@ export function PublicDiscovery({
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
     useState<RetainedVendorPreview | null>(null);
+  const showBrandLogo = isLocalmanBrandTitle(title);
   const nearbyDataRef = useRef<NearbyVendorsResponseData | null>(null);
   const nearbyDataUpdatedAtRef = useRef<string | null>(null);
   const nearbyDataRequestKeyRef = useRef<string | null>(null);
@@ -1172,9 +1179,34 @@ export function PublicDiscovery({
         aria-labelledby="discovery-title"
       >
         <div className="discovery-sidebar">
-          <div className="discovery-heading">
+          <div
+            className={
+              showBrandLogo
+                ? "discovery-heading discovery-heading-branded"
+                : "discovery-heading"
+            }
+          >
             <p className="eyebrow">Abuja pilot</p>
-            <h1 id="discovery-title">{title}</h1>
+            <h1 id="discovery-title">
+              {showBrandLogo ? (
+                <span className="discovery-brand-title">
+                  <span className="discovery-brand-icon" aria-hidden="true">
+                    <Image
+                      alt=""
+                      className="discovery-brand-logo"
+                      height={512}
+                      priority
+                      sizes="(max-width: 767px) 44px, 72px"
+                      src={LOCALMAN_BRAND_ICON_SRC}
+                      width={512}
+                    />
+                  </span>
+                  <span>{title}</span>
+                </span>
+              ) : (
+                title
+              )}
+            </h1>
             <p>Find Local Food Vendors Near You.</p>
           </div>
 
