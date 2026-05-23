@@ -12,6 +12,7 @@ Local Man — UI Rules
 
 ## Public UI Rules
 - Homepage must open into mobile Home content on small screens and the combined discovery layout on tablet/desktop.
+- Header branding must keep the Localman icon and visible `Localman` text side-by-side; the icon must not replace the text or inflate the mobile header.
 - The public discovery map may render as MapLibre using the browser-safe MapTiler style URL or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
 - The map should mount immediately on page load; nearby vendors may hydrate asynchronously from default-city data first and then upgrade to precise results when location resolves.
 - When MapLibre is active, the map must use one marker system only:
@@ -84,6 +85,7 @@ Local Man — UI Rules
 - directions button
 - desktop may show map-preview helper copy; mobile must hide map-preview helper wording because map context lives in the dedicated Map tab
 - visible detail link text: `View details →`
+- `Call` and `Directions` actions should include lightweight icons on vendor cards and selected vendor previews; `View details` keeps its existing icon treatment.
 - tapping/clicking the card body should update selected vendor state without interfering with call, directions, or details
 - `Active hours:`, distance, and open/closed state must remain visible before and after the card is selected.
 - open/closed state and `Active hours:` must come from the shared server-computed availability fields so the card badge and hours line never contradict each other
@@ -99,6 +101,7 @@ Local Man — UI Rules
 - Supabase-hosted vendor hero images should use responsive transformed widths instead of always loading the original-size asset
 - vendor detail images should lazy load and decode asynchronously when rendered by the browser
 - visible primary actions near top
+- vendor detail primary actions should remain `Call`, `Directions`, and `Request Rider`, with lightweight icons that do not change action behavior
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
 - compact summary cards or chips are preferred when they reduce scrolling without hiding information
 - lightweight star rating input may appear here, but it must stay compact and free of text boxes
@@ -110,6 +113,8 @@ Local Man — UI Rules
 - public hours should display in 12-hour AM/PM format
 - featured dishes visually separated
 - address and location visible
+- sharing must live in its own lightweight secondary section titled `Share this vendor with a friend`, below vendor metadata and outside the primary action row
+- vendor sharing should expose only native share and copy-link actions with canonical vendor URLs; do not add dedicated WhatsApp branding, social widgets, referral params, or tracking params
 - missing vendor data should use explicit fallback copy instead of vague placeholders
 - If a vendor has no image, show a plain missing-image state instead of stock imagery.
 

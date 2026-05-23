@@ -7,6 +7,7 @@ import { VendorDetailTracker } from "./vendor-detail-tracker.tsx";
 import { VendorHeroImage } from "./vendor-hero-image.tsx";
 import { VendorRating } from "./vendor-rating.tsx";
 import { RiderConnectModal } from "./rider-connect-modal.tsx";
+import { VendorShareActions } from "./vendor-share-actions.tsx";
 import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
 import { resolveVendorOpenState } from "../../lib/vendors/hours.ts";
 
@@ -236,6 +237,12 @@ export function VendorDetail({
             ))}
             {vendor.categories.length === 0 ? <span>No categories added yet</span> : null}
           </div>
+        </div>
+
+        <div className="vendor-detail-section vendor-share-section">
+          <p className="eyebrow">Share</p>
+          <h2>Share this vendor with a friend</h2>
+          <VendorShareActions vendorName={vendor.name} vendorSlug={vendor.slug} />
         </div>
 
         <div className="vendor-detail-section">

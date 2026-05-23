@@ -62,6 +62,15 @@ This note summarizes the current branch behavior after the mobile discovery rest
 - Negative and neutral signals remain internal/admin-only and are not exposed through public vendor detail responses.
 - Admin vendor edit can show aggregate-only signal counts for operational awareness without rating identities, anonymous hashes, IPs, or per-rating rows.
 
+### Branding and Vendor Profile Polish
+
+- Public header branding now shows the Localman icon beside the existing Localman text on mobile and desktop.
+- Discovery vendor cards and selected vendor preview actions keep lightweight icons beside `Call` and `Directions`; `View details` retains its existing icon treatment.
+- Vendor detail primary actions show lightweight icons beside `Call`, `Directions`, and `Request Rider`.
+- Vendor detail includes a dedicated `Share this vendor with a friend` section below vendor metadata, separate from the primary action row.
+- The share section supports native share and copy-link behavior using the canonical `/vendors/[slug]` URL.
+- The dedicated WhatsApp share button was removed; WhatsApp remains available through supported native share sheets.
+
 ### Admin Session and Vendor Images
 
 - Admin sessions are cookie-backed and validated through `/api/admin/session`.

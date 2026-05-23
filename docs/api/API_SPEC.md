@@ -170,6 +170,7 @@ Behavior:
 - Missing hours, featured dishes, or images must not cause the detail route to fail.
 - `rating_badges` contains only approved public confidence badge summaries: `slug` and `label`.
 - Public vendor detail responses must not include negative signals, neutral signals, raw signal counts, per-rating signal rows, anonymous hashes, or moderation metadata.
+- Vendor sharing is client-side only and uses the canonical `/vendors/[slug]` route from this response context. There is no public share endpoint, no tracking parameter, and no social-feed API.
 
 Detail image shape:
 - `images` contains vendor profile image records for that vendor

@@ -55,11 +55,13 @@ Card actions are:
 - `Call`
 - `Directions`
 - `View details`
+- `Call` and `Directions` include lightweight icons; `View details` keeps its existing icon treatment
 
 Action rules:
 
 - `Call` and `View details` share the green/glassy CTA family so primary vendor actions feel related
 - `Directions` is secondary
+- `Call` and `Directions` icons must stay subtle, centered, and text-adjacent without adding extra button backgrounds
 - `Directions` may remain visually distinct because it leaves the app for navigation
 - clicking/tapping the card body updates the selected vendor state
 - desktop may show map-preview helper copy because the map stays visible beside the list

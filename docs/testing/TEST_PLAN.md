@@ -72,10 +72,12 @@ Test:
 - public UI shows runtime errors when Supabase data is unavailable
 - vendor cards always render required fields
 - vendor cards remain text-first, compact, image-free on the homepage, and readable without decorative assets
+- vendor card and selected vendor preview actions show lightweight icons beside `Call` and `Directions`
 - `Active hours:` stays visible before and after card selection
 - distance and open/closed state stay visible before and after card selection
 - selected vendor highlight remains readable
 - selected vendor preview exposes `View details`, `Call`, and `Directions`
+- selected vendor preview keeps the existing `View details` icon behavior while preserving `Call` and `Directions` icons
 - vendor card metadata row keeps distance and open/closed state visible together
 - the real map uses one vendor-marker system only with no clustering
 - marker taps update the selected vendor preview without moving the camera
@@ -98,6 +100,10 @@ Test:
 - public shell applies the correct browser-local theme attribute for morning, afternoon, and night
 - uploaded vendor images appear on vendor detail pages
 - vendor detail layout stays compact on desktop and mobile without hiding sections
+- vendor detail primary actions show icons beside `Call`, `Directions`, and `Request Rider`
+- vendor detail renders a dedicated `Share this vendor with a friend` section below metadata, outside the location block and primary action row
+- native share and copy-link actions use the canonical vendor detail URL without tracking params
+- the dedicated WhatsApp share button is absent; WhatsApp availability comes from native share sheets where supported
 - location reminder toast appears on discovery load and can be closed without blocking the page
 - location reminder toast auto-dismisses after roughly five seconds
 
@@ -386,6 +392,7 @@ Manual UI checks:
 - selected vendor preview keeps `Call`, `Directions`, and `View details` accessible
 - vendor detail hero remains compact and readable
 - public surfaces avoid heavy decorative assets, blur-heavy panels, and large eager images
+- header branding renders the Localman icon beside the existing text without mobile overflow, navigation collision, or layout shift
 - map controls stay visible
 - MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
 - the real map should show oxblood storefront markers by default, a green storefront marker when selected, a blue user-location marker, and no cluster bubbles

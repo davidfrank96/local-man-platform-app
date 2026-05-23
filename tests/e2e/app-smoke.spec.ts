@@ -1564,6 +1564,95 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("vendor detail share actions use canonical vendor profile links", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.addInitScript(() => {
+      const shareStore: {
+        copied: string;
+        shared: ShareData | null;
+      } = {
+        copied: "",
+        shared: null,
+      };
+
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            shareStore.copied = text;
+          },
+        },
+      });
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: async (data: ShareData) => {
+          shareStore.shared = data;
+        },
+      });
+
+      (
+        window as typeof window & {
+          __LOCALMAN_VENDOR_SHARE_STORE__?: typeof shareStore;
+        }
+      ).__LOCALMAN_VENDOR_SHARE_STORE__ = shareStore;
+    });
+
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+
+    const canonicalUrl = `${new URL(page.url()).origin}/vendors/jabi-office-lunch-bowl`;
+    await expect(
+      page.getByRole("heading", { name: "Share this vendor with a friend" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Share link" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "WhatsApp" })).toHaveCount(0);
+    await expect(page.locator(".vendor-detail-actions .vendor-share-actions")).toHaveCount(0);
+    await expect(
+      page
+        .locator(".vendor-detail-section")
+        .filter({ hasText: "Location" })
+        .locator(".vendor-share-actions"),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(".vendor-share-section").locator(".vendor-share-actions"),
+    ).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Share link" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as typeof window & {
+                __LOCALMAN_VENDOR_SHARE_STORE__?: {
+                  shared: ShareData | null;
+                };
+              }
+            ).__LOCALMAN_VENDOR_SHARE_STORE__?.shared?.url,
+        ),
+      )
+      .toBe(canonicalUrl);
+
+    await page.getByRole("button", { name: "Copy link" }).click();
+    await expect(page.getByText("Vendor link copied.")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as typeof window & {
+                __LOCALMAN_VENDOR_SHARE_STORE__?: {
+                  copied: string;
+                };
+              }
+            ).__LOCALMAN_VENDOR_SHARE_STORE__?.copied,
+        ),
+      )
+      .toBe(canonicalUrl);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("vendor detail Request Rider flow creates WhatsApp handoff", async ({ page }) => {
     const errors = trackClientErrors(page);
     const contactPayloads: unknown[] = [];

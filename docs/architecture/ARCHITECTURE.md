@@ -54,6 +54,7 @@ Handles:
 - local retention surfaces for recent and last-selected vendors
 - navigation restoration
 - vendor detail rendering
+- vendor detail primary actions and secondary share section rendering
 - lightweight public vendor rating
 - Rider Connect request flow on vendor detail pages
 - trust-first location display
@@ -144,6 +145,7 @@ Public rendering rules:
   - blue user-location marker
   - no clustering
 - vendor detail uses a shorter hero and compact summary blocks to reduce scrolling
+- vendor detail sharing is client-side only: the UI builds the canonical `/vendors/[slug]` URL for native share and copy-link actions without adding tracking params or a backend share endpoint
 
 ## Map Interaction Model
 
