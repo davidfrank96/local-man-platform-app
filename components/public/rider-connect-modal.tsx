@@ -34,6 +34,27 @@ type Feedback =
       message: string;
     };
 
+function RiderActionIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="vendor-action-icon"
+      focusable="false"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.7"
+    >
+      <path d="M3.2 9.7h2.2l1.4-3.6h3.4l1.3 3.6h1.3" />
+      <path d="M7.1 6.1 8.4 3.4h2" />
+      <path d="M5.1 11.4a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0Z" />
+      <path d="M13.7 11.4a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0Z" />
+    </svg>
+  );
+}
+
 function getFormText(formData: FormData, name: string): string {
   const value = formData.get(name);
 
@@ -210,10 +231,11 @@ export function RiderConnectModal({
   return (
     <>
       <button
-        className="button-secondary compact-button rider-connect-trigger"
+        className="button-secondary compact-button vendor-action-button rider-connect-trigger"
         type="button"
         onClick={openModal}
       >
+        <RiderActionIcon />
         Request Rider
       </button>
 

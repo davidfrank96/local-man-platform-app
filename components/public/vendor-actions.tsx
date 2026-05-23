@@ -66,7 +66,14 @@ export function VendorActions({
 }: VendorActionsProps) {
   const phoneHref = getPhoneHref(phoneNumber);
   const directionsHref = getDirectionsUrl(latitude, longitude);
-  const showInlineActionIcons = source === "card" || source === "selected_preview";
+  const showActionIcons =
+    source === "card" || source === "selected_preview" || source === "detail";
+  const primaryActionClassName = showActionIcons
+    ? "button-primary compact-button vendor-action-button"
+    : "button-primary compact-button";
+  const secondaryActionClassName = showActionIcons
+    ? "button-secondary compact-button vendor-action-button"
+    : "button-secondary compact-button";
   const metadata: Record<string, string | number | boolean | null> = source
     ? { source }
     : {};
@@ -114,7 +121,7 @@ export function VendorActions({
     <div className="vendor-actions">
       {phoneHref ? (
         <a
-          className="button-primary compact-button vendor-action-button"
+          className={primaryActionClassName}
           href={phoneHref}
           onClick={(event) => {
             event.preventDefault();
@@ -122,14 +129,14 @@ export function VendorActions({
             navigateAfterTracking(phoneHref, "self");
           }}
         >
-          {showInlineActionIcons ? <PhoneActionIcon /> : null}
+          {showActionIcons ? <PhoneActionIcon /> : null}
           Call
         </a>
       ) : (
         <span className="button-disabled">No phone</span>
       )}
       <a
-        className="button-secondary compact-button vendor-action-button"
+        className={secondaryActionClassName}
         href={directionsHref}
         rel="noreferrer"
         target="_blank"
@@ -139,7 +146,7 @@ export function VendorActions({
           navigateAfterTracking(directionsHref, "blank");
         }}
       >
-        {showInlineActionIcons ? <DirectionsActionIcon /> : null}
+        {showActionIcons ? <DirectionsActionIcon /> : null}
         Directions
       </a>
     </div>
