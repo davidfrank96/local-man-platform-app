@@ -2425,6 +2425,16 @@ h2 {
   font-size: 0.92rem;
 }
 
+.vendor-action-button {
+  gap: 6px;
+}
+
+.vendor-action-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
 .button-disabled {
   display: inline-flex;
   align-items: center;
