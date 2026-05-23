@@ -99,6 +99,8 @@ Default:
 - on mobile the selected vendor is visible on the Map tab
 - `View details` opens the vendor detail page
 - vendor detail exposes `Request Rider` for the Rider Connect handoff flow when users want to coordinate with an independent rider
+- vendor detail primary actions remain `Call`, `Directions`, and `Request Rider`; sharing is a separate secondary section
+- vendor detail includes a standalone `Share this vendor with a friend` section for native share and copy-link actions using the canonical vendor URL
 - `Back to map` returns to discovery
 - discovery search, filters, selected vendor, and scroll position are restored through query state plus a short-lived session snapshot
 - restored nearby vendor data is reused only when the snapshot is still fresh enough to trust

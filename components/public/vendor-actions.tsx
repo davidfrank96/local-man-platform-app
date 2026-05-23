@@ -17,6 +17,44 @@ type VendorActionsProps = {
   locationSource?: LocationSource | null;
 };
 
+function PhoneActionIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="vendor-action-icon"
+      focusable="false"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5.1 2.4 6.2 5c.2.5.1 1-.3 1.3l-.7.7c.8 1.7 2.1 3 3.8 3.8l.7-.7c.4-.4.9-.5 1.3-.3l2.6 1.1c.4.2.7.6.7 1v1.3c0 .6-.5 1.1-1.1 1.1C6.9 14.3 1.8 9.1 1.8 2.9c0-.6.5-1.1 1.1-1.1h1.3c.4 0 .8.2.9.6Z" />
+    </svg>
+  );
+}
+
+function DirectionsActionIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="vendor-action-icon"
+      focusable="false"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 1.8 14.2 8 8 14.2 1.8 8 8 1.8Z" />
+      <path d="M6.1 9.8V7.7c0-.7.5-1.2 1.2-1.2h2.5" />
+      <path d="m8.7 5.4 1.4 1.1-1.4 1.2" />
+    </svg>
+  );
+}
+
 export function VendorActions({
   latitude,
   longitude,
@@ -28,6 +66,14 @@ export function VendorActions({
 }: VendorActionsProps) {
   const phoneHref = getPhoneHref(phoneNumber);
   const directionsHref = getDirectionsUrl(latitude, longitude);
+  const showActionIcons =
+    source === "card" || source === "selected_preview" || source === "detail";
+  const primaryActionClassName = showActionIcons
+    ? "button-primary compact-button vendor-action-button"
+    : "button-primary compact-button";
+  const secondaryActionClassName = showActionIcons
+    ? "button-secondary compact-button vendor-action-button"
+    : "button-secondary compact-button";
   const metadata: Record<string, string | number | boolean | null> = source
     ? { source }
     : {};
@@ -75,7 +121,7 @@ export function VendorActions({
     <div className="vendor-actions">
       {phoneHref ? (
         <a
-          className="button-primary compact-button"
+          className={primaryActionClassName}
           href={phoneHref}
           onClick={(event) => {
             event.preventDefault();
@@ -83,13 +129,14 @@ export function VendorActions({
             navigateAfterTracking(phoneHref, "self");
           }}
         >
+          {showActionIcons ? <PhoneActionIcon /> : null}
           Call
         </a>
       ) : (
         <span className="button-disabled">No phone</span>
       )}
       <a
-        className="button-secondary compact-button"
+        className={secondaryActionClassName}
         href={directionsHref}
         rel="noreferrer"
         target="_blank"
@@ -99,6 +146,7 @@ export function VendorActions({
           navigateAfterTracking(directionsHref, "blank");
         }}
       >
+        {showActionIcons ? <DirectionsActionIcon /> : null}
         Directions
       </a>
     </div>

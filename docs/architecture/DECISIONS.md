@@ -67,3 +67,8 @@ Local Man — Architecture and Product Decisions
 **Decision:** Rider Connect is a lightweight independent-rider WhatsApp handoff, not a Localman delivery system.
 **Reason:** Users may need help coordinating pickup, but Localman should not take on payment, dispatch, employment, rider-availability, or delivery-guarantee obligations in the MVP.
 **Impact:** Public suggestions expose safe rider cards only, selected-rider handoff returns a WhatsApp click-to-chat URL, phone values are hashed where stored, admins manage rider profile visibility, and delivery/payment terms stay coordinated directly between the user, vendor, and rider.
+
+### Decision 014
+**Decision:** Vendor profile sharing stays client-side and secondary to vendor discovery actions.
+**Reason:** Sharing is useful for lightweight referrals, but the MVP should not introduce social-feed behavior, tracking links, or a backend share service.
+**Impact:** Vendor detail shows a small dedicated share section with native share and copy-link actions, using the canonical `/vendors/[slug]` URL and no WhatsApp-specific button, referral params, or analytics side effects.

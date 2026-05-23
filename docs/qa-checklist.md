@@ -17,6 +17,7 @@ Use this checklist before pushing or releasing UI work.
 - [ ] mobile About tab shows about/support copy and no search/filter/map controls
 - [ ] web left column contains header, search/filter, location panel, section navbar, and vendor content
 - [ ] web right column contains map and selected vendor card
+- [ ] header branding shows the Localman icon beside the existing Localman text on mobile and desktop
 - [ ] desktop does not show the mobile bottom dock
 - [ ] no hidden map on mobile or web
 - [ ] no duplicate selected vendor cards
@@ -48,12 +49,14 @@ Use this checklist before pushing or releasing UI work.
 - [ ] `New` has no star icon
 - [ ] rating values keep the star icon
 - [ ] `Call`, `Directions`, and `View details` work
+- [ ] `Call` and `Directions` show lightweight icons without changing `View details` icon behavior
 
 ## Selected vendor card
 
 - [ ] mobile selected vendor card is directly below the map
 - [ ] web selected vendor card remains in the right/map column
 - [ ] `Call`, `Directions`, and `View details` all work
+- [ ] `Call` and `Directions` icons are present and aligned
 - [ ] selected vendor change does not shake the page
 
 ## Location
@@ -70,6 +73,11 @@ Use this checklist before pushing or releasing UI work.
 - [ ] back to map restores discovery state
 - [ ] detail hero stays compact
 - [ ] images appear only on the detail page
+- [ ] `Call`, `Directions`, and `Request Rider` action icons render without changing button behavior
+- [ ] `Share this vendor with a friend` renders as a dedicated section below vendor metadata
+- [ ] `Share link` uses native share when available and shares the canonical vendor URL
+- [ ] `Copy link` copies the canonical vendor URL and shows safe feedback
+- [ ] no dedicated WhatsApp share button appears
 - [ ] Request Rider opens the Rider Connect modal
 - [ ] Rider Connect reminds users to call the vendor first
 - [ ] Rider Connect disclaimer states Localman connects users, vendors, and independent riders and does not collect payment or guarantee delivery

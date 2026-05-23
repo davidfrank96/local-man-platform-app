@@ -42,7 +42,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - marker tap selects a vendor without moving the map
   - vendor-card selection may gently focus the map
   - no clustering in the current release
-- vendor detail pages with compact top summary, weekly hours, featured dishes, vendor images, and `Back to map`
+- vendor detail pages with compact top summary, call/directions/Request Rider actions, a dedicated share section, weekly hours, featured dishes, vendor images, and `Back to map`
 - lightweight vendor rating input with 1-5 stars, optional predefined rating signals, no free-text reviews, and one rating per vendor per anonymous browser identity
 - conservative public confidence badges may appear on vendor detail only after thresholded positive rating-signal evidence; negative and neutral signals remain internal/admin-only
 - Rider Connect on vendor detail pages:
