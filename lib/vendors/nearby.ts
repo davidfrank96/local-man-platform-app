@@ -7,7 +7,10 @@ import {
 } from "../location/distance.ts";
 import type { ResolvedNearbyVendorsQuery } from "../location/user-location.ts";
 import type { PriceBand } from "../../types";
-import { compareDiscoveryVendors } from "./discovery-ranking.ts";
+import {
+  compareDiscoveryVendors,
+  compareSearchRankedDiscoveryVendors,
+} from "./discovery-ranking.ts";
 import {
   getVendorAvailabilitySnapshot,
   type VendorHourWindow,
@@ -248,9 +251,12 @@ export function findNearbyVendors(
 
   results.sort((left, right) => {
     if (normalizedSearch) {
-      const searchRankDifference =
-        right.searchRelevanceScore - left.searchRelevanceScore;
-      if (searchRankDifference !== 0) return searchRankDifference;
+      return compareSearchRankedDiscoveryVendors(
+        left,
+        right,
+        left.searchRelevanceScore,
+        right.searchRelevanceScore,
+      );
     }
 
     return compareDiscoveryVendors(left, right);

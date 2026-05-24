@@ -225,7 +225,7 @@ test("keeps open vendors ahead of closed vendors before ranking and distance", (
   );
 });
 
-test("search ranking puts strong name matches ahead of weak area matches", () => {
+test("search ranking keeps closer matches ahead of stronger name matches outside close-distance ties", () => {
   const vendors: VendorLocationRecord[] = [
     {
       ...baseVendor,
@@ -263,8 +263,96 @@ test("search ranking puts strong name matches ahead of weak area matches", () =>
 
   assert.deepEqual(
     results.map((vendor) => vendor.vendor_id),
-    ["prefix-name-match", "ranked-area-match"],
+    ["ranked-area-match", "prefix-name-match"],
   );
+});
+
+test("search hierarchy stays stable across 1km 5km 10km and 30km radius flows", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "closed-name-match",
+      name: "Rice Corner",
+      latitude: 0,
+      longitude: 0.02,
+      is_open_override: false,
+    },
+    {
+      ...baseVendor,
+      id: "closed-dish-match",
+      name: "Office Lunch Bowl",
+      latitude: 0,
+      longitude: 0.035,
+      is_open_override: false,
+      vendor_featured_dishes: [
+        {
+          dish_name: "Fried rice and chicken",
+          description: null,
+          is_featured: true,
+        },
+      ],
+    },
+    {
+      ...baseVendor,
+      id: "open-ayobami-match",
+      name: "Ayobami Jesus",
+      slug: "pepper-soup-rice",
+      latitude: 0,
+      longitude: 0.086,
+      is_open_override: true,
+      vendor_featured_dishes: [
+        {
+          dish_name: "Pepper soup rice",
+          description: null,
+          is_featured: true,
+        },
+      ],
+    },
+    {
+      ...baseVendor,
+      id: "far-closed-match",
+      name: "Rice Palace",
+      latitude: 0,
+      longitude: 0.22,
+      is_open_override: false,
+    },
+  ];
+
+  const rankedIdsForRadius = (radius_km: number) =>
+    findNearbyVendors(
+      vendors,
+      {
+        lat: 0,
+        lng: 0,
+        location_source: "precise",
+        radius_km,
+        search: "rice",
+      },
+      new Date("2026-04-28T12:00:00Z"),
+      new Map([
+        ["closed-name-match", 5],
+        ["closed-dish-match", 3],
+        ["open-ayobami-match", 1],
+        ["far-closed-match", 10],
+      ]),
+    ).map((vendor) => vendor.vendor_id);
+
+  assert.deepEqual(rankedIdsForRadius(1), []);
+  assert.deepEqual(rankedIdsForRadius(5), [
+    "closed-name-match",
+    "closed-dish-match",
+  ]);
+  assert.deepEqual(rankedIdsForRadius(10), [
+    "open-ayobami-match",
+    "closed-name-match",
+    "closed-dish-match",
+  ]);
+  assert.deepEqual(rankedIdsForRadius(30), [
+    "open-ayobami-match",
+    "closed-name-match",
+    "closed-dish-match",
+    "far-closed-match",
+  ]);
 });
 
 test("search matches featured dishes and categories before unrelated vendors", () => {
