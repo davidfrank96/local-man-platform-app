@@ -354,6 +354,7 @@ export const publicRiderSuggestionSchema = z
     vehicle_type: z.string().nullable(),
     operating_areas: riderOperatingAreasSchema,
     usual_availability_label: z.string().trim().min(1).max(120).nullable(),
+    masked_plate_number: z.string().trim().min(1).max(40).regex(/\*/).nullable().optional(),
   })
   .strict();
 

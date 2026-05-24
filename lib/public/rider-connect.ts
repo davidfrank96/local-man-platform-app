@@ -12,6 +12,10 @@ import {
   formatNigerianPhoneForDisplay,
   normalizeNigerianPhoneNumber,
 } from "../phone.ts";
+import {
+  getRiderPublicFirstName,
+  maskRiderPlateNumber,
+} from "../riders/public-identity.ts";
 import type {
   PublicRiderSuggestion,
   RiderContactHandoffRequest,
@@ -45,6 +49,7 @@ type PublicRiderSuggestionRow = {
   display_name: string;
   photo_url: string | null;
   vehicle_type: string | null;
+  plate_number?: string | null;
   operating_areas: string[] | null;
   usual_available_hours: Record<string, unknown> | null;
 };
@@ -99,7 +104,7 @@ const vendorRiderSelect = [
   "longitude",
 ].join(",");
 
-const riderContactSelect = `${riderPublicSelect},whatsapp_phone`;
+const riderContactSelect = `${riderPublicSelect},plate_number,whatsapp_phone`;
 
 let hasLoggedHashSecretFallback = false;
 
@@ -190,11 +195,23 @@ function getUsualAvailabilityLabel(value: Record<string, unknown> | null): strin
 function toPublicRiderSuggestion(row: PublicRiderSuggestionRow): PublicRiderSuggestion {
   return publicRiderSuggestionSchema.parse({
     rider_id: row.id,
-    display_name: row.display_name,
+    display_name: getRiderPublicFirstName(row.display_name),
     photo_url: row.photo_url,
     vehicle_type: row.vehicle_type,
     operating_areas: row.operating_areas ?? [],
     usual_availability_label: getUsualAvailabilityLabel(row.usual_available_hours),
+  });
+}
+
+function toPublicRiderHandoff(row: RiderContactRow): PublicRiderSuggestion {
+  return publicRiderSuggestionSchema.parse({
+    rider_id: row.id,
+    display_name: getRiderPublicFirstName(row.display_name),
+    photo_url: row.photo_url,
+    vehicle_type: row.vehicle_type,
+    operating_areas: row.operating_areas ?? [],
+    usual_availability_label: getUsualAvailabilityLabel(row.usual_available_hours),
+    masked_plate_number: maskRiderPlateNumber(row.plate_number),
   });
 }
 
@@ -578,7 +595,7 @@ export async function createRiderContactHandoff(
     throw new RiderConnectServiceError("NOT_FOUND", "Rider was not found.", 404);
   }
 
-  const rider = toPublicRiderSuggestion(riderRow);
+  const rider = toPublicRiderHandoff(riderRow);
   const whatsappUrl = createWhatsAppUrl(
     riderRow.whatsapp_phone,
     buildWhatsAppMessage(vendor, rider, request),

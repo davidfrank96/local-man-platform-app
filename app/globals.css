@@ -3376,7 +3376,7 @@ h2 {
   gap: 18px;
   width: min(1100px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 18px 0 26px;
+  padding: 18px 0 0;
 }
 
 @media (min-width: 821px) {
@@ -3586,6 +3586,56 @@ h2 {
   padding-top: 12px;
 }
 
+.rider-verification-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(36, 97, 79, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
+  padding: 14px;
+}
+
+.rider-verification-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.rider-verification-list div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(37, 41, 36, 0.08);
+  padding-bottom: 8px;
+}
+
+.rider-verification-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.rider-verification-list dt {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rider-verification-list dd {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 800;
+  text-align: right;
+}
+
+.rider-verification-note {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+}
+
 .rider-suggestion-grid {
   display: grid;
   gap: 10px;
@@ -3642,6 +3692,15 @@ h2 {
   .rider-connect-handoff-actions > * {
     width: 100%;
     justify-content: center;
+  }
+
+  .rider-verification-list div {
+    display: grid;
+    gap: 3px;
+  }
+
+  .rider-verification-list dd {
+    text-align: left;
   }
 }
 
@@ -4430,7 +4489,7 @@ h2 {
   .vendor-detail-shell {
     gap: 18px;
     width: min(100%, calc(100% - 20px));
-    padding: 16px 0 22px;
+    padding: 16px 0 0;
   }
 
   .vendor-detail-copy {

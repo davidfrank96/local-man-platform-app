@@ -1564,6 +1564,45 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("vendor detail scroll boundary ends at the Ratings section", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const viewports = [
+      { height: 720, width: 1280 },
+      { height: 900, width: 768 },
+      { height: 844, width: 390 },
+      { height: 720, width: 320 },
+    ];
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto("/vendors/jabi-office-lunch-bowl");
+      await expect(page.getByRole("heading", { name: "Rate this vendor" })).toBeVisible();
+
+      const metrics = await page.evaluate(() => {
+        const ratingSection = Array.from(
+          document.querySelectorAll<HTMLElement>(".vendor-detail-section"),
+        ).find((section) => section.textContent?.includes("Rate this vendor"));
+
+        if (!ratingSection) {
+          throw new Error("Ratings section is missing from vendor detail.");
+        }
+
+        const ratingRect = ratingSection.getBoundingClientRect();
+        const ratingBottom = ratingRect.bottom + window.scrollY;
+        const documentBottom = document.documentElement.scrollHeight;
+
+        return {
+          trailingGap: documentBottom - ratingBottom,
+        };
+      });
+
+      expect(metrics.trailingGap).toBeGreaterThanOrEqual(-2);
+      expect(metrics.trailingGap).toBeLessThanOrEqual(2);
+    }
+
+    await expectNoClientErrors(errors);
+  });
+
   test("vendor detail share actions use canonical vendor profile links", async ({ page }) => {
     const errors = trackClientErrors(page);
 
@@ -1659,6 +1698,27 @@ test.describe("Phase 3 browser smoke", () => {
     const reportPayloads: unknown[] = [];
     let suggestionRequestCount = 0;
 
+    await page.addInitScript(() => {
+      const stateWindow = window as typeof window & {
+        __LOCALMAN_WHATSAPP_OPENED__?: Array<{
+          features: string | undefined;
+          target: string | undefined;
+          url: string;
+        }>;
+      };
+
+      stateWindow.__LOCALMAN_WHATSAPP_OPENED__ = [];
+      window.open = ((url?: string | URL, target?: string, features?: string) => {
+        stateWindow.__LOCALMAN_WHATSAPP_OPENED__?.push({
+          features,
+          target,
+          url: String(url),
+        });
+
+        return { closed: false } as Window;
+      }) as typeof window.open;
+    });
+
     await page.route("**/api/vendors/jabi-office-lunch-bowl/riders", async (route) => {
       suggestionRequestCount += 1;
       await route.fulfill({
@@ -1701,6 +1761,7 @@ test.describe("Phase 3 browser smoke", () => {
               vehicle_type: "Motorcycle",
               operating_areas: ["Jabi", "Wuse"],
               usual_availability_label: "Usually available afternoons",
+              masked_plate_number: "18-KJ-***",
             },
           },
           error: null,
@@ -1759,17 +1820,41 @@ test.describe("Phase 3 browser smoke", () => {
     await dialog.getByRole("checkbox").check();
     await dialog.getByRole("button", { name: "Find a Rider" }).click();
 
-    await expect(dialog.getByText("Amina Rider")).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Amina" })).toBeVisible();
     await expect(dialog.getByText("Motorcycle")).toBeVisible();
     await expect(dialog.getByText("Jabi, Wuse")).toBeVisible();
     await expect(dialog.getByText("+2348111111111")).toHaveCount(0);
+    await expect(dialog.getByText("Amina Rider")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Select rider" }).click();
 
-    await expect(dialog.getByText("Amina Rider is selected.")).toBeVisible();
-    await expect(dialog.getByRole("link", { name: "Message rider" })).toHaveAttribute(
+    await expect(dialog.getByText("Rider Information")).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Amina" })).toBeVisible();
+    await expect(dialog.getByText("18-KJ-***")).toBeVisible();
+    await expect(dialog.getByText("18-KJA-443")).toHaveCount(0);
+    await expect(dialog.getByText("Verify the rider plate number before pickup.")).toBeVisible();
+    const continueLink = dialog.getByRole("link", { name: "Continue to WhatsApp" });
+    await expect(continueLink).toHaveAttribute(
       "href",
       "https://wa.me/2348111111111?text=hello",
     );
+    await continueLink.click();
+    await expect.poll(
+      () => page.evaluate(() => {
+        const stateWindow = window as typeof window & {
+          __LOCALMAN_WHATSAPP_OPENED__?: Array<{
+            features: string | undefined;
+            target: string | undefined;
+            url: string;
+          }>;
+        };
+
+        return stateWindow.__LOCALMAN_WHATSAPP_OPENED__?.[0] ?? null;
+      }),
+    ).toEqual({
+      features: "noopener,noreferrer",
+      target: "_blank",
+      url: "https://wa.me/2348111111111?text=hello",
+    });
     await expect(dialog.getByRole("button", { name: "Try another rider" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Back to vendor" })).toBeVisible();
     await dialog.getByLabel("Rider unavailable?").selectOption("no_response");

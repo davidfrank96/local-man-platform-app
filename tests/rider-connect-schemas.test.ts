@@ -19,6 +19,10 @@ import {
   riderVisibilityStatusSchema,
   updateAdminRiderRequestSchema,
 } from "../lib/validation/schemas.ts";
+import {
+  getRiderPublicFirstName,
+  maskRiderPlateNumber,
+} from "../lib/riders/public-identity.ts";
 
 const riderConnectMigrationPath = resolve(
   process.cwd(),
@@ -76,6 +80,27 @@ test("public rider suggestion cards reject raw contact fields", () => {
   assert.equal(
     publicRiderSuggestionSchema.safeParse({
       ...baseSuggestion,
+      plate_number: "18-KJA-443",
+    }).success,
+    false,
+  );
+  assert.equal(
+    publicRiderSuggestionSchema.safeParse({
+      ...baseSuggestion,
+      masked_plate_number: "18-KJA-443",
+    }).success,
+    false,
+  );
+  assert.equal(
+    publicRiderSuggestionSchema.safeParse({
+      ...baseSuggestion,
+      masked_plate_number: "18-KJ-***",
+    }).success,
+    true,
+  );
+  assert.equal(
+    publicRiderSuggestionSchema.safeParse({
+      ...baseSuggestion,
       operating_areas: undefined,
     }).success,
     false,
@@ -88,6 +113,17 @@ test("public rider suggestion cards reject raw contact fields", () => {
     }).success,
     true,
   );
+});
+
+test("rider public identity helpers expose first name and masked plate only", () => {
+  assert.equal(getRiderPublicFirstName("David Okafor"), "David");
+  assert.equal(getRiderPublicFirstName("  Amina   Rider  "), "Amina");
+  assert.equal(getRiderPublicFirstName(""), "Rider");
+  assert.equal(maskRiderPlateNumber("18-KJA-443"), "18-KJ-***");
+  assert.equal(maskRiderPlateNumber("18 KJA 443"), "18KJ-***");
+  assert.equal(maskRiderPlateNumber("7497"), "74-***");
+  assert.equal(maskRiderPlateNumber("AB"), "A-***");
+  assert.equal(maskRiderPlateNumber(null), null);
 });
 
 test("contact handoff schema requires current contact details and accepted disclaimer", () => {
@@ -143,11 +179,12 @@ test("contact handoff response exposes only safe selected-rider fields", () => {
     whatsapp_url: "https://wa.me/2348000000000?text=hello",
     rider: {
       rider_id: "11111111-1111-4111-8111-111111111111",
-      display_name: "Amina Rider",
+      display_name: "Amina",
       photo_url: null,
       vehicle_type: "bike",
       operating_areas: ["Wuse"],
       usual_availability_label: "Usually available afternoons",
+      masked_plate_number: "18-KJ-***",
     },
   };
 
@@ -165,6 +202,16 @@ test("contact handoff response exposes only safe selected-rider fields", () => {
       rider: {
         ...safeResponse.rider,
         phone: "+2348000000000",
+      },
+    }).success,
+    false,
+  );
+  assert.equal(
+    riderContactHandoffResponseDataSchema.safeParse({
+      ...safeResponse,
+      rider: {
+        ...safeResponse.rider,
+        plate_number: "18-KJA-443",
       },
     }).success,
     false,

@@ -41,6 +41,7 @@ const selectedRiderRow = {
   usual_available_hours: {
     label: "Usually available afternoons",
   },
+  plate_number: "7497",
   whatsapp_phone: "+2348111111111",
 };
 
@@ -128,6 +129,7 @@ test("public rider suggestions return only verified visible safe cards", async (
           display_name: "Zed Rider",
           photo_url: null,
           vehicle_type: "Bicycle",
+          plate_number: "77-XYZ-999",
           operating_areas: ["Garki"],
           usual_available_hours: null,
         },
@@ -136,6 +138,7 @@ test("public rider suggestions return only verified visible safe cards", async (
           display_name: "Amina Rider",
           photo_url: null,
           vehicle_type: "Motorcycle",
+          plate_number: "18-KJA-443",
           operating_areas: ["Jabi", "Wuse"],
           usual_available_hours: {
             label: "Usually available afternoons",
@@ -157,9 +160,12 @@ test("public rider suggestions return only verified visible safe cards", async (
 
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
-    assert.equal(body.data.riders[0].display_name, "Amina Rider");
+    assert.equal(body.data.riders[0].display_name, "Amina");
     assert.equal(serialized.includes("phone"), false);
     assert.equal(serialized.includes("whatsapp"), false);
+    assert.equal(serialized.includes('"plate_number"'), false);
+    assert.equal(serialized.includes("18-KJA-443"), false);
+    assert.equal(serialized.includes("77-XYZ-999"), false);
     assert.equal(serialized.includes(hiddenRiderPhone), false);
     assert.ok(calls.some((url) => url.pathname === "/rest/v1/riders"));
   } finally {
@@ -284,9 +290,12 @@ test("rider contact endpoint creates minimal intent and returns selected WhatsAp
     assert.equal(response.status, 201);
     assert.equal(body.success, true);
     assert.equal(body.data.intent_id, "33333333-3333-4333-8333-333333333333");
-    assert.equal(body.data.rider.display_name, "Amina Rider");
+    assert.equal(body.data.rider.display_name, "Amina");
+    assert.equal(body.data.rider.masked_plate_number, "74-***");
     assert.match(body.data.whatsapp_url, /^https:\/\/wa\.me\/2348111111111\?/);
     assert.equal(serialized.includes("whatsapp_phone"), false);
+    assert.equal(serialized.includes('"plate_number"'), false);
+    assert.equal(serialized.includes("7497"), false);
     assert.equal(serialized.includes("full_name"), false);
     assert.equal(serialized.includes("notes"), false);
     assert.equal(insertBody.customer_phone_hash, hashLike(insertBody.customer_phone_hash));
