@@ -177,7 +177,7 @@ test("discovery search ranking prioritizes suya name, dish, and category matches
     slug: "everyday-food",
     name: "Everyday Food",
     short_description: "Sometimes serves suya on request.",
-    distance_km: 0.4,
+    distance_km: 1.2,
     ranking_score: 20,
   });
   const dishMatch = createVendor({
@@ -188,13 +188,13 @@ test("discovery search ranking prioritizes suya name, dish, and category matches
       dish_name: "Beef suya",
       description: "Peppered skewers",
     },
-    distance_km: 3,
+    distance_km: 1.3,
   });
   const nameMatch = createVendor({
     vendor_id: "00000000-0000-4000-8000-000000000004",
     slug: "suya-palace",
     name: "Suya Palace",
-    distance_km: 5,
+    distance_km: 1.4,
   });
 
   const results = sortDiscoveryVendors(
@@ -209,6 +209,75 @@ test("discovery search ranking prioritizes suya name, dish, and category matches
     "suya-palace",
     "evening-grill",
     "everyday-food",
+  ]);
+});
+
+test("discovery search ranking keeps proximity ahead of stronger text matches outside close-distance ties", () => {
+  const nearWeakMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000002",
+    slug: "near-rice-area",
+    name: "Everyday Food",
+    area: "Rice district",
+    distance_km: 0.8,
+  });
+  const farStrongMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000003",
+    slug: "far-rice-palace",
+    name: "Rice Palace",
+    distance_km: 4.8,
+  });
+
+  const results = sortDiscoveryVendors(
+    [farStrongMatch, nearWeakMatch],
+    {
+      ...baseFilters,
+      search: "rice",
+    },
+  );
+
+  assert.deepEqual(results.map((vendor) => vendor.slug), [
+    "near-rice-area",
+    "far-rice-palace",
+  ]);
+});
+
+test("discovery search ranking keeps open matching vendors ahead of closed stronger text matches", () => {
+  const openDishMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000002",
+    slug: "pepper-soup-rice",
+    name: "Ayobami Jesus",
+    is_open_now: true,
+    distance_km: 9.6,
+    featured_dish: {
+      dish_name: "Pepper soup rice",
+      description: null,
+    },
+    categories: [],
+  });
+  const closedCategoryMatch = createVendor({
+    vendor_id: "00000000-0000-4000-8000-000000000003",
+    slug: "jabi-rice-corner",
+    name: "Jabi Rice Corner",
+    is_open_now: false,
+    distance_km: 3.6,
+    featured_dish: {
+      dish_name: "Fried rice and chicken",
+      description: null,
+    },
+    categories: [{ name: "Rice", slug: "rice" }],
+  });
+
+  const results = sortDiscoveryVendors(
+    [closedCategoryMatch, openDishMatch],
+    {
+      ...baseFilters,
+      search: "rice",
+    },
+  );
+
+  assert.deepEqual(results.map((vendor) => vendor.slug), [
+    "pepper-soup-rice",
+    "jabi-rice-corner",
   ]);
 });
 

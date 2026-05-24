@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import type {
   PublicRiderSuggestion,
   RiderContactHandoffRequest,
   RiderContactHandoffResponseData,
   RiderUnavailableReason,
 } from "../../types/index.ts";
+import { getRiderPublicFirstName } from "../../lib/riders/public-identity.ts";
 import { isAllowedPublicImageUrl } from "../../lib/vendors/images.ts";
 import {
   createVendorRiderContactHandoff,
@@ -73,6 +74,22 @@ async function readErrorMessage(error: unknown, fallback: string): Promise<strin
   }
 
   return fallback;
+}
+
+function openWhatsAppHandoff(event: MouseEvent<HTMLAnchorElement>, whatsappUrl: string) {
+  event.preventDefault();
+
+  try {
+    const openedWindow = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+
+    if (openedWindow) {
+      return;
+    }
+  } catch {
+    // Fall back to same-tab navigation when the browser blocks a new window.
+  }
+
+  window.location.assign(whatsappUrl);
 }
 
 export function RiderConnectModal({
@@ -173,9 +190,11 @@ export function RiderConnectModal({
       return;
     }
 
+    const riderName = getRiderPublicFirstName(rider.display_name);
+
     setFeedback({
       type: "loading",
-      message: `Preparing WhatsApp handoff for ${rider.display_name}...`,
+      message: `Preparing WhatsApp handoff for ${riderName}...`,
     });
 
     try {
@@ -356,6 +375,7 @@ export function RiderConnectModal({
                 {riders.length > 0 ? (
                   <div className="rider-suggestion-grid">
                     {riders.map((rider) => {
+                      const riderName = getRiderPublicFirstName(rider.display_name);
                       const riderPhotoUrl = isAllowedPublicImageUrl(rider.photo_url, {
                         allowLocalPaths: false,
                       })
@@ -366,14 +386,14 @@ export function RiderConnectModal({
                         <article className="rider-suggestion-card" key={rider.rider_id}>
                           {riderPhotoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img alt={`${rider.display_name} profile`} src={riderPhotoUrl} />
+                            <img alt={`${riderName} profile`} src={riderPhotoUrl} />
                           ) : (
                             <div className="rider-suggestion-avatar" aria-hidden="true">
-                              {rider.display_name.slice(0, 1).toUpperCase()}
+                              {riderName.slice(0, 1).toUpperCase()}
                             </div>
                           )}
                           <div>
-                            <h3>{rider.display_name}</h3>
+                            <h3>{riderName}</h3>
                             <p>{rider.vehicle_type ?? "Independent rider"}</p>
                             <p>
                               {rider.operating_areas.length > 0
@@ -412,7 +432,39 @@ export function RiderConnectModal({
             {step === "handoff" && handoff ? (
               <div className="rider-connect-handoff" aria-live="polite">
                 <p className="form-note">{feedback.message}</p>
-                <h3>{handoff.rider.display_name} is selected.</h3>
+                <section className="rider-verification-card" aria-labelledby="rider-verification-title">
+                  <p className="eyebrow">Rider Information</p>
+                  <h3 id="rider-verification-title">
+                    {getRiderPublicFirstName(handoff.rider.display_name)}
+                  </h3>
+                  <dl className="rider-verification-list">
+                    <div>
+                      <dt>Vehicle</dt>
+                      <dd>{handoff.rider.vehicle_type ?? "Independent rider"}</dd>
+                    </div>
+                    <div>
+                      <dt>Area</dt>
+                      <dd>
+                        {handoff.rider.operating_areas.length > 0
+                          ? handoff.rider.operating_areas.join(", ")
+                          : "Operating areas not listed"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Hours</dt>
+                      <dd>{handoff.rider.usual_availability_label ?? "Availability varies"}</dd>
+                    </div>
+                    <div>
+                      <dt>Plate</dt>
+                      <dd>{handoff.rider.masked_plate_number ?? "Not listed"}</dd>
+                    </div>
+                  </dl>
+                  <p className="rider-verification-note">
+                    {handoff.rider.masked_plate_number
+                      ? "Verify the rider plate number before pickup."
+                      : "Confirm the rider details directly before pickup."}
+                  </p>
+                </section>
                 <p>
                   Localman connects you. Food availability, delivery fee, payment,
                   pickup, and delivery terms are coordinated directly.
@@ -423,8 +475,9 @@ export function RiderConnectModal({
                     href={handoff.whatsapp_url}
                     rel="noreferrer"
                     target="_blank"
+                    onClick={(event) => openWhatsAppHandoff(event, handoff.whatsapp_url)}
                   >
-                    Message rider
+                    Continue to WhatsApp
                   </a>
                   <button
                     className="button-secondary compact-button"

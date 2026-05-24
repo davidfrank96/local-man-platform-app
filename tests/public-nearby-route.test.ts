@@ -301,6 +301,140 @@ test("nearby route searches featured dishes and categories with strong matches f
   }
 });
 
+test("nearby route keeps open matching vendors ahead of closed stronger text matches", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = toUrl(input);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        createCandidateVendor(0, {
+          id: "closed-category-match",
+          name: "Jabi Rice Corner",
+          slug: "jabi-rice-corner",
+          longitude: 7.3986 + 0.002,
+          is_open_override: false,
+          vendor_featured_dishes: [
+            {
+              dish_name: "Fried rice and chicken",
+              description: null,
+              is_featured: true,
+            },
+          ],
+          vendor_category_map: [
+            {
+              vendor_categories: {
+                slug: "rice",
+                name: "Rice",
+              },
+            },
+          ],
+        }),
+        createCandidateVendor(1, {
+          id: "open-dish-match",
+          name: "Ayobami Jesus",
+          slug: "pepper-soup-rice",
+          longitude: 7.3986 + 0.086,
+          is_open_override: true,
+          vendor_featured_dishes: [
+            {
+              dish_name: "Pepper soup rice",
+              description: null,
+              is_featured: true,
+            },
+          ],
+        }),
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_vendor_usage_scores") {
+      return Response.json([]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const response = await nearbyRoute(
+      createNearbyNextRequest(
+        "http://localhost/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=30&search=rice",
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      body.data.vendors.map((vendor: { slug: string }) => vendor.slug),
+      ["pepper-soup-rice", "jabi-rice-corner"],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("nearby route keeps closer open matches ahead of farther stronger text matches", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = toUrl(input);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        createCandidateVendor(0, {
+          id: "far-strong-match",
+          name: "Rice Palace",
+          slug: "rice-palace",
+          longitude: 7.3986 + 0.06,
+          is_open_override: true,
+          vendor_featured_dishes: [
+            {
+              dish_name: "Jollof rice",
+              description: null,
+              is_featured: true,
+            },
+          ],
+        }),
+        createCandidateVendor(1, {
+          id: "near-weak-match",
+          name: "Everyday Food",
+          slug: "everyday-food",
+          area: "Rice district",
+          longitude: 7.3986 + 0.004,
+          is_open_override: true,
+        }),
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_vendor_usage_scores") {
+      return Response.json([]);
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const response = await nearbyRoute(
+      createNearbyNextRequest(
+        "http://localhost/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=30&search=rice",
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      body.data.vendors.map((vendor: { slug: string }) => vendor.slug),
+      ["everyday-food", "rice-palace"],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("nearby route ranks open vendors by distance with popularity as a close-distance tie-breaker", async () => {
   const restoreEnv = setPublicEnv();
   const originalFetch = globalThis.fetch;

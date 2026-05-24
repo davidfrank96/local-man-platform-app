@@ -106,6 +106,34 @@ export function compareDiscoveryVendors(
   return left.name.localeCompare(right.name) || left.vendor_id.localeCompare(right.vendor_id);
 }
 
+export function compareSearchRankedDiscoveryVendors(
+  left: DiscoveryRankableVendor,
+  right: DiscoveryRankableVendor,
+  leftSearchScore: number,
+  rightSearchScore: number,
+): number {
+  const openRankDifference = getOpenRank(left) - getOpenRank(right);
+  if (openRankDifference !== 0) return openRankDifference;
+
+  const distanceRankDifference = getDistanceDifference(left, right);
+  const searchRankDifference = rightSearchScore - leftSearchScore;
+  const popularityRankDifference = getPopularityRank(right) - getPopularityRank(left);
+
+  if (distanceRankDifference.isCloseTie) {
+    if (searchRankDifference !== 0) return searchRankDifference;
+    if (popularityRankDifference !== 0) return popularityRankDifference;
+  }
+
+  if (distanceRankDifference.difference !== 0) {
+    return distanceRankDifference.difference;
+  }
+
+  if (searchRankDifference !== 0) return searchRankDifference;
+  if (popularityRankDifference !== 0) return popularityRankDifference;
+
+  return compareDiscoveryVendors(left, right);
+}
+
 export function sortDiscoveryVendors(
   vendors: NearbyVendor[],
   filters: DiscoveryFiltersLike,
@@ -122,12 +150,14 @@ export function sortDiscoveryVendors(
       searchScore: getSearchRelevanceScore(normalizedSearch, getDiscoverySearchFields(vendor)),
     }))
     .filter((entry) => entry.searchScore > 0)
-    .sort((left, right) => {
-      const searchRankDifference = right.searchScore - left.searchScore;
-      if (searchRankDifference !== 0) return searchRankDifference;
-
-      return compareDiscoveryVendors(left.vendor, right.vendor);
-    })
+    .sort((left, right) =>
+      compareSearchRankedDiscoveryVendors(
+        left.vendor,
+        right.vendor,
+        left.searchScore,
+        right.searchScore,
+      ),
+    )
     .map((entry) => entry.vendor);
 }
 
