@@ -388,6 +388,12 @@ test("admin can create verified visible rider but cannot create visible unverifi
 
     assert.equal(invalidResponse.status, 400);
     assert.equal(invalidBody.success, false);
+    assert.deepEqual(invalidBody.error.details.issues, [
+      {
+        path: "visibility_status",
+        message: "Visible riders must be verified.",
+      },
+    ]);
     assert.equal(createBodies.length, 1);
   } finally {
     globalThis.fetch = originalFetch;
