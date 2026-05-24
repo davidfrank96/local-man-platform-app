@@ -59,6 +59,9 @@ const visibilityStatusLabels: Record<RiderVisibilityStatus, string> = {
   suspended: "Suspended",
 };
 
+const visibleRequiresVerifiedMessage =
+  "Set verification status to Verified before making a rider visible.";
+
 function createAdminFeedback(
   tone: AdminFeedback["tone"],
   message: string,
@@ -223,6 +226,15 @@ function buildRiderCreatePayload(draft: CreateRiderDraft): CreateAdminRiderReque
   };
 }
 
+function normalizeCreateVisibilityForVerification(
+  verificationStatus: RiderVerificationStatus,
+  visibilityStatus: RiderVisibilityStatus,
+): RiderVisibilityStatus {
+  return verificationStatus === "verified" || visibilityStatus !== "visible"
+    ? visibilityStatus
+    : "hidden";
+}
+
 export function AdminRiderManagement() {
   const { session } = useAdminSession();
   const [filters, setFilters] = useState<RiderFilters>({
@@ -356,6 +368,19 @@ export function AdminRiderManagement() {
       return;
     }
 
+    if (
+      createDraft.visibility_status === "visible" &&
+      createDraft.verification_status !== "verified"
+    ) {
+      setFeedback(createAdminFeedback(
+        "error",
+        visibleRequiresVerifiedMessage,
+        "VALIDATION_ERROR",
+        "Visible riders are public suggestions, so the rider must be verified first.",
+      ));
+      return;
+    }
+
     setIsCreating(true);
     setFeedback(createAdminFeedback("neutral", "Creating rider profile…"));
 
@@ -437,12 +462,17 @@ export function AdminRiderManagement() {
                 <span>Initial verification status</span>
                 <select
                   value={createDraft.verification_status}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const verificationStatus = event.target.value as RiderVerificationStatus;
                     setCreateDraft((current) => ({
                       ...current,
-                      verification_status: event.target.value as RiderVerificationStatus,
-                    }))
-                  }
+                      verification_status: verificationStatus,
+                      visibility_status: normalizeCreateVisibilityForVerification(
+                        verificationStatus,
+                        current.visibility_status,
+                      ),
+                    }));
+                  }}
                 >
                   <option value="pending">Pending</option>
                   <option value="verified">Verified</option>
@@ -461,9 +491,15 @@ export function AdminRiderManagement() {
                   }
                 >
                   <option value="hidden">Hidden</option>
-                  <option value="visible">Visible</option>
+                  <option
+                    value="visible"
+                    disabled={createDraft.verification_status !== "verified"}
+                  >
+                    Visible
+                  </option>
                   <option value="suspended">Suspended</option>
                 </select>
+                <span className="field-hint">{visibleRequiresVerifiedMessage}</span>
               </label>
               <label className="field">
                 <span>Display name</span>

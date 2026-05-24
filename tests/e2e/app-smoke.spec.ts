@@ -2728,8 +2728,26 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(
       createPanel.getByText("Creating a rider profile does not make them a Localman employee"),
     ).toBeVisible();
-    await createPanel.getByLabel("Initial verification status").selectOption("verified");
-    await createPanel.getByLabel("Initial visibility status").selectOption("visible");
+    const createVerificationStatus = createPanel.getByLabel("Initial verification status");
+    const createVisibilityStatus = createPanel.getByLabel("Initial visibility status");
+    await expect(createVisibilityStatus.locator('option[value="visible"]')).toHaveAttribute(
+      "disabled",
+      "",
+    );
+    await createVerificationStatus.selectOption("verified");
+    await expect(createVisibilityStatus.locator('option[value="visible"]')).not.toHaveAttribute(
+      "disabled",
+      "",
+    );
+    await createVisibilityStatus.selectOption("visible");
+    await createVerificationStatus.selectOption("pending");
+    await expect(createVisibilityStatus).toHaveValue("hidden");
+    await expect(createVisibilityStatus.locator('option[value="visible"]')).toHaveAttribute(
+      "disabled",
+      "",
+    );
+    await createVerificationStatus.selectOption("verified");
+    await createVisibilityStatus.selectOption("visible");
     await createPanel.getByLabel("Display name").fill("Manual Rider");
     await createPanel.getByLabel("Full legal name").fill("Manual Rider Legal");
     await createPanel.getByLabel("Phone").fill("+2348123456789");
