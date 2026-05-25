@@ -225,7 +225,7 @@ Returns:
 - `vendor_slug`
 - `riders`, containing only:
   - `rider_id`
-  - `display_name`
+  - `display_name` as the first-name public label
   - `photo_url`
   - `vehicle_type`
   - `operating_areas`
@@ -233,10 +233,12 @@ Returns:
 
 Behavior:
 - requires a valid active vendor slug
-- returns only riders with `verification_status = verified` and `visibility_status = visible`
-- sorts riders matching the vendor area before other listed riders, then by display name
+- returns only riders with `verification_status = verified`, `visibility_status = visible`, and current structured availability
+- returns at most 3 rider suggestions
+- uses stable lightweight rotation when more than 3 riders are available
+- keeps rider operating area informational only; area and proximity are not hard eligibility filters
 - uses service-role server access so the public response can be safely shaped
-- does not expose rider phone, WhatsApp phone, full legal name, notes, or internal status fields
+- does not expose rider phone, WhatsApp phone, full legal name, notes, full plate number, or internal status fields
 - rate limits suggestion requests:
   - threshold: `60` requests per `10` minutes per vendor-scope/client bucket
   - block window: `5` minutes after exceeding the threshold
@@ -263,13 +265,13 @@ Request body:
 Returns:
 - `intent_id`
 - `whatsapp_url`
-- safe selected rider card fields matching the public suggestion contract
+- safe selected rider card fields matching the public suggestion contract, plus optional `masked_plate_number`
 
 Behavior:
 - validates request params and body before database access
 - requires disclaimer acceptance
 - verifies the vendor exists and is active
-- verifies the selected rider is still `verified` and `visible`
+- verifies the selected rider is still `verified`, `visible`, and currently available from structured availability windows
 - stores a `rider_contact_intents` row only after validation
 - stores `customer_phone_hash`, not raw customer phone
 - stores delivery area and minimal request metadata only; raw customer address is used transiently for the WhatsApp message
@@ -426,12 +428,13 @@ Route file:
 
 Behavior:
 - requires `riders:manage`
-- accepts manual intake fields: display name, optional full legal name, phone, WhatsApp phone, vehicle type, plate number, operating areas, usual available hours, notes, verification status, visibility status, and external consent confirmation
+- accepts manual intake fields: display name, optional full legal name, phone, WhatsApp phone, vehicle type, plate number, operating areas, display-only usual available hours, structured weekday/weekend availability times, notes, verification status, visibility status, and external consent confirmation
 - defaults new profiles to `verification_status = pending` and `visibility_status = hidden`
 - requires admin confirmation that the rider provided consent outside Localman
 - rejects unsafe fields such as photo upload, payment, bank, NIN, BVN, or dispatch/order data
 - rejects duplicate rider profiles when phone or WhatsApp already matches an existing rider
 - only allows `visibility_status = visible` when `verification_status = verified`
+- requires weekday/weekend availability start/end values to be paired; overnight ranges are allowed
 - writes a `CREATE_RIDER` audit log with safe metadata only
 - does not approve individual deliveries, assign riders, process payments, or mediate disputes
 
@@ -463,10 +466,12 @@ Behavior:
   - plate number
   - operating areas
   - usual available hours
+  - weekday/weekend available start and end times
   - verification status
   - visibility status
   - notes
 - rejects invalid statuses and unsafe fields
+- rejects incomplete structured availability ranges; overnight ranges are allowed
 - writes audit logs for rider profile/status changes
 - does not approve individual deliveries, assign riders, process payments, or mediate disputes
 
@@ -567,6 +572,27 @@ Vendor summary fields used by the admin workspace include:
 - `featured_dishes_count`
 
 Those counts drive dashboard overview cards, incomplete-vendor status, and registry badges in the admin UI.
+
+### GET /api/admin/vendors/:id/rating-signals
+Read aggregate-only internal rating signal counts for one vendor.
+
+Route file:
+- `app/api/admin/vendors/[id]/rating-signals/route.ts`
+
+Behavior:
+- requires `analytics:read`
+- validates the vendor id route param
+- reads through the server-only `get_admin_vendor_rating_signal_summary` RPC
+- returns `signal_summary` with aggregate counts only:
+  - `positive_signal_count`
+  - `neutral_signal_count`
+  - `negative_signal_count`
+  - `food_safety_concern_count`
+  - `poor_hygiene_count`
+  - `vendor_unavailable_count`
+  - `recent_signal_count`
+- does not return rating identities, anonymous hashes, IPs, raw signal rows, per-rating selections, free text, or moderation actions
+- returns a generic admin-safe error if the upstream summary read fails
 
 ### GET /api/admin/admin-users
 List team access accounts

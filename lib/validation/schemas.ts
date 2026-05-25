@@ -294,6 +294,56 @@ const riderOperatingAreasSchema = z
   .max(25);
 
 const riderJsonObjectSchema = z.record(z.string(), z.unknown());
+const riderAvailabilityTimeSchema = timeSchema.nullable().optional();
+const riderAvailabilityTimeColumnSchema = timeSchema.nullable().default(null);
+
+type RiderAvailabilityRangeTarget = {
+  weekday_available_from?: string | null;
+  weekday_available_until?: string | null;
+  weekend_available_from?: string | null;
+  weekend_available_until?: string | null;
+};
+
+function hasAvailabilityTime(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function validateRiderAvailabilityRanges(
+  value: RiderAvailabilityRangeTarget,
+  context: z.RefinementCtx,
+) {
+  const ranges: Array<{
+    startKey: keyof RiderAvailabilityRangeTarget;
+    endKey: keyof RiderAvailabilityRangeTarget;
+    label: string;
+  }> = [
+    {
+      startKey: "weekday_available_from",
+      endKey: "weekday_available_until",
+      label: "Weekday",
+    },
+    {
+      startKey: "weekend_available_from",
+      endKey: "weekend_available_until",
+      label: "Weekend",
+    },
+  ];
+
+  for (const range of ranges) {
+    const hasStart = hasAvailabilityTime(value[range.startKey]);
+    const hasEnd = hasAvailabilityTime(value[range.endKey]);
+
+    if (hasStart === hasEnd) {
+      continue;
+    }
+
+    context.addIssue({
+      code: "custom",
+      message: `${range.label} availability requires both start and end times.`,
+      path: [hasStart ? range.endKey : range.startKey],
+    });
+  }
+}
 
 const optionalRiderTextSchema = (maxLength: number) =>
   z
@@ -315,6 +365,10 @@ export const riderSchema = z.object({
   plate_number: z.string().nullable(),
   operating_areas: riderOperatingAreasSchema.default([]),
   usual_available_hours: riderJsonObjectSchema.nullable(),
+  weekday_available_from: riderAvailabilityTimeColumnSchema,
+  weekday_available_until: riderAvailabilityTimeColumnSchema,
+  weekend_available_from: riderAvailabilityTimeColumnSchema,
+  weekend_available_until: riderAvailabilityTimeColumnSchema,
   verification_status: riderVerificationStatusSchema,
   visibility_status: riderVisibilityStatusSchema,
   notes: z.string().nullable(),
@@ -469,6 +523,10 @@ export const createAdminRiderRequestSchema = z
     plate_number: optionalRiderTextSchema(40),
     operating_areas: riderOperatingAreasSchema.min(1),
     usual_available_hours: adminRiderHoursInputSchema.optional(),
+    weekday_available_from: riderAvailabilityTimeSchema,
+    weekday_available_until: riderAvailabilityTimeSchema,
+    weekend_available_from: riderAvailabilityTimeSchema,
+    weekend_available_until: riderAvailabilityTimeSchema,
     verification_status: riderVerificationStatusSchema.optional(),
     visibility_status: riderVisibilityStatusSchema.optional(),
     notes: optionalRiderTextSchema(1000),
@@ -479,6 +537,8 @@ export const createAdminRiderRequestSchema = z
   .superRefine((value, context) => {
     const verificationStatus = value.verification_status ?? "pending";
     const visibilityStatus = value.visibility_status ?? "hidden";
+
+    validateRiderAvailabilityRanges(value, context);
 
     if (visibilityStatus === "visible" && verificationStatus !== "verified") {
       context.addIssue({
@@ -499,11 +559,18 @@ export const updateAdminRiderRequestSchema = z
     plate_number: optionalRiderTextSchema(40),
     operating_areas: riderOperatingAreasSchema.optional(),
     usual_available_hours: adminRiderHoursInputSchema.optional(),
+    weekday_available_from: riderAvailabilityTimeSchema,
+    weekday_available_until: riderAvailabilityTimeSchema,
+    weekend_available_from: riderAvailabilityTimeSchema,
+    weekend_available_until: riderAvailabilityTimeSchema,
     verification_status: riderVerificationStatusSchema.optional(),
     visibility_status: riderVisibilityStatusSchema.optional(),
     notes: optionalRiderTextSchema(1000),
   })
   .strict()
+  .superRefine((value, context) => {
+    validateRiderAvailabilityRanges(value, context);
+  })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one rider field must be provided.",
   });

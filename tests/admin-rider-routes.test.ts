@@ -28,6 +28,10 @@ const riderRecord = {
   plate_number: "ABC-123",
   operating_areas: ["Wuse", "Garki"],
   usual_available_hours: { label: "Weekdays 9am-6pm" },
+  weekday_available_from: "09:00:00",
+  weekday_available_until: "18:00:00",
+  weekend_available_from: null,
+  weekend_available_until: null,
   verification_status: "pending",
   visibility_status: "hidden",
   notes: "New application",
@@ -305,6 +309,8 @@ test("admin can create rider with hidden pending defaults and audit log", async 
         whatsapp_phone: "+2348022222222",
         operating_areas: ["Wuse", "Garki"],
         usual_available_hours: "Weekdays 9am-6pm",
+        weekday_available_from: "09:00",
+        weekday_available_until: "18:00",
         consent_confirmed: true,
       }),
     );
@@ -326,6 +332,10 @@ test("admin can create rider with hidden pending defaults and audit log", async 
       plate_number: null,
       operating_areas: ["Wuse", "Garki"],
       usual_available_hours: { label: "Weekdays 9am-6pm" },
+      weekday_available_from: "09:00",
+      weekday_available_until: "18:00",
+      weekend_available_from: null,
+      weekend_available_until: null,
       verification_status: "pending",
       visibility_status: "hidden",
       notes: null,
@@ -401,6 +411,36 @@ test("admin can create verified visible rider but cannot create visible unverifi
   }
 });
 
+test("admin rider create rejects incomplete structured availability ranges", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls);
+
+  try {
+    const response = await createRiderRoute(
+      createRequest("/api/admin/riders", "POST", {
+        display_name: "Incomplete Availability Rider",
+        phone: "+2348033333333",
+        whatsapp_phone: "+2348044444444",
+        operating_areas: ["Maitama"],
+        verification_status: "verified",
+        visibility_status: "visible",
+        weekday_available_from: "09:00",
+        consent_confirmed: true,
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(calls.includes("POST /rest/v1/riders"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin rider create rejects duplicate phone or WhatsApp safely", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -450,6 +490,8 @@ test("admin can update rider status and safe profile fields", async () => {
         visibility_status: "visible",
         display_name: "Musa Verified",
         operating_areas: ["Wuse", "Garki", "Maitama"],
+        weekday_available_from: "12:00",
+        weekday_available_until: "10:00",
       }),
       { params: Promise.resolve({ id: riderId }) },
     );
@@ -466,6 +508,8 @@ test("admin can update rider status and safe profile fields", async () => {
       visibility_status: "visible",
       display_name: "Musa Verified",
       operating_areas: ["Wuse", "Garki", "Maitama"],
+      weekday_available_from: "12:00",
+      weekday_available_until: "10:00",
     });
     assert.ok(calls.includes("POST /rest/v1/audit_logs"));
   } finally {
@@ -626,4 +670,6 @@ test("admin riders UI is protected and documents independent-rider boundaries", 
   assert.match(componentSource, /It does not assign deliveries/);
   assert.match(componentSource, /verification_status/);
   assert.match(componentSource, /visibility_status/);
+  assert.match(componentSource, /Weekday start time/);
+  assert.match(componentSource, /Structured times below control rider suggestions/);
 });

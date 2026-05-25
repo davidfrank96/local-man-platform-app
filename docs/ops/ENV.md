@@ -28,7 +28,7 @@ Local Man — Environment Variables
 - Browser admin and agent sessions are persisted in same-origin HTTP-only cookies, not `localStorage` or `sessionStorage`.
 - Browser admin API calls now authenticate through those cookies and `/api/admin/session`; callers no longer need to attach a bearer token manually.
 - Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.
-- Rider Connect application, suggestion, contact handoff, unavailable-report, and admin rider routes use server-side access. Public suggestion responses must never include rider phone or WhatsApp values.
+- Rider Connect application, suggestion, contact handoff, unavailable-report, and admin rider routes use server-side access. Public suggestion responses must never include rider phone, WhatsApp values, full legal names, full plate numbers, internal notes, or internal status fields.
 - `RIDER_CONNECT_HASH_SECRET` must never be exposed as `NEXT_PUBLIC_*`; it is used only on the server when storing Rider Connect phone hashes.
 - Team access creation and existing-user recovery use the server-only service role key and must not be called directly from the browser.
 - Server-side admin route authorization still supports bearer tokens for compatibility and targeted tests, but the primary browser flow is cookie-backed.

@@ -23,10 +23,15 @@ import {
   getRiderPublicFirstName,
   maskRiderPlateNumber,
 } from "../lib/riders/public-identity.ts";
+import { isRiderAvailableNow } from "../lib/riders/availability.ts";
 
 const riderConnectMigrationPath = resolve(
   process.cwd(),
   "supabase/migrations/20260517090000_rider_connect_schema.sql",
+);
+const riderAvailabilityMigrationPath = resolve(
+  process.cwd(),
+  "supabase/migrations/20260525120000_rider_structured_availability.sql",
 );
 
 const riderConnectUserFacingCopyPaths = [
@@ -232,6 +237,10 @@ test("rider database schema keeps private contact fields separate from public ca
     usual_available_hours: {
       label: "Usually available afternoons",
     },
+    weekday_available_from: "09:00:00",
+    weekday_available_until: "22:00:00",
+    weekend_available_from: null,
+    weekend_available_until: null,
     verification_status: "verified",
     visibility_status: "visible",
     notes: null,
@@ -258,6 +267,8 @@ test("admin rider update schema allows only managed profile and status fields", 
     whatsapp_phone: "+2348000000001",
     operating_areas: ["Wuse", "Garki"],
     usual_available_hours: "Weekdays 10 AM - 7 PM",
+    weekday_available_from: "10:00",
+    weekday_available_until: "07:00",
     verification_status: "verified",
     visibility_status: "visible",
     notes: "Reviewed by admin.",
@@ -265,6 +276,8 @@ test("admin rider update schema allows only managed profile and status fields", 
 
   assert.equal(parsedUpdate.phone, "2348000000000");
   assert.equal(parsedUpdate.whatsapp_phone, "2348000000001");
+  assert.equal(parsedUpdate.weekday_available_from, "10:00");
+  assert.equal(parsedUpdate.weekday_available_until, "07:00");
   assert.equal(
     updateAdminRiderRequestSchema.safeParse({
       verification_status: "approved",
@@ -275,6 +288,19 @@ test("admin rider update schema allows only managed profile and status fields", 
     updateAdminRiderRequestSchema.safeParse({
       photo_url: "https://example.com/rider.jpg",
       visibility_status: "visible",
+    }).success,
+    false,
+  );
+  assert.equal(
+    updateAdminRiderRequestSchema.safeParse({
+      weekday_available_from: "09:00",
+    }).success,
+    false,
+  );
+  assert.equal(
+    updateAdminRiderRequestSchema.safeParse({
+      weekday_available_from: "not-time",
+      weekday_available_until: "17:00",
     }).success,
     false,
   );
@@ -291,6 +317,10 @@ test("admin rider create schema requires consent and prevents visible unverified
     plate_number: "RID-100",
     operating_areas: ["Wuse", "Garki"],
     usual_available_hours: "Weekdays 10 AM - 7 PM",
+    weekday_available_from: "09:00",
+    weekday_available_until: "23:00",
+    weekend_available_from: "12:00",
+    weekend_available_until: "10:00",
     verification_status: "verified",
     visibility_status: "visible",
     notes: "Consent collected through manual intake.",
@@ -301,6 +331,8 @@ test("admin rider create schema requires consent and prevents visible unverified
 
   assert.equal(parsedCreate.phone, "2348000000000");
   assert.equal(parsedCreate.whatsapp_phone, "2348000000001");
+  assert.equal(parsedCreate.weekend_available_from, "12:00");
+  assert.equal(parsedCreate.weekend_available_until, "10:00");
   assert.equal(
     createAdminRiderRequestSchema.safeParse({
       ...validCreateRequest,
@@ -326,8 +358,77 @@ test("admin rider create schema requires consent and prevents visible unverified
   assert.equal(
     createAdminRiderRequestSchema.safeParse({
       ...validCreateRequest,
+      weekend_available_until: undefined,
+    }).success,
+    false,
+  );
+  assert.equal(
+    createAdminRiderRequestSchema.safeParse({
+      ...validCreateRequest,
       bank_account: "not allowed",
     }).success,
+    false,
+  );
+});
+
+test("rider availability helper supports weekday, weekend, overnight, and null windows", () => {
+  assert.equal(
+    isRiderAvailableNow(
+      {
+        weekday_available_from: "09:00",
+        weekday_available_until: "17:00",
+      },
+      new Date("2026-05-18T11:00:00.000Z"),
+    ),
+    true,
+  );
+  assert.equal(
+    isRiderAvailableNow(
+      {
+        weekday_available_from: "09:00",
+        weekday_available_until: "17:00",
+      },
+      new Date("2026-05-18T20:00:00.000Z"),
+    ),
+    false,
+  );
+  assert.equal(
+    isRiderAvailableNow(
+      {
+        weekend_available_from: "10:00",
+        weekend_available_until: "18:00",
+      },
+      new Date("2026-05-23T11:00:00.000Z"),
+    ),
+    true,
+  );
+  assert.equal(
+    isRiderAvailableNow(
+      {
+        weekday_available_from: "12:00",
+        weekday_available_until: "10:00",
+      },
+      new Date("2026-05-18T22:30:00.000Z"),
+    ),
+    true,
+  );
+  assert.equal(
+    isRiderAvailableNow(
+      {
+        weekday_available_from: "12:00",
+        weekday_available_until: "10:00",
+      },
+      new Date("2026-05-19T08:30:00.000Z"),
+    ),
+    true,
+  );
+  assert.equal(
+    isRiderAvailableNow({
+      weekday_available_from: null,
+      weekday_available_until: null,
+      weekend_available_from: null,
+      weekend_available_until: null,
+    }),
     false,
   );
 });
@@ -374,6 +475,7 @@ test("unavailable report response exposes only admin-review acknowledgement", ()
 
 test("rider connect migration keeps public Data API access fail-closed", () => {
   const migration = readFileSync(riderConnectMigrationPath, "utf8");
+  const availabilityMigration = readFileSync(riderAvailabilityMigrationPath, "utf8");
 
   assert.match(migration, /alter table public\.riders enable row level security;/);
   assert.match(migration, /alter table public\.rider_contact_intents enable row level security;/);
@@ -385,6 +487,10 @@ test("rider connect migration keeps public Data API access fail-closed", () => {
     /grant select, insert, update, delete on table\s+public\.riders,\s+public\.rider_contact_intents,\s+public\.rider_unavailable_reports\s+to service_role;/,
   );
   assert.doesNotMatch(migration, /\bgrant\b[\s\S]*\bto\s+anon\b/i);
+  assert.match(availabilityMigration, /add column if not exists weekday_available_from time/);
+  assert.match(availabilityMigration, /add constraint riders_weekday_availability_pair_check/);
+  assert.match(availabilityMigration, /add constraint riders_weekend_availability_pair_check/);
+  assert.doesNotMatch(availabilityMigration, /\bgrant\b/i);
 });
 
 test("payment note contract stays limited to direct coordination states", () => {

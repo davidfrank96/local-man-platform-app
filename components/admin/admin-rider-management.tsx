@@ -38,6 +38,10 @@ type RiderDraft = {
   plate_number: string;
   operating_areas: string;
   usual_available_hours: string;
+  weekday_available_from: string;
+  weekday_available_until: string;
+  weekend_available_from: string;
+  weekend_available_until: string;
   verification_status: RiderVerificationStatus;
   visibility_status: RiderVisibilityStatus;
   notes: string;
@@ -126,6 +130,10 @@ function formatHoursForInput(value: AdminRider["usual_available_hours"]): string
   return JSON.stringify(value, null, 2);
 }
 
+function formatTimeForInput(value: string | null): string {
+  return value?.slice(0, 5) ?? "";
+}
+
 function createDraftFromRider(rider: AdminRider): RiderDraft {
   return {
     display_name: rider.display_name,
@@ -136,6 +144,10 @@ function createDraftFromRider(rider: AdminRider): RiderDraft {
     plate_number: rider.plate_number ?? "",
     operating_areas: rider.operating_areas.join(", "),
     usual_available_hours: formatHoursForInput(rider.usual_available_hours),
+    weekday_available_from: formatTimeForInput(rider.weekday_available_from),
+    weekday_available_until: formatTimeForInput(rider.weekday_available_until),
+    weekend_available_from: formatTimeForInput(rider.weekend_available_from),
+    weekend_available_until: formatTimeForInput(rider.weekend_available_until),
     verification_status: rider.verification_status,
     visibility_status: rider.visibility_status,
     notes: rider.notes ?? "",
@@ -152,6 +164,10 @@ function createEmptyRiderDraft(): CreateRiderDraft {
     plate_number: "",
     operating_areas: "",
     usual_available_hours: "",
+    weekday_available_from: "",
+    weekday_available_until: "",
+    weekend_available_from: "",
+    weekend_available_until: "",
     verification_status: "pending",
     visibility_status: "hidden",
     notes: "",
@@ -167,6 +183,11 @@ function normalizeAreas(value: string): string[] {
 }
 
 function normalizeOptionalText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeOptionalTime(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
@@ -203,6 +224,10 @@ function buildRiderUpdatePayload(draft: RiderDraft): UpdateAdminRiderRequest {
     plate_number: normalizeOptionalText(draft.plate_number),
     operating_areas: normalizeAreas(draft.operating_areas),
     usual_available_hours: normalizeHours(draft.usual_available_hours),
+    weekday_available_from: normalizeOptionalTime(draft.weekday_available_from),
+    weekday_available_until: normalizeOptionalTime(draft.weekday_available_until),
+    weekend_available_from: normalizeOptionalTime(draft.weekend_available_from),
+    weekend_available_until: normalizeOptionalTime(draft.weekend_available_until),
     verification_status: draft.verification_status,
     visibility_status: draft.visibility_status,
     notes: normalizeOptionalText(draft.notes),
@@ -219,6 +244,10 @@ function buildRiderCreatePayload(draft: CreateRiderDraft): CreateAdminRiderReque
     plate_number: normalizeOptionalText(draft.plate_number),
     operating_areas: normalizeAreas(draft.operating_areas),
     usual_available_hours: normalizeHours(draft.usual_available_hours),
+    weekday_available_from: normalizeOptionalTime(draft.weekday_available_from),
+    weekday_available_until: normalizeOptionalTime(draft.weekday_available_until),
+    weekend_available_from: normalizeOptionalTime(draft.weekend_available_from),
+    weekend_available_until: normalizeOptionalTime(draft.weekend_available_until),
     verification_status: draft.verification_status,
     visibility_status: draft.visibility_status,
     notes: normalizeOptionalText(draft.notes),
@@ -590,6 +619,61 @@ export function AdminRiderManagement() {
                     }))
                   }
                 />
+                <span className="field-hint">
+                  Display text only. Structured times below control rider suggestions.
+                </span>
+              </label>
+              <label className="field">
+                <span>Weekday start time</span>
+                <input
+                  type="time"
+                  value={createDraft.weekday_available_from}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      weekday_available_from: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Weekday end time</span>
+                <input
+                  type="time"
+                  value={createDraft.weekday_available_until}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      weekday_available_until: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Weekend start time</span>
+                <input
+                  type="time"
+                  value={createDraft.weekend_available_from}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      weekend_available_from: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Weekend end time</span>
+                <input
+                  type="time"
+                  value={createDraft.weekend_available_until}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      weekend_available_until: event.target.value,
+                    }))
+                  }
+                />
               </label>
               <label className="field field-wide">
                 <span>Internal notes</span>
@@ -891,6 +975,57 @@ export function AdminRiderManagement() {
                     onChange={(event) =>
                       setDraft((current) => current
                         ? { ...current, usual_available_hours: event.target.value }
+                        : current)
+                    }
+                  />
+                  <span className="field-hint">
+                    Display text only. Structured times below control rider suggestions.
+                  </span>
+                </label>
+                <label className="field">
+                  <span>Weekday start time</span>
+                  <input
+                    type="time"
+                    value={draft.weekday_available_from}
+                    onChange={(event) =>
+                      setDraft((current) => current
+                        ? { ...current, weekday_available_from: event.target.value }
+                        : current)
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Weekday end time</span>
+                  <input
+                    type="time"
+                    value={draft.weekday_available_until}
+                    onChange={(event) =>
+                      setDraft((current) => current
+                        ? { ...current, weekday_available_until: event.target.value }
+                        : current)
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Weekend start time</span>
+                  <input
+                    type="time"
+                    value={draft.weekend_available_from}
+                    onChange={(event) =>
+                      setDraft((current) => current
+                        ? { ...current, weekend_available_from: event.target.value }
+                        : current)
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Weekend end time</span>
+                  <input
+                    type="time"
+                    value={draft.weekend_available_until}
+                    onChange={(event) =>
+                      setDraft((current) => current
+                        ? { ...current, weekend_available_until: event.target.value }
                         : current)
                     }
                   />

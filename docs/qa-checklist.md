@@ -81,8 +81,10 @@ Use this checklist before pushing or releasing UI work.
 - [ ] Request Rider opens the Rider Connect modal
 - [ ] Rider Connect reminds users to call the vendor first
 - [ ] Rider Connect disclaimer states Localman connects users, vendors, and independent riders and does not collect payment or guarantee delivery
-- [ ] rider suggestions show only public-safe rider fields
-- [ ] Message rider opens only after a selected-rider handoff is created
+- [ ] rider suggestions show at most 3 verified, visible, currently available riders with public-safe fields only
+- [ ] incomplete contact or delivery details show actionable validation copy before rider selection
+- [ ] selected-rider verification sheet shows first name, vehicle, area, availability text, and masked plate when available
+- [ ] `Continue to WhatsApp` opens only after a selected-rider handoff is created
 - [ ] Try another rider and Back to vendor work
 - [ ] report rider unavailable stores a review signal without exposing report data publicly
 
@@ -154,8 +156,9 @@ Use this checklist before pushing or releasing UI work.
 - [ ] successful rider application is stored as hidden and pending
 - [ ] `/admin/riders` renders search, verification filter, visibility filter, status badges, contact counts, report counts, and the independent-rider note
 - [ ] admin can update rider verification and visibility status
-- [ ] public suggestions include only verified and visible riders
-- [ ] public suggestions exclude rider phone and WhatsApp values
+- [ ] public suggestions include only verified, visible, currently available riders and are capped at 3
+- [ ] public suggestions exclude rider phone, WhatsApp values, full legal names, notes, full plate, and internal status fields
+- [ ] selected-rider verification shows masked plate only and never full plate
 - [ ] contact handoff hashes customer phone and stores minimal metadata
 - [ ] unavailable report hashes reporter phone when provided
 - [ ] Rider Connect copy avoids payment, dispatch, courier, driver, and guarantee wording

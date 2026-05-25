@@ -66,7 +66,7 @@ Authenticated users missing from `admin_users` are denied workspace access and m
 
 Key permission boundaries:
 
-- `analytics:read` -> admin only
+- `analytics:read` -> admin only; covers admin analytics and aggregate-only vendor rating signal summaries
 - `audit_logs:read` -> admin only
 - `platform_logs:read` -> admin only
 - `admin_users:manage` -> admin only

@@ -159,10 +159,12 @@ Test:
 - successful rider applications create `pending` and `hidden` rider rows only
 - admin rider APIs are protected from unauthenticated and unauthorized access
 - admins can list riders, view rider detail, update verification status, update visibility status, and edit safe profile fields
+- admin rider create/edit persists paired weekday/weekend availability times and rejects incomplete ranges while allowing overnight ranges
 - invalid rider status values and unsafe fields are rejected
-- public rider suggestions return only verified and visible riders
-- public rider suggestions never include rider phone, WhatsApp phone, full legal name, notes, or internal status fields
-- contact handoff requires disclaimer acceptance and a selected verified/visible rider
+- public rider suggestions return at most 3 verified, visible, currently available riders
+- public rider suggestions keep operating area informational only and never use area/proximity as a hard eligibility filter
+- public rider suggestions never include rider phone, WhatsApp phone, full legal name, notes, full plate, or internal status fields
+- contact handoff requires disclaimer acceptance and a selected verified/visible/currently available rider
 - contact handoff stores a minimal contact intent, hashes customer phone, and does not persist raw customer phone or full address
 - contact handoff returns a WhatsApp URL for the selected rider only
 - unavailable reports validate reason values, hash optional reporter phone, and stay admin-review-only
@@ -342,7 +344,8 @@ Public detail follow-up after admin edits:
 - confirm the modal reminds users to call the vendor first
 - confirm the disclaimer says Localman connects users, vendors, and independent riders and does not collect payment or guarantee delivery
 - submit valid contact details and confirm only public-safe rider suggestions render
-- select one rider and confirm the handoff shows `Message rider`, `Try another rider`, and `Back to vendor`
+- select one rider and confirm the verification sheet shows first name, vehicle, area, availability, masked plate, `Continue to WhatsApp`, `Try another rider`, and `Back to vendor`
+- submit incomplete contact/delivery details and confirm the modal shows actionable validation copy before rider selection instead of a raw `Invalid input` message
 - confirm report-unavailable flow stores an admin-review report without exposing report data publicly
 
 Release-gate upload sequence:

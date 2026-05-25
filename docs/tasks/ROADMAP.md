@@ -117,5 +117,8 @@ The active branch includes:
 - admin session refresh stabilization for form and file-picker state
 - vendor image upload state isolation by selected vendor id
 - explicit Supabase Data API grants and fail-closed future public-schema defaults
+- rating signals with positive-only public confidence badges and admin-only internal signal summaries
+- Rider Connect structured availability, max-3 currently available shortlist, masked-plate verification, and selected-rider-only WhatsApp handoff
+- vendor detail share section with native share and copy-link actions only
 
 These are release-hardening outcomes, not new roadmap scope.

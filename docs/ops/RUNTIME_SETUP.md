@@ -158,10 +158,10 @@ Dashboard fallback:
 1. Open the Supabase project.
 2. Go to SQL Editor.
 3. Run every file in `supabase/migrations` in filename order.
-4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `admin_users`, `audit_logs`, `user_events`, `riders`, `rider_contact_intents`, `rider_unavailable_reports`, and `app_schema_migrations`.
+4. Confirm the public tables exist: `vendors`, `vendor_hours`, `vendor_categories`, `vendor_category_map`, `vendor_featured_dishes`, `vendor_images`, `ratings`, `rating_signal_options`, `rating_signal_selections`, `admin_users`, `audit_logs`, `user_events`, `riders`, `rider_contact_intents`, `rider_unavailable_reports`, and `app_schema_migrations`.
 5. Confirm `public.vendor_images` includes `storage_object_path`.
 6. Confirm `public.user_events` exists for Phase 6 analytics.
-7. Confirm `public.submit_public_vendor_rating(uuid, integer, text, text)` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
+7. Confirm `public.submit_public_vendor_rating(uuid, integer, text, text, text[])` and `public.refresh_vendor_rating_summary(uuid)` exist before releasing the public ratings route.
 8. Confirm `public.operational_events` exists with the admin read policy before enabling operational-event persistence.
 9. Confirm Data API grants are explicit and least privilege: public read tables remain selectable by anon/authenticated where intended, admin/internal tables are not anon-readable, and `app_schema_migrations` is inaccessible to client roles.
 10. Confirm future default privileges are revoked for public-schema tables, functions, and sequences so new migrations fail closed until grants are added.

@@ -90,10 +90,11 @@ export const apiEndpoints = {
     path: "/api/vendors/[slug]/riders",
     requestShape: "Route param: slug.",
     responseShape:
-      "Public-safe rider suggestion cards for verified, visible independent riders. Response excludes rider phone, WhatsApp, legal name, private notes, and internal status fields.",
+      "Up to 3 public-safe rider suggestion cards for verified, visible, currently available independent riders. Response excludes rider phone, WhatsApp, legal name, private notes, full plate, and internal status fields.",
     validationBoundary: [
       "slug must match the documented slug format",
-      "riders must be verification_status=verified and visibility_status=visible",
+      "riders must be verification_status=verified, visibility_status=visible, and currently available from structured availability windows",
+      "suggestions are capped server-side at 3 riders",
       "suggestions must not expose raw rider phone or WhatsApp values",
       "server-side service-role reads must shape the response before returning it to public clients",
     ],

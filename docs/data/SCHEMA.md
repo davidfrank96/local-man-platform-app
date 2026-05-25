@@ -254,6 +254,10 @@ Notes:
 - plate_number: text nullable
 - operating_areas: text[] default empty
 - usual_available_hours: jsonb nullable
+- weekday_available_from: time nullable
+- weekday_available_until: time nullable
+- weekend_available_from: time nullable
+- weekend_available_until: time nullable
 - verification_status: text default `pending`
 - visibility_status: text default `hidden`
 - notes: text nullable
@@ -265,9 +269,11 @@ Runtime rules:
 - `verification_status` must be `pending`, `verified`, or `rejected`.
 - `visibility_status` must be `hidden`, `visible`, or `suspended`.
 - Public applications are inserted as `pending` and `hidden`.
-- Riders become eligible for public suggestions only when both `verified` and `visible`.
-- Raw `phone` and `whatsapp_phone` are admin/server-only fields and are never returned from public suggestion APIs.
-- `usual_available_hours` stores listed/usual availability labels, not live availability.
+- Riders become eligible for public suggestions only when `verified`, `visible`, and currently within their structured availability window.
+- Raw `phone`, `whatsapp_phone`, full legal name, full plate number, notes, and internal status fields are admin/server-only and are never returned from public suggestion APIs.
+- `usual_available_hours` stores listed/usual availability labels for display only.
+- Structured weekday/weekend availability columns power current-time filtering. Null structured availability means unknown and is not treated as currently available.
+- Weekday/weekend start and end values must be both null or both set; overnight windows are supported.
 
 ## Table: rider_contact_intents
 - id: uuid, primary key
@@ -284,7 +290,7 @@ Runtime rules:
 
 Runtime rules:
 - Created only after a user accepts the Rider Connect disclaimer and selects a rider.
-- The selected rider must still be `verified` and `visible`.
+- The selected rider must still be `verified`, `visible`, and currently within their structured availability window.
 - `customer_phone_hash` is a server-side HMAC hash; raw customer phone is not stored.
 - Raw delivery address is used transiently to build the WhatsApp message and is not stored in a first-class column.
 - `request_metadata` remains minimal and must not store raw phone, full customer address, service-role keys, or private rider contact data.

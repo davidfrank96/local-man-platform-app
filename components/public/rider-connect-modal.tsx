@@ -70,10 +70,52 @@ function getOptionalFormText(formData: FormData, name: string): string | undefin
 
 async function readErrorMessage(error: unknown, fallback: string): Promise<string> {
   if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message.replace(/^[A-Z_]+:\s*/, "");
+    const rawMessage = error.message.trim();
+    const match = rawMessage.match(/^([A-Z_]+):\s*(.*)$/);
+    const code = match?.[1] ?? "";
+    const message = match?.[2]?.trim() ?? rawMessage;
+
+    if (code === "VALIDATION_ERROR") {
+      return "Please check your contact and delivery details before continuing.";
+    }
+
+    if (code === "NOT_FOUND") {
+      return "This rider is no longer available. Please choose another rider.";
+    }
+
+    if (code === "TOO_MANY_REQUESTS") {
+      return message || "Too many rider requests. Please wait before trying again.";
+    }
+
+    return message || fallback;
   }
 
   return fallback;
+}
+
+function validateRiderContactDetails(payload: RiderContactDetails): string | null {
+  const hasDeliveryAddress =
+    typeof payload.deliveryAddress === "string" && payload.deliveryAddress.length > 0;
+  const hasDeliveryArea =
+    typeof payload.deliveryArea === "string" && payload.deliveryArea.length > 0;
+
+  if (payload.customerName.length === 0) {
+    return "Please enter your name before requesting a rider.";
+  }
+
+  if (payload.customerPhone.length === 0) {
+    return "Please enter your phone number before requesting a rider.";
+  }
+
+  if (payload.deliveryLocationMode === "manual_address" && !hasDeliveryAddress) {
+    return "Please enter a delivery address before requesting a rider.";
+  }
+
+  if (!hasDeliveryAddress && !hasDeliveryArea) {
+    return "Please enter a delivery address or approximate area before requesting a rider.";
+  }
+
+  return null;
 }
 
 function openWhatsAppHandoff(event: MouseEvent<HTMLAnchorElement>, whatsappUrl: string) {
@@ -159,6 +201,16 @@ export function RiderConnectModal({
       disclaimerAccepted: true,
     };
 
+    const validationMessage = validateRiderContactDetails(payload);
+
+    if (validationMessage) {
+      setFeedback({
+        type: "error",
+        message: validationMessage,
+      });
+      return;
+    }
+
     setFeedback({
       type: "loading",
       message: "Finding listed independent riders...",
@@ -174,7 +226,7 @@ export function RiderConnectModal({
         type: "success",
         message: result.riders.length > 0
           ? "Choose a rider to generate a WhatsApp handoff link."
-          : "No verified riders are visible for this vendor yet.",
+          : "No riders are currently available at this time. Please try again later.",
       });
     } catch (error) {
       setFeedback({
@@ -416,7 +468,7 @@ export function RiderConnectModal({
                   </div>
                 ) : (
                   <div className="discovery-empty-state">
-                    <strong>No riders listed yet.</strong>
+                    <strong>No riders are currently available at this time.</strong>
                     <p>Call {vendorName} directly, or try again later.</p>
                   </div>
                 )}

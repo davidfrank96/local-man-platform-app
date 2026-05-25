@@ -73,7 +73,7 @@ Small food businesses with:
 - call vendor button
 - directions button
 - ratings display
-- Request Rider flow on vendor detail pages with public-safe rider suggestions, disclaimer acceptance, WhatsApp click-to-chat handoff for the selected rider, and unavailable reporting
+- Request Rider flow on vendor detail pages with max-3 availability-based public-safe rider suggestions, disclaimer acceptance, selected-rider masked-plate verification, WhatsApp click-to-chat handoff for the selected rider, and unavailable reporting
 - no-image vendor cards on discovery surfaces for faster loading and scanning
 
 ### Admin Features

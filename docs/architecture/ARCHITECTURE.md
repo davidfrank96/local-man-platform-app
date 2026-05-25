@@ -460,19 +460,21 @@ Public application path:
 2. `/api/riders/apply` validates contact/profile fields, consent, and independent-rider disclaimer acceptance
 3. the server inserts a `riders` row with `verification_status = pending` and `visibility_status = hidden`
 4. admins review the profile at `/admin/riders`
-5. a rider becomes eligible for suggestions only when admin sets `verification_status = verified` and `visibility_status = visible`
+5. a rider becomes eligible for suggestions only when admin sets `verification_status = verified`, `visibility_status = visible`, and structured availability covers the current local time
 
 Vendor-detail handoff path:
 
 1. user opens a vendor detail page and selects `Request Rider`
 2. user enters contact details, delivery location mode/address or area, order note, payment coordination note, and accepts the disclaimer
-3. `/api/vendors/[slug]/riders` returns public-safe suggestions only
-4. the response excludes rider phone, WhatsApp phone, full legal name, notes, and internal status fields
-5. user selects one rider
-6. `/api/vendors/[slug]/riders/contact` verifies the selected rider is still verified and visible
-7. the server inserts a minimal `rider_contact_intents` row with a hashed customer phone
-8. the server builds a WhatsApp click-to-chat URL for the selected rider only
-9. user sends the WhatsApp message directly from their device
+3. the client blocks incomplete contact or delivery details with actionable copy before rider selection
+4. `/api/vendors/[slug]/riders` returns up to 3 public-safe currently available suggestions only
+5. the response excludes rider phone, WhatsApp phone, full legal name, notes, full plate, and internal status fields
+6. user selects one rider
+7. `/api/vendors/[slug]/riders/contact` verifies the selected rider is still verified, visible, and currently available
+8. the server inserts a minimal `rider_contact_intents` row with a hashed customer phone
+9. the server builds a WhatsApp click-to-chat URL for the selected rider only and returns a safe rider card with optional masked plate
+10. the client shows the selected-rider verification sheet before opening WhatsApp
+11. user continues to WhatsApp and sends the message directly from their device
 
 Unavailable-report path:
 
@@ -486,6 +488,8 @@ Rules:
 - Localman does not collect payment, assign deliveries, create orders, send WhatsApp API messages, guarantee rider availability, or guarantee delivery.
 - Users are reminded to call the vendor first to confirm food availability and price.
 - Rider availability is described as usual/listed availability, not real-time live availability.
+- Rider names are displayed as first name only in public flows.
+- Full rider plates are never public; the selected-rider verification sheet may show only a masked plate helper.
 - `RIDER_CONNECT_HASH_SECRET` should be set server-side in staging and production for phone hashing; service-role fallback exists only as an MVP fallback.
 
 ## Discovery Retention State
