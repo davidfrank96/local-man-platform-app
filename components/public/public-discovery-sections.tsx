@@ -9,6 +9,47 @@ import type { LocationSource } from "../../types/index.ts";
 
 export type VendorSection = "nearby" | "recent" | "popular" | "lastSelected";
 
+function VendorSectionTabIcon({ section }: { section: VendorSection }) {
+  if (section === "nearby") {
+    return (
+      <span className="vendor-section-tab-icon" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <path d="M13.5 2.5 7.3 13.2 6.1 8.8 2.5 7.1 13.5 2.5Z" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (section === "recent") {
+    return (
+      <span className="vendor-section-tab-icon" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <circle cx="8" cy="8" r="5.5" />
+          <path d="M8 4.9v3.5l2.2 1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (section === "popular") {
+    return (
+      <span className="vendor-section-tab-icon" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <path d="M8.7 1.8c.3 2-.7 3.2-1.8 4.5-.9 1-1.7 2-1.7 3.5A3.3 3.3 0 0 0 8.5 13c2 0 3.6-1.5 3.6-3.5 0-1.6-.8-2.9-2-4.1-.3 1-.9 1.7-1.7 2.3.2-1.9-.5-3.5-1.9-5.2Z" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className="vendor-section-tab-icon" aria-hidden="true">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <path d="m8 2.2 1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 10.8l-3.4 1.9.7-3.8-2.8-2.7 3.8-.5L8 2.2Z" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
 export function VendorSectionTabs({
   activeVendorSection,
   className,
@@ -30,7 +71,8 @@ export function VendorSectionTabs({
         type="button"
         onClick={() => onChange("nearby")}
       >
-        Nearby
+        <VendorSectionTabIcon section="nearby" />
+        <span>Nearby</span>
       </button>
       <button
         aria-pressed={activeVendorSection === "recent"}
@@ -42,7 +84,8 @@ export function VendorSectionTabs({
         type="button"
         onClick={() => onChange("recent")}
       >
-        Recent
+        <VendorSectionTabIcon section="recent" />
+        <span>Recent</span>
       </button>
       <button
         aria-pressed={activeVendorSection === "popular"}
@@ -54,7 +97,8 @@ export function VendorSectionTabs({
         type="button"
         onClick={() => onChange("popular")}
       >
-        Popular
+        <VendorSectionTabIcon section="popular" />
+        <span>Popular</span>
       </button>
       <button
         aria-pressed={activeVendorSection === "lastSelected"}
@@ -66,7 +110,8 @@ export function VendorSectionTabs({
         type="button"
         onClick={() => onChange("lastSelected")}
       >
-        Last selected
+        <VendorSectionTabIcon section="lastSelected" />
+        <span>Last selected</span>
       </button>
     </section>
   );

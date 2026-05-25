@@ -1187,6 +1187,13 @@ export function PublicDiscovery({
             }
           >
             <p className="eyebrow">Abuja pilot</p>
+            <span className="discovery-notification-button" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <path d="M5.7 8.3a4.3 4.3 0 0 1 8.6 0v3.4l1.2 2H4.5l1.2-2V8.3Z" strokeLinejoin="round" />
+                <path d="M8.4 15.6a1.8 1.8 0 0 0 3.2 0" strokeLinecap="round" />
+              </svg>
+              <span />
+            </span>
             <h1 id="discovery-title">
               {showBrandLogo ? (
                 <span className="discovery-brand-title">
@@ -1261,6 +1268,12 @@ export function PublicDiscovery({
           ) : null}
 
           <section className="location-panel" aria-live="polite">
+            <span className="location-panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 21s6-5.5 6-11a6 6 0 1 0-12 0c0 5.5 6 11 6 11Z" fill="currentColor" fillOpacity="0.14" strokeLinejoin="round" />
+                <circle cx="12" cy="10" r="2.2" fill="currentColor" stroke="none" />
+              </svg>
+            </span>
             <div>
               <strong>{locationDisplay.headline}</strong>
               {locationDisplay.detail ? (
