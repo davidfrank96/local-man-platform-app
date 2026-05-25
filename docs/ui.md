@@ -130,7 +130,10 @@ Vendor image upload state is also workspace UI state:
 - upload success is shown only after the storage-backed `vendor_images` row is returned and merged for the current vendor
 
 Rider Connect UI state is intentionally lightweight:
-- public suggestions show listed independent riders with public-safe profile fields only
+- public suggestions show at most 3 verified, visible, currently available independent riders with public-safe profile fields only
+- operating area is displayed as rider context only and is not an eligibility filter
+- incomplete contact or delivery details should show actionable validation copy before the suggestion list appears
+- after rider selection, the verification sheet shows first name, vehicle, area, listed availability, and a masked plate when available before `Continue to WhatsApp`
 - rider phone and WhatsApp values stay server-side until the selected-rider handoff is created
 - the user sends the WhatsApp message directly
 - admin rider management controls profile review and visibility only, not delivery assignment or payment

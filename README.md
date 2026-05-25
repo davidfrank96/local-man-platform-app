@@ -47,8 +47,11 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - conservative public confidence badges may appear on vendor detail only after thresholded positive rating-signal evidence; negative and neutral signals remain internal/admin-only
 - Rider Connect on vendor detail pages:
   - `Request Rider` opens a disclaimer-gated handoff flow
-  - suggestions include only verified and visible independent riders
-  - suggestion responses exclude rider phone and WhatsApp values
+  - suggestions include up to 3 verified, visible, currently available independent riders
+  - rider area remains informational only, not a hard dispatch/proximity filter
+  - suggestion responses exclude rider phone, WhatsApp values, full names, notes, and full plate numbers
+  - incomplete contact or delivery details are blocked before rider selection with clear form copy
+  - selected-rider verification shows first name and masked plate when available before WhatsApp handoff
   - WhatsApp click-to-chat URLs are generated only for the selected rider after contact intent creation
   - users can report a rider as unavailable for admin review
   - Localman does not collect payment, assign deliveries, send WhatsApp messages, or guarantee delivery
@@ -312,7 +315,8 @@ Phase 6 currently covers:
   - public rider application at `/riders/apply`
   - admin rider management at `/admin/riders`
   - vendor-detail `Request Rider` flow
-  - safe verified/visible rider suggestions
+  - safe verified/visible/currently available rider suggestions
+  - selected-rider verification with masked plate before handoff
   - selected-rider WhatsApp handoff
   - unavailable reporting
   - no payment, dispatch, order tracking, rider app, or WhatsApp API sending

@@ -41,6 +41,10 @@ const selectedRiderRow = {
   usual_available_hours: {
     label: "Usually available afternoons",
   },
+  weekday_available_from: "00:00:00",
+  weekday_available_until: "00:00:00",
+  weekend_available_from: "00:00:00",
+  weekend_available_until: "00:00:00",
   plate_number: "7497",
   whatsapp_phone: "+2348111111111",
 };
@@ -105,7 +109,7 @@ function createValidReportPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("public rider suggestions return only verified visible safe cards", async () => {
+test("public rider suggestions return max 3 currently available safe cards without area filtering", async () => {
   const restoreEnv = setRiderEnv();
   const originalFetch = globalThis.fetch;
   const calls: URL[] = [];
@@ -131,7 +135,11 @@ test("public rider suggestions return only verified visible safe cards", async (
           vehicle_type: "Bicycle",
           plate_number: "77-XYZ-999",
           operating_areas: ["Garki"],
-          usual_available_hours: null,
+          usual_available_hours: { label: "All day" },
+          weekday_available_from: "00:00:00",
+          weekday_available_until: "00:00:00",
+          weekend_available_from: "00:00:00",
+          weekend_available_until: "00:00:00",
         },
         {
           id: riderId,
@@ -139,10 +147,53 @@ test("public rider suggestions return only verified visible safe cards", async (
           photo_url: null,
           vehicle_type: "Motorcycle",
           plate_number: "18-KJA-443",
-          operating_areas: ["Jabi", "Wuse"],
+          operating_areas: ["Garki"],
           usual_available_hours: {
             label: "Usually available afternoons",
           },
+          weekday_available_from: "00:00:00",
+          weekday_available_until: "00:00:00",
+          weekend_available_from: "00:00:00",
+          weekend_available_until: "00:00:00",
+        },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          display_name: "Bala Rider",
+          photo_url: null,
+          vehicle_type: "Motorcycle",
+          plate_number: "19-KJA-443",
+          operating_areas: ["Garki"],
+          usual_available_hours: { label: "All day" },
+          weekday_available_from: "00:00:00",
+          weekday_available_until: "00:00:00",
+          weekend_available_from: "00:00:00",
+          weekend_available_until: "00:00:00",
+        },
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+          display_name: "Chika Rider",
+          photo_url: null,
+          vehicle_type: "Motorcycle",
+          plate_number: "20-KJA-443",
+          operating_areas: ["Garki"],
+          usual_available_hours: { label: "All day" },
+          weekday_available_from: "00:00:00",
+          weekday_available_until: "00:00:00",
+          weekend_available_from: "00:00:00",
+          weekend_available_until: "00:00:00",
+        },
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          display_name: "Unavailable Rider",
+          photo_url: null,
+          vehicle_type: "Motorcycle",
+          plate_number: "21-KJA-443",
+          operating_areas: ["Jabi"],
+          usual_available_hours: { label: "Unknown" },
+          weekday_available_from: null,
+          weekday_available_until: null,
+          weekend_available_from: null,
+          weekend_available_until: null,
         },
       ]);
     }
@@ -160,7 +211,14 @@ test("public rider suggestions return only verified visible safe cards", async (
 
     assert.equal(response.status, 200);
     assert.equal(body.success, true);
-    assert.equal(body.data.riders[0].display_name, "Amina");
+    assert.equal(body.data.riders.length, 3);
+    assert.equal(
+      body.data.riders.some((rider: { operating_areas: string[] }) =>
+        rider.operating_areas.includes("Garki")
+      ),
+      true,
+    );
+    assert.equal(serialized.includes("Unavailable"), false);
     assert.equal(serialized.includes("phone"), false);
     assert.equal(serialized.includes("whatsapp"), false);
     assert.equal(serialized.includes('"plate_number"'), false);
@@ -201,6 +259,38 @@ test("rider contact endpoint requires accepted disclaimer before writing", async
   }
 });
 
+test("rider contact endpoint rejects missing delivery details before private lookup", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = (async () => {
+    fetchCalled = true;
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await riderContactRoute(
+      createRequest("/api/vendors/jabi-office-lunch-bowl/riders/contact", createValidContactPayload({
+        deliveryAddress: undefined,
+        deliveryArea: undefined,
+      })),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.equal(serialized.includes("whatsapp_phone"), false);
+    assert.equal(serialized.includes(hiddenRiderPhone), false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("rider contact endpoint rejects hidden or unverified selected riders", async () => {
   const restoreEnv = setRiderEnv();
   const originalFetch = globalThis.fetch;
@@ -218,6 +308,50 @@ test("rider contact endpoint rejects hidden or unverified selected riders", asyn
       assert.equal(url.searchParams.get("verification_status"), "eq.verified");
       assert.equal(url.searchParams.get("visibility_status"), "eq.visible");
       return Response.json([]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await riderContactRoute(
+      createRequest(
+        "/api/vendors/jabi-office-lunch-bowl/riders/contact",
+        createValidContactPayload(),
+      ),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 404);
+    assert.equal(body.success, false);
+    assert.equal(calls.includes("/rest/v1/rider_contact_intents"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("rider contact endpoint rejects selected riders outside structured availability", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    calls.push(url.pathname);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      return Response.json([{
+        ...selectedRiderRow,
+        weekday_available_from: null,
+        weekday_available_until: null,
+        weekend_available_from: null,
+        weekend_available_until: null,
+      }]);
     }
 
     return Response.json({ message: "Unexpected request" }, { status: 500 });

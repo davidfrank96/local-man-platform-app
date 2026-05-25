@@ -102,6 +102,11 @@ Local Man — UI Rules
 - vendor detail images should lazy load and decode asynchronously when rendered by the browser
 - visible primary actions near top
 - vendor detail primary actions should remain `Call`, `Directions`, and `Request Rider`, with lightweight icons that do not change action behavior
+- `Request Rider` should open a lightweight Rider Connect modal that validates contact and delivery details before showing rider suggestions
+- Rider Connect suggestions should show at most 3 verified, visible, currently available riders and only first name, vehicle, operating area, and listed availability
+- Rider operating area is context only and must not be presented as a dispatch/proximity guarantee
+- selected-rider verification should show first name, vehicle, area, listed availability, and masked plate when available before `Continue to WhatsApp`
+- full rider plate, phone, WhatsApp value, full legal name, notes, and internal statuses must not appear in public Rider Connect UI before handoff
 - at-a-glance summary for open state, area, phone, price, rating, and featured dish count
 - compact summary cards or chips are preferred when they reduce scrolling without hiding information
 - lightweight star rating input may appear here, but it must stay compact and free of text boxes

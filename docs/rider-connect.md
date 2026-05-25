@@ -8,7 +8,7 @@ Rider Connect is the current lightweight handoff model for connecting users, ven
 - Admins review rider profiles at `/admin/riders`.
 - Vendor detail pages show `Request Rider`.
 - Users submit contact details, delivery area/address, order note, a payment coordination note, and the required disclaimer.
-- Localman returns public-safe rider suggestions for riders that are both `verified` and `visible`.
+- Localman returns up to 3 public-safe rider suggestions for riders that are `verified`, `visible`, and currently within their structured availability window.
 - The user chooses one rider and Localman returns a WhatsApp click-to-chat URL for that selected rider only.
 - The user sends the WhatsApp message directly. Localman does not send WhatsApp messages through an API.
 - Users can report a selected rider as unavailable after handoff.
@@ -23,7 +23,7 @@ Use:
 - `Find a Rider`
 - `independent riders`
 - `coordinate directly`
-- `message rider`
+- `Continue to WhatsApp`
 - `Localman connects you`
 - `usually available`
 - `rider suggestions`
@@ -62,7 +62,7 @@ The application flow does not collect NIN, BVN, bank account, wallet, password, 
 - review contact-intent and unavailable-report counts
 - update `verification_status`: `pending`, `verified`, `rejected`
 - update `visibility_status`: `hidden`, `visible`, `suspended`
-- edit safe profile fields including names, phone values, vehicle type, plate number, operating areas, usual available hours, and notes
+- edit safe profile fields including names, phone values, vehicle type, plate number, operating areas, display-only usual available hours, structured weekday/weekend availability windows, and notes
 
 Admin-created rider profiles default to `pending` and `hidden` unless an admin explicitly chooses another valid status pair. `visible` is allowed only for `verified` riders. Admin create requires confirmation that rider consent was collected externally and rejects duplicate phone or WhatsApp values.
 
@@ -76,19 +76,22 @@ Hard delete is intentionally unsupported in the MVP. Deactivation is handled thr
 
 - requires a valid active vendor slug
 - rate limits public suggestion requests
-- returns only verified and visible riders
-- optionally sorts riders matching the vendor area first
+- returns only riders that are verified, visible, and currently available based on structured weekday/weekend time windows
+- returns a maximum of 3 rider suggestions
+- uses lightweight stable rotation when more than 3 riders are available
+- keeps operating area informational only; area and proximity are not eligibility filters
 - returns public-safe fields only: rider id, display name, photo URL, vehicle type, operating areas, and usual availability label
-- never returns rider phone, WhatsApp phone, full legal name, notes, or internal status fields
+- never returns rider phone, WhatsApp phone, full legal name, notes, full plate, or internal status fields
 
 `POST /api/vendors/[slug]/riders/contact`:
 
 - validates selected rider, customer details, delivery mode/address/area, order note, payment note, and disclaimer acceptance
-- verifies the vendor exists and the selected rider is still verified and visible
+- verifies the vendor exists and the selected rider is still verified, visible, and currently available
 - stores a minimal `rider_contact_intents` row
 - hashes customer phone before storage
 - uses raw customer phone/address only transiently while building the WhatsApp URL
 - returns the WhatsApp URL for the selected rider only
+- returns a safe selected-rider card that may include a masked plate value for the verification sheet
 
 `POST /api/vendors/[slug]/riders/report-unavailable`:
 
@@ -101,6 +104,8 @@ Hard delete is intentionally unsupported in the MVP. Deactivation is handled thr
 ## Privacy Model
 
 - Public suggestions exclude rider phone and WhatsApp values.
+- Public identity display is first-name-only.
+- Full plate numbers are never public; the selected-rider verification sheet may show only a masked plate helper.
 - Raw rider contact values are queried only server-side when creating the selected-rider handoff.
 - Customer and reporter phone values are stored as server-side HMAC hashes.
 - `RIDER_CONNECT_HASH_SECRET` should be set in staging and production as a server-only secret.
@@ -139,8 +144,10 @@ Supabase Data API exposure remains explicit-grant only. Future rider-related mig
 - Rider application page renders liability-safe independent-rider copy.
 - A submitted application creates a hidden/pending rider only.
 - Admin rider page is protected and visible only to admins with `riders:manage`.
-- Public suggestions include only verified/visible riders and no private fields.
+- Public suggestions include only verified, visible, currently available riders, are capped at 3, and include no private fields.
+- The selected-rider verification sheet shows masked plate values only and never exposes the full plate publicly.
 - Contact handoff requires disclaimer acceptance and returns a WhatsApp URL only after a rider is selected.
+- The public modal blocks incomplete contact or delivery details before rider selection so users see actionable copy instead of a raw validation error.
 - Contact intent stores hashed customer phone and minimal metadata.
 - Unavailable report stores hashed reporter phone when provided and remains admin-review-only.
 - Copy tests reject payment, dispatch, courier, driver, and guarantee wording.

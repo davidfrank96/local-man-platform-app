@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import {
   publicRiderSuggestionSchema,
   riderContactHandoffResponseDataSchema,
@@ -16,6 +16,10 @@ import {
   getRiderPublicFirstName,
   maskRiderPlateNumber,
 } from "../riders/public-identity.ts";
+import {
+  isRiderAvailableNow,
+  type RiderAvailabilityWindow,
+} from "../riders/availability.ts";
 import type {
   PublicRiderSuggestion,
   RiderContactHandoffRequest,
@@ -52,7 +56,7 @@ type PublicRiderSuggestionRow = {
   plate_number?: string | null;
   operating_areas: string[] | null;
   usual_available_hours: Record<string, unknown> | null;
-};
+} & RiderAvailabilityWindow;
 
 type RiderContactRow = PublicRiderSuggestionRow & {
   whatsapp_phone: string;
@@ -89,6 +93,10 @@ const riderPublicSelect = [
   "vehicle_type",
   "operating_areas",
   "usual_available_hours",
+  "weekday_available_from",
+  "weekday_available_until",
+  "weekend_available_from",
+  "weekend_available_until",
 ].join(",");
 
 const vendorRiderSelect = [
@@ -215,47 +223,38 @@ function toPublicRiderHandoff(row: RiderContactRow): PublicRiderSuggestion {
   });
 }
 
-function normalizeArea(value: string | null | undefined): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
+function createRiderRotationScore(riderId: string, now: Date): string {
+  const periodKey = now.toISOString().slice(0, 13);
+
+  return createHash("sha256")
+    .update(`localman-rider-shortlist:${periodKey}:${riderId}`)
+    .digest("hex");
 }
 
-function riderMatchesVendorArea(rider: PublicRiderSuggestion, vendorArea: string | null): boolean {
-  const normalizedVendorArea = normalizeArea(vendorArea);
-
-  if (!normalizedVendorArea) {
-    return false;
-  }
-
-  return rider.operating_areas.some((area) => normalizeArea(area) === normalizedVendorArea);
-}
-
-function sortRidersForVendor(
-  riders: PublicRiderSuggestion[],
-  vendorArea: string | null,
+function createAvailableRiderShortlist(
+  rows: PublicRiderSuggestionRow[],
+  now = new Date(),
 ): PublicRiderSuggestion[] {
-  return [...riders].sort((left, right) => {
-    const leftMatches = riderMatchesVendorArea(left, vendorArea);
-    const rightMatches = riderMatchesVendorArea(right, vendorArea);
-
-    if (leftMatches !== rightMatches) {
-      return leftMatches ? -1 : 1;
-    }
-
-    return left.display_name.localeCompare(right.display_name);
-  });
+  return rows
+    .filter((row) => isRiderAvailableNow(row, now))
+    .sort((left, right) =>
+      createRiderRotationScore(left.id, now).localeCompare(
+        createRiderRotationScore(right.id, now),
+      )
+    )
+    .slice(0, 3)
+    .map(toPublicRiderSuggestion);
 }
 
 async function fetchVisibleVerifiedRiders(
   config: RiderConnectConfig,
-): Promise<PublicRiderSuggestion[]> {
+): Promise<PublicRiderSuggestionRow[]> {
   const url = new URL("/rest/v1/riders", config.url);
   url.searchParams.set("select", riderPublicSelect);
   url.searchParams.set("verification_status", "eq.verified");
   url.searchParams.set("visibility_status", "eq.visible");
-  url.searchParams.set("order", "display_name.asc");
-  url.searchParams.set("limit", "50");
+  url.searchParams.set("order", "created_at.asc");
+  url.searchParams.set("limit", "100");
 
   const rows = await fetchServiceJson<PublicRiderSuggestionRow[]>(
     url,
@@ -263,7 +262,7 @@ async function fetchVisibleVerifiedRiders(
     "Rider suggestion lookup failed",
   );
 
-  return rows.map(toPublicRiderSuggestion);
+  return rows;
 }
 
 async function fetchSelectedVisibleRider(
@@ -567,10 +566,7 @@ export async function getPublicRiderSuggestionsForVendor(
     throw new RiderConnectServiceError("NOT_FOUND", "Vendor was not found.", 404);
   }
 
-  const riders = sortRidersForVendor(
-    await fetchVisibleVerifiedRiders(config),
-    vendor.area,
-  );
+  const riders = createAvailableRiderShortlist(await fetchVisibleVerifiedRiders(config));
 
   return {
     vendor_slug: vendor.slug,
@@ -593,6 +589,10 @@ export async function createRiderContactHandoff(
 
   if (!riderRow) {
     throw new RiderConnectServiceError("NOT_FOUND", "Rider was not found.", 404);
+  }
+
+  if (!isRiderAvailableNow(riderRow)) {
+    throw new RiderConnectServiceError("NOT_FOUND", "Rider is not currently available.", 404);
   }
 
   const rider = toPublicRiderHandoff(riderRow);

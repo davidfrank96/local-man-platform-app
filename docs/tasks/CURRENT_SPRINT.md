@@ -107,7 +107,7 @@ Current release-gate notes:
 - real cross-vendor upload verification should be run against both local dev and local production runtime before promotion
 - mobile regression gates should cover dock tab state, shared Home/Map filters, radius filters, empty states, mock-cache rejection, invalid analytics vendor ids, and map refresh state
 - Supabase security gates should cover explicit grants, RLS, function execution grants, and fail-closed default privileges
-- Rider Connect release gates should cover safe copy, hidden/pending applications, verified/visible suggestion filtering, selected-rider-only WhatsApp handoff, hashed phone storage, and report-unavailable review signals
+- Rider Connect release gates should cover safe copy, hidden/pending applications, max-3 verified/visible/currently available suggestion filtering, masked-plate verification, selected-rider-only WhatsApp handoff, actionable frontend validation, hashed phone storage, and report-unavailable review signals
 - high-severity dependency audit findings remain deployment blockers even when functional checks pass
 
 ## Phase 5 Boundaries

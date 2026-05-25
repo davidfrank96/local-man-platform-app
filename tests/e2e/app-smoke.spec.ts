@@ -581,6 +581,10 @@ function buildMockAdminRiders(count: number) {
     usual_available_hours: {
       label: index % 2 === 0 ? "Weekdays 9am-6pm" : "Evenings and weekends",
     },
+    weekday_available_from: index % 2 === 0 ? "09:00:00" : "18:00:00",
+    weekday_available_until: index % 2 === 0 ? "18:00:00" : "23:00:00",
+    weekend_available_from: index % 2 === 0 ? null : "18:00:00",
+    weekend_available_until: index % 2 === 0 ? null : "23:00:00",
     verification_status: index === 0 ? "pending" : "verified",
     visibility_status: index === 0 ? "hidden" : "visible",
     notes: index === 0 ? "Needs admin review" : "Reviewed profile",
@@ -1127,6 +1131,10 @@ async function mockAuthenticatedAdminWorkspace(
         plate_number: payload.plate_number ?? null,
         operating_areas: payload.operating_areas ?? [],
         usual_available_hours: payload.usual_available_hours ?? null,
+        weekday_available_from: payload.weekday_available_from ?? null,
+        weekday_available_until: payload.weekday_available_until ?? null,
+        weekend_available_from: payload.weekend_available_from ?? null,
+        weekend_available_until: payload.weekend_available_until ?? null,
         verification_status: payload.verification_status ?? "pending",
         visibility_status: payload.visibility_status ?? "hidden",
         notes: payload.notes ?? null,
@@ -1885,6 +1893,65 @@ test.describe("Phase 3 browser smoke", () => {
       reason: "no_response",
       reporterPhone: "+2348123456789",
     });
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("vendor detail Request Rider explains missing delivery details before rider selection", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    let suggestionRequestCount = 0;
+    let contactRequestCount = 0;
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/riders", async (route) => {
+      suggestionRequestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            vendor_slug: "jabi-office-lunch-bowl",
+            riders: [],
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/riders/contact", async (route) => {
+      contactRequestCount += 1;
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          data: null,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid input.",
+            status: 400,
+          },
+        }),
+      });
+    });
+
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+    await page.getByRole("button", { name: "Request Rider" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Find a Rider" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("Customer name").fill("Ada");
+    await dialog.getByLabel("Phone / WhatsApp").fill("08012345678");
+    await dialog.getByLabel("Delivery location mode").selectOption("manual_address");
+    await dialog.getByRole("checkbox").check();
+    await dialog.getByRole("button", { name: "Find a Rider" }).click();
+
+    await expect(
+      dialog.getByText("Please enter a delivery address before requesting a rider."),
+    ).toBeVisible();
+    await expect(dialog.getByText("Invalid input.")).toHaveCount(0);
+    await expect.poll(() => suggestionRequestCount).toBe(0);
+    await expect.poll(() => contactRequestCount).toBe(0);
 
     await expectNoClientErrors(errors);
   });
