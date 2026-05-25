@@ -1564,19 +1564,22 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
-  test("vendor detail scroll boundary ends at the Ratings section", async ({ page }) => {
+  test("vendor detail scroll boundary ends at the Ratings section across responsive widths", async ({ page }) => {
     const errors = trackClientErrors(page);
     const viewports = [
-      { height: 720, width: 1280 },
-      { height: 900, width: 768 },
+      { height: 740, width: 360 },
       { height: 844, width: 390 },
-      { height: 720, width: 320 },
+      { height: 932, width: 430 },
+      { height: 1024, width: 768 },
+      { height: 768, width: 1024 },
+      { height: 800, width: 1280 },
     ];
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto("/vendors/jabi-office-lunch-bowl");
       await expect(page.getByRole("heading", { name: "Rate this vendor" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Share this vendor with a friend" })).toBeVisible();
 
       const metrics = await page.evaluate(() => {
         const ratingSection = Array.from(
@@ -1592,10 +1595,13 @@ test.describe("Phase 3 browser smoke", () => {
         const documentBottom = document.documentElement.scrollHeight;
 
         return {
+          hasHorizontalOverflow: document.documentElement.scrollWidth >
+            document.documentElement.clientWidth + 1,
           trailingGap: documentBottom - ratingBottom,
         };
       });
 
+      expect(metrics.hasHorizontalOverflow, `horizontal overflow at ${viewport.width}px`).toBe(false);
       expect(metrics.trailingGap).toBeGreaterThanOrEqual(-2);
       expect(metrics.trailingGap).toBeLessThanOrEqual(2);
     }
