@@ -12,6 +12,15 @@ This document records the current lightweight UI constraints and stability decis
 - lightweight inline SVG for small identity or metadata icons
 - keep discovery usable on weak mobile networks
 
+## PWA runtime cache constraints
+
+- the service worker is a static-shell optimization only, not an offline-first data layer
+- cache only static asset classes: `/_next/static/`, icons, local branding, seed/static images, manifest, fonts, scripts, styles, and `/offline.html`
+- do not service-worker-cache `/api/**`, `/admin/**`, `/vendors/**`, `/search`, Rider Connect, rating, nearby discovery, search/filter, or open/closed vendor payloads
+- navigation is network-first; offline fallback must use `/offline.html` and must not show stale marketplace state as current
+- service worker registration is production-only and should not run during `npm run dev`
+- update cache names deliberately so old `localman-static-*` caches can be removed predictably during activation
+
 ## Discovery-specific constraints
 
 - map remains visible without oversized decorative UI
@@ -37,6 +46,7 @@ Current stability rules include:
 - no cross-vendor preview or file-input state leakage after switching edit sessions
 - no stale discovery cache hydration when the nearby request key, cache version, browser origin, or vendor payload shape is unsafe
 - the mobile Map selected vendor panel stays in normal page flow above the fixed dock
+- discovery scroll-position snapshot writes are frame-throttled so sessionStorage persistence does not run for every raw scroll event
 
 ## Known regression fixes in this phase
 
@@ -91,6 +101,17 @@ Fix:
 - scope cache envelopes by version and browser origin
 - reject malformed vendor records and known mock/test vendor identities before hydration
 - require a live nearby fetch when restored data is not authoritative for the active filter state
+
+### Scroll persistence jank
+
+Problem:
+
+- discovery state persistence wrote the current scroll position to browser storage directly from every scroll event
+
+Fix:
+
+- keep the passive scroll listener, but schedule storage persistence through `requestAnimationFrame`
+- flush immediately on `pagehide` so browser-back restoration still has the latest scroll position
 
 ### Vendor-image upload state leakage
 

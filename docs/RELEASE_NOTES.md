@@ -75,6 +75,15 @@ This note summarizes the current branch behavior after the mobile discovery rest
 - The share section supports native share and copy-link behavior using the canonical `/vendors/[slug]` URL.
 - The dedicated WhatsApp share button was removed; WhatsApp remains available through supported native share sheets.
 
+### PWA Runtime Foundation
+
+- Localman now has Phase 1 PWA runtime groundwork for installable browser-app behavior.
+- `/sw.js` registers only in production on HTTPS, `localhost`, or `127.0.0.1`.
+- The service worker caches only static shell assets: Next static chunks, manifest, icons, local branding files, seed/static images, fonts, scripts, styles, and `/offline.html`.
+- Dynamic marketplace data remains network-owned. `/api/**`, `/admin/**`, `/vendors/**`, `/search`, cross-origin requests, and non-GET requests are bypassed by the service worker.
+- Offline navigation shows a lightweight reconnect page and does not present stale nearby vendors, rider availability, ratings, search results, or open/closed vendor state as current.
+- Push notifications, background sync, offline maps, offline discovery, and offline Rider Connect are not implemented.
+
 ### Admin Session and Vendor Images
 
 - Admin sessions are cookie-backed and validated through `/api/admin/session`.

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#13733D">
+    <title>Localman offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --background: #faf6f0;
+        --card: #ffffff;
+        --border: #e6e2d8;
+        --text: #111814;
+        --muted: #4f5b53;
+        --green: #13733d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        min-height: 100svh;
+        place-items: center;
+        background: var(--background);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        padding: 24px;
+      }
+
+      main {
+        width: min(100%, 420px);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: var(--card);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+        padding: 28px;
+        text-align: center;
+      }
+
+      img {
+        display: block;
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.45rem;
+        line-height: 1.2;
+      }
+
+      p {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.55;
+      }
+
+      a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        margin-top: 22px;
+        border-radius: 999px;
+        background: var(--green);
+        color: #ffffff;
+        font-weight: 700;
+        padding: 0 20px;
+        text-decoration: none;
+      }
+
+      a:focus-visible {
+        outline: 3px solid rgba(19, 115, 61, 0.28);
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/pwa-192x192.png" alt="" width="72" height="72">
+      <h1>You appear to be offline.</h1>
+      <p>
+        Some Localman features may be unavailable until your connection returns.
+        Nearby vendors, rider availability, ratings, and search need a live network.
+      </p>
+      <a href="/">Try Localman again</a>
+    </main>
+  </body>
+</html>

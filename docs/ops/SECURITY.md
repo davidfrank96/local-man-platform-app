@@ -62,6 +62,10 @@ This document records the current application security posture for release revie
 - Restored nearby results carry a request key for location/search/radius/category/price/open-now state.
 - Malformed vendor records and known Playwright/mock vendor identities are rejected before hydration.
 - Admin vendor mutations invalidate restored public discovery vendor data.
+- The Phase 1 service worker must cache static shell assets only.
+- The service worker bypasses `/api/**`, `/admin/**`, `/vendors/**`, `/search`, non-GET requests, and cross-origin requests.
+- Rider Connect suggestions/contact handoff, rating writes, nearby discovery, open/closed state, admin sessions, and vendor detail payloads must remain network-owned and must not be stored in `CacheStorage`.
+- Offline navigation may return `/offline.html`, but it must not present stale vendors, riders, ratings, or search results as live data.
 
 ## Secrets
 

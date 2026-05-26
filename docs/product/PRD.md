@@ -102,7 +102,7 @@ Small food businesses with:
 - vendor self-signup
 - public user login
 - offline-first support
-- full PWA install/offline-cache behavior
+- offline marketplace cache behavior
 - chat
 - loyalty system
 - recommendation engine

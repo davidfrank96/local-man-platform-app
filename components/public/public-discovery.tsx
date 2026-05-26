@@ -560,7 +560,10 @@ export function PublicDiscovery({
   useEffect(() => {
     if (!snapshotHydrated) return;
 
+    let scrollPersistFrameId = 0;
+
     function persistScrollPosition() {
+      scrollPersistFrameId = 0;
       const snapshot = readPublicDiscoverySnapshot<NearbyVendorsResponseData>(discoverySnapshotKey) ?? {
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt: nearbyDataUpdatedAtRef.current,
@@ -595,18 +598,36 @@ export function PublicDiscovery({
       }
     }
 
-    window.addEventListener("scroll", persistScrollPosition, { passive: true });
-    window.addEventListener("pagehide", persistScrollPosition);
+    function scheduleScrollPositionPersist() {
+      if (scrollPersistFrameId !== 0) {
+        return;
+      }
+
+      scrollPersistFrameId = window.requestAnimationFrame(persistScrollPosition);
+    }
+
+    function persistScrollPositionImmediately() {
+      if (scrollPersistFrameId !== 0) {
+        window.cancelAnimationFrame(scrollPersistFrameId);
+        scrollPersistFrameId = 0;
+      }
+
+      persistScrollPosition();
+    }
+
+    window.addEventListener("scroll", scheduleScrollPositionPersist, { passive: true });
+    window.addEventListener("pagehide", persistScrollPositionImmediately);
 
     return () => {
-      window.removeEventListener("scroll", persistScrollPosition);
-      window.removeEventListener("pagehide", persistScrollPosition);
+      window.removeEventListener("scroll", scheduleScrollPositionPersist);
+      window.removeEventListener("pagehide", persistScrollPositionImmediately);
+      if (scrollPersistFrameId !== 0) {
+        window.cancelAnimationFrame(scrollPersistFrameId);
+      }
     };
   }, [
     discoverySnapshotKey,
     fallbackDiscoverySnapshotKey,
-    nearbyData,
-    selectedVendorId,
     snapshotHydrated,
   ]);
 

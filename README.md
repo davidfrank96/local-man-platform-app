@@ -84,6 +84,11 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - restored discovery data yields to one live nearby fetch before it becomes authoritative again
   - admin vendor mutations invalidate restored public discovery vendor data
 - morning, afternoon, and night discovery themes based on browser-local time
+- PWA install groundwork:
+  - manifest and high-definition icons support browser install prompts
+  - production-only service worker caches static shell assets, icons, branding, and seed/static images
+  - dynamic marketplace data stays network-owned and is not cached by the service worker
+  - offline navigation shows a plain reconnect message instead of stale nearby vendors, rider availability, ratings, or search results
 
 ### Admin
 - Supabase email/password admin login with secure HTTP-only cookie-backed sessions
@@ -150,6 +155,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - [docs/vendor-cards.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/vendor-cards.md) - discovery-card and selected-vendor rules
 - [docs/location.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/location.md) - popup, retry UI, and location trust behavior
 - [docs/performance.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/performance.md) - low-bandwidth and UI-stability constraints
+- [docs/pwa-runtime.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/pwa-runtime.md) - PWA install/runtime scope, static cache policy, and offline limitations
 - [docs/qa-checklist.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/qa-checklist.md) - release and regression checklist
 - [docs/rbac.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rbac.md) - admin and agent role rules
 - [docs/ops/SECURITY.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/SECURITY.md) - auth/RBAC, Supabase grants/RLS, public write, cache, and secret-handling security notes
@@ -274,7 +280,7 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - Rider availability is based on admin-managed visibility plus structured availability windows, not a guaranteed live status.
 - WhatsApp handoff is user-controlled click-to-chat; Localman does not send WhatsApp API messages.
 - Public abuse protection is process-local and in-memory, so it is best-effort for a single app instance until a distributed limiter is added.
-- Offline-first behavior and a full PWA install/offline cache are not implemented yet.
+- PWA install/runtime support is limited to static shell assets and an offline fallback page. Offline-first discovery, Rider Connect, ratings, maps, and dynamic marketplace caching are not implemented.
 
 ## Runtime Validation
 Before deployment or major continuation work, keep the runtime gate green:
