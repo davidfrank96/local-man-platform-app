@@ -10,6 +10,12 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - mobile Map tab for the dedicated map view, shared search/filter controls, map refresh, marker selection, and the selected vendor panel
 - mobile About tab for lightweight support and usage guidance, without search/filter controls
 - desktop search/filter bar with the map and selected vendor panel in the right column
+- redesigned lightweight filter panel:
+  - search remains in the shared Home/Map/desktop discovery surface
+  - filter toggle opens radius, price, category, and open-now controls
+  - panel header shows `Filters`, an active-filter count pill, and `Clear all`
+  - mobile filter view opens as a viewport-bounded sheet with a close button and `Apply filters`
+  - desktop filter view uses a wider card with radius/price side by side, category full width, and open-now as a tap-friendly card
 - discovery ordering that prioritizes:
   - open vendors first
   - distance within the same open/closed group
@@ -262,6 +268,14 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - schema-changing releases must apply migrations before the new app build is promoted
 - current migrations are additive; rollback should restore the previous app deploy first rather than manually removing applied schema objects unless a migration defect is confirmed
 
+## Known MVP Limitations
+- Rider Connect is lightweight coordination, not Localman dispatch.
+- There is no realtime rider tracking, rider acceptance lifecycle, rider app, or delivery/order lifecycle.
+- Rider availability is based on admin-managed visibility plus structured availability windows, not a guaranteed live status.
+- WhatsApp handoff is user-controlled click-to-chat; Localman does not send WhatsApp API messages.
+- Public abuse protection is process-local and in-memory, so it is best-effort for a single app instance until a distributed limiter is added.
+- Offline-first behavior and a full PWA install/offline cache are not implemented yet.
+
 ## Runtime Validation
 Before deployment or major continuation work, keep the runtime gate green:
 
@@ -368,7 +382,7 @@ Phase 5 delivered:
 - `Active hours:` on discovery cards
 - selected vendor highlight behavior
 - browser-back and `Back to map` restoration
-- Apply button restoration after navigation
+- `Apply filters` button restoration after navigation
 - morning, afternoon, and night discovery theming
 - stable MapLibre marker/card synchronization without marker-tap camera drift
 - oxblood storefront vendor markers, green selected-marker state, and blue user-location marker

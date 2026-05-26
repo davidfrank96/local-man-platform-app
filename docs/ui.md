@@ -23,6 +23,22 @@ The public homepage combines:
 - lightweight retention sections for recent, popular, and last-selected vendors
 - a mobile-only bottom dock with Home, Map, and About tabs
 
+## Filter surface
+
+Current discovery filters preserve the same query behavior while using a cleaner panel UI:
+
+- search remains visible in the shared Home, Map, and desktop discovery controls
+- the filter toggle opens radius, price, category, open-now, and apply controls
+- the panel header shows `Filters`, an active-count pill such as `1 active`, and a `Clear all` action
+- `Clear all` is visible but disabled when no non-default filters are active
+- radius choices are 1 km, 5 km, 10 km, and 30 km
+- price choices are `Any`, `Budget`, `Standard`, and `Premium`
+- category is full width and is disabled only when no categories are loaded
+- open-now is a tap-friendly card with checkbox, title, helper copy, and a clock icon
+- `Apply filters` is the primary CTA and submits the current draft filter controls
+- mobile opens the same panel as a viewport-bounded sheet with a close button and contained scrolling
+- desktop uses the same component with radius and price side by side, category full width, then open-now full width
+
 The interaction model is:
 
 1. resolve location

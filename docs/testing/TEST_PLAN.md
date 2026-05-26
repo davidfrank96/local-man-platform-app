@@ -89,6 +89,10 @@ Test:
 - mobile Home and Map tabs share search, category, price, open-now, radius, and selected-vendor state
 - mobile About renders no search/filter controls and does not reset shared discovery state
 - mobile radius filters return correct results for 1 km, 5 km, 10 km, and 30 km where seeded data exists
+- filter panel header renders `Filters`, the active count pill, `Clear all`, and `Apply filters`
+- `Clear all` remains visible but disabled when no non-default filters are active
+- mobile filter sheet remains viewport-bounded, scrollable when needed, and clear of the fixed bottom dock
+- desktop filter panel keeps radius/price side by side and category/open-now full width
 - stale wider-radius or different-filter cached snapshots cannot hydrate a mismatched request key
 - mock/test vendor ids and known mock slugs cannot hydrate public discovery cache or retained vendor memory
 - friendly empty states appear only after loading completes for true empty search/filter/radius states
@@ -389,6 +393,8 @@ Manual UI checks:
 - mobile Home, Map, and About dock tabs render only on mobile
 - mobile Home shows search/filter and vendor cards
 - mobile Map shows shared search/filter, map refresh, map/fallback, and selected vendor panel
+- mobile filter sheet shows the close button, active-count pill, stacked controls, open-now card, and `Apply filters`
+- desktop filter panel shows the active-count pill, `Clear all`, two-column radius/price controls, full-width category, open-now card, and `Apply filters`
 - mobile About shows support/about copy only
 - desktop keeps the combined discovery layout and does not show the mobile dock
 - vendor cards remain compact, readable, and image-free

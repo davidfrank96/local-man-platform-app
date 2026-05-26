@@ -36,6 +36,87 @@ const defaultFilters: DiscoveryFilters = {
   category: "",
 };
 
+type FilterIconName =
+  | "category"
+  | "chevron"
+  | "clock"
+  | "close"
+  | "price"
+  | "radius"
+  | "reset"
+  | "sliders";
+
+function FilterIcon({ name }: { name: FilterIconName }) {
+  switch (name) {
+    case "category":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="4.8" height="4.8" rx="1" />
+          <rect x="11.7" y="3.5" width="4.8" height="4.8" rx="1" />
+          <rect x="3.5" y="11.7" width="4.8" height="4.8" rx="1" />
+          <rect x="11.7" y="11.7" width="4.8" height="4.8" rx="1" />
+        </svg>
+      );
+    case "chevron":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <circle cx="10" cy="10" r="6.5" />
+          <path d="M10 6.6v3.8l2.7 1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="m5 5 10 10M15 5 5 15" strokeLinecap="round" />
+        </svg>
+      );
+    case "price":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M3.8 4.8v5.4l6.9 6.9 5.4-5.4-6.9-6.9H3.8Z" strokeLinejoin="round" />
+          <circle cx="7.1" cy="8.1" r="1" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "radius":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M10 17s5.5-5.2 5.5-9.5a5.5 5.5 0 1 0-11 0C4.5 11.8 10 17 10 17Z" strokeLinejoin="round" />
+          <circle cx="10" cy="7.5" r="1.8" />
+        </svg>
+      );
+    case "reset":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M5 5.4A6.5 6.5 0 1 1 3.8 13" strokeLinecap="round" />
+          <path d="M4.6 2.8v3.4h3.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "sliders":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M3 5h4.5M12.5 5H17M3 10h8M16 10h1M3 15h2.5M10.5 15H17" strokeLinecap="round" />
+          <circle cx="10" cy="5" r="2.1" />
+          <circle cx="13.5" cy="10" r="2.1" />
+          <circle cx="8" cy="15" r="2.1" />
+        </svg>
+      );
+  }
+}
+
+function formatActiveFilterCount(count: number) {
+  return `${count} active`;
+}
+
+function formatPriceBandLabel(band: PriceBand) {
+  return band.charAt(0).toUpperCase() + band.slice(1);
+}
+
 function readFormFilters(form: HTMLFormElement): DiscoveryFilters {
   const formData = new FormData(form);
 
@@ -70,6 +151,7 @@ export function VendorFilters({
   const panelId = useId();
   const activeFilterCount = countActiveDiscoveryFilters(draftFilters);
   const isFloating = variant === "mobileFloating" || variant === "desktopFloating";
+  const isMobileFloating = variant === "mobileFloating";
   const floatingClassName =
     variant === "mobileFloating"
       ? "discovery-filters discovery-filters-mobile"
@@ -194,6 +276,169 @@ export function VendorFilters({
     onChange(nextFilters);
   }
 
+  const filterPanel = (
+    <div className="filter-panel-shell">
+      <div className="filter-panel-header">
+        {isMobileFloating ? (
+          <button
+            aria-label="Close filters"
+            className="filter-panel-close"
+            type="button"
+            onClick={onTogglePanel}
+          >
+            <FilterIcon name="close" />
+          </button>
+        ) : null}
+        <div className="filter-panel-title-group">
+          {!isMobileFloating ? (
+            <span className="filter-panel-title-icon">
+              <FilterIcon name="sliders" />
+            </span>
+          ) : null}
+          <div className="filter-panel-title-copy">
+            <strong>Filters</strong>
+            <span className="filter-active-pill">{formatActiveFilterCount(activeFilterCount)}</span>
+          </div>
+        </div>
+        <button
+          className="filter-clear-all"
+          disabled={activeFilterCount === 0}
+          type="button"
+          onClick={clearFilters}
+        >
+          <FilterIcon name="reset" />
+          <span>Clear all</span>
+        </button>
+      </div>
+
+      <div className="filter-panel-body">
+        <div className="filter-field-grid">
+          <label className="filter-select-field">
+            <span className="filter-control-label">
+              <FilterIcon name="radius" />
+              <span>Radius</span>
+            </span>
+            <span className="filter-select-shell">
+              <span className="filter-select-icon">
+                <FilterIcon name="radius" />
+              </span>
+              <select
+                value={draftFilters.radiusKm}
+                name="radiusKm"
+                onChange={(event) =>
+                  updateDraftFilters((current) => ({
+                    ...current,
+                    radiusKm: Number(event.target.value),
+                  }))
+                }
+              >
+                {radiusOptions.map((radius) => (
+                  <option key={radius} value={radius}>
+                    {radius} km
+                  </option>
+                ))}
+              </select>
+              <span className="filter-select-chevron">
+                <FilterIcon name="chevron" />
+              </span>
+            </span>
+          </label>
+
+          <label className="filter-select-field">
+            <span className="filter-control-label">
+              <FilterIcon name="price" />
+              <span>Price</span>
+            </span>
+            <span className="filter-select-shell">
+              <span className="filter-select-icon">
+                <FilterIcon name="price" />
+              </span>
+              <select
+                value={draftFilters.priceBand}
+                name="priceBand"
+                onChange={(event) =>
+                  updateDraftFilters((current) => ({
+                    ...current,
+                    priceBand: event.target.value as DiscoveryFilters["priceBand"],
+                  }))
+                }
+              >
+                <option value="">Any</option>
+                {priceBands.map((band) => (
+                  <option key={band} value={band}>
+                    {formatPriceBandLabel(band)}
+                  </option>
+                ))}
+              </select>
+              <span className="filter-select-chevron">
+                <FilterIcon name="chevron" />
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <label className="filter-select-field filter-select-field-full">
+          <span className="filter-control-label">
+            <FilterIcon name="category" />
+            <span>Category</span>
+          </span>
+          <span className="filter-select-shell">
+            <span className="filter-select-icon">
+              <FilterIcon name="category" />
+            </span>
+            <select
+              value={draftFilters.category}
+              disabled={categories.length === 0}
+              name="category"
+              onChange={(event) =>
+                updateDraftFilters((current) => ({
+                  ...current,
+                  category: event.target.value,
+                }))
+              }
+            >
+              <option value="">Any</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.slug}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <span className="filter-select-chevron">
+              <FilterIcon name="chevron" />
+            </span>
+          </span>
+        </label>
+
+        <label className="filter-open-card">
+          <input
+            checked={draftFilters.openNow}
+            name="openNow"
+            type="checkbox"
+            onChange={(event) =>
+              updateDraftFilters((current) => ({
+                ...current,
+                openNow: event.target.checked,
+              }))
+            }
+          />
+          <span className="filter-open-copy">
+            <strong>Open now</strong>
+            <span>Show only vendors that are open now</span>
+          </span>
+          <span className="filter-open-icon">
+            <FilterIcon name="clock" />
+          </span>
+        </label>
+
+        <button className="filter-apply-button" type="submit">
+          <FilterIcon name="sliders" />
+          <span>Apply filters</span>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <form
       className={isFloating ? floatingClassName : "discovery-filters"}
@@ -242,123 +487,12 @@ export function VendorFilters({
             }
             data-open={panelOpen ? "true" : "false"}
           >
-            <div className="discovery-filters-summary discovery-filters-summary-mobile">
-              <strong>Filters</strong>
-              <span>
-                {activeFilterCount > 0
-                  ? `${activeFilterCount} active`
-                  : "Search by vendor, dish, or area"}
-              </span>
-              {activeFilterCount > 0 ? (
-                <button
-                  className="button-secondary compact-button discovery-clear-button"
-                  type="button"
-                  onClick={clearFilters}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-            <div className="discovery-mobile-filter-grid">
-              <label className="field">
-                <span>Radius</span>
-                <select
-                  value={draftFilters.radiusKm}
-                  name="radiusKm"
-                  onChange={(event) =>
-                    updateDraftFilters((current) => ({
-                      ...current,
-                      radiusKm: Number(event.target.value),
-                    }))
-                  }
-                >
-                  {radiusOptions.map((radius) => (
-                    <option key={radius} value={radius}>
-                      {radius} km
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Price</span>
-                <select
-                  value={draftFilters.priceBand}
-                  name="priceBand"
-                  onChange={(event) =>
-                    updateDraftFilters((current) => ({
-                      ...current,
-                      priceBand: event.target.value as DiscoveryFilters["priceBand"],
-                    }))
-                  }
-                >
-                  <option value="">Any</option>
-                  {priceBands.map((band) => (
-                    <option key={band} value={band}>
-                      {band}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="field">
-              <span>Category</span>
-              <select
-                value={draftFilters.category}
-                disabled={categories.length === 0}
-                name="category"
-                onChange={(event) =>
-                  updateDraftFilters((current) => ({
-                    ...current,
-                    category: event.target.value,
-                  }))
-                }
-              >
-                <option value="">Any</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.slug}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="checkbox-field filter-checkbox filter-checkbox-mobile">
-              <input
-                checked={draftFilters.openNow}
-                name="openNow"
-                type="checkbox"
-                onChange={(event) =>
-                  updateDraftFilters((current) => ({
-                    ...current,
-                    openNow: event.target.checked,
-                  }))
-                }
-              />
-              <span>Open now</span>
-            </label>
-            <button className="button-primary compact-button discovery-mobile-apply" type="submit">
-              Apply
-            </button>
+            {filterPanel}
           </div>
         </>
       ) : (
         <>
-          <div className="discovery-filters-summary">
-            <strong>Filters</strong>
-            <span>
-              {activeFilterCount > 0
-                ? `${activeFilterCount} active`
-                : "Search by vendor, dish, or area"}
-            </span>
-            {activeFilterCount > 0 ? (
-              <button
-                className="button-secondary compact-button discovery-clear-button"
-                type="button"
-                onClick={clearFilters}
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
+          {filterPanel}
           <label className="field search-field">
             <span>Search</span>
             <input
@@ -368,83 +502,6 @@ export function VendorFilters({
               onChange={(event) => updateSearchDraft(event.target.value)}
             />
           </label>
-          <label className="field">
-            <span>Radius</span>
-            <select
-              value={draftFilters.radiusKm}
-              name="radiusKm"
-              onChange={(event) =>
-                updateDraftFilters((current) => ({
-                  ...current,
-                  radiusKm: Number(event.target.value),
-                }))
-              }
-            >
-              {radiusOptions.map((radius) => (
-                <option key={radius} value={radius}>
-                  {radius} km
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Price</span>
-            <select
-              value={draftFilters.priceBand}
-              name="priceBand"
-              onChange={(event) =>
-                updateDraftFilters((current) => ({
-                  ...current,
-                  priceBand: event.target.value as DiscoveryFilters["priceBand"],
-                }))
-              }
-            >
-              <option value="">Any</option>
-              {priceBands.map((band) => (
-                <option key={band} value={band}>
-                  {band}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Category</span>
-            <select
-              value={draftFilters.category}
-              disabled={categories.length === 0}
-              name="category"
-              onChange={(event) =>
-                updateDraftFilters((current) => ({
-                  ...current,
-                  category: event.target.value,
-                }))
-              }
-            >
-              <option value="">Any</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.slug}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="checkbox-field filter-checkbox">
-            <input
-              checked={draftFilters.openNow}
-              name="openNow"
-              type="checkbox"
-              onChange={(event) =>
-                updateDraftFilters((current) => ({
-                  ...current,
-                  openNow: event.target.checked,
-                }))
-              }
-            />
-            <span>Open now</span>
-          </label>
-          <button className="button-primary compact-button" type="submit">
-            Apply
-          </button>
         </>
       )}
     </form>

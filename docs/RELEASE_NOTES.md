@@ -33,6 +33,9 @@ This note summarizes the current branch behavior after the mobile discovery rest
 
 - Radius filters currently support 1 km, 5 km, 10 km, and 30 km.
 - Radius/search/category/open-now/price filters are shared across mobile Home, mobile Map, and desktop discovery.
+- The filter panel now shows a `Filters` header, active-filter count pill, `Clear all`, icon-labeled radius/price/category selects, an open-now card, and a primary `Apply filters` CTA while preserving the existing filtering/query behavior.
+- Mobile filter view opens as a bounded sheet with a close button, stacked fields, contained scrolling, and spacing above the fixed bottom dock.
+- Desktop filter view keeps radius and price in a two-column row, then category and open-now as full-width controls.
 - Friendly empty states now distinguish true empty search/filter/radius results from loading and fetch errors.
 - The mobile Map tab keeps the map visible for zero-result states and shows compact empty-state guidance.
 - The mobile Map refresh control retries nearby discovery for the current state without hard-refreshing the browser page.

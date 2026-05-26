@@ -29,6 +29,10 @@ Use this checklist before pushing or releasing UI work.
 
 - [ ] search works
 - [ ] filter toggle opens and closes
+- [ ] filter panel shows `Filters`, active count, `Clear all`, and `Apply filters`
+- [ ] `Clear all` is disabled when no non-default filters are active
+- [ ] mobile filter sheet opens inside the viewport, scrolls internally when needed, and does not overlap the bottom dock
+- [ ] desktop filter panel keeps radius/price side by side and category/open-now full width
 - [ ] search state persists between mobile Home and Map
 - [ ] radius filter works at 1 km, 5 km, 10 km, and 30 km where seeded data exists
 - [ ] radius filter does not reuse a stale cached wider-radius result set

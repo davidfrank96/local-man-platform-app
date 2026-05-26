@@ -72,6 +72,8 @@ For each vendor before activation:
 - [ ] On desktop, confirm the combined list/map layout still renders.
 - [ ] Confirm search changes the result set on mobile Home, mobile Map, and desktop.
 - [ ] Confirm filters still work, including 1 km, 5 km, 10 km, and 30 km radius choices where seeded data exists.
+- [ ] Confirm the filter panel shows active count, `Clear all`, open-now card, and `Apply filters`.
+- [ ] Confirm the mobile filter sheet opens and scrolls without covering the bottom dock.
 - [ ] Confirm vendor cards open the vendor detail page.
 - [ ] Confirm call and directions actions render correctly.
 - [ ] Confirm the selected vendor panel shows open state, area, active hours, and call/directions/detail actions.

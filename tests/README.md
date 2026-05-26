@@ -32,6 +32,8 @@ Shared-environment cleanup safety:
 - include mobile discovery regression coverage after dock/search/map changes:
   - Home and Map share search/filter state
   - radius filters do not reuse stale wider-radius cache
+  - filter sheet shows active count, `Clear all`, and `Apply filters`
+  - mobile filter sheet remains viewport-bounded above the dock
   - About renders no search/filter controls
   - map refresh preserves filters and selected-vendor state
   - empty-state copy appears only for true empty results
