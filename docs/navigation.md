@@ -20,7 +20,7 @@ On the mobile Home tab, search and filters are presented above the vendor sectio
 
 - search field filters the same nearby dataset used by the Map tab
 - filter button is part of the same mobile row
-- filter panel expands below that row
+- filter button opens the current filter sheet/panel without changing routes
 - search behavior is unchanged from the underlying discovery query logic
 
 ### Map search/filter surface
@@ -38,16 +38,27 @@ The mobile About tab does not render search, filters, map, or vendor sections. S
 
 ### Mobile filter behavior
 
-The filter toggle opens the existing filter controls:
+The filter toggle opens the current filter controls:
 
 - radius
 - price
 - category
 - open now
-- apply
-- clear when active
+- `Apply filters`
+- `Clear all`
 
 The panel is hidden by default and uses the same discovery state as the rest of the page.
+On mobile, the open panel behaves as a viewport-bounded sheet with its own close button, contained vertical scrolling, and safe spacing above the fixed bottom dock.
+On desktop, the open panel remains in the left discovery column.
+
+Runtime UI details:
+- the header shows `Filters`, an active-filter count pill, and `Clear all`
+- `Clear all` remains visible but is disabled when no non-default filters are active
+- radius and price are side by side on desktop and stacked on mobile
+- category is full width
+- open-now is a full-width card with checkbox, helper text, and a clock icon
+- `Apply filters` submits the draft filter state
+
 Supported radius choices are currently 1 km, 5 km, 10 km, and 30 km.
 
 ### Mobile vendor section navbar

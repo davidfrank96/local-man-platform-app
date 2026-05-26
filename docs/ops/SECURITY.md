@@ -25,8 +25,9 @@ This document records the current application security posture for release revie
 
 ## Rider Connect Privacy and Abuse
 
-- Public rider suggestions are shaped by server routes and expose only rider id, display name, photo URL, vehicle type, operating areas, and usual availability label.
+- Public rider suggestions are shaped by server routes and expose only rider id, first-name display label, photo URL, vehicle type, operating areas, and usual availability label.
 - Public suggestions are capped at 3 verified, visible, currently available riders; operating area is informational only and not a hard eligibility filter.
+- There is no public all-rider directory, public rider search endpoint, or uncapped rider enumeration flow in the MVP.
 - Public suggestion responses must not include rider phone, WhatsApp phone, full legal name, internal notes, full plate number, or internal status fields.
 - Public Rider Connect identity display is first-name-only. The selected-rider verification sheet may show a masked plate value, but full plate numbers must never be public.
 - Frontend validation should block incomplete contact or delivery details before rider selection; backend validation remains authoritative for every handoff write.

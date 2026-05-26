@@ -42,6 +42,17 @@ Notes:
 - the fixed dock must not cover the selected vendor card actions
 - the current mobile Map tab uses a taller map than the Home tab used before the dock restructure
 
+### Filter panel layout
+
+Filter controls share one component across mobile Home, mobile Map, and desktop.
+
+- mobile keeps the search row visible until the filter toggle opens the sheet
+- the mobile sheet is fixed inside the viewport, scrolls internally when needed, and leaves space above the bottom dock
+- desktop keeps the filter panel in the left column, aligned with search and vendor cards
+- radius and price are a two-column row on desktop and stack on mobile
+- category, open-now, and `Apply filters` are full width
+- open-now remains a checkbox control visually presented as a larger tap-friendly card
+
 ## Mobile section behavior
 
 The mobile vendor section navbar controls which content pane is visible:

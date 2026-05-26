@@ -13,7 +13,9 @@ Rider Connect is the current lightweight handoff model for connecting users, ven
 - The user sends the WhatsApp message directly. Localman does not send WhatsApp messages through an API.
 - Users can report a selected rider as unavailable after handoff.
 
-Rider Connect does not include payments, checkout, delivery dispatch, order tracking, rider login, live rider GPS, or delivery guarantees.
+There is no public all-rider directory. Public rider discovery is vendor-scoped, capped, and shaped by the server route.
+
+Rider Connect does not include payments, checkout, delivery dispatch, order tracking, rider acceptance lifecycle, rider login, live rider GPS, realtime tracking, offline coordination, or delivery guarantees.
 
 ## Liability-Safe Copy Rules
 
@@ -80,8 +82,11 @@ Hard delete is intentionally unsupported in the MVP. Deactivation is handled thr
 - returns a maximum of 3 rider suggestions
 - uses lightweight stable rotation when more than 3 riders are available
 - keeps operating area informational only; area and proximity are not eligibility filters
-- returns public-safe fields only: rider id, display name, photo URL, vehicle type, operating areas, and usual availability label
+- is the only public rider suggestion surface; the MVP does not expose an all-riders listing endpoint or public rider search
+- returns public-safe fields only: rider id, first-name display label, photo URL, vehicle type, operating areas, and usual availability label
 - never returns rider phone, WhatsApp phone, full legal name, notes, full plate, or internal status fields
+
+When no riders are available, the public modal shows an empty state telling the user to call the vendor directly or try again later.
 
 `POST /api/vendors/[slug]/riders/contact`:
 

@@ -225,7 +225,7 @@ Returns:
 - `vendor_slug`
 - `riders`, containing only:
   - `rider_id`
-  - `display_name` as the first-name public label
+  - `display_name` shaped as the first-name public label
   - `photo_url`
   - `vehicle_type`
   - `operating_areas`
@@ -238,6 +238,7 @@ Behavior:
 - uses stable lightweight rotation when more than 3 riders are available
 - keeps rider operating area informational only; area and proximity are not hard eligibility filters
 - uses service-role server access so the public response can be safely shaped
+- is vendor-scoped and capped; there is no public all-rider enumeration or rider search endpoint in the MVP
 - does not expose rider phone, WhatsApp phone, full legal name, notes, full plate number, or internal status fields
 - rate limits suggestion requests:
   - threshold: `60` requests per `10` minutes per vendor-scope/client bucket

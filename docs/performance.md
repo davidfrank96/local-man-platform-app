@@ -18,6 +18,8 @@ This document records the current lightweight UI constraints and stability decis
 - discovery card and map props should stay stable enough to avoid unnecessary re-renders
 - selected vendor preview stays compact so the map keeps usable space
 - filter surfaces are collapsible on mobile and web
+- the current filter panel is CSS and inline-SVG based; it must not add animation libraries, component frameworks, or new runtime-heavy effects
+- mobile filter sheets use contained scrolling and `overscroll-behavior` so they do not trap the page behind the fixed bottom dock
 - section navbars switch existing content instead of fetching new data per tab
 - mobile Home and Map tabs share one discovery state instead of duplicating fetches or filter state
 - mobile Map refresh should reuse the existing nearby fetch path and must not hard-refresh the browser page

@@ -136,6 +136,7 @@ Public rendering rules:
 - vendor images remain detail-page only
 - mobile Home is list/search oriented; mobile Map is the dedicated map view with shared filters, map refresh, and the selected vendor panel
 - desktop keeps the combined left-list/right-map discovery layout
+- filter controls are presentation state around the existing discovery query contract; the current filter UI uses a desktop panel and mobile sheet but still submits the same search, radius, category, price, and open-now values
 - selected vendor preview stays compact so the map retains usable space
 - mobile selected vendor preview flows below the map with normal page scrolling
 - the public map must degrade quietly to the coordinate fallback when style loading, WebGL, or network conditions prevent MapLibre from loading
@@ -486,6 +487,7 @@ Unavailable-report path:
 
 Rules:
 - Localman does not collect payment, assign deliveries, create orders, send WhatsApp API messages, guarantee rider availability, or guarantee delivery.
+- The MVP has no rider acceptance lifecycle, live dispatch state, realtime tracking, offline-first handoff, or full PWA install/offline-cache behavior.
 - Users are reminded to call the vendor first to confirm food availability and price.
 - Rider availability is described as usual/listed availability, not real-time live availability.
 - Rider names are displayed as first name only in public flows.

@@ -42,6 +42,14 @@ Local Man — UI Rules
 - Call and directions buttons must be obvious.
 - Directions actions should use Google Maps deep links and must not imply that Google Maps renders the embedded discovery map.
 - Search and filters must not overwhelm the screen.
+- The discovery filter panel must preserve the existing filter state and query behavior.
+- The filter panel header should show `Filters`, an active-count pill, and `Clear all`; `Clear all` may stay visible while disabled when no non-default filters are active.
+- Filter fields should remain radius, price, category, and open-now only unless filtering logic is intentionally changed.
+- Radius options are 1 km, 5 km, 10 km, and 30 km.
+- Desktop filter layout should keep radius and price side by side, with category, open-now, and `Apply filters` full width.
+- Mobile filter layout should behave like a bounded sheet with a close button, stacked fields, contained scrolling, and spacing above the fixed dock.
+- The open-now filter should remain a real checkbox while using a larger card-style tap target with helper copy.
+- `Apply filters` is the primary filter CTA and must not alter the search/filter state contract.
 - Discovery ordering should be understandable without exposing raw ranking math.
 - Open vendors should be easier to find than closed vendors.
 - The UI may highlight a small set of popular nearby vendors when real usage signals support it.
@@ -152,6 +160,7 @@ Local Man — UI Rules
   - Analytics
   - Manage vendors
   - Create vendor
+  - Riders
   - Team access
   - Activity
   - Logs

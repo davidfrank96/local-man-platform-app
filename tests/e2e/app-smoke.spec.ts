@@ -3596,7 +3596,7 @@ test.describe("Phase 3 browser smoke", () => {
           dish_name: "Jollof rice",
           description: "Smoky party rice",
         },
-        today_hours: "9:00 AM - 8:00 PM",
+        today_hours: "12:00 AM - 11:59 PM",
       },
       {
         vendor_id: suyaVendorId,
@@ -3616,7 +3616,7 @@ test.describe("Phase 3 browser smoke", () => {
           dish_name: "Beef suya",
           description: "Peppered grill skewers",
         },
-        today_hours: "10:00 AM - 11:00 PM",
+        today_hours: "12:00 AM - 11:59 PM",
       },
     ]);
 
@@ -3674,7 +3674,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await mapFilters.locator('button[aria-label="Open filters"]').click();
     await mapFilters.locator('select[name="radiusKm"]').selectOption("30");
-    await mapFilters.getByRole("button", { name: "Apply" }).click();
+    await mapFilters.getByRole("button", { name: "Apply filters" }).click();
     await expect(page).toHaveURL(/radius_km=30/);
     await expect(mapSearch).toHaveValue("suya");
 
@@ -3828,7 +3828,7 @@ test.describe("Phase 3 browser smoke", () => {
       });
 
       await homeFilters.locator('select[name="radiusKm"]').selectOption(radius);
-      await homeFilters.getByRole("button", { name: "Apply" }).click();
+      await homeFilters.getByRole("button", { name: "Apply filters" }).click();
       await responsePromise;
       await expect(page.locator(".vendor-card:visible")).toHaveCount(expectedVisibleCounts[radius]);
 
@@ -3860,7 +3860,7 @@ test.describe("Phase 3 browser smoke", () => {
     });
 
     await mapFilters.locator('select[name="radiusKm"]').selectOption("5");
-    await mapFilters.getByRole("button", { name: "Apply" }).click();
+    await mapFilters.getByRole("button", { name: "Apply filters" }).click();
     await mapResponsePromise;
     await expect(page.locator(`.discovery-map [data-vendor-id="${radiusVendors[0].vendor_id}"]`)).toBeVisible();
     await expect(page.locator(`.discovery-map [data-vendor-id="${radiusVendors[1].vendor_id}"]`)).toBeVisible();
@@ -4039,7 +4039,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await homeFilters.locator('button[aria-label="Open filters"]').click();
     await homeFilters.locator('select[name="radiusKm"]').selectOption("1");
-    await homeFilters.getByRole("button", { name: "Apply" }).click();
+    await homeFilters.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByTestId("discovery-empty-state")).toContainText("No vendors found nearby.");
     await expect(page.getByTestId("discovery-empty-state")).toContainText("within 1 km");
 
@@ -4139,7 +4139,7 @@ test.describe("Phase 3 browser smoke", () => {
       );
     });
     await homeFilters.locator('select[name="radiusKm"]').selectOption("30");
-    await homeFilters.getByRole("button", { name: "Apply" }).click();
+    await homeFilters.getByRole("button", { name: "Apply filters" }).click();
     await emptyResponsePromise;
     await expect(page.getByTestId("discovery-empty-state")).toContainText("Nothing matched your search.");
 

@@ -53,7 +53,7 @@ Local Man — Roadmap
 - `Active hours:` on cards
 - selected vendor highlight and selected preview actions
 - browser-back and `Back to map` restoration
-- Apply button restoration after navigation
+- `Apply filters` button restoration after navigation
 - time-based morning, afternoon, and night discovery theming
 - MapLibre interactive map with fallback coordinate map, selected-preview sync, oxblood storefront vendor markers, green selected-marker state, and no clustering
 - trust-first precise, approximate, and default-city location messaging

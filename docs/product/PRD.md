@@ -96,9 +96,13 @@ Small food businesses with:
 - delivery/order tracking
 - rider app or rider login
 - rider availability or delivery guarantees
+- rider acceptance lifecycle
+- realtime rider tracking
 - wallets
 - vendor self-signup
 - public user login
+- offline-first support
+- full PWA install/offline-cache behavior
 - chat
 - loyalty system
 - recommendation engine
