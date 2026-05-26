@@ -105,6 +105,10 @@ Use this checklist before pushing or releasing UI work.
 - [ ] no hydration errors
 - [ ] no obvious remount loops
 - [ ] no broken import or runtime crash
+- [ ] production service worker registers at `/sw.js` without update loops
+- [ ] service worker cache contains only static shell assets, icons, branding, seed/static images, manifest, and `/offline.html`
+- [ ] service worker does not cache `/api/**`, `/vendors/**`, `/search`, Rider Connect, ratings, nearby discovery, or admin/session payloads
+- [ ] offline navigation shows the reconnect fallback instead of stale marketplace data
 
 ## Admin and agent workspace
 

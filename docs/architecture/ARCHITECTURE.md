@@ -487,12 +487,26 @@ Unavailable-report path:
 
 Rules:
 - Localman does not collect payment, assign deliveries, create orders, send WhatsApp API messages, guarantee rider availability, or guarantee delivery.
-- The MVP has no rider acceptance lifecycle, live dispatch state, realtime tracking, offline-first handoff, or full PWA install/offline-cache behavior.
+- The MVP has no rider acceptance lifecycle, live dispatch state, realtime tracking, offline-first handoff, or offline marketplace cache behavior.
 - Users are reminded to call the vendor first to confirm food availability and price.
 - Rider availability is described as usual/listed availability, not real-time live availability.
 - Rider names are displayed as first name only in public flows.
 - Full rider plates are never public; the selected-rider verification sheet may show only a masked plate helper.
 - `RIDER_CONNECT_HASH_SECRET` should be set server-side in staging and production for phone hashing; service-role fallback exists only as an MVP fallback.
+
+## PWA Runtime Foundation
+
+Localman has installable-app groundwork through the manifest, generated icons, and a minimal production-only service worker.
+
+Runtime rules:
+
+- `/sw.js` registers only in production on HTTPS, `localhost`, or `127.0.0.1`.
+- the service worker cache is versioned as `localman-static-*`
+- static shell assets may be cached: `/_next/static/`, icons, local branding, seed/static images, manifest, fonts, scripts, styles, and `/offline.html`
+- `/api/**`, `/admin/**`, `/vendors/**`, `/search`, non-GET requests, and cross-origin requests bypass the service worker cache
+- navigation remains network-first and may fall back to `/offline.html` only when offline
+- offline fallback copy must not show stale nearby vendors, rider availability, ratings, search results, or open/closed vendor state as current
+- push notifications, background sync, offline discovery, offline Rider Connect, and offline maps are not implemented
 
 ## Discovery Retention State
 

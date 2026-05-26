@@ -95,6 +95,7 @@ Test:
 - desktop filter panel keeps radius/price side by side and category/open-now full width
 - stale wider-radius or different-filter cached snapshots cannot hydrate a mismatched request key
 - mock/test vendor ids and known mock slugs cannot hydrate public discovery cache or retained vendor memory
+- discovery scroll-position snapshot persistence is throttled through animation frames and flushes on page hide
 - friendly empty states appear only after loading completes for true empty search/filter/radius states
 - mobile Map keeps the map visible when filtered results are empty and shows a lightweight empty-state overlay
 - mobile Map refresh retries nearby discovery without a hard page reload and preserves current filters
@@ -117,9 +118,26 @@ Current automated coverage:
 - `tests/discovery-ranking.test.ts`
 - `tests/public-user-action-tracking.test.ts`
 - `tests/discovery-cache.test.ts`
+- `tests/frontend-stability.test.ts`
 - `tests/vendor-retention.test.ts`
 - `tests/e2e/app-smoke.spec.ts`
 - `tests/e2e/layout-stress.spec.ts`
+
+### PWA Runtime Logic
+Test:
+- `/sw.js` registers only in production-safe browser contexts
+- service worker scope stays at `/`
+- service worker cache names are versioned and predictable
+- precache list contains only install/static fallback assets
+- `/_next/static/`, icons, local branding, seed/static images, manifest, fonts, scripts, and styles are cache-eligible
+- `/api/**`, `/admin/**`, `/vendors/**`, `/search`, cross-origin requests, and non-GET requests bypass the service worker cache
+- nearby discovery, Rider Connect, ratings, search/filter, open/closed state, and admin/session payloads are not stored in `CacheStorage`
+- offline navigation falls back to `/offline.html`
+- offline fallback copy does not present stale vendors, riders, ratings, or search results as live data
+- production install/runtime checks confirm the service worker does not create update loops or duplicate fetch storms
+
+Current automated coverage:
+- `tests/pwa-runtime.test.ts`
 
 ### Public Rating Logic
 Test:
