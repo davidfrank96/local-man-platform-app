@@ -235,7 +235,7 @@ Behavior:
 - requires a valid active vendor slug
 - returns only riders with `verification_status = verified`, `visibility_status = visible`, and current structured availability
 - returns at most 3 rider suggestions
-- uses stable lightweight rotation when more than 3 riders are available
+- uses stable lightweight rotation when more than 3 riders are available, including eligible riders beyond the first fetch window so the same early rows are not permanently favored
 - keeps rider operating area informational only; area and proximity are not hard eligibility filters
 - uses service-role server access so the public response can be safely shaped
 - is vendor-scoped and capped; there is no public all-rider enumeration or rider search endpoint in the MVP
@@ -257,11 +257,21 @@ Request body:
 - `customerName`
 - `customerPhone`
 - `deliveryLocationMode`: `current_location` or `manual_address`
-- `deliveryAddress`
-- `deliveryArea`
+- `deliveryAddress`; required when `deliveryLocationMode = manual_address`
+- `deliveryArea`; required when `deliveryLocationMode = current_location`
 - `orderNote`
 - `paymentNoteType`: `coordinate_directly`, `already_paid_vendor`, `pay_vendor_on_pickup`, or `cash_on_delivery`
 - `disclaimerAccepted`: must be `true`
+
+Accepted customer phone examples:
+- `08012345678`
+- `+2348012345678`
+- `2348012345678`
+
+Rejected shortened examples:
+- `0813273210`
+- `+234813273210`
+- `234813273210`
 
 Returns:
 - `intent_id`
@@ -270,6 +280,7 @@ Returns:
 
 Behavior:
 - validates request params and body before database access
+- rejects invalid customer phone values and missing mode-specific delivery fields before any handoff is created
 - requires disclaimer acceptance
 - verifies the vendor exists and is active
 - verifies the selected rider is still `verified`, `visible`, and currently available from structured availability windows

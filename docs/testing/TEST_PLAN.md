@@ -128,6 +128,8 @@ Test:
 - `/sw.js` registers only in production-safe browser contexts
 - service worker scope stays at `/`
 - service worker cache names are versioned and predictable
+- runtime marker exposes the expected PWA shell version without user data
+- focus/visibility return checks ask the registered service worker for updates without creating update loops
 - precache list contains only install/static fallback assets
 - `/_next/static/`, icons, local branding, seed/static images, manifest, fonts, scripts, and styles are cache-eligible
 - `/api/**`, `/admin/**`, `/vendors/**`, `/search`, cross-origin requests, and non-GET requests bypass the service worker cache
@@ -184,8 +186,12 @@ Test:
 - admin rider create/edit persists paired weekday/weekend availability times and rejects incomplete ranges while allowing overnight ranges
 - invalid rider status values and unsafe fields are rejected
 - public rider suggestions return at most 3 verified, visible, currently available riders
+- public rider suggestions do not permanently exclude eligible riders beyond the first fetch window
 - public rider suggestions keep operating area informational only and never use area/proximity as a hard eligibility filter
 - public rider suggestions never include rider phone, WhatsApp phone, full legal name, notes, full plate, or internal status fields
+- Request Rider blocks missing name, missing phone, invalid Nigerian phone values, missing manual address, and missing current-location area before any suggestion request
+- accepted phone examples include `08012345678`, `+2348012345678`, and `2348012345678`
+- shortened values such as `0813273210`, `+234813273210`, and `234813273210` stay invalid
 - contact handoff requires disclaimer acceptance and a selected verified/visible/currently available rider
 - contact handoff stores a minimal contact intent, hashes customer phone, and does not persist raw customer phone or full address
 - contact handoff returns a WhatsApp URL for the selected rider only
@@ -193,6 +199,8 @@ Test:
 - Rider Connect application, suggestion, contact, and report routes return clean `TOO_MANY_REQUESTS` responses when rate limited
 - user-facing Rider Connect copy rejects payment, dispatch, courier, driver, and guarantee wording
 - Rider Connect does not add payments, order tracking, dispatch assignment, rider login, or WhatsApp API outbound sending
+- Rider Connect modal traps focus, closes on `Escape`, and returns focus to the Request Rider trigger
+- rating prompt modal/sheet traps focus, closes on `Escape`, and returns focus to the rating trigger
 
 Current automated coverage:
 - `tests/rider-connect-schemas.test.ts`
@@ -398,6 +406,7 @@ Run before signoff:
 - `npm run smoke:nearby`
 - `npm run test:e2e`
 - targeted Rider Connect API/UI tests when Rider Connect code or copy changes
+- targeted PWA runtime tests when service-worker, manifest, icon, or runtime freshness code changes
 
 Manual viewport checks:
 - `320px`
@@ -428,6 +437,7 @@ Manual UI checks:
 - mobile pinch zoom and drag-pan should be checked on a real device before final release confidence
 - no horizontal overflow on mobile
 - morning, afternoon, and night themes stay readable
+- Rider Connect and rating prompt keyboard navigation remains usable with focus trap and Escape-close behavior
 
 ### Admin Data Quality
 Test:

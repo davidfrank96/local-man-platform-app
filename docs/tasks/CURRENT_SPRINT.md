@@ -83,6 +83,8 @@ Phase 6 signal visibility is ready when:
 - Public discovery cache hydration now rejects request-key mismatches, malformed vendor rows, and known mock/test vendor identities.
 - Public analytics event writes now skip stale/nonexistent vendor ids safely before database insert.
 - Supabase Data API grants are explicit and future public-schema objects fail closed until granted.
+- PWA Phase 0 and Phase 1 are in place: high-definition install assets, manifest wiring, production-only static-shell service worker, offline reconnect fallback, runtime freshness marker, and throttled update checks.
+- Rider Connect form guidance now shows accepted Nigerian phone examples and blocks mode-specific address/area mistakes before rider suggestions load.
 
 ## Current Warnings
 - IP approximation is still an interface only; there is no live provider yet.
@@ -108,6 +110,8 @@ Current release-gate notes:
 - mobile regression gates should cover dock tab state, shared Home/Map filters, radius filters, empty states, mock-cache rejection, invalid analytics vendor ids, and map refresh state
 - Supabase security gates should cover explicit grants, RLS, function execution grants, and fail-closed default privileges
 - Rider Connect release gates should cover safe copy, hidden/pending applications, max-3 verified/visible/currently available suggestion filtering, masked-plate verification, selected-rider-only WhatsApp handoff, actionable frontend validation, hashed phone storage, and report-unavailable review signals
+- PWA release gates should cover icon/manifest reachability, production service-worker registration, static-only CacheStorage contents, `/api/**` bypass, offline reconnect fallback, and runtime marker freshness
+- accessibility gates should cover Rider Connect and rating prompt focus trapping, Escape-close behavior, focus return, and small touch targets
 - high-severity dependency audit findings remain deployment blockers even when functional checks pass
 
 ## Phase 5 Boundaries

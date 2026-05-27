@@ -64,6 +64,8 @@ LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS=30
 
 `RIDER_CONNECT_HASH_SECRET` is required for production-grade Rider Connect phone hashing. It must be server-only. If omitted, the MVP falls back to `SUPABASE_SERVICE_ROLE_KEY`, but rotating the fallback key changes future hashes and can reduce comparability with earlier Rider Connect contact/report rows.
 
+Rider Connect customer phone input must pass the Nigerian phone validation used by the backend. Valid examples are `08012345678`, `+2348012345678`, and `2348012345678`. Manual-address requests require `deliveryAddress`; current-location requests require `deliveryArea`.
+
 `NEXT_PUBLIC_MAP_STYLE_URL` is optional. Set it only if you want the public discovery page to render a real MapLibre map. If it is left empty, the discovery page will continue to use the built-in coordinate fallback map and the rest of the app will behave normally.
 
 `LOCALMAN_LOG_LEVEL` and `LOCALMAN_ENABLE_DEBUG_LOGS` are optional. They control the structured server logger only:
@@ -184,6 +186,13 @@ Data API security gate:
 - verify public flows still work: categories, nearby vendors, vendor detail, ratings, and events
 - verify admin flows still work through protected routes: login/session, vendor create/edit, image upload, analytics, activity, logs, and team access
 - any new public-schema migration must include explicit grants for the objects it creates; do not rely on Supabase default exposure
+
+PWA runtime gate:
+- build and start a production runtime before validating service-worker behavior
+- confirm `/sw.js` registers only in production-safe origins
+- confirm the runtime marker reports `2026-05-pwa-runtime-v2`
+- inspect `CacheStorage` and confirm `/api/**`, `/vendors/**`, `/search`, Rider Connect, ratings, nearby discovery, and admin/session payloads are absent
+- confirm offline navigation shows `/offline.html` rather than stale marketplace data
 
 ## Abuja Seed Data
 Seed file:

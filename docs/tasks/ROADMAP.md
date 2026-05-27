@@ -119,6 +119,9 @@ The active branch includes:
 - explicit Supabase Data API grants and fail-closed future public-schema defaults
 - rating signals with positive-only public confidence badges and admin-only internal signal summaries
 - Rider Connect structured availability, max-3 currently available shortlist, masked-plate verification, and selected-rider-only WhatsApp handoff
+- Rider Connect form guidance for accepted Nigerian phone formats and mode-specific delivery address/area requirements before rider selection
 - vendor detail share section with native share and copy-link actions only
+- PWA Phase 0/1 groundwork with generated install icons, manifest wiring, static-shell service worker, offline reconnect fallback, and runtime freshness marker
+- modal accessibility hardening for Rider Connect and rating prompt focus trap, Escape-close, and focus return
 
 These are release-hardening outcomes, not new roadmap scope.

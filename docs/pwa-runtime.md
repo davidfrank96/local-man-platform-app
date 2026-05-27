@@ -1,12 +1,25 @@
 # Localman PWA Runtime
 
-This document describes the Phase 1 PWA runtime foundation.
+This document describes the Phase 0 asset foundation and Phase 1 runtime foundation.
 
 ## Scope
 
 Localman is installable as a lightweight browser app with manifest, icon, and service-worker groundwork. It is not offline-first.
 
 The service worker is intentionally small and root-scoped so it can support installability and repeat static asset reuse without changing discovery, search, Rider Connect, ratings, maps, admin, or routing behavior.
+
+## Phase 0 Asset Foundation
+
+Phase 0 prepared install branding only:
+
+- generated high-definition Android/PWA icons at `72`, `96`, `128`, `144`, `152`, `192`, `256`, `384`, and `512` pixels
+- generated Apple/iOS icons at `120`, `152`, `167`, and `180` pixels
+- generated browser favicon, apple-touch, and maskable icon assets
+- used a white install-icon background
+- preserved the official Localman PNG logo proportions and colors
+- avoided service workers, offline caching, push notifications, routing changes, and runtime behavior changes
+
+Phase 0 does not make Localman offline-capable.
 
 ## Registration
 
@@ -16,6 +29,7 @@ The service worker is intentionally small and root-scoped so it can support inst
 - Registration errors are swallowed so installability never blocks the Localman runtime.
 - The client asks the registered service worker to check for updates after registration and again when an installed PWA returns to focus or visibility, with a short throttle so update checks do not become noisy.
 - The runtime exposes a safe debug marker at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]` so operators can confirm which PWA runtime version is loaded without exposing user data.
+- Current runtime marker: `2026-05-pwa-runtime-v2`.
 
 ## Cached Assets
 
@@ -92,5 +106,6 @@ Before promotion, validate:
 - `npm test`
 - `npm run build`
 - `npm run smoke:nearby`
+- targeted check that the runtime marker reports `2026-05-pwa-runtime-v2`
 - targeted browser check that `/sw.js` registers in production and that `/api/vendors/nearby` is not served from `CacheStorage`
 - `git diff --check`
