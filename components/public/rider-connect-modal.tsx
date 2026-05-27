@@ -8,6 +8,7 @@ import type {
   RiderContactHandoffResponseData,
   RiderUnavailableReason,
 } from "../../types/index.ts";
+import { isNigerianPhoneNumber } from "../../lib/phone.ts";
 import { getRiderPublicFirstName } from "../../lib/riders/public-identity.ts";
 import { isAllowedPublicImageUrl } from "../../lib/vendors/images.ts";
 import {
@@ -26,6 +27,15 @@ type RiderConnectModalProps = {
 
 type RiderConnectStep = "details" | "riders" | "handoff";
 
+type RiderContactField =
+  | "customerName"
+  | "customerPhone"
+  | "deliveryAddress"
+  | "deliveryArea"
+  | "disclaimerAccepted";
+
+type RiderFormErrors = Partial<Record<RiderContactField, string>>;
+
 type Feedback =
   | {
       type: "idle";
@@ -35,6 +45,12 @@ type Feedback =
       type: "loading" | "error" | "success";
       message: string;
     };
+
+function getDescriptionIds(...ids: Array<string | false | null | undefined>): string | undefined {
+  const descriptionIds = ids.filter(Boolean);
+
+  return descriptionIds.length > 0 ? descriptionIds.join(" ") : undefined;
+}
 
 function RiderActionIcon() {
   return (
@@ -94,29 +110,69 @@ async function readErrorMessage(error: unknown, fallback: string): Promise<strin
   return fallback;
 }
 
-function validateRiderContactDetails(payload: RiderContactDetails): string | null {
+function hasFieldErrors(errors: RiderFormErrors): boolean {
+  return Object.keys(errors).length > 0;
+}
+
+function getFirstInvalidField(errors: RiderFormErrors): RiderContactField | null {
+  const fieldOrder: RiderContactField[] = [
+    "customerName",
+    "customerPhone",
+    "deliveryAddress",
+    "deliveryArea",
+    "disclaimerAccepted",
+  ];
+
+  return fieldOrder.find((field) => errors[field]) ?? null;
+}
+
+function focusFirstInvalidField(form: HTMLFormElement, errors: RiderFormErrors) {
+  const firstInvalidField = getFirstInvalidField(errors);
+
+  if (!firstInvalidField) {
+    return;
+  }
+
+  const field = form.querySelector<HTMLElement>(`[name="${firstInvalidField}"]`);
+
+  field?.focus({ preventScroll: true });
+  field?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function validateRiderContactDetails(
+  payload: RiderContactDetails,
+  disclaimerAccepted: boolean,
+): RiderFormErrors {
+  const errors: RiderFormErrors = {};
   const hasDeliveryAddress =
     typeof payload.deliveryAddress === "string" && payload.deliveryAddress.length > 0;
   const hasDeliveryArea =
     typeof payload.deliveryArea === "string" && payload.deliveryArea.length > 0;
 
   if (payload.customerName.length === 0) {
-    return "Please enter your name before requesting a rider.";
+    errors.customerName = "Enter your name before finding a rider.";
   }
 
   if (payload.customerPhone.length === 0) {
-    return "Please enter your phone number before requesting a rider.";
+    errors.customerPhone = "Enter your phone number before finding a rider.";
+  } else if (!isNigerianPhoneNumber(payload.customerPhone)) {
+    errors.customerPhone =
+      "Enter a valid Nigerian phone number like 08012345678, +2348012345678, or 2348012345678.";
   }
 
   if (payload.deliveryLocationMode === "manual_address" && !hasDeliveryAddress) {
-    return "Please enter a delivery address before requesting a rider.";
+    errors.deliveryAddress = "Enter your delivery address before finding a rider.";
   }
 
-  if (!hasDeliveryAddress && !hasDeliveryArea) {
-    return "Please enter a delivery address or approximate area before requesting a rider.";
+  if (payload.deliveryLocationMode === "current_location" && !hasDeliveryArea) {
+    errors.deliveryArea = "Select or enter your delivery area before finding a rider.";
   }
 
-  return null;
+  if (!disclaimerAccepted) {
+    errors.disclaimerAccepted = "Accept the Rider Connect disclaimer before finding a rider.";
+  }
+
+  return errors;
 }
 
 function openWhatsAppHandoff(event: MouseEvent<HTMLAnchorElement>, whatsappUrl: string) {
@@ -146,6 +202,7 @@ export function RiderConnectModal({
     type: "idle",
     message: null,
   });
+  const [formErrors, setFormErrors] = useState<RiderFormErrors>({});
   const [contactDetails, setContactDetails] = useState<RiderContactDetails | null>(null);
   const [riders, setRiders] = useState<PublicRiderSuggestion[]>([]);
   const [handoff, setHandoff] = useState<RiderContactHandoffResponseData | null>(null);
@@ -159,6 +216,7 @@ export function RiderConnectModal({
     setIsOpen(true);
     setStep("details");
     setFeedback({ type: "idle", message: null });
+    setFormErrors({});
     setHandoff(null);
     setReportFeedback({ type: "idle", message: null });
   }
@@ -167,6 +225,7 @@ export function RiderConnectModal({
     setIsOpen(false);
     setStep("details");
     setFeedback({ type: "idle", message: null });
+    setFormErrors({});
     setContactDetails(null);
     setRiders([]);
     setHandoff(null);
@@ -186,14 +245,6 @@ export function RiderConnectModal({
     const formData = new FormData(event.currentTarget);
     const disclaimerAccepted = formData.get("disclaimerAccepted") === "on";
 
-    if (!disclaimerAccepted) {
-      setFeedback({
-        type: "error",
-        message: "Accept the Rider Connect disclaimer before choosing a rider.",
-      });
-      return;
-    }
-
     const payload: RiderContactDetails = {
       customerName: getFormText(formData, "customerName"),
       customerPhone: getFormText(formData, "customerPhone"),
@@ -209,16 +260,21 @@ export function RiderConnectModal({
       disclaimerAccepted: true,
     };
 
-    const validationMessage = validateRiderContactDetails(payload);
+    const validationErrors = validateRiderContactDetails(payload, disclaimerAccepted);
 
-    if (validationMessage) {
+    if (hasFieldErrors(validationErrors)) {
+      setFormErrors(validationErrors);
       setFeedback({
         type: "error",
-        message: validationMessage,
+        message: "Please fix the highlighted request details before finding a rider.",
       });
+      setContactDetails(null);
+      setRiders([]);
+      focusFirstInvalidField(event.currentTarget, validationErrors);
       return;
     }
 
+    setFormErrors({});
     setFeedback({
       type: "loading",
       message: "Finding listed independent riders...",
@@ -348,31 +404,62 @@ export function RiderConnectModal({
             </p>
 
             {step === "details" ? (
-              <form className="rider-connect-form" onSubmit={handleDetailsSubmit}>
+              <form className="rider-connect-form" noValidate onSubmit={handleDetailsSubmit}>
                 <div className="form-grid">
                   <label className="field">
                     <span>Customer name</span>
-                    <input name="customerName" placeholder="Ada" required />
+                    <input
+                      aria-describedby={formErrors.customerName ? "rider-customer-name-error" : undefined}
+                      aria-invalid={Boolean(formErrors.customerName)}
+                      name="customerName"
+                      placeholder="Ada"
+                      required
+                    />
+                    {formErrors.customerName ? (
+                      <span className="field-error" id="rider-customer-name-error">
+                        {formErrors.customerName}
+                      </span>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Phone / WhatsApp</span>
                     <input
+                      aria-describedby={getDescriptionIds(
+                        "rider-customer-phone-hint",
+                        formErrors.customerPhone && "rider-customer-phone-error",
+                      )}
+                      aria-invalid={Boolean(formErrors.customerPhone)}
                       autoComplete="tel"
                       inputMode="tel"
                       name="customerPhone"
-                      placeholder="+234..."
+                      placeholder="08012345678"
                       required
                     />
+                    <span className="field-hint" id="rider-customer-phone-hint">
+                      Use 08012345678, +2348012345678, or 2348012345678.
+                    </span>
+                    {formErrors.customerPhone ? (
+                      <span className="field-error" id="rider-customer-phone-error">
+                        {formErrors.customerPhone}
+                      </span>
+                    ) : null}
                   </label>
                 </div>
 
                 <div className="form-grid">
                   <label className="field">
                     <span>Delivery location mode</span>
-                    <select name="deliveryLocationMode" required>
+                    <select
+                      aria-describedby="rider-delivery-mode-hint"
+                      name="deliveryLocationMode"
+                      required
+                    >
                       <option value="manual_address">Enter address manually</option>
                       <option value="current_location">Use current location</option>
                     </select>
+                    <span className="field-hint" id="rider-delivery-mode-hint">
+                      Manual address needs an address. Current location needs an area.
+                    </span>
                   </label>
                   <label className="field">
                     <span>Payment coordination note</span>
@@ -388,14 +475,43 @@ export function RiderConnectModal({
                 <label className="field field-wide">
                   <span>Delivery address</span>
                   <textarea
+                    aria-describedby={getDescriptionIds(
+                      "rider-delivery-address-hint",
+                      formErrors.deliveryAddress && "rider-delivery-address-error",
+                    )}
+                    aria-invalid={Boolean(formErrors.deliveryAddress)}
                     name="deliveryAddress"
                     placeholder="Street, estate, landmark, or delivery instructions"
                   />
+                  <span className="field-hint" id="rider-delivery-address-hint">
+                    Required when you choose manual address.
+                  </span>
+                  {formErrors.deliveryAddress ? (
+                    <span className="field-error" id="rider-delivery-address-error">
+                      {formErrors.deliveryAddress}
+                    </span>
+                  ) : null}
                 </label>
 
                 <label className="field field-wide">
                   <span>Delivery area</span>
-                  <input name="deliveryArea" placeholder="Wuse, Garki, Maitama..." />
+                  <input
+                    aria-describedby={getDescriptionIds(
+                      "rider-delivery-area-hint",
+                      formErrors.deliveryArea && "rider-delivery-area-error",
+                    )}
+                    aria-invalid={Boolean(formErrors.deliveryArea)}
+                    name="deliveryArea"
+                    placeholder="Wuse, Garki, Maitama..."
+                  />
+                  <span className="field-hint" id="rider-delivery-area-hint">
+                    Required when using current location.
+                  </span>
+                  {formErrors.deliveryArea ? (
+                    <span className="field-error" id="rider-delivery-area-error">
+                      {formErrors.deliveryArea}
+                    </span>
+                  ) : null}
                 </label>
 
                 <label className="field field-wide">
@@ -407,7 +523,13 @@ export function RiderConnectModal({
                 </label>
 
                 <label className="checkbox-field rider-connect-disclaimer">
-                  <input name="disclaimerAccepted" required type="checkbox" />
+                  <input
+                    aria-describedby={formErrors.disclaimerAccepted ? "rider-disclaimer-error" : undefined}
+                    aria-invalid={Boolean(formErrors.disclaimerAccepted)}
+                    name="disclaimerAccepted"
+                    required
+                    type="checkbox"
+                  />
                   <span>
                     Localman only connects users, vendors, and independent riders.
                     Food availability, payment, delivery fee, pickup, and delivery
@@ -415,6 +537,11 @@ export function RiderConnectModal({
                     Localman does not collect payment or guarantee delivery.
                   </span>
                 </label>
+                {formErrors.disclaimerAccepted ? (
+                  <p className="field-error" id="rider-disclaimer-error">
+                    {formErrors.disclaimerAccepted}
+                  </p>
+                ) : null}
 
                 {feedback.message ? (
                   <p

@@ -1903,6 +1903,172 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("vendor detail Request Rider validates details before fetching rider suggestions", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    let suggestionRequestCount = 0;
+    let contactRequestCount = 0;
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/riders", async (route) => {
+      suggestionRequestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            vendor_slug: "jabi-office-lunch-bowl",
+            riders: [
+              {
+                rider_id: "11111111-1111-4111-8111-111111111111",
+                display_name: "Amina Rider",
+                photo_url: null,
+                vehicle_type: "Motorcycle",
+                operating_areas: ["Jabi", "Wuse"],
+                usual_availability_label: "Usually available afternoons",
+              },
+            ],
+          },
+          error: null,
+        }),
+      });
+    });
+
+    await page.route("**/api/vendors/jabi-office-lunch-bowl/riders/contact", async (route) => {
+      contactRequestCount += 1;
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          data: null,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid input.",
+            status: 400,
+          },
+        }),
+      });
+    });
+
+    const invalidCases = [
+      {
+        name: "missing customer name",
+        values: {
+          customerName: "",
+          customerPhone: "+2348123456789",
+          deliveryLocationMode: "manual_address",
+          deliveryAddress: "25 Ademola Adetokunbo Crescent",
+          deliveryArea: "Wuse 2",
+        },
+        message: "Enter your name before finding a rider.",
+        focusLabel: "Customer name",
+      },
+      {
+        name: "missing phone",
+        values: {
+          customerName: "Ada",
+          customerPhone: "",
+          deliveryLocationMode: "manual_address",
+          deliveryAddress: "25 Ademola Adetokunbo Crescent",
+          deliveryArea: "Wuse 2",
+        },
+        message: "Enter your phone number before finding a rider.",
+        focusLabel: "Phone / WhatsApp",
+      },
+      {
+        name: "invalid phone",
+        values: {
+          customerName: "Ada",
+          customerPhone: "12345",
+          deliveryLocationMode: "manual_address",
+          deliveryAddress: "25 Ademola Adetokunbo Crescent",
+          deliveryArea: "Wuse 2",
+        },
+        message:
+          "Enter a valid Nigerian phone number like 08012345678, +2348012345678, or 2348012345678.",
+        focusLabel: "Phone / WhatsApp",
+      },
+      {
+        name: "manual address missing",
+        values: {
+          customerName: "Ada",
+          customerPhone: "08012345678",
+          deliveryLocationMode: "manual_address",
+          deliveryAddress: "",
+          deliveryArea: "Wuse 2",
+        },
+        message: "Enter your delivery address before finding a rider.",
+        focusLabel: "Delivery address",
+      },
+      {
+        name: "current location without area or address",
+        values: {
+          customerName: "Ada",
+          customerPhone: "08012345678",
+          deliveryLocationMode: "current_location",
+          deliveryAddress: "",
+          deliveryArea: "",
+        },
+        message: "Select or enter your delivery area before finding a rider.",
+        focusLabel: "Delivery area",
+      },
+      {
+        name: "current location without area",
+        values: {
+          customerName: "Ada",
+          customerPhone: "08012345678",
+          deliveryLocationMode: "current_location",
+          deliveryAddress: "25 Ademola Adetokunbo Crescent",
+          deliveryArea: "",
+        },
+        message: "Select or enter your delivery area before finding a rider.",
+        focusLabel: "Delivery area",
+      },
+    ];
+
+    for (const scenario of invalidCases) {
+      await page.goto("/vendors/jabi-office-lunch-bowl");
+      await page.getByRole("button", { name: "Request Rider" }).click();
+
+      const dialog = page.getByRole("dialog", { name: "Find a Rider" });
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog.getByText("Use 08012345678, +2348012345678, or 2348012345678."),
+      ).toBeVisible();
+      await expect(
+        dialog.getByText(
+          "Manual address needs an address. Current location needs an area.",
+        ),
+      ).toBeVisible();
+      await expect(dialog.getByText("Required when you choose manual address.")).toBeVisible();
+      await expect(dialog.getByText("Required when using current location.")).toBeVisible();
+      await dialog.getByLabel("Customer name").fill(scenario.values.customerName);
+      await dialog.getByLabel("Phone / WhatsApp").fill(scenario.values.customerPhone);
+      await dialog.getByLabel("Delivery location mode").selectOption(
+        scenario.values.deliveryLocationMode,
+      );
+      await dialog.getByLabel("Payment coordination note").selectOption("already_paid_vendor");
+      await dialog.getByLabel("Delivery address").fill(scenario.values.deliveryAddress);
+      await dialog.getByLabel("Delivery area").fill(scenario.values.deliveryArea);
+      await dialog.getByRole("checkbox").check();
+      await dialog.getByRole("button", { name: "Find a Rider" }).click();
+
+      await expect(
+        dialog.getByText("Please fix the highlighted request details before finding a rider."),
+      ).toBeVisible();
+      await expect(dialog.getByText(scenario.message)).toBeVisible();
+      await expect(dialog.getByLabel(scenario.focusLabel)).toBeFocused();
+      await expect(dialog.getByRole("button", { name: "Select rider" })).toHaveCount(0);
+      await expect(dialog.getByText("Amina")).toHaveCount(0);
+      await expect(dialog.getByText("Invalid input.")).toHaveCount(0);
+    }
+
+    await expect.poll(() => suggestionRequestCount).toBe(0);
+    await expect.poll(() => contactRequestCount).toBe(0);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("vendor detail Request Rider explains missing delivery details before rider selection", async ({ page }) => {
     const errors = trackClientErrors(page);
     let suggestionRequestCount = 0;
@@ -1953,7 +2119,7 @@ test.describe("Phase 3 browser smoke", () => {
     await dialog.getByRole("button", { name: "Find a Rider" }).click();
 
     await expect(
-      dialog.getByText("Please enter a delivery address before requesting a rider."),
+      dialog.getByText("Enter your delivery address before finding a rider."),
     ).toBeVisible();
     await expect(dialog.getByText("Invalid input.")).toHaveCount(0);
     await expect.poll(() => suggestionRequestCount).toBe(0);
