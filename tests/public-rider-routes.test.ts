@@ -232,6 +232,74 @@ test("public rider suggestions return max 3 currently available safe cards witho
   }
 });
 
+test("public rider suggestions use a rotating fetch window beyond the first 100 riders", async () => {
+  const restoreEnv = setRiderEnv();
+  const originalFetch = globalThis.fetch;
+  const riderRequests: URL[] = [];
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([vendorRow]);
+    }
+
+    if (url.pathname === "/rest/v1/riders") {
+      riderRequests.push(url);
+
+      if (url.searchParams.get("select") === "id") {
+        return Response.json([{ id: riderId }], {
+          headers: {
+            "content-range": "0-0/250",
+          },
+        });
+      }
+
+      assert.equal(url.searchParams.get("limit"), "100");
+      assert.ok(url.searchParams.has("offset"));
+      assert.ok(Number(url.searchParams.get("offset")) >= 0);
+      return Response.json([
+        selectedRiderRow,
+        {
+          ...selectedRiderRow,
+          id: "22222222-2222-4222-8222-222222222222",
+          display_name: "Beyond Window Rider",
+        },
+        {
+          ...selectedRiderRow,
+          id: "33333333-3333-4333-8333-333333333333",
+          display_name: "Late Eligible Rider",
+        },
+        {
+          ...selectedRiderRow,
+          id: "44444444-4444-4444-8444-444444444444",
+          display_name: "Fourth Eligible Rider",
+        },
+      ]);
+    }
+
+    return Response.json({ message: "Unexpected request" }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const response = await riderSuggestionsRoute(
+      createRequest("/api/vendors/jabi-office-lunch-bowl/riders"),
+      { params: Promise.resolve({ slug: "jabi-office-lunch-bowl" }) },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.riders.length, 3);
+    assert.equal(riderRequests.length, 2);
+    assert.equal(riderRequests[0]?.searchParams.get("select"), "id");
+    assert.notEqual(riderRequests[1]?.searchParams.get("select"), "id");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("rider contact endpoint requires accepted disclaimer before writing", async () => {
   const restoreEnv = setRiderEnv();
   const originalFetch = globalThis.fetch;

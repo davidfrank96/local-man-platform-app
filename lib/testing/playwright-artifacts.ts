@@ -1,22 +1,28 @@
-export const PLAYWRIGHT_MARKER_PREFIX = "PLAYWRIGHT_";
-export const PLAYWRIGHT_QA_E2E_PREFIX = "QA_E2E_";
-export const LEGACY_QA_ADMIN_VENDOR_PREFIX = "QA Admin Vendor";
-export const PLAYWRIGHT_QA_ADMIN_VENDOR_PREFIX = "QA Admin Vendor ";
-export const PLAYWRIGHT_QA_TEST_VENDOR_PREFIX = "QA_TEST_PLAYWRIGHT_";
-export const PLAYWRIGHT_ADMIN_EMAIL_PREFIX = "qa_admin_playwright_";
-export const PLAYWRIGHT_AGENT_EMAIL_PREFIX = "qa_agent_playwright_";
-export const PLAYWRIGHT_TEST_EMAIL_DOMAIN = "example.test";
-
-const playwightQueryNamePrefixes = [
+import {
+  AUTOMATED_ADMIN_EMAIL_PREFIX,
+  AUTOMATED_AGENT_EMAIL_PREFIX,
+  AUTOMATED_QA_ADMIN_VENDOR_PREFIX,
+  AUTOMATED_QA_E2E_PREFIX,
+  AUTOMATED_QA_TEST_VENDOR_PREFIX,
+  AUTOMATED_TEST_EMAIL_DOMAIN,
+  AUTOMATED_TEST_MARKER_PREFIX,
+  AUTOMATED_VENDOR_NAME_QUERY_PATTERNS,
   LEGACY_QA_ADMIN_VENDOR_PREFIX,
-  PLAYWRIGHT_QA_E2E_PREFIX,
-  PLAYWRIGHT_MARKER_PREFIX,
-  "QA_TEST_",
-];
+  isDestructiveVendorInvalidationReason as isDestructiveVendorInvalidationReasonRule,
+  matchesAutomatedTestEmail,
+  matchesAutomatedTestVendorName,
+  matchesQaAdminArtifactVendorName,
+} from "../runtime-artifact-rules.ts";
 
-export const PLAYWRIGHT_VENDOR_NAME_QUERY_PATTERNS = playwightQueryNamePrefixes.map(
-  (prefix) => `${prefix}%`,
-);
+export const PLAYWRIGHT_MARKER_PREFIX = AUTOMATED_TEST_MARKER_PREFIX;
+export const PLAYWRIGHT_QA_E2E_PREFIX = AUTOMATED_QA_E2E_PREFIX;
+export { LEGACY_QA_ADMIN_VENDOR_PREFIX };
+export const PLAYWRIGHT_QA_ADMIN_VENDOR_PREFIX = AUTOMATED_QA_ADMIN_VENDOR_PREFIX;
+export const PLAYWRIGHT_QA_TEST_VENDOR_PREFIX = AUTOMATED_QA_TEST_VENDOR_PREFIX;
+export const PLAYWRIGHT_ADMIN_EMAIL_PREFIX = AUTOMATED_ADMIN_EMAIL_PREFIX;
+export const PLAYWRIGHT_AGENT_EMAIL_PREFIX = AUTOMATED_AGENT_EMAIL_PREFIX;
+export const PLAYWRIGHT_TEST_EMAIL_DOMAIN = AUTOMATED_TEST_EMAIL_DOMAIN;
+export const PLAYWRIGHT_VENDOR_NAME_QUERY_PATTERNS = AUTOMATED_VENDOR_NAME_QUERY_PATTERNS;
 
 export function sanitizePlaywrightArtifactSegment(
   value: string,
@@ -146,72 +152,23 @@ export function createPlaywrightImageFileName(options?: {
 export function matchesPlaywrightQaAdminVendorName(
   name: string | null | undefined,
 ): boolean {
-  if (typeof name !== "string") {
-    return false;
-  }
-
-  const normalized = name.trim();
-
-  return normalized.startsWith(LEGACY_QA_ADMIN_VENDOR_PREFIX)
-    || normalized.startsWith(PLAYWRIGHT_QA_E2E_PREFIX)
-    || normalized.startsWith(PLAYWRIGHT_MARKER_PREFIX);
+  return matchesQaAdminArtifactVendorName(name);
 }
 
 export function matchesPlaywrightTestVendorName(
   name: string | null | undefined,
 ): boolean {
-  if (typeof name !== "string") {
-    return false;
-  }
-
-  const normalized = name.trim();
-
-  return normalized.startsWith(PLAYWRIGHT_QA_TEST_VENDOR_PREFIX)
-    || normalized.startsWith("QA_TEST_")
-    || normalized.startsWith(PLAYWRIGHT_QA_E2E_PREFIX)
-    || normalized.startsWith(PLAYWRIGHT_MARKER_PREFIX);
+  return matchesAutomatedTestVendorName(name);
 }
 
 export function matchesPlaywrightTestEmail(
   email: string | null | undefined,
 ): boolean {
-  if (typeof email !== "string") {
-    return false;
-  }
-
-  const normalized = email.trim().toLowerCase();
-  const atIndex = normalized.indexOf("@");
-
-  if (atIndex <= 0) {
-    return false;
-  }
-
-  const localPart = normalized.slice(0, atIndex);
-  const domain = normalized.slice(atIndex + 1);
-
-  if (
-    domain !== PLAYWRIGHT_TEST_EMAIL_DOMAIN
-    && domain !== "example.com"
-    && domain !== "example.test"
-    && domain !== "test.com"
-  ) {
-    return false;
-  }
-
-  return localPart.startsWith(PLAYWRIGHT_ADMIN_EMAIL_PREFIX)
-    || localPart.startsWith(PLAYWRIGHT_AGENT_EMAIL_PREFIX)
-    || localPart.startsWith("qa_admin_")
-    || localPart.startsWith("qa_test_")
-    || localPart.startsWith("playwright")
-    || localPart.startsWith("e2e");
+  return matchesAutomatedTestEmail(email);
 }
 
 export function isDestructiveVendorInvalidationReason(
   reason: string | null | undefined,
 ): boolean {
-  if (typeof reason !== "string") {
-    return false;
-  }
-
-  return /deactivat|delet|cleanup/i.test(reason);
+  return isDestructiveVendorInvalidationReasonRule(reason);
 }

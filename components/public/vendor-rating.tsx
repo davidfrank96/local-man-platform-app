@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { AppErrorCode } from "../../lib/api/contracts.ts";
 import { AppError } from "../../lib/errors/app-error.ts";
 import { handleAppError } from "../../lib/errors/ui-error.ts";
@@ -9,6 +9,7 @@ import {
   type RatingSignalSlug,
 } from "../../lib/ratings/signals.ts";
 import { formatVendorCardRating } from "../../lib/vendors/card-display.ts";
+import { useModalFocusTrap } from "./use-modal-focus-trap.ts";
 
 type VendorRatingProps = {
   vendorId: string;
@@ -113,6 +114,7 @@ export function VendorRating({
   initialAverageRating,
   initialReviewCount,
 }: VendorRatingProps) {
+  const promptRef = useRef<HTMLElement | null>(null);
   const [summary, setSummary] = useState<RatingState>({
     averageRating: initialAverageRating,
     reviewCount: initialReviewCount,
@@ -253,6 +255,13 @@ export function VendorRating({
       : "New vendor";
   const promptTitleId = "vendor-rating-prompt-title";
 
+  useModalFocusTrap({
+    active: pendingScore !== null && ratingPrompt !== null,
+    containerRef: promptRef,
+    escapeDisabled: isSubmitting,
+    onEscape: closePrompt,
+  });
+
   return (
     <div className="vendor-rating-card">
       <div className="vendor-rating-summary">
@@ -282,7 +291,9 @@ export function VendorRating({
             aria-labelledby={promptTitleId}
             aria-modal="true"
             className="vendor-rating-prompt"
+            ref={promptRef}
             role="dialog"
+            tabIndex={-1}
           >
             <div className="vendor-rating-prompt-header">
               <div>

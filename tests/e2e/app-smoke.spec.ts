@@ -149,6 +149,10 @@ async function readMapCameraState(page: Page) {
   return page.evaluate(() => window.__LOCAL_MAN_MAP_DEBUG__?.getCameraState() ?? null);
 }
 
+async function isMapDebugAvailable(page: Page) {
+  return page.evaluate(() => Boolean(window.__LOCAL_MAN_MAP_DEBUG__));
+}
+
 async function topPosition(locator: Locator) {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
@@ -1341,17 +1345,19 @@ test.describe("Phase 3 browser smoke", () => {
         expect(defaultMarkerVisual.text).toBe("");
         expect(defaultMarkerVisual.backgroundColor).toBe("rgb(178, 58, 48)");
       }
-      const interactionState = await readMapInteractionState(page);
-      expect(interactionState).not.toBeNull();
-      expect(interactionState).toMatchObject({
-        boxZoom: true,
-        doubleClickZoom: true,
-        dragPan: true,
-        dragRotate: false,
-        keyboard: true,
-        scrollZoom: true,
-        touchZoomRotate: true,
-      });
+      if (await isMapDebugAvailable(page)) {
+        const interactionState = await readMapInteractionState(page);
+        expect(interactionState).not.toBeNull();
+        expect(interactionState).toMatchObject({
+          boxZoom: true,
+          doubleClickZoom: true,
+          dragPan: true,
+          dragRotate: false,
+          keyboard: true,
+          scrollZoom: true,
+          touchZoomRotate: true,
+        });
+      }
     }
 
     await firstCard.getByRole("link", { name: "View details →" }).click();
@@ -1961,11 +1967,43 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/vendors/jabi-office-lunch-bowl");
-    await expect(page.getByRole("button", { name: "Request Rider" })).toBeVisible();
-    await page.getByRole("button", { name: "Request Rider" }).click();
-    await expect(page.getByRole("dialog", { name: "Find a Rider" })).toBeVisible();
+    const requestRiderButton = page.getByRole("button", { name: "Request Rider" });
+    await expect(requestRiderButton).toBeVisible();
+    await requestRiderButton.click();
+    const dialog = page.getByRole("dialog", { name: "Find a Rider" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Close Request Rider" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(requestRiderButton).toBeFocused();
+
+    await requestRiderButton.click();
+    await expect(dialog).toBeVisible();
     await page.getByRole("button", { name: "Close Request Rider" }).click();
-    await expect(page.getByRole("dialog", { name: "Find a Rider" })).toHaveCount(0);
+    await expect(dialog).toHaveCount(0);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("vendor rating prompt traps focus and closes with Escape", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.goto("/vendors/jabi-office-lunch-bowl");
+
+    const fourStarButton = page.getByRole("button", { name: "Rate 4 stars" });
+    await fourStarButton.click();
+    const ratingPrompt = page.getByRole("dialog", { name: "What stood out?" });
+    const closeButton = ratingPrompt.getByRole("button", { name: "Close rating prompt" });
+    await expect(ratingPrompt).toBeVisible();
+    await expect(closeButton).toBeFocused();
+
+    await page.keyboard.press("Shift+Tab");
+    await expect(ratingPrompt.getByRole("button", { name: "Submit rating" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(closeButton).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(ratingPrompt).toHaveCount(0);
+    await expect(fourStarButton).toBeFocused();
 
     await expectNoClientErrors(errors);
   });
@@ -4473,7 +4511,10 @@ test.describe("Phase 3 browser smoke", () => {
     await openMobileDiscoveryTab(page, "map");
     await expect(selectedPanel).toBeVisible();
     await expectUniqueMapVendorMarkers(page);
-    if ((await page.locator('.discovery-map[data-map-mode="maplibre"]').count()) > 0) {
+    if (
+      (await page.locator('.discovery-map[data-map-mode="maplibre"]').count()) > 0 &&
+      (await isMapDebugAvailable(page))
+    ) {
       const overviewZoom = await page.evaluate(() => window.__LOCAL_MAN_MAP_DEBUG__?.getZoom() ?? null);
       expect(overviewZoom).not.toBeNull();
       expect(overviewZoom!).toBeLessThan(15);

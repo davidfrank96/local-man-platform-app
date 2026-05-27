@@ -211,10 +211,15 @@ export async function GET(request: NextRequest) {
     logRouteEvent("error", routeLog, {
       event: "PUBLIC_NEARBY_ROUTE_FAILED",
       status: 200,
+      errorCode: "UPSTREAM_ERROR",
       message: "Nearby request degraded to an empty response after an upstream failure.",
       error,
       metadata: {
         degraded: true,
+        degradedResponse: true,
+        operatorActionRequired: true,
+        publicResponseStatus: 200,
+        upstreamArea: "nearby_vendor_lookup",
         locationSource: resolvedSearch.location.source,
         searchPresent: Boolean(query.data.search),
         radiusKm: query.data.radius_km,
