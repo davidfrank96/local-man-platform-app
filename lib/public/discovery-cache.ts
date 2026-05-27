@@ -9,7 +9,7 @@ import {
 } from "./discovery-cache-hygiene.ts";
 import {
   isDestructiveVendorInvalidationReason,
-} from "../testing/playwright-artifacts.ts";
+} from "../runtime-artifact-rules.ts";
 
 const DISCOVERY_SNAPSHOT_PREFIX = "public-discovery:";
 const DISCOVERY_OFFLINE_CACHE_PREFIX = "public-discovery-offline:public-discovery:";

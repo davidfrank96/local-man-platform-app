@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 import type {
   PublicRiderSuggestion,
@@ -15,6 +15,7 @@ import {
   fetchVendorRiderSuggestions,
   reportVendorRiderUnavailable,
 } from "../../lib/vendors/public-api-client.ts";
+import { useModalFocusTrap } from "./use-modal-focus-trap.ts";
 
 type RiderContactDetails = Omit<RiderContactHandoffRequest, "riderId">;
 
@@ -138,6 +139,7 @@ export function RiderConnectModal({
   vendorName,
   vendorSlug,
 }: RiderConnectModalProps) {
+  const modalRef = useRef<HTMLElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<RiderConnectStep>("details");
   const [feedback, setFeedback] = useState<Feedback>({
@@ -171,6 +173,12 @@ export function RiderConnectModal({
     setReportReason("no_response");
     setReportFeedback({ type: "idle", message: null });
   }
+
+  useModalFocusTrap({
+    active: isOpen,
+    containerRef: modalRef,
+    onEscape: closeModal,
+  });
 
   async function handleDetailsSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -316,7 +324,9 @@ export function RiderConnectModal({
             aria-labelledby="rider-connect-title"
             aria-modal="true"
             className="rider-connect-modal"
+            ref={modalRef}
             role="dialog"
+            tabIndex={-1}
           >
             <div className="rider-connect-header">
               <div>

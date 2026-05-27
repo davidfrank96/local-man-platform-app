@@ -2158,8 +2158,8 @@ h2 {
 
 .location-reminder-close {
   display: inline-flex;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   align-self: start;
@@ -3090,8 +3090,8 @@ h2 {
 
 .vendor-marker {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
   border: 3px solid var(--color-surface);
@@ -3102,15 +3102,15 @@ h2 {
 }
 
 .vendor-marker__icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: block;
   pointer-events: none;
 }
 
 .vendor-marker.selected {
-  width: 42px;
-  height: 42px;
+  width: 50px;
+  height: 50px;
   background: var(--color-green);
   box-shadow:
     0 0 0 4px rgba(36, 97, 79, 0.24),
@@ -3934,8 +3934,8 @@ h2 {
 
 .vendor-rating-prompt-close {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -3943,6 +3943,10 @@ h2 {
   border-radius: 999px;
   background: rgba(244, 241, 231, 0.92);
   font-weight: 800;
+}
+
+.rider-connect-header .compact-button {
+  min-height: 44px;
 }
 
 .vendor-rating-signal-list {

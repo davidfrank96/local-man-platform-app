@@ -589,9 +589,18 @@ test("nearby route logs degraded empty responses distinctly from true empty resu
 
     assert.ok(degradedLog);
     assert.equal(degradedLog?.status, 200);
+    assert.equal(degradedLog?.errorCode, "UPSTREAM_ERROR");
     assert.equal(
       (degradedLog?.metadata as Record<string, unknown> | undefined)?.degraded,
       true,
+    );
+    assert.equal(
+      (degradedLog?.metadata as Record<string, unknown> | undefined)?.operatorActionRequired,
+      true,
+    );
+    assert.equal(
+      (degradedLog?.metadata as Record<string, unknown> | undefined)?.upstreamArea,
+      "nearby_vendor_lookup",
     );
   } finally {
     console.error = originalError;

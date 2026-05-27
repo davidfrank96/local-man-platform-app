@@ -113,6 +113,7 @@ const vendorRiderSelect = [
 ].join(",");
 
 const riderContactSelect = `${riderPublicSelect},plate_number,whatsapp_phone`;
+const riderSuggestionFetchLimit = 100;
 
 let hasLoggedHashSecretFallback = false;
 
@@ -171,6 +172,77 @@ async function fetchServiceJson<T>(
   }
 
   return payload as T;
+}
+
+function parseContentRangeTotal(contentRange: string | null): number | null {
+  if (!contentRange) {
+    return null;
+  }
+
+  const totalSegment = contentRange.split("/").at(-1)?.trim();
+
+  if (!totalSegment || totalSegment === "*") {
+    return null;
+  }
+
+  const total = Number.parseInt(totalSegment, 10);
+
+  return Number.isFinite(total) && total >= 0 ? total : null;
+}
+
+function createRiderFetchOffset(totalVisibleRiders: number, now = new Date()): number {
+  const maxOffset = Math.max(0, totalVisibleRiders - riderSuggestionFetchLimit);
+
+  if (maxOffset === 0) {
+    return 0;
+  }
+
+  const periodKey = now.toISOString().slice(0, 13);
+  const hash = createHash("sha256")
+    .update(`localman-rider-fetch-window:${periodKey}`)
+    .digest("hex");
+  const hashNumber = Number.parseInt(hash.slice(0, 8), 16);
+
+  return hashNumber % (maxOffset + 1);
+}
+
+async function fetchVisibleVerifiedRiderCount(
+  config: RiderConnectConfig,
+): Promise<number | null> {
+  const url = new URL("/rest/v1/riders", config.url);
+  url.searchParams.set("select", "id");
+  url.searchParams.set("verification_status", "eq.verified");
+  url.searchParams.set("visibility_status", "eq.visible");
+  url.searchParams.set("limit", "1");
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: createServiceRoleHeaders(config, "count=exact"),
+      cache: "no-store",
+    });
+    await readJson(response);
+  } catch (error) {
+    logStructuredEvent("warn", {
+      type: "RIDER_SUGGESTION_COUNT_UNAVAILABLE",
+      message: "Rider suggestion count lookup failed; using the default fetch window.",
+      error,
+    });
+    return null;
+  }
+
+  if (!response.ok) {
+    logStructuredEvent("warn", {
+      type: "RIDER_SUGGESTION_COUNT_UNAVAILABLE",
+      message: "Rider suggestion count lookup was rejected; using the default fetch window.",
+      status: response.status,
+    });
+    return null;
+  }
+
+  return parseContentRangeTotal(response.headers.get("content-range"));
 }
 
 async function fetchVendorTarget(
@@ -249,12 +321,23 @@ function createAvailableRiderShortlist(
 async function fetchVisibleVerifiedRiders(
   config: RiderConnectConfig,
 ): Promise<PublicRiderSuggestionRow[]> {
+  const totalVisibleRiders = await fetchVisibleVerifiedRiderCount(config);
+  const offset = totalVisibleRiders === null
+    ? 0
+    : createRiderFetchOffset(totalVisibleRiders);
   const url = new URL("/rest/v1/riders", config.url);
   url.searchParams.set("select", riderPublicSelect);
   url.searchParams.set("verification_status", "eq.verified");
   url.searchParams.set("visibility_status", "eq.visible");
   url.searchParams.set("order", "created_at.asc");
-  url.searchParams.set("limit", "100");
+  url.searchParams.set("limit", String(riderSuggestionFetchLimit));
+
+  if (
+    totalVisibleRiders !== null &&
+    totalVisibleRiders > riderSuggestionFetchLimit
+  ) {
+    url.searchParams.set("offset", String(offset));
+  }
 
   const rows = await fetchServiceJson<PublicRiderSuggestionRow[]>(
     url,
