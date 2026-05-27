@@ -20,6 +20,8 @@ This document records the current lightweight UI constraints and stability decis
 - navigation is network-first; offline fallback must use `/offline.html` and must not show stale marketplace state as current
 - service worker registration is production-only and should not run during `npm run dev`
 - update cache names deliberately so old `localman-static-*` caches can be removed predictably during activation
+- the client may call `registration.update()` after registration and when an installed PWA returns to focus/visibility, but those checks must stay throttled and non-blocking
+- runtime freshness markers such as `window.__LOCALMAN_PWA_RUNTIME__` may identify the shell version only and must not expose user or marketplace state
 
 ## Discovery-specific constraints
 
@@ -47,6 +49,14 @@ Current stability rules include:
 - no stale discovery cache hydration when the nearby request key, cache version, browser origin, or vendor payload shape is unsafe
 - the mobile Map selected vendor panel stays in normal page flow above the fixed dock
 - discovery scroll-position snapshot writes are frame-throttled so sessionStorage persistence does not run for every raw scroll event
+- Rider Connect form validation should run before suggestion fetches so invalid user input does not mount the rider list and then bounce back to the form
+
+## Current performance watchpoints
+
+- public discovery still does app-side exact distance/radius ranking after the Supabase bounding-box candidate read
+- MapLibre remains optional and must continue to degrade to the coordinate fallback without blocking vendor browsing
+- process-local caches and rate limiters are appropriate for the pilot but are not distributed scaling primitives
+- PWA static cache updates improve repeat-load behavior but must not evolve into dynamic API caching without a separate offline-data design
 
 ## Known regression fixes in this phase
 

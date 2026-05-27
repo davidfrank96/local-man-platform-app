@@ -78,6 +78,8 @@ For each vendor before activation:
 - [ ] Confirm call and directions actions render correctly.
 - [ ] Confirm the selected vendor panel shows open state, area, active hours, and call/directions/detail actions.
 - [ ] Confirm stale/mock cached vendors do not appear after browser refresh.
+- [ ] Confirm the service worker registers in production runtime and caches only static shell assets.
+- [ ] Confirm the PWA runtime marker is current and no `/api/**` or vendor/search payloads are in `CacheStorage`.
 
 ## Mobile Geolocation Test
 - [ ] Test on a mobile browser with location permission allowed.
@@ -114,6 +116,8 @@ If storage uploads are broken:
 ## Known Limitations
 - IP approximation is still an interface, not a concrete provider.
 - Public map rendering may use MapLibre with a browser-safe MapTiler style URL or the coordinate fallback when the style URL is absent or the real map cannot load.
+- PWA support is install/static-shell only; offline discovery, Rider Connect, ratings, maps, and dynamic marketplace cache behavior are not implemented.
+- Android Chrome and iOS Add to Home Screen appearance should still be checked on real devices before promoting PWA installability publicly.
 - Admin login uses Supabase email/password sessions backed by the current admin authorization model.
 - Missing vendor images fall back cleanly, but some seed data still uses placeholder image URLs.
 - Public rate limiting is still process-local and best-effort for a single app instance rather than a distributed global throttle.

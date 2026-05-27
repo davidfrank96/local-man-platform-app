@@ -30,7 +30,9 @@ This document records the current application security posture for release revie
 - There is no public all-rider directory, public rider search endpoint, or uncapped rider enumeration flow in the MVP.
 - Public suggestion responses must not include rider phone, WhatsApp phone, full legal name, internal notes, full plate number, or internal status fields.
 - Public Rider Connect identity display is first-name-only. The selected-rider verification sheet may show a masked plate value, but full plate numbers must never be public.
-- Frontend validation should block incomplete contact or delivery details before rider selection; backend validation remains authoritative for every handoff write.
+- Frontend validation blocks incomplete contact or delivery details before rider selection; backend validation remains authoritative for every handoff write.
+- Customer phone values must satisfy the Nigerian phone validation contract accepted by the backend, such as `08012345678`, `+2348012345678`, or `2348012345678`.
+- `manual_address` handoffs require a delivery address, and `current_location` handoffs require a delivery area.
 - Rider contact handoff returns a WhatsApp URL only after the user selects one rider and accepts the disclaimer.
 - Customer and reporter phone values are stored as HMAC hashes. Set `RIDER_CONNECT_HASH_SECRET` in staging and production as a server-only secret.
 - If `RIDER_CONNECT_HASH_SECRET` is missing, the MVP falls back to the service-role key for hashing; rotating that fallback changes future hashes and can reduce comparability with earlier records.
@@ -66,6 +68,7 @@ This document records the current application security posture for release revie
 - The service worker bypasses `/api/**`, `/admin/**`, `/vendors/**`, `/search`, non-GET requests, and cross-origin requests.
 - Rider Connect suggestions/contact handoff, rating writes, nearby discovery, open/closed state, admin sessions, and vendor detail payloads must remain network-owned and must not be stored in `CacheStorage`.
 - Offline navigation may return `/offline.html`, but it must not present stale vendors, riders, ratings, or search results as live data.
+- The PWA runtime marker may expose only non-user runtime freshness data such as `2026-05-pwa-runtime-v2`; it must not include user, vendor, rider, session, or auth data.
 
 ## Secrets
 

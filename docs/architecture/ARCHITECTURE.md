@@ -147,6 +147,7 @@ Public rendering rules:
   - no clustering
 - vendor detail uses a shorter hero and compact summary blocks to reduce scrolling
 - vendor detail sharing is client-side only: the UI builds the canonical `/vendors/[slug]` URL for native share and copy-link actions without adding tracking params or a backend share endpoint
+- Rider Connect and rating prompt modal/sheet flows trap focus, close on `Escape`, and return focus to the trigger so keyboard users do not lose their place
 
 ## Map Interaction Model
 
@@ -468,6 +469,9 @@ Vendor-detail handoff path:
 1. user opens a vendor detail page and selects `Request Rider`
 2. user enters contact details, delivery location mode/address or area, order note, payment coordination note, and accepts the disclaimer
 3. the client blocks incomplete contact or delivery details with actionable copy before rider selection
+   - accepted customer phone examples: `08012345678`, `+2348012345678`, `2348012345678`
+   - `manual_address` requires `deliveryAddress`
+   - `current_location` requires `deliveryArea`
 4. `/api/vendors/[slug]/riders` returns up to 3 public-safe currently available suggestions only
 5. the response excludes rider phone, WhatsApp phone, full legal name, notes, full plate, and internal status fields
 6. user selects one rider
@@ -506,6 +510,8 @@ Runtime rules:
 - `/api/**`, `/admin/**`, `/vendors/**`, `/search`, non-GET requests, and cross-origin requests bypass the service worker cache
 - navigation remains network-first and may fall back to `/offline.html` only when offline
 - offline fallback copy must not show stale nearby vendors, rider availability, ratings, search results, or open/closed vendor state as current
+- the client asks the registered service worker to check for updates after registration and on focus/visibility return, with throttling
+- a safe runtime marker is exposed at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]`; the current marker is `2026-05-pwa-runtime-v2`
 - push notifications, background sync, offline discovery, offline Rider Connect, and offline maps are not implemented
 
 ## Discovery Retention State

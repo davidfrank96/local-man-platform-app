@@ -72,3 +72,8 @@ Local Man — Architecture and Product Decisions
 **Decision:** Vendor profile sharing stays client-side and secondary to vendor discovery actions.
 **Reason:** Sharing is useful for lightweight referrals, but the MVP should not introduce social-feed behavior, tracking links, or a backend share service.
 **Impact:** Vendor detail shows a small dedicated share section with native share and copy-link actions, using the canonical `/vendors/[slug]` URL and no WhatsApp-specific button, referral params, or analytics side effects.
+
+### Decision 015
+**Decision:** PWA support is limited to install branding plus static-shell runtime caching until the marketplace data model is ready for offline semantics.
+**Reason:** Nearby discovery, open/closed status, Rider Connect availability, ratings, search, and admin sessions are dynamic trust surfaces; stale cached data could mislead users.
+**Impact:** Phase 0 provides manifest/icons, Phase 1 registers a production-only service worker for static assets and offline navigation fallback only, dynamic API/vendor/admin/search routes bypass CacheStorage, and runtime freshness is diagnosed through a safe version marker instead of aggressive cache clearing.

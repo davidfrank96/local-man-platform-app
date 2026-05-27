@@ -85,8 +85,13 @@ Use this checklist before pushing or releasing UI work.
 - [ ] Request Rider opens the Rider Connect modal
 - [ ] Rider Connect reminds users to call the vendor first
 - [ ] Rider Connect disclaimer states Localman connects users, vendors, and independent riders and does not collect payment or guarantee delivery
+- [ ] Rider Connect phone helper shows accepted examples: `08012345678`, `+2348012345678`, and `2348012345678`
+- [ ] Rider Connect rejects shortened phone values such as `0813273210`, `+234813273210`, and `234813273210`
+- [ ] manual address mode requires a delivery address before rider suggestions load
+- [ ] current location mode requires a delivery area before rider suggestions load
 - [ ] rider suggestions show at most 3 verified, visible, currently available riders with public-safe fields only
 - [ ] incomplete contact or delivery details show actionable validation copy before rider selection
+- [ ] invalid Rider Connect form submissions do not call the rider suggestion or contact handoff endpoint
 - [ ] selected-rider verification sheet shows first name, vehicle, area, availability text, and masked plate when available
 - [ ] `Continue to WhatsApp` opens only after a selected-rider handoff is created
 - [ ] Try another rider and Back to vendor work
@@ -106,6 +111,8 @@ Use this checklist before pushing or releasing UI work.
 - [ ] no obvious remount loops
 - [ ] no broken import or runtime crash
 - [ ] production service worker registers at `/sw.js` without update loops
+- [ ] PWA runtime marker reports the current version and contains no user data
+- [ ] returning to an installed PWA from focus/visibility triggers a throttled update check without reloading the app unexpectedly
 - [ ] service worker cache contains only static shell assets, icons, branding, seed/static images, manifest, and `/offline.html`
 - [ ] service worker does not cache `/api/**`, `/vendors/**`, `/search`, Rider Connect, ratings, nearby discovery, or admin/session payloads
 - [ ] offline navigation shows the reconnect fallback instead of stale marketplace data
@@ -170,6 +177,8 @@ Use this checklist before pushing or releasing UI work.
 - [ ] contact handoff hashes customer phone and stores minimal metadata
 - [ ] unavailable report hashes reporter phone when provided
 - [ ] Rider Connect copy avoids payment, dispatch, courier, driver, and guarantee wording
+- [ ] Rider Connect modal traps focus, closes on `Escape`, and returns focus to the Request Rider trigger
+- [ ] rating prompt modal/sheet traps focus, closes on `Escape`, and returns focus to the rating trigger
 
 ## CSV intake
 

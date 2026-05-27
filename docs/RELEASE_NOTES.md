@@ -4,6 +4,10 @@
 
 This note summarizes the current branch behavior after the mobile discovery restructure, cache/security hardening, admin upload/session stabilization, and regression-lockdown coverage.
 
+### Branch Consolidation Scope
+
+This branch consolidates completed runtime behavior across Rider Connect, rating signals, confidence badges, admin moderation visibility, branding/logo integration, vendor sharing, responsive hardening, accessibility hardening, PWA Phase 0/1 groundwork, cache/runtime fixes, scroll/layout stabilization, and release-gate coverage. It does not introduce delivery dispatch, payments, public rider directories, offline-first marketplace behavior, push notifications, background sync, or realtime rider tracking.
+
 ### Rider Connect MVP
 
 - `/riders/apply` lets prospective independent riders submit profile details for admin review.
@@ -13,6 +17,8 @@ This note summarizes the current branch behavior after the mobile discovery rest
 - Vendor detail pages include `Request Rider`.
 - Public rider suggestions return up to 3 verified, visible, currently available riders and exclude rider phone, WhatsApp phone, full legal name, notes, full plate, and internal status fields.
 - The public modal validates contact and delivery details before rider selection so users see actionable form copy instead of a raw validation error.
+- Customer phone guidance is Nigerian-format specific. Accepted examples are `08012345678`, `+2348012345678`, and `2348012345678`; shortened values such as `0813273210`, `+234813273210`, and `234813273210` are rejected.
+- `manual_address` requires a delivery address. `current_location` requires a delivery area. The frontend blocks rider suggestions until the mode-specific location requirement is satisfied, and backend validation remains authoritative for contact handoff.
 - Contact handoff creates a minimal `rider_contact_intents` row, hashes customer phone, returns a first-name-only selected-rider verification sheet with masked plate when available, and returns a WhatsApp click-to-chat URL for the selected rider only.
 - Unavailable reports create admin-review-only `rider_unavailable_reports` rows and do not auto-suspend riders.
 - Rider Connect routes are rate-limited for applications, suggestions, contact handoffs, same-rider cooldowns, and unavailable reports.
@@ -77,12 +83,30 @@ This note summarizes the current branch behavior after the mobile discovery rest
 
 ### PWA Runtime Foundation
 
-- Localman now has Phase 1 PWA runtime groundwork for installable browser-app behavior.
+- Localman now has Phase 0 and Phase 1 PWA groundwork for installable browser-app behavior.
+- Phase 0 generated high-definition Android, iOS, browser, apple-touch, favicon, and maskable icon assets from the official Localman PNG logo, using a white install-icon background and preserving the brand colors/proportions.
+- The manifest references install metadata, standalone display mode, theme/background colors, and the generated icon set.
 - `/sw.js` registers only in production on HTTPS, `localhost`, or `127.0.0.1`.
 - The service worker caches only static shell assets: Next static chunks, manifest, icons, local branding files, seed/static images, fonts, scripts, styles, and `/offline.html`.
 - Dynamic marketplace data remains network-owned. `/api/**`, `/admin/**`, `/vendors/**`, `/search`, cross-origin requests, and non-GET requests are bypassed by the service worker.
 - Offline navigation shows a lightweight reconnect page and does not present stale nearby vendors, rider availability, ratings, search results, or open/closed vendor state as current.
+- The PWA runtime asks the registered service worker to check for updates after registration and when an installed PWA returns to focus or visibility, with throttling to avoid noisy update checks.
+- Operators can confirm the loaded PWA runtime through `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]`.
 - Push notifications, background sync, offline maps, offline discovery, and offline Rider Connect are not implemented.
+
+### Accessibility and UI Hardening
+
+- Rider Connect and rating prompt modal/sheet flows trap focus while open, close on `Escape`, and return focus to the trigger when dismissed.
+- Rider Connect form errors are field-specific and connected with accessible descriptions where practical.
+- Small touch-target regressions on public utility controls were hardened without changing layout architecture.
+- Mobile filter sheets, Rider Connect, rating prompt, selected vendor previews, and bottom-dock spacing were regression-checked for overflow and overlap.
+
+### Performance and Runtime Stability
+
+- Discovery scroll-position persistence is throttled with `requestAnimationFrame` and flushed on `pagehide` so browser-back restoration remains accurate without scroll-time storage spam.
+- Public discovery cache hydration is request-keyed and must yield to a live nearby fetch before restored data becomes authoritative.
+- The service worker version bump removes older `localman-static-*` caches on activation while preserving the no-dynamic-API-cache rule.
+- Known remaining scaling constraints are process-local rate limiting, app-side discovery ranking/filtering for the current pilot scale, and the absence of centralized distributed tracing.
 
 ### Admin Session and Vendor Images
 
@@ -117,6 +141,9 @@ The current regression-lockdown suite covers:
 - empty-state rendering
 - selected vendor synchronization
 - discovery cache request-key mismatch handling
+- Rider Connect form validation before suggestion fetches
+- PWA service-worker static-cache boundaries and runtime freshness markers
+- modal focus trapping and Escape-close behavior
 
 ### Release Gate
 

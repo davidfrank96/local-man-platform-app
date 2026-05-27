@@ -292,6 +292,8 @@ Runtime rules:
 - Created only after a user accepts the Rider Connect disclaimer and selects a rider.
 - The selected rider must still be `verified`, `visible`, and currently within their structured availability window.
 - `customer_phone_hash` is a server-side HMAC hash; raw customer phone is not stored.
+- Customer phone must pass the shared Nigerian phone validation before handoff. Accepted examples include `08012345678`, `+2348012345678`, and `2348012345678`.
+- `manual_address` requests require a delivery address before handoff; `current_location` requests require a delivery area.
 - Raw delivery address is used transiently to build the WhatsApp message and is not stored in a first-class column.
 - `request_metadata` remains minimal and must not store raw phone, full customer address, service-role keys, or private rider contact data.
 

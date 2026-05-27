@@ -38,6 +38,40 @@ Required disclaimer:
 
 User-facing flows must also remind users to call the vendor first to confirm food availability and price. Rider hours must be described as usual/listed availability, not real-time certainty.
 
+## Request Form Validation
+
+The vendor-detail `Request Rider` form validates required user details before rider suggestions are fetched or shown.
+
+Required user inputs:
+
+- customer name, trimmed and non-empty
+- customer phone in the accepted Nigerian formats
+- delivery location mode
+- a delivery address when `manual_address` is selected
+- a delivery area when `current_location` is selected
+- Rider Connect disclaimer acceptance
+
+Accepted customer phone examples:
+
+- `08012345678`
+- `+2348012345678`
+- `2348012345678`
+
+Rejected examples:
+
+- `0813273210`
+- `+234813273210`
+- `234813273210`
+
+Validation behavior:
+
+- invalid forms stay on the details step
+- rider suggestions are not fetched for invalid forms
+- the rider selection list is not shown until the form is valid
+- expected user mistakes receive field-specific messages such as `Enter a valid Nigerian phone number like 08012345678, +2348012345678, or 2348012345678.`
+- backend `/riders/contact` validation remains authoritative for anything the frontend misses
+- generic raw schema messages such as `Invalid input` must not be shown for expected missing contact or delivery details
+
 ## Public Application
 
 `/riders/apply` accepts independent rider applications with:
@@ -80,7 +114,7 @@ Hard delete is intentionally unsupported in the MVP. Deactivation is handled thr
 - rate limits public suggestion requests
 - returns only riders that are verified, visible, and currently available based on structured weekday/weekend time windows
 - returns a maximum of 3 rider suggestions
-- uses lightweight stable rotation when more than 3 riders are available
+- uses lightweight stable rotation when more than 3 riders are available, including eligible riders beyond the first fetch window so the same early rows are not permanently favored
 - keeps operating area informational only; area and proximity are not eligibility filters
 - is the only public rider suggestion surface; the MVP does not expose an all-riders listing endpoint or public rider search
 - returns public-safe fields only: rider id, first-name display label, photo URL, vehicle type, operating areas, and usual availability label
@@ -153,6 +187,7 @@ Supabase Data API exposure remains explicit-grant only. Future rider-related mig
 - The selected-rider verification sheet shows masked plate values only and never exposes the full plate publicly.
 - Contact handoff requires disclaimer acceptance and returns a WhatsApp URL only after a rider is selected.
 - The public modal blocks incomplete contact or delivery details before rider selection so users see actionable copy instead of a raw validation error.
+- The public modal traps focus, closes on `Escape`, and returns focus to the trigger after close.
 - Contact intent stores hashed customer phone and minimal metadata.
 - Unavailable report stores hashed reporter phone when provided and remains admin-review-only.
 - Copy tests reject payment, dispatch, courier, driver, and guarantee wording.

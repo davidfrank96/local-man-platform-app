@@ -57,6 +57,8 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - rider area remains informational only, not a hard dispatch/proximity filter
   - suggestion responses exclude rider phone, WhatsApp values, full names, notes, and full plate numbers
   - incomplete contact or delivery details are blocked before rider selection with clear form copy
+  - accepted customer phone examples are `08012345678`, `+2348012345678`, and `2348012345678`
+  - `manual_address` requires a delivery address; `current_location` requires a delivery area
   - selected-rider verification shows first name and masked plate when available before WhatsApp handoff
   - WhatsApp click-to-chat URLs are generated only for the selected rider after contact intent creation
   - users can report a rider as unavailable for admin review
@@ -85,10 +87,12 @@ Local Man is a location-based food discovery product for finding nearby local ve
   - admin vendor mutations invalidate restored public discovery vendor data
 - morning, afternoon, and night discovery themes based on browser-local time
 - PWA install groundwork:
-  - manifest and high-definition icons support browser install prompts
+  - Phase 0 manifest and high-definition icons support browser install prompts, home-screen icons, and splash surfaces
   - production-only service worker caches static shell assets, icons, branding, and seed/static images
   - dynamic marketplace data stays network-owned and is not cached by the service worker
   - offline navigation shows a plain reconnect message instead of stale nearby vendors, rider availability, ratings, or search results
+  - Phase 1 runtime update checks run after service-worker registration and on focus/visibility return with a short throttle
+  - a safe runtime marker is exposed at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]` for stale-runtime diagnosis
 
 ### Admin
 - Supabase email/password admin login with secure HTTP-only cookie-backed sessions
@@ -163,7 +167,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - [docs/audit-logs.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/audit-logs.md) - workspace audit logging behavior
 - [docs/analytics.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/analytics.md) - public event tracking and admin analytics reads
 - [docs/error-handling.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/error-handling.md) - shared error contract, toast system, and error boundary
-- [docs/RELEASE_NOTES.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/RELEASE_NOTES.md) - current release notes for mobile UX, cache/security hardening, admin upload/session stabilization, and regression lockdown coverage
+- [docs/RELEASE_NOTES.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/RELEASE_NOTES.md) - consolidated branch release notes for Rider Connect, ratings, PWA, UI hardening, cache/runtime safety, and regression coverage
 
 ## Local Setup
 1. Install dependencies:
@@ -281,6 +285,7 @@ Additional runtime and database-script variables are documented in [docs/ops/RUN
 - WhatsApp handoff is user-controlled click-to-chat; Localman does not send WhatsApp API messages.
 - Public abuse protection is process-local and in-memory, so it is best-effort for a single app instance until a distributed limiter is added.
 - PWA install/runtime support is limited to static shell assets and an offline fallback page. Offline-first discovery, Rider Connect, ratings, maps, and dynamic marketplace caching are not implemented.
+- Real-device PWA install appearance and update behavior still need Android Chrome and iOS Add to Home Screen checks before a public PWA launch.
 
 ## Runtime Validation
 Before deployment or major continuation work, keep the runtime gate green:
@@ -340,6 +345,12 @@ Phase 6 currently covers:
   - selected-rider WhatsApp handoff
   - unavailable reporting
   - no payment, dispatch, order tracking, rider app, or WhatsApp API sending
+- PWA:
+  - high-definition icon/manifest groundwork
+  - production-only static-shell service worker
+  - network-owned marketplace data with no service-worker API caching
+  - offline reconnect fallback
+  - runtime version marker and focus/visibility update checks for stale-runtime diagnosis
 - summary cards, vendor performance, drop-off signals, recent user events, and dedicated recent team activity review
 - operational warning and failure review from persisted structured logs
 - non-blocking tracking writes that must never interfere with public discovery
