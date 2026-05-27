@@ -14,6 +14,8 @@ The service worker is intentionally small and root-scoped so it can support inst
 - Registration is allowed only on HTTPS, `localhost`, or `127.0.0.1`.
 - Development mode does not register the service worker, which avoids stale Turbopack or local-development assets.
 - Registration errors are swallowed so installability never blocks the Localman runtime.
+- The client asks the registered service worker to check for updates after registration and again when an installed PWA returns to focus or visibility, with a short throttle so update checks do not become noisy.
+- The runtime exposes a safe debug marker at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]` so operators can confirm which PWA runtime version is loaded without exposing user data.
 
 ## Cached Assets
 
@@ -27,7 +29,7 @@ The service worker may cache:
 - `/offline.html`
 - same-origin font, script, and style request destinations
 
-The service worker uses a versioned static cache and removes older `localman-static-*` caches during activation.
+The service worker uses a versioned static cache and removes older `localman-static-*` caches during activation. Cache version bumps are limited to static-shell freshness and must not introduce dynamic marketplace caching.
 
 ## Dynamic Data Rules
 

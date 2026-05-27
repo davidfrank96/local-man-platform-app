@@ -1,4 +1,4 @@
-const CACHE_VERSION = "2026-05-pwa-runtime-v1";
+const CACHE_VERSION = "2026-05-pwa-runtime-v2";
 const STATIC_CACHE_NAME = `localman-static-${CACHE_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 

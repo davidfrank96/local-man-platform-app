@@ -18,9 +18,14 @@ test("PWA runtime registers the service worker only for production-safe origins"
   assert.match(pwaRuntime, /protocol === "https:"/);
   assert.match(pwaRuntime, /hostname === "localhost"/);
   assert.match(pwaRuntime, /hostname === "127\.0\.0\.1"/);
+  assert.match(pwaRuntime, /const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v2";/);
   assert.match(pwaRuntime, /navigator\.serviceWorker\.register\("\/sw\.js"/);
   assert.match(pwaRuntime, /scope: "\/"/);
   assert.match(pwaRuntime, /updateViaCache: "none"/);
+  assert.match(pwaRuntime, /registration\.update\(\)/);
+  assert.match(pwaRuntime, /window\.addEventListener\("focus", checkForUpdates\)/);
+  assert.match(pwaRuntime, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
+  assert.match(pwaRuntime, /localmanPwaRuntime = PWA_RUNTIME_VERSION/);
 });
 
 test("service worker precaches only install and shell fallback assets", () => {
@@ -30,6 +35,7 @@ test("service worker precaches only install and shell fallback assets", () => {
 
   const precacheBlock = match[1] ?? "";
 
+  assert.match(serviceWorker, /const CACHE_VERSION = "2026-05-pwa-runtime-v2";/);
   assert.match(serviceWorker, /const OFFLINE_URL = "\/offline\.html";/);
   assert.match(precacheBlock, /OFFLINE_URL/);
   assert.match(precacheBlock, /"\/manifest\.webmanifest"/);
