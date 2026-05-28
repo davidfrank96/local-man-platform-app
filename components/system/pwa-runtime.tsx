@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v2";
+const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v3";
 const PWA_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 type LocalmanPwaRuntimeState = {

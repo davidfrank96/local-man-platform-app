@@ -96,6 +96,7 @@ type PublicDiscoveryProps = {
 };
 
 type MobileDiscoveryTab = "home" | "map" | "about";
+type MobileLegalSection = "terms" | "privacy";
 type DiscoveryEmptyStateCopy = {
   title: string;
   body: string;
@@ -203,6 +204,8 @@ export function PublicDiscovery({
     useState<VendorSection>("nearby");
   const [activeMobileTab, setActiveMobileTab] =
     useState<MobileDiscoveryTab>("home");
+  const [openMobileLegalSection, setOpenMobileLegalSection] =
+    useState<MobileLegalSection | null>(null);
   const [mapRefreshToken, setMapRefreshToken] = useState(0);
   const [showLocationReminder, setShowLocationReminder] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -1615,6 +1618,162 @@ export function PublicDiscovery({
             <a href={LOCALMAN_WEBSITE_URL} rel="noreferrer" target="_blank">
               Visit Localman
             </a>
+          </div>
+          <div className="mobile-about-legal" aria-label="Localman legal information">
+            <p className="mobile-about-legal-note">
+              These summaries are provided to explain how Localman works. They may be
+              updated as the platform grows.
+            </p>
+            <div className="mobile-about-legal-accordion">
+              <section className="mobile-about-legal-section">
+                <button
+                  aria-controls="mobile-about-terms-content"
+                  aria-expanded={openMobileLegalSection === "terms"}
+                  className="mobile-about-legal-trigger"
+                  data-testid="mobile-about-terms-toggle"
+                  type="button"
+                  onClick={() =>
+                    setOpenMobileLegalSection((current) =>
+                      current === "terms" ? null : "terms",
+                    )
+                  }
+                >
+                  <span>Terms of Use</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path
+                      d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </button>
+                <div
+                  className="mobile-about-legal-content"
+                  data-testid="mobile-about-terms-content"
+                  hidden={openMobileLegalSection !== "terms"}
+                  id="mobile-about-terms-content"
+                >
+                  <p>
+                    By using Localman, you agree to use the platform lawfully and
+                    responsibly.
+                  </p>
+                  <ul>
+                    <li>
+                      Localman helps people discover local food and everyday vendors.
+                      Vendor details, prices, hours, menus, and availability can change,
+                      so confirm important details with the vendor.
+                    </li>
+                    <li>
+                      Rider Connect is lightweight coordination with independent riders.
+                      Localman is not a rideshare, logistics, employment, or dispatch
+                      company and does not guarantee delivery or rider performance.
+                    </li>
+                    <li>
+                      WhatsApp handoff happens outside Localman. You are responsible for
+                      the details you share and any agreement you make with a vendor or
+                      rider.
+                    </li>
+                    <li>
+                      Ratings and feedback should be honest. Do not submit false,
+                      abusive, spammy, or misleading information.
+                    </li>
+                    <li>
+                      Localman may change, pause, or interrupt parts of the service and
+                      does not guarantee uninterrupted access.
+                    </li>
+                    <li>
+                      To the fullest extent allowed by law, Localman is not responsible
+                      for vendor pricing, food quality, rider conduct, delays, outages,
+                      or decisions made outside the platform.
+                    </li>
+                    <li>
+                      These terms may be updated over time. For support, email{" "}
+                      <a href={`mailto:${LOCALMAN_SUPPORT_EMAIL}`}>
+                        {LOCALMAN_SUPPORT_EMAIL}
+                      </a>
+                      .
+                    </li>
+                  </ul>
+                </div>
+              </section>
+              <section className="mobile-about-legal-section">
+                <button
+                  aria-controls="mobile-about-privacy-content"
+                  aria-expanded={openMobileLegalSection === "privacy"}
+                  className="mobile-about-legal-trigger"
+                  data-testid="mobile-about-privacy-toggle"
+                  type="button"
+                  onClick={() =>
+                    setOpenMobileLegalSection((current) =>
+                      current === "privacy" ? null : "privacy",
+                    )
+                  }
+                >
+                  <span>Privacy Policy</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path
+                      d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </button>
+                <div
+                  className="mobile-about-legal-content"
+                  data-testid="mobile-about-privacy-content"
+                  hidden={openMobileLegalSection !== "privacy"}
+                  id="mobile-about-privacy-content"
+                >
+                  <p>
+                    Localman uses information to operate vendor discovery, rider
+                    coordination, ratings, sharing, admin management, and abuse
+                    prevention.
+                  </p>
+                  <ul>
+                    <li>
+                      Localman may handle vendor information, rider information,
+                      admin-entered data, rider request details, ratings and signals,
+                      approximate location or selected area, and browser or device data.
+                    </li>
+                    <li>
+                      Full rider phone or WhatsApp details are not shown publicly before
+                      handoff. Full rider plates are not exposed publicly; a masked plate
+                      may appear after rider selection. Internal notes are not public.
+                    </li>
+                    <li>
+                      Continuing to WhatsApp opens a service outside Localman, with its
+                      own privacy practices. Necessary contact and request details may be
+                      shared with the selected rider for coordination.
+                    </li>
+                    <li>
+                      Localman keeps information as needed for platform operation,
+                      support, admin records, abuse prevention, and legal or safety
+                      reasons. Exact retention periods may vary.
+                    </li>
+                    <li>
+                      You can choose not to submit rider request details. Vendors and
+                      riders may request updates or removal through the available support
+                      or admin process.
+                    </li>
+                    <li>
+                      Localman uses reasonable protections, but no internet service can
+                      guarantee perfect security.
+                    </li>
+                    <li>
+                      Localman is not intended for children. Minors should use the
+                      platform only with a parent or guardian.
+                    </li>
+                    <li>This policy may be updated as Localman grows.</li>
+                  </ul>
+                </div>
+              </section>
+            </div>
           </div>
         </section>
         {showBackToTop ? (

@@ -3773,6 +3773,79 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("mobile About legal markup hydrates without client/server mismatch", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    await expect(page.getByTestId("mobile-about-view")).toBeHidden();
+    await expect(page.getByTestId("mobile-about-terms-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("mobile-about-privacy-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("mobile-about-terms-content")).toBeHidden();
+    await expect(page.getByTestId("mobile-about-privacy-content")).toBeHidden();
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("mobile About legal sections open and close accessibly", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    await openMobileDiscoveryTab(page, "about");
+    await expect(page.getByTestId("mobile-about-view")).toBeVisible();
+    await expect(
+      page.getByText(
+        "These summaries are provided to explain how Localman works. They may be updated as the platform grows.",
+      ),
+    ).toBeVisible();
+
+    const termsToggle = page.getByTestId("mobile-about-terms-toggle");
+    const termsContent = page.getByTestId("mobile-about-terms-content");
+    const privacyToggle = page.getByTestId("mobile-about-privacy-toggle");
+    const privacyContent = page.getByTestId("mobile-about-privacy-content");
+
+    await expect(termsToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(privacyToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(termsContent).toBeHidden();
+    await expect(privacyContent).toBeHidden();
+
+    await termsToggle.focus();
+    await expect(termsToggle).toBeFocused();
+    await termsToggle.press("Enter");
+    await expect(termsToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(termsContent).toBeVisible();
+    await expect(termsContent).toContainText("Localman is not a rideshare");
+
+    await termsToggle.press("Enter");
+    await expect(termsToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(termsContent).toBeHidden();
+
+    await privacyToggle.click();
+    await expect(privacyToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(privacyContent).toBeVisible();
+    await expect(privacyContent).toContainText("Full rider phone or WhatsApp details are not shown publicly");
+
+    await privacyToggle.click();
+    await expect(privacyToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(privacyContent).toBeHidden();
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
+    await expect(page.locator('[data-testid="mobile-home-filters"] input[name="search"]:visible')).toHaveCount(0);
+    await expect(page.locator('[data-testid="mobile-map-filters"] input[name="search"]:visible')).toHaveCount(0);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("mobile Home and Map share search and filter state without showing filters on About", async ({ page }) => {
     const errors = trackClientErrors(page);
     const riceVendorId = "50000000-0000-4000-8000-000000000001";
