@@ -18,7 +18,7 @@ test("PWA runtime registers the service worker only for production-safe origins"
   assert.match(pwaRuntime, /protocol === "https:"/);
   assert.match(pwaRuntime, /hostname === "localhost"/);
   assert.match(pwaRuntime, /hostname === "127\.0\.0\.1"/);
-  assert.match(pwaRuntime, /const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v2";/);
+  assert.match(pwaRuntime, /const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v3";/);
   assert.match(pwaRuntime, /navigator\.serviceWorker\.register\("\/sw\.js"/);
   assert.match(pwaRuntime, /scope: "\/"/);
   assert.match(pwaRuntime, /updateViaCache: "none"/);
@@ -35,7 +35,7 @@ test("service worker precaches only install and shell fallback assets", () => {
 
   const precacheBlock = match[1] ?? "";
 
-  assert.match(serviceWorker, /const CACHE_VERSION = "2026-05-pwa-runtime-v2";/);
+  assert.match(serviceWorker, /const CACHE_VERSION = "2026-05-pwa-runtime-v3";/);
   assert.match(serviceWorker, /const OFFLINE_URL = "\/offline\.html";/);
   assert.match(precacheBlock, /OFFLINE_URL/);
   assert.match(precacheBlock, /"\/manifest\.webmanifest"/);
@@ -68,6 +68,17 @@ test("service worker caches only static asset request classes", () => {
   assert.match(serviceWorker, /request\.destination === "script"/);
   assert.match(serviceWorker, /request\.destination === "style"/);
   assert.doesNotMatch(serviceWorker, /\/_next\/image/);
+});
+
+test("service worker keeps app shell scripts fresh before cache fallback", () => {
+  assert.match(serviceWorker, /function isFreshShellAssetRequest/);
+  assert.match(serviceWorker, /url\.pathname\.startsWith\("\/_next\/static\/"\)/);
+  assert.match(serviceWorker, /request\.destination === "script"/);
+  assert.match(serviceWorker, /request\.destination === "style"/);
+  assert.match(serviceWorker, /function networkFirstStaticAsset/);
+  assert.match(serviceWorker, /const networkResponse = await fetch\(request\)/);
+  assert.match(serviceWorker, /const cachedResponse = await cache\.match\(request\)/);
+  assert.match(serviceWorker, /isFreshShellAssetRequest\(request, url\)[\s\S]*networkFirstStaticAsset\(request\)/);
 });
 
 test("service worker and offline fallback headers keep updates revalidating", async () => {

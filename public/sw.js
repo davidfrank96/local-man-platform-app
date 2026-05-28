@@ -1,4 +1,4 @@
-const CACHE_VERSION = "2026-05-pwa-runtime-v2";
+const CACHE_VERSION = "2026-05-pwa-runtime-v3";
 const STATIC_CACHE_NAME = `localman-static-${CACHE_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -55,6 +55,14 @@ function isStaticAssetRequest(request, url) {
   );
 }
 
+function isFreshShellAssetRequest(request, url) {
+  return (
+    url.pathname.startsWith("/_next/static/") ||
+    request.destination === "script" ||
+    request.destination === "style"
+  );
+}
+
 function isCacheableResponse(response) {
   return response.ok && response.type === "basic";
 }
@@ -74,6 +82,28 @@ async function cacheFirst(request) {
   }
 
   return networkResponse;
+}
+
+async function networkFirstStaticAsset(request) {
+  const cache = await caches.open(STATIC_CACHE_NAME);
+
+  try {
+    const networkResponse = await fetch(request);
+
+    if (isCacheableResponse(networkResponse)) {
+      await cache.put(request, networkResponse.clone());
+    }
+
+    return networkResponse;
+  } catch (error) {
+    const cachedResponse = await cache.match(request);
+
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    throw error;
+  }
 }
 
 async function networkOnlyNavigation(request) {
@@ -147,5 +177,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(cacheFirst(request));
+  event.respondWith(
+    isFreshShellAssetRequest(request, url)
+      ? networkFirstStaticAsset(request)
+      : cacheFirst(request),
+  );
 });

@@ -56,7 +56,7 @@ Mobile is tabbed through a fixed bottom dock.
 
 - Home shows the discovery header, shared search/filter controls, location messaging, vendor section navigation, and vendor cards
 - Map shows a dedicated map view with shared search/filter controls, map refresh, and the selected vendor summary below the map
-- About shows lightweight product/support guidance without search, filters, or map
+- About shows lightweight product/support guidance plus collapsible Terms of Use and Privacy Policy summaries without search, filters, or map
 - Home and Map share the same search, radius, category, price, open-now, and selected-vendor state
 - the selected vendor summary on Map uses normal page scrolling
 

@@ -422,7 +422,7 @@ Manual UI checks:
 - mobile Map shows shared search/filter, map refresh, map/fallback, and selected vendor panel
 - mobile filter sheet shows the close button, active-count pill, stacked controls, open-now card, and `Apply filters`
 - desktop filter panel shows the active-count pill, `Clear all`, two-column radius/price controls, full-width category, open-now card, and `Apply filters`
-- mobile About shows support/about copy only
+- mobile About shows support/about copy plus accessible Terms of Use and Privacy Policy accordions
 - desktop keeps the combined discovery layout and does not show the mobile dock
 - vendor cards remain compact, readable, and image-free
 - selected vendor preview keeps `Call`, `Directions`, and `View details` accessible
