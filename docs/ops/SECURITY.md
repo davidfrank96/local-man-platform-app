@@ -68,7 +68,7 @@ This document records the current application security posture for release revie
 - The service worker bypasses `/api/**`, `/admin/**`, `/vendors/**`, `/search`, non-GET requests, and cross-origin requests.
 - Rider Connect suggestions/contact handoff, rating writes, nearby discovery, open/closed state, admin sessions, and vendor detail payloads must remain network-owned and must not be stored in `CacheStorage`.
 - Offline navigation may return `/offline.html`, but it must not present stale vendors, riders, ratings, or search results as live data.
-- The PWA runtime marker may expose only non-user runtime freshness data such as `2026-05-pwa-runtime-v2`; it must not include user, vendor, rider, session, or auth data.
+- The PWA runtime marker may expose only non-user runtime freshness data such as `2026-05-pwa-runtime-v4`; it must not include user, vendor, rider, session, or auth data.
 
 ## Secrets
 

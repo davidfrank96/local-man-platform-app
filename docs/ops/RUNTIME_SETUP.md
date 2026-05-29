@@ -190,9 +190,10 @@ Data API security gate:
 PWA runtime gate:
 - build and start a production runtime before validating service-worker behavior
 - confirm `/sw.js` registers only in production-safe origins
-- confirm the runtime marker reports `2026-05-pwa-runtime-v2`
+- confirm the runtime marker reports `2026-05-pwa-runtime-v4`
 - inspect `CacheStorage` and confirm `/api/**`, `/vendors/**`, `/search`, Rider Connect, ratings, nearby discovery, and admin/session payloads are absent
 - confirm offline navigation shows `/offline.html` rather than stale marketplace data
+- simulate a repeated stale chunk/runtime failure and confirm the branded reload fallback appears instead of a blank screen or reload loop
 
 ## Abuja Seed Data
 Seed file:

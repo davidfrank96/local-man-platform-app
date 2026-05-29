@@ -725,6 +725,53 @@ export function MapLibreVendorMap({
   }, [timeTheme]);
 
   useEffect(() => {
+    let resumeResizeFrame: number | null = null;
+
+    const resizeVisibleMap = () => {
+      const map = mapRef.current;
+
+      if (!map || !loadedRef.current) {
+        return;
+      }
+
+      if (resumeResizeFrame !== null) {
+        window.cancelAnimationFrame(resumeResizeFrame);
+      }
+
+      resumeResizeFrame = window.requestAnimationFrame(() => {
+        resumeResizeFrame = null;
+        const currentMap = mapRef.current;
+
+        if (!currentMap || !loadedRef.current) {
+          return;
+        }
+
+        currentMap.resize();
+      });
+    };
+
+    const handleVisibilityResume = () => {
+      if (document.visibilityState === "visible") {
+        resizeVisibleMap();
+      }
+    };
+
+    window.addEventListener("focus", resizeVisibleMap);
+    window.addEventListener("pageshow", resizeVisibleMap);
+    document.addEventListener("visibilitychange", handleVisibilityResume);
+
+    return () => {
+      if (resumeResizeFrame !== null) {
+        window.cancelAnimationFrame(resumeResizeFrame);
+      }
+
+      window.removeEventListener("focus", resizeVisibleMap);
+      window.removeEventListener("pageshow", resizeVisibleMap);
+      document.removeEventListener("visibilitychange", handleVisibilityResume);
+    };
+  }, []);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !loadedRef.current) {
       return;

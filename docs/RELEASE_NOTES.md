@@ -92,6 +92,7 @@ This branch consolidates completed runtime behavior across Rider Connect, rating
 - Offline navigation shows a lightweight reconnect page and does not present stale nearby vendors, rider availability, ratings, search results, or open/closed vendor state as current.
 - The PWA runtime asks the registered service worker to check for updates after registration and when an installed PWA returns to focus or visibility, with throttling to avoid noisy update checks.
 - Operators can confirm the loaded PWA runtime through `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]`.
+- The runtime now recovers from stale app-shell chunk failures on PWA resume by reloading once and then showing a branded `Reload Localman` fallback instead of leaving users on a blank screen.
 - Push notifications, background sync, offline maps, offline discovery, and offline Rider Connect are not implemented.
 
 ### Accessibility and UI Hardening

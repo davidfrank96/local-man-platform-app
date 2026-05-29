@@ -2,6 +2,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { handleAppError } from "../../lib/errors/ui-error.ts";
+import { LocalmanRecoveryFallback } from "./localman-recovery-fallback.tsx";
 
 type GlobalErrorBoundaryProps = {
   children: ReactNode;
@@ -48,19 +49,7 @@ export class GlobalErrorBoundary extends Component<
 
   render() {
     if (this.state.hasError) {
-      return (
-        <div className="global-error-fallback" role="alert">
-          <h1>Something went wrong.</h1>
-          <p>Please refresh.</p>
-          <button
-            type="button"
-            className="button-primary"
-            onClick={() => window.location.reload()}
-          >
-            Refresh
-          </button>
-        </div>
-      );
+      return <LocalmanRecoveryFallback />;
     }
 
     return this.props.children;

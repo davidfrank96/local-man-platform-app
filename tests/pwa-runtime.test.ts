@@ -18,12 +18,17 @@ test("PWA runtime registers the service worker only for production-safe origins"
   assert.match(pwaRuntime, /protocol === "https:"/);
   assert.match(pwaRuntime, /hostname === "localhost"/);
   assert.match(pwaRuntime, /hostname === "127\.0\.0\.1"/);
-  assert.match(pwaRuntime, /const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v3";/);
+  assert.match(pwaRuntime, /const PWA_RUNTIME_VERSION = "2026-05-pwa-runtime-v4";/);
   assert.match(pwaRuntime, /navigator\.serviceWorker\.register\("\/sw\.js"/);
   assert.match(pwaRuntime, /scope: "\/"/);
   assert.match(pwaRuntime, /updateViaCache: "none"/);
   assert.match(pwaRuntime, /registration\.update\(\)/);
-  assert.match(pwaRuntime, /window\.addEventListener\("focus", checkForUpdates\)/);
+  assert.match(pwaRuntime, /window\.addEventListener\("focus", handleFocus\)/);
+  assert.match(pwaRuntime, /window\.addEventListener\("online", handleOnline\)/);
+  assert.match(pwaRuntime, /window\.addEventListener\("pageshow", handlePageShow\)/);
+  assert.match(pwaRuntime, /window\.addEventListener\("error", handleWindowError\)/);
+  assert.match(pwaRuntime, /window\.addEventListener\("unhandledrejection", handleUnhandledRejection\)/);
+  assert.match(pwaRuntime, /navigator\.serviceWorker\.addEventListener\("controllerchange", handleControllerChange\)/);
   assert.match(pwaRuntime, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
   assert.match(pwaRuntime, /localmanPwaRuntime = PWA_RUNTIME_VERSION/);
 });
@@ -35,7 +40,7 @@ test("service worker precaches only install and shell fallback assets", () => {
 
   const precacheBlock = match[1] ?? "";
 
-  assert.match(serviceWorker, /const CACHE_VERSION = "2026-05-pwa-runtime-v3";/);
+  assert.match(serviceWorker, /const CACHE_VERSION = "2026-05-pwa-runtime-v4";/);
   assert.match(serviceWorker, /const OFFLINE_URL = "\/offline\.html";/);
   assert.match(precacheBlock, /OFFLINE_URL/);
   assert.match(precacheBlock, /"\/manifest\.webmanifest"/);
@@ -78,7 +83,22 @@ test("service worker keeps app shell scripts fresh before cache fallback", () =>
   assert.match(serviceWorker, /function networkFirstStaticAsset/);
   assert.match(serviceWorker, /const networkResponse = await fetch\(request\)/);
   assert.match(serviceWorker, /const cachedResponse = await cache\.match\(request\)/);
+  assert.match(serviceWorker, /if \(isCacheableResponse\(networkResponse\)\) \{[\s\S]*return networkResponse;/);
+  assert.match(serviceWorker, /if \(cachedResponse\) \{[\s\S]*return cachedResponse;[\s\S]*return networkResponse;/);
   assert.match(serviceWorker, /isFreshShellAssetRequest\(request, url\)[\s\S]*networkFirstStaticAsset\(request\)/);
+});
+
+test("PWA runtime recovers stale chunks without reload loops", () => {
+  assert.match(pwaRuntime, /const PWA_RECOVERY_RELOAD_KEY = `localman:pwa-recovery-reload:\$\{PWA_RUNTIME_VERSION\}`;/);
+  assert.match(pwaRuntime, /const PWA_RECOVERY_FALLBACK_ID = "localman-runtime-recovery";/);
+  assert.match(pwaRuntime, /ChunkLoadError/i);
+  assert.match(pwaRuntime, /failed to fetch dynamically imported module/i);
+  assert.match(pwaRuntime, /function hasAttemptedRecoveryReload/);
+  assert.match(pwaRuntime, /function markRecoveryReloadAttempt/);
+  assert.match(pwaRuntime, /function showRuntimeRecoveryFallback/);
+  assert.match(pwaRuntime, /Localman needs to reload to continue\./);
+  assert.match(pwaRuntime, /Reload Localman/);
+  assert.match(pwaRuntime, /hasCriticalUserFlowActive/);
 });
 
 test("service worker and offline fallback headers keep updates revalidating", async () => {

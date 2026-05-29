@@ -1,4 +1,4 @@
-const CACHE_VERSION = "2026-05-pwa-runtime-v3";
+const CACHE_VERSION = "2026-05-pwa-runtime-v4";
 const STATIC_CACHE_NAME = `localman-static-${CACHE_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -92,6 +92,13 @@ async function networkFirstStaticAsset(request) {
 
     if (isCacheableResponse(networkResponse)) {
       await cache.put(request, networkResponse.clone());
+      return networkResponse;
+    }
+
+    const cachedResponse = await cache.match(request);
+
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     return networkResponse;
