@@ -511,7 +511,9 @@ Runtime rules:
 - navigation remains network-first and may fall back to `/offline.html` only when offline
 - offline fallback copy must not show stale nearby vendors, rider availability, ratings, search results, or open/closed vendor state as current
 - the client asks the registered service worker to check for updates after registration and on focus/visibility return, with throttling
-- a safe runtime marker is exposed at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]`; the current marker is `2026-05-pwa-runtime-v2`
+- a safe runtime marker is exposed at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]`; the current marker is `2026-05-pwa-runtime-v4`
+- app-shell JS/CSS chunk requests are network-first for freshness but may fall back to an already cached static shell asset when the network returns a non-OK stale-chunk response
+- resume recovery listens for visibility, pageshow, online, service-worker controller changes, and stale chunk/runtime failures; it reloads once only when needed and then shows a branded recovery fallback instead of looping
 - push notifications, background sync, offline discovery, offline Rider Connect, and offline maps are not implemented
 
 ## Discovery Retention State

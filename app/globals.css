@@ -2134,15 +2134,47 @@ h2 {
 .global-error-fallback {
   min-height: 100dvh;
   display: grid;
-  place-content: center;
-  gap: 12px;
+  place-items: center;
   padding: 24px;
+  background: var(--color-background);
   text-align: center;
 }
 
-.global-error-fallback h1,
-.global-error-fallback p {
+.localman-recovery-card {
+  width: min(100%, 420px);
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  background: var(--color-surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  padding: 28px;
+}
+
+.localman-recovery-logo {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+}
+
+.localman-recovery-card h1,
+.localman-recovery-card p {
   margin: 0;
+}
+
+.localman-recovery-card h1 {
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.localman-recovery-card p {
+  margin-top: 12px;
+  color: var(--color-muted);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.localman-recovery-card .button-primary {
+  margin-top: 22px;
 }
 
 @media (max-width: 767px) {

@@ -29,7 +29,8 @@ Phase 0 does not make Localman offline-capable.
 - Registration errors are swallowed so installability never blocks the Localman runtime.
 - The client asks the registered service worker to check for updates after registration and again when an installed PWA returns to focus or visibility, with a short throttle so update checks do not become noisy.
 - The runtime exposes a safe debug marker at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]` so operators can confirm which PWA runtime version is loaded without exposing user data.
-- Current runtime marker: `2026-05-pwa-runtime-v2`.
+- Current runtime marker: `2026-05-pwa-runtime-v4`.
+- Resume recovery listens for `visibilitychange`, `pageshow`, `online`, service-worker controller changes, and stale chunk/runtime asset failures. It reloads once only when the app shell is broken or stale, then shows a branded reload fallback instead of looping.
 
 ## Cached Assets
 
@@ -44,6 +45,8 @@ The service worker may cache:
 - same-origin font, script, and style request destinations
 
 The service worker uses a versioned static cache and removes older `localman-static-*` caches during activation. Cache version bumps are limited to static-shell freshness and must not introduce dynamic marketplace caching.
+
+Next static JS/CSS shell assets are network-first for freshness, but if a stale resumed shell requests an old cached chunk and the network returns a non-OK response such as `404`, the service worker may fall back to the cached static chunk. This fallback is limited to static shell assets and does not apply to marketplace APIs.
 
 ## Dynamic Data Rules
 
@@ -106,6 +109,7 @@ Before promotion, validate:
 - `npm test`
 - `npm run build`
 - `npm run smoke:nearby`
-- targeted check that the runtime marker reports `2026-05-pwa-runtime-v2`
+- targeted check that the runtime marker reports `2026-05-pwa-runtime-v4`
 - targeted browser check that `/sw.js` registers in production and that `/api/vendors/nearby` is not served from `CacheStorage`
+- targeted resume/chunk-failure check that repeated stale shell failures show the Localman reload fallback without a reload loop
 - `git diff --check`

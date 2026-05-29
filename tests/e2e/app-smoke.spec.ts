@@ -1565,6 +1565,54 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("MapLibre remains usable after PWA resume events", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+
+    await page.goto("/");
+    await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
+    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible();
+    await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
+    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+    await expectNoClientErrors(errors);
+  });
+
+  test("PWA runtime shows branded recovery fallback after repeated stale chunk failure", async ({ page }) => {
+    await primePublicLocation(page);
+
+    await page.goto("/");
+    await page.evaluate(() => {
+      window.sessionStorage.setItem(
+        "localman:pwa-recovery-reload:2026-05-pwa-runtime-v4",
+        "2026-05-pwa-runtime-v4",
+      );
+      window.dispatchEvent(
+        new ErrorEvent("error", {
+          error: new Error("ChunkLoadError: Loading chunk app failed"),
+          message: "ChunkLoadError: Loading chunk app failed",
+        }),
+      );
+    });
+
+    const fallback = page.locator("#localman-runtime-recovery");
+    await expect(fallback).toBeVisible();
+    await expect(fallback).toContainText("Localman needs to reload to continue.");
+    await expect(fallback.getByRole("button", { name: "Reload Localman" })).toBeVisible();
+  });
+
   test("vendor detail page loads successfully", async ({ page }) => {
     const errors = trackClientErrors(page);
 
