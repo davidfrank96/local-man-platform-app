@@ -34,7 +34,7 @@ On the mobile Map tab, the same search/filter state is available in the map view
 
 ### About tab
 
-The mobile About tab does not render search, filters, map, or vendor sections. It includes collapsible Terms of Use and Privacy Policy summaries for mobile users. Switching to About must not reset the shared discovery filters.
+The mobile About tab does not render search, filters, map, or vendor sections. It includes collapsible Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy sections for mobile users. Switching to About must not reset the shared discovery filters.
 
 ### Mobile filter behavior
 

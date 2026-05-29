@@ -32,6 +32,10 @@ Phase 0 does not make Localman offline-capable.
 - Current runtime marker: `2026-05-pwa-runtime-v4`.
 - Resume recovery listens for `visibilitychange`, `pageshow`, `online`, service-worker controller changes, and stale chunk/runtime asset failures. It reloads once only when the app shell is broken or stale, then shows a branded reload fallback instead of looping.
 
+## User Install Guidance
+
+The mobile About tab includes an `Install Localman as an App` accordion with Android Chrome and iPhone/iOS Safari add-to-home-screen steps. This is educational copy only; it does not change the manifest, service worker, runtime caching, or install prompt behavior.
+
 ## Cached Assets
 
 The service worker may cache:

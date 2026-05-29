@@ -3804,7 +3804,9 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.getByTestId("mobile-map-filters").locator('input[name="search"]')).toBeVisible();
     await expect(page.locator(".discovery-map")).toBeVisible();
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(firstVendorName ?? "");
-    await expect(page.locator(`.discovery-map [data-vendor-id="${firstVendorId}"].selected`)).toBeVisible();
+    await expect(
+      page.locator(`.discovery-map [data-vendor-id="${firstVendorId}"].selected`),
+    ).toBeVisible({ timeout: 10_000 });
 
     const mapTop = await topPosition(page.locator(".discovery-map"));
     const selectedTop = await topPosition(page.locator(".selected-vendor-panel"));
@@ -3821,7 +3823,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
-  test("mobile About legal markup hydrates without client/server mismatch", async ({ page }) => {
+  test("mobile About markup hydrates without client/server mismatch", async ({ page }) => {
     const errors = trackClientErrors(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -3830,15 +3832,21 @@ test.describe("Phase 3 browser smoke", () => {
     await page.goto("/");
 
     await expect(page.getByTestId("mobile-about-view")).toBeHidden();
+    await expect(page.getByTestId("mobile-about-using-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("mobile-about-mission-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("mobile-about-install-toggle")).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByTestId("mobile-about-terms-toggle")).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByTestId("mobile-about-privacy-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("mobile-about-using-content")).toBeHidden();
+    await expect(page.getByTestId("mobile-about-mission-content")).toBeHidden();
+    await expect(page.getByTestId("mobile-about-install-content")).toBeHidden();
     await expect(page.getByTestId("mobile-about-terms-content")).toBeHidden();
     await expect(page.getByTestId("mobile-about-privacy-content")).toBeHidden();
 
     await expectNoClientErrors(errors);
   });
 
-  test("mobile About legal sections open and close accessibly", async ({ page }) => {
+  test("mobile About sections open and close accessibly", async ({ page }) => {
     const errors = trackClientErrors(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -3854,15 +3862,68 @@ test.describe("Phase 3 browser smoke", () => {
       ),
     ).toBeVisible();
 
+    const usingToggle = page.getByTestId("mobile-about-using-toggle");
+    const usingContent = page.getByTestId("mobile-about-using-content");
+    const missionToggle = page.getByTestId("mobile-about-mission-toggle");
+    const missionContent = page.getByTestId("mobile-about-mission-content");
+    const installToggle = page.getByTestId("mobile-about-install-toggle");
+    const installContent = page.getByTestId("mobile-about-install-content");
     const termsToggle = page.getByTestId("mobile-about-terms-toggle");
     const termsContent = page.getByTestId("mobile-about-terms-content");
     const privacyToggle = page.getByTestId("mobile-about-privacy-toggle");
     const privacyContent = page.getByTestId("mobile-about-privacy-content");
 
+    await expect(usingToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(missionToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(installToggle).toHaveAttribute("aria-expanded", "false");
     await expect(termsToggle).toHaveAttribute("aria-expanded", "false");
     await expect(privacyToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(usingContent).toBeHidden();
+    await expect(missionContent).toBeHidden();
+    await expect(installContent).toBeHidden();
     await expect(termsContent).toBeHidden();
     await expect(privacyContent).toBeHidden();
+
+    await usingToggle.focus();
+    await expect(usingToggle).toBeFocused();
+    await usingToggle.press("Enter");
+    await expect(usingToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(usingContent).toBeVisible();
+    await expect(usingContent).toContainText("Use Home to browse nearby vendors");
+    await expect(usingContent).toContainText("WhatsApp is used to coordinate directly");
+
+    await missionToggle.press("Space");
+    await expect(missionToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(usingToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(usingContent).toBeHidden();
+    await expect(missionContent).toBeVisible();
+    await expect(missionContent).toContainText("Localman currently does not charge vendors, riders, or customers");
+    await expect(missionContent).toContainText("Localman is not a dispatch company");
+
+    await missionToggle.press("Space");
+    await expect(missionToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(missionContent).toBeHidden();
+
+    await installToggle.focus();
+    await expect(installToggle).toBeFocused();
+    await installToggle.press("Enter");
+    await expect(installToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(installContent).toBeVisible();
+    await expect(installContent).toContainText(
+      "You can add Localman to your phone home screen",
+    );
+    await expect(installContent).toContainText("Android");
+    await expect(installContent).toContainText("Open Localman in Chrome");
+    await expect(installContent).toContainText("Install app");
+    await expect(installContent).toContainText("iPhone / iOS");
+    await expect(installContent).toContainText("Open Localman in Safari");
+    await expect(installContent).toContainText(
+      "On iPhone, use Safari for Add to Home Screen",
+    );
+
+    await installToggle.press("Enter");
+    await expect(installToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(installContent).toBeHidden();
 
     await termsToggle.focus();
     await expect(termsToggle).toBeFocused();
@@ -4300,6 +4361,9 @@ test.describe("Phase 3 browser smoke", () => {
 
     await openMobileDiscoveryTab(page, "map");
     await expect(page.getByTestId("mobile-map-filters").locator('select[name="radiusKm"]')).toHaveValue("1");
+    await expect(
+      page.locator(`.discovery-map [data-vendor-id="${liveNearVendor.vendor_id}"]`),
+    ).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: "Select Live One Kilometer Akara" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Select Cached Thirty Kilometer Suya" })).toHaveCount(0);
 

@@ -30,7 +30,7 @@ This branch consolidates completed runtime behavior across Rider Connect, rating
 - Mobile discovery now uses a fixed bottom dock with `Home`, `Map`, and `About`.
 - `Home` contains the mobile header, shared search/filter controls, location messaging, vendor sections, and vendor cards.
 - `Map` contains the dedicated map view, shared search/filter controls, map refresh, marker selection, and selected vendor panel.
-- `About` contains lightweight support/about guidance only; it does not render search, filters, map, or vendor results.
+- `About` contains lightweight support/about guidance plus collapsible Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy sections. It does not render search, filters, map, or vendor results.
 - Home and Map share one search/filter/selected-vendor state. Search, category, price, open-now, and radius filters persist when switching between them.
 - The selected vendor panel on the mobile Map tab flows naturally below the map through normal page scrolling.
 - Desktop keeps the existing combined discovery layout with list/search content in the left column and map/selected vendor content in the right column.

@@ -65,7 +65,7 @@ Small food businesses with:
 - current location detection
 - mobile Home tab for search/filter and vendor browsing
 - mobile Map tab for dedicated map context, selected vendor sync, and map refresh
-- mobile About tab for lightweight support and usage guidance
+- mobile About tab for lightweight support, usage, mission, app-install, Terms, and Privacy guidance
 - desktop combined vendor list and map layout
 - vendor detail page
 - search by vendor, dish, or area
