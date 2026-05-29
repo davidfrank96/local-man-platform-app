@@ -14,7 +14,7 @@ Use this checklist before pushing or releasing UI work.
 - [ ] mobile Map selected vendor card uses natural page scrolling
 - [ ] mobile location panel appears in the Home flow
 - [ ] mobile vendor section navbar is visible
-- [ ] mobile About tab shows about/support copy, legal accordions, and no search/filter/map controls
+- [ ] mobile About tab shows about/support copy plus Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy accordions, with no search/filter/map controls
 - [ ] web left column contains header, search/filter, location panel, section navbar, and vendor content
 - [ ] web right column contains map and selected vendor card
 - [ ] header branding shows the Localman icon beside the existing Localman text on mobile and desktop

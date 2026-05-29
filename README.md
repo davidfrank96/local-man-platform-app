@@ -8,7 +8,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - discovery homepage with mobile bottom-dock navigation and the existing desktop combined discovery layout
 - mobile Home tab for search, filters, nearby vendor cards, recent vendors, popular vendors, and last-selected memory
 - mobile Map tab for the dedicated map view, shared search/filter controls, map refresh, marker selection, and the selected vendor panel
-- mobile About tab for lightweight support and usage guidance, without search/filter controls
+- mobile About tab for lightweight support, usage, mission, app-install, Terms, and Privacy guidance, without search/filter controls
 - desktop search/filter bar with the map and selected vendor panel in the right column
 - redesigned lightweight filter panel:
   - search remains in the shared Home/Map/desktop discovery surface
@@ -411,6 +411,7 @@ Phase 5 delivered:
 - vendor image upload state isolation across vendor switches
 - vendor image metadata-row verification before upload success responses
 - mobile discovery bottom dock with Home, Map, and About tabs
+- mobile About accordions for Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy
 - shared Home/Map search, category, open-now, price, and radius filter state
 - mobile map refresh and empty-state UX without changing MapLibre internals
 - public discovery cache hygiene for request-key mismatches, malformed cached vendor records, and known mock/test vendor identities

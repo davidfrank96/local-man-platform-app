@@ -96,7 +96,7 @@ type PublicDiscoveryProps = {
 };
 
 type MobileDiscoveryTab = "home" | "map" | "about";
-type MobileLegalSection = "terms" | "privacy";
+type MobileAboutSection = "using" | "mission" | "install" | "terms" | "privacy";
 type DiscoveryEmptyStateCopy = {
   title: string;
   body: string;
@@ -204,8 +204,8 @@ export function PublicDiscovery({
     useState<VendorSection>("nearby");
   const [activeMobileTab, setActiveMobileTab] =
     useState<MobileDiscoveryTab>("home");
-  const [openMobileLegalSection, setOpenMobileLegalSection] =
-    useState<MobileLegalSection | null>(null);
+  const [openMobileAboutSection, setOpenMobileAboutSection] =
+    useState<MobileAboutSection | null>(null);
   const [mapRefreshToken, setMapRefreshToken] = useState(0);
   const [showLocationReminder, setShowLocationReminder] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -1619,7 +1619,7 @@ export function PublicDiscovery({
               Visit Localman
             </a>
           </div>
-          <div className="mobile-about-legal" aria-label="Localman legal information">
+          <div className="mobile-about-legal" aria-label="Localman information">
             <p className="mobile-about-legal-note">
               These summaries are provided to explain how Localman works. They may be
               updated as the platform grows.
@@ -1627,13 +1627,200 @@ export function PublicDiscovery({
             <div className="mobile-about-legal-accordion">
               <section className="mobile-about-legal-section">
                 <button
+                  aria-controls="mobile-about-using-content"
+                  aria-expanded={openMobileAboutSection === "using"}
+                  className="mobile-about-legal-trigger"
+                  data-testid="mobile-about-using-toggle"
+                  type="button"
+                  onClick={() =>
+                    setOpenMobileAboutSection((current) =>
+                      current === "using" ? null : "using",
+                    )
+                  }
+                >
+                  <span>Using Localman</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path
+                      d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </button>
+                <div
+                  className="mobile-about-legal-content"
+                  data-testid="mobile-about-using-content"
+                  hidden={openMobileAboutSection !== "using"}
+                  id="mobile-about-using-content"
+                >
+                  <h3>Discover vendors</h3>
+                  <p>
+                    Use Home to browse nearby vendors. Search by vendor name, filter
+                    results, adjust your search radius, and open vendor profiles when
+                    you need more details.
+                  </p>
+                  <h3>Use the map</h3>
+                  <p>
+                    Switch to Map for location context. Refresh the map when you need
+                    updated nearby results, then tap vendors from the map or list views.
+                  </p>
+                  <h3>Check vendor details</h3>
+                  <p>
+                    Vendor profiles show useful information, direct call links,
+                    directions, sharing, and rating options.
+                  </p>
+                  <h3>Request a rider</h3>
+                  <p>
+                    When you need delivery help, complete the rider request form and
+                    choose from available riders. Suggestions depend on rider
+                    availability, and WhatsApp is used to coordinate directly with the
+                    selected rider.
+                  </p>
+                  <h3>Share ratings</h3>
+                  <p>
+                    Rate your experience and add optional rating signals when they fit.
+                    Your feedback helps improve discovery quality.
+                  </p>
+                </div>
+              </section>
+              <section className="mobile-about-legal-section">
+                <button
+                  aria-controls="mobile-about-mission-content"
+                  aria-expanded={openMobileAboutSection === "mission"}
+                  className="mobile-about-legal-trigger"
+                  data-testid="mobile-about-mission-toggle"
+                  type="button"
+                  onClick={() =>
+                    setOpenMobileAboutSection((current) =>
+                      current === "mission" ? null : "mission",
+                    )
+                  }
+                >
+                  <span>Why Localman Exists</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path
+                      d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </button>
+                <div
+                  className="mobile-about-legal-content"
+                  data-testid="mobile-about-mission-content"
+                  hidden={openMobileAboutSection !== "mission"}
+                  id="mobile-about-mission-content"
+                >
+                  <h3>Discover local</h3>
+                  <p>
+                    Localman exists to help people discover useful local vendors around
+                    them, from structured businesses to informal businesses, roadside
+                    vendors, and local service providers.
+                  </p>
+                  <h3>Support local communities</h3>
+                  <p>
+                    The goal is to connect users, vendors, and independent riders in a
+                    simple way that improves visibility and access for the community.
+                  </p>
+                  <h3>Independent riders</h3>
+                  <p>
+                    Riders are independent participants who help users coordinate
+                    deliveries. Localman is not a dispatch company and does not employ
+                    riders.
+                  </p>
+                  <h3>No platform fees right now</h3>
+                  <p>
+                    Localman currently does not charge vendors, riders, or customers.
+                    Business remains business-as-usual, and vendors are not expected to
+                    provide special pricing, special treatment, or special access because
+                    of Localman.
+                  </p>
+                  <h3>Trust and safety</h3>
+                  <p>
+                    Localman recognizes that platform abuse exists. The platform keeps
+                    improving privacy protections, abuse prevention, rider protections,
+                    vendor protections, and user protections while keeping the experience
+                    simple.
+                  </p>
+                  <h3>Future</h3>
+                  <p>
+                    Localman&apos;s long-term mission is to make local discovery easier,
+                    more accessible, and more community-focused.
+                  </p>
+                </div>
+              </section>
+              <section className="mobile-about-legal-section">
+                <button
+                  aria-controls="mobile-about-install-content"
+                  aria-expanded={openMobileAboutSection === "install"}
+                  className="mobile-about-legal-trigger"
+                  data-testid="mobile-about-install-toggle"
+                  type="button"
+                  onClick={() =>
+                    setOpenMobileAboutSection((current) =>
+                      current === "install" ? null : "install",
+                    )
+                  }
+                >
+                  <span>Install Localman as an App</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path
+                      d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </button>
+                <div
+                  className="mobile-about-legal-content"
+                  data-testid="mobile-about-install-content"
+                  hidden={openMobileAboutSection !== "install"}
+                  id="mobile-about-install-content"
+                >
+                  <p>
+                    You can add Localman to your phone home screen and open it
+                    like a regular app.
+                  </p>
+                  <h3>Android</h3>
+                  <ol>
+                    <li>Open Localman in Chrome.</li>
+                    <li>Tap the three-dot menu in the top-right corner.</li>
+                    <li>Tap &quot;Install app&quot; or &quot;Add to Home screen.&quot;</li>
+                    <li>Confirm by tapping &quot;Install&quot; or &quot;Add.&quot;</li>
+                    <li>Open Localman from your home screen.</li>
+                  </ol>
+                  <h3>iPhone / iOS</h3>
+                  <ol>
+                    <li>Open Localman in Safari.</li>
+                    <li>Tap the Share button.</li>
+                    <li>Scroll and tap &quot;Add to Home Screen.&quot;</li>
+                    <li>Confirm the name and tap &quot;Add.&quot;</li>
+                    <li>Open Localman from your home screen.</li>
+                  </ol>
+                  <p>
+                    On iPhone, use Safari for Add to Home Screen. Other browsers
+                    may not show the same option.
+                  </p>
+                </div>
+              </section>
+              <section className="mobile-about-legal-section">
+                <button
                   aria-controls="mobile-about-terms-content"
-                  aria-expanded={openMobileLegalSection === "terms"}
+                  aria-expanded={openMobileAboutSection === "terms"}
                   className="mobile-about-legal-trigger"
                   data-testid="mobile-about-terms-toggle"
                   type="button"
                   onClick={() =>
-                    setOpenMobileLegalSection((current) =>
+                    setOpenMobileAboutSection((current) =>
                       current === "terms" ? null : "terms",
                     )
                   }
@@ -1653,7 +1840,7 @@ export function PublicDiscovery({
                 <div
                   className="mobile-about-legal-content"
                   data-testid="mobile-about-terms-content"
-                  hidden={openMobileLegalSection !== "terms"}
+                  hidden={openMobileAboutSection !== "terms"}
                   id="mobile-about-terms-content"
                 >
                   <p>
@@ -1702,12 +1889,12 @@ export function PublicDiscovery({
               <section className="mobile-about-legal-section">
                 <button
                   aria-controls="mobile-about-privacy-content"
-                  aria-expanded={openMobileLegalSection === "privacy"}
+                  aria-expanded={openMobileAboutSection === "privacy"}
                   className="mobile-about-legal-trigger"
                   data-testid="mobile-about-privacy-toggle"
                   type="button"
                   onClick={() =>
-                    setOpenMobileLegalSection((current) =>
+                    setOpenMobileAboutSection((current) =>
                       current === "privacy" ? null : "privacy",
                     )
                   }
@@ -1727,7 +1914,7 @@ export function PublicDiscovery({
                 <div
                   className="mobile-about-legal-content"
                   data-testid="mobile-about-privacy-content"
-                  hidden={openMobileLegalSection !== "privacy"}
+                  hidden={openMobileAboutSection !== "privacy"}
                   id="mobile-about-privacy-content"
                 >
                   <p>

@@ -68,7 +68,7 @@ For each vendor before activation:
 - [ ] On mobile, confirm the Home, Map, and About dock tabs render.
 - [ ] On mobile Home, confirm vendor cards render and search/filter controls work.
 - [ ] On mobile Map, confirm the map area renders without a blank screen and the refresh control is usable.
-- [ ] On mobile About, confirm support/about copy appears and search/filter controls are absent.
+- [ ] On mobile About, confirm support/about copy and the Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy accordions appear, and search/filter controls are absent.
 - [ ] On desktop, confirm the combined list/map layout still renders.
 - [ ] Confirm search changes the result set on mobile Home, mobile Map, and desktop.
 - [ ] Confirm filters still work, including 1 km, 5 km, 10 km, and 30 km radius choices where seeded data exists.

@@ -28,7 +28,7 @@ Local Man — UI Rules
   - About
 - Mobile Home must show the header, shared search/filter controls, location messaging, vendor section navigation, and vendor results.
 - Mobile Map must show shared search/filter controls over the map, the map refresh control, the map, and the selected vendor panel below the map.
-- Mobile About must show only lightweight support/about content and must not render search, filters, or the map.
+- Mobile About must show only lightweight informational content: support/about copy, Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy. It must not render search, filters, or the map.
 - The mobile selected vendor panel must flow naturally below the map through normal page scrolling.
 - Reminder toasts and location status panels must not move the Home search/filter and vendor list out of usable reach.
 - Web discovery currently uses:

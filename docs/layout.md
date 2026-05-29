@@ -70,7 +70,7 @@ The section switcher does not change routes and does not reset shared discovery 
 
 ## Mobile About behavior
 
-The mobile About tab is local UI state, not a route. It shows lightweight product/support guidance and collapsible legal summaries, and must not render search, filters, map, or vendor results.
+The mobile About tab is local UI state, not a route. It shows lightweight product/support guidance and collapsible Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy sections. It must not render search, filters, map, or vendor results.
 
 ## Web layout
 
