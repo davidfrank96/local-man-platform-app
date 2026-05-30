@@ -3754,6 +3754,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await expect(page.getByTestId("mobile-discovery-dock")).toBeVisible();
     await expect(page.getByTestId("mobile-discovery-tab-home")).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("desktop-floating-about-button")).toBeHidden();
     await expect(page.locator(".discovery-map")).toBeHidden();
     await expect(page.locator(".location-panel div > span").first()).toHaveText("Wuse II, Abuja");
     await expect(page.locator(".vendor-section-nav").getByRole("button", { name: "Last selected" })).toBeVisible();
@@ -3951,6 +3952,86 @@ test.describe("Phase 3 browser smoke", () => {
     expect(hasHorizontalOverflow).toBe(false);
     await expect(page.locator('[data-testid="mobile-home-filters"] input[name="search"]:visible')).toHaveCount(0);
     await expect(page.locator('[data-testid="mobile-map-filters"] input[name="search"]:visible')).toHaveCount(0);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("desktop floating About panel exposes shared About content accessibly", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const aboutButton = page.getByTestId("desktop-floating-about-button");
+    const aboutPanel = page.getByTestId("desktop-floating-about-panel");
+    const aboutView = page.getByTestId("desktop-about-view");
+    const usingToggle = page.getByTestId("desktop-about-using-toggle");
+    const usingContent = page.getByTestId("desktop-about-using-content");
+    const privacyToggle = page.getByTestId("desktop-about-privacy-toggle");
+    const privacyContent = page.getByTestId("desktop-about-privacy-content");
+
+    await expect(aboutButton).toBeVisible();
+    await expect(aboutButton).toHaveAttribute("aria-expanded", "false");
+    await expect(aboutPanel).toHaveCount(0);
+    await expect(page.getByTestId("mobile-about-view")).toBeHidden();
+
+    await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
+    const firstCard = page.locator(".vendor-card").first();
+    await firstCard.getByRole("button", { name: /Preview .* on map/ }).click();
+    const selectedViewDetails = page
+      .locator(".selected-vendor-panel")
+      .getByRole("link", { name: "View details" });
+    await expect(selectedViewDetails).toBeVisible();
+    await expectNoBoxOverlap(
+      aboutButton,
+      selectedViewDetails,
+      "desktop About button and selected vendor View details action",
+    );
+
+    const mapControls = page.locator(".maplibre-map-surface .maplibregl-ctrl-top-right").first();
+    if ((await mapControls.count()) > 0 && await mapControls.isVisible()) {
+      await expectNoBoxOverlap(
+        aboutButton,
+        mapControls,
+        "desktop About button and MapLibre controls",
+      );
+    }
+
+    await aboutButton.click();
+    await expect(aboutButton).toHaveAttribute("aria-expanded", "true");
+    await expect(aboutPanel).toBeVisible();
+    await expect(aboutView).toContainText("Find useful vendors near you.");
+    await expect(aboutView).toContainText("How to use it");
+    await expect(aboutView).toContainText("Support");
+    await expect(aboutView).toContainText("Using Localman");
+    await expect(aboutView).toContainText("Why Localman Exists");
+    await expect(aboutView).toContainText("Install Localman as an App");
+    await expect(aboutView).toContainText("Terms of Use");
+    await expect(aboutView).toContainText("Privacy Policy");
+
+    await usingToggle.focus();
+    await usingToggle.press("Enter");
+    await expect(usingToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(usingContent).toBeVisible();
+    await expect(usingContent).toContainText("Use Home to browse nearby vendors");
+
+    await privacyToggle.click();
+    await expect(usingToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(usingContent).toBeHidden();
+    await expect(privacyToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(privacyContent).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(aboutPanel).toHaveCount(0);
+    await expect(aboutButton).toHaveAttribute("aria-expanded", "false");
+    await expect(aboutButton).toBeFocused();
+
+    await aboutButton.click();
+    await expect(aboutPanel).toBeVisible();
+    await page.mouse.click(20, 20);
+    await expect(aboutPanel).toHaveCount(0);
 
     await expectNoClientErrors(errors);
   });
