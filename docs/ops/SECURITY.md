@@ -14,6 +14,7 @@ This document records the current application security posture for release revie
 ## Public Writes
 
 - Public ratings do not require login, but one anonymous browser identity can rate a given vendor once.
+- The anonymous rating identity hash is duplicate-protection metadata only. It must remain readable by service-role/server code and must not be selectable by anon or authenticated client roles.
 - Optional rating signals inherit the same rating write path, rate limits, duplicate protections, and database duplicate semantics.
 - Signal selections must be predefined, score-compatible, unique per rating, and limited to two.
 - Raw signal selections are internal. Public responses must not expose negative signals, neutral signals, raw counts, per-rating rows, anonymous hashes, or client identifiers.
