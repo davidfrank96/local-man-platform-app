@@ -2278,6 +2278,10 @@ h2 {
   display: none;
 }
 
+.desktop-floating-about {
+  display: none;
+}
+
 .mobile-about-card {
   display: grid;
   gap: 6px;
@@ -2384,6 +2388,120 @@ h2 {
   display: grid;
   gap: 8px;
   padding-left: 18px;
+}
+
+@media (min-width: 821px) {
+  .desktop-floating-about {
+    position: fixed;
+    right: 24px;
+    bottom: 88px;
+    z-index: 85;
+    display: grid;
+    justify-items: end;
+    pointer-events: none;
+  }
+
+  .desktop-floating-about > * {
+    pointer-events: auto;
+  }
+
+  .desktop-floating-about-button {
+    display: inline-flex;
+    min-height: 52px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #0e5e2e 0%, #13733d 100%);
+    box-shadow: 0 12px 26px rgba(19, 115, 61, 0.28);
+    color: #fff;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 900;
+    padding: 0 18px;
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .desktop-floating-about-button:hover {
+    box-shadow: 0 16px 32px rgba(19, 115, 61, 0.34);
+    transform: translateY(-1px);
+  }
+
+  .desktop-floating-about-button:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.86);
+    outline-offset: 3px;
+  }
+
+  .desktop-floating-about-button svg {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+  }
+
+  .desktop-floating-about-button svg:last-child {
+    transition: transform 180ms ease;
+  }
+
+  .desktop-floating-about-button[aria-expanded="true"] svg:last-child {
+    transform: rotate(180deg);
+  }
+
+  .desktop-floating-about-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 12px);
+    width: min(460px, calc(100vw - 48px));
+    max-height: 70vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid rgba(37, 41, 36, 0.1);
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 18px 44px rgba(37, 41, 36, 0.16);
+    padding: 16px;
+    transform-origin: bottom right;
+    transition:
+      opacity 180ms ease,
+      transform 180ms ease;
+  }
+
+  .desktop-floating-about-panel:focus {
+    outline: none;
+  }
+
+  .desktop-about-view {
+    display: grid;
+    gap: 12px;
+  }
+
+  .desktop-about-view h2 {
+    margin: 0;
+    color: var(--discovery-heading-title);
+    font-size: 1.55rem;
+    line-height: 1.08;
+  }
+
+  .desktop-about-view > p:not(.eyebrow) {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .desktop-about-view a {
+    color: var(--color-green);
+    font-weight: 800;
+  }
+
+  .desktop-about-view .mobile-about-card,
+  .desktop-about-view .mobile-about-legal-section {
+    border-color: #e6e2d8;
+    border-radius: 16px;
+    background: #fffdf8;
+  }
 }
 
 .discovery-filters-summary {
