@@ -147,6 +147,7 @@ Notes:
 - new public rating writes include a SHA-256 anonymous browser identity hash.
 - `ratings_vendor_anonymous_client_hash_idx` enforces one rating per vendor per anonymous hash when the hash is present.
 - legacy rows may have `anonymous_client_hash = null` and remain part of aggregate rating history.
+- `anonymous_client_hash` is server/private duplicate-protection metadata. Public Data API roles receive only column-level `ratings` reads that exclude it.
 - rating signals are intentionally not stored on `ratings` because `ratings` has public-facing summary use.
 
 ## Table: rating_signal_options
@@ -387,7 +388,9 @@ Public read grants exist for:
 - `vendor_category_map`
 - `vendor_featured_dishes`
 - `vendor_images`
-- `ratings`
+- public-safe `ratings` columns only: `id`, `vendor_id`, `score`, `comment`, `source_type`, and `created_at`
+
+Anon and authenticated client roles must not receive `SELECT` on `ratings.anonymous_client_hash`.
 
 Anon receives no direct table grants for Rider Connect tables because `riders` contains sensitive phone/WhatsApp fields. Public rider suggestions, contact handoffs, applications, and unavailable reports go through server routes that use service-role access and return shaped safe responses.
 

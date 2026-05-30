@@ -182,7 +182,14 @@ const publicReadTables = [
   "vendor_category_map",
   "vendor_featured_dishes",
   "vendor_images",
-  "ratings",
+];
+const publicRatingsReadColumns = [
+  "id",
+  "vendor_id",
+  "score",
+  "comment",
+  "source_type",
+  "created_at",
 ];
 const workspaceMutableTables = [
   "vendors",
@@ -195,6 +202,7 @@ const workspaceMutableTables = [
 ];
 const serviceTables = [
   ...publicReadTables,
+  "ratings",
   "admin_users",
   "audit_logs",
   "user_events",
@@ -243,6 +251,10 @@ const requiredTablePrivileges = [
     ["service_role", table, "DELETE"],
   ]),
 ];
+const requiredColumnPrivileges = publicRatingsReadColumns.flatMap((column) => [
+  ["anon", "ratings", column, "SELECT"],
+  ["authenticated", "ratings", column, "SELECT"],
+]);
 const forbiddenTablePrivileges = [
   ...requiredRlsTables.flatMap((table) => [
     ["anon", table, "INSERT"],
@@ -251,6 +263,8 @@ const forbiddenTablePrivileges = [
   ]),
   ...["admin_users", "audit_logs", "user_events", "operational_events", "app_schema_migrations"]
     .map((table) => ["anon", table, "SELECT"]),
+  ["anon", "ratings", "SELECT"],
+  ["authenticated", "ratings", "SELECT"],
   ...["rating_signal_options", "rating_signal_selections"].map((table) => [
     "anon",
     table,
@@ -285,6 +299,10 @@ const forbiddenTablePrivileges = [
   ["authenticated", "audit_logs", "DELETE"],
   ["authenticated", "app_schema_migrations", "SELECT"],
 ];
+const forbiddenColumnPrivileges = [
+  ["anon", "ratings", "anonymous_client_hash", "SELECT"],
+  ["authenticated", "ratings", "anonymous_client_hash", "SELECT"],
+];
 
 const missingTableGrants = runRows(`
   with expected(role_name, table_name, privilege_name) as (
@@ -297,6 +315,22 @@ const missingTableGrants = runRows(`
   order by role_name, table_name, privilege_name;
 `).map(([role, table, privilege]) => ({ role, table, privilege }));
 
+const missingColumnGrants = runRows(`
+  with expected(role_name, table_name, column_name, privilege_name) as (
+    values
+      ${sqlValues(requiredColumnPrivileges)}
+  )
+  select role_name, table_name, column_name, privilege_name
+  from expected
+  where not has_column_privilege(
+    role_name,
+    format('public.%I', table_name),
+    column_name,
+    privilege_name
+  )
+  order by role_name, table_name, column_name, privilege_name;
+`).map(([role, table, column, privilege]) => ({ role, table, column, privilege }));
+
 const excessiveTableGrants = runRows(`
   with forbidden(role_name, table_name, privilege_name) as (
     values
@@ -307,6 +341,22 @@ const excessiveTableGrants = runRows(`
   where has_table_privilege(role_name, format('public.%I', table_name), privilege_name)
   order by role_name, table_name, privilege_name;
 `).map(([role, table, privilege]) => ({ role, table, privilege }));
+
+const excessiveColumnGrants = runRows(`
+  with forbidden(role_name, table_name, column_name, privilege_name) as (
+    values
+      ${sqlValues(forbiddenColumnPrivileges)}
+  )
+  select role_name, table_name, column_name, privilege_name
+  from forbidden
+  where has_column_privilege(
+    role_name,
+    format('public.%I', table_name),
+    column_name,
+    privilege_name
+  )
+  order by role_name, table_name, column_name, privilege_name;
+`).map(([role, table, column, privilege]) => ({ role, table, column, privilege }));
 
 const requiredFunctionPrivileges = [
   ["anon", "public.is_admin()"],
@@ -439,7 +489,9 @@ function classifySeverity() {
     missingPolicies.length > 0 ||
     missingRlsTables.length > 0 ||
     missingTableGrants.length > 0 ||
+    missingColumnGrants.length > 0 ||
     excessiveTableGrants.length > 0 ||
+    excessiveColumnGrants.length > 0 ||
     missingFunctionGrants.length > 0 ||
     excessiveFunctionGrants.length > 0 ||
     excessiveOptionalFunctionGrants.length > 0 ||
@@ -477,7 +529,9 @@ const result = {
     missingPolicies.length === 0 &&
     missingRlsTables.length === 0 &&
     missingTableGrants.length === 0 &&
+    missingColumnGrants.length === 0 &&
     excessiveTableGrants.length === 0 &&
+    excessiveColumnGrants.length === 0 &&
     missingFunctionGrants.length === 0 &&
     excessiveFunctionGrants.length === 0 &&
     excessiveOptionalFunctionGrants.length === 0 &&
@@ -495,7 +549,9 @@ const result = {
   missingPolicies,
   missingRlsTables,
   missingTableGrants,
+  missingColumnGrants,
   excessiveTableGrants,
+  excessiveColumnGrants,
   missingFunctionGrants,
   excessiveFunctionGrants,
   excessiveOptionalFunctionGrants,
