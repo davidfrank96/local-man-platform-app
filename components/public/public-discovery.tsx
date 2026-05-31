@@ -54,8 +54,9 @@ import {
 } from "../../lib/vendors/public-api-client.ts";
 import {
   formatVendorCardDistance,
+  getVendorActiveHoursLabel,
+  getVendorCurrentStatusDisplay,
   getVendorCue,
-  getVendorOpenStateDisplayFromSnapshot,
 } from "../../lib/vendors/card-display.ts";
 import {
   getPopularVendorIds,
@@ -999,11 +1000,12 @@ export function PublicDiscovery({
   );
   const selectedVendorOpenState = useMemo(
     () =>
-      getVendorOpenStateDisplayFromSnapshot({
-        isOpenNow: selectedVendor?.is_open_now,
-        todayHours: selectedVendor?.today_hours,
-      }),
-    [selectedVendor?.is_open_now, selectedVendor?.today_hours],
+      getVendorCurrentStatusDisplay(selectedVendor?.is_open_now),
+    [selectedVendor?.is_open_now],
+  );
+  const selectedVendorActiveHours = useMemo(
+    () => getVendorActiveHoursLabel(selectedVendor),
+    [selectedVendor],
   );
   const selectedVendorCue = useMemo(
     () => (selectedVendor ? getVendorCue(selectedVendor) : null),
@@ -1589,6 +1591,7 @@ export function PublicDiscovery({
             discoveryReturnTo={discoveryReturnTo}
             isApproximateDistance={isApproximateDistance}
             selectedVendor={selectedVendor}
+            selectedVendorActiveHours={selectedVendorActiveHours}
             selectedVendorCue={selectedVendorCue}
             selectedVendorOpenState={selectedVendorOpenState}
           />

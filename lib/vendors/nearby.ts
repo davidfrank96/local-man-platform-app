@@ -79,6 +79,7 @@ export type NearbyVendorResult = {
   featured_dish: NearbyVendorFeaturedDishSummary | null;
   categories?: NearbyVendorCategorySummary[];
   today_hours: string;
+  active_hours: string;
 };
 
 type NearbyVendorSortable = NearbyVendorResult & {
@@ -242,6 +243,7 @@ export function findNearbyVendors(
       featured_dish: getFeaturedDishSummary(vendor),
       categories: getVendorCategorySummaries(vendor),
       today_hours: availability.todayHours,
+      active_hours: availability.activeHours,
       rawDistanceKm,
       searchRelevanceScore,
     };

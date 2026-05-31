@@ -1038,6 +1038,7 @@ export const nearbyVendorsResponseDataSchema = z.object({
       featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),
       categories: z.array(nearbyVendorCategorySummarySchema).optional(),
       today_hours: z.string(),
+      active_hours: z.string().optional(),
     }),
   ),
 });

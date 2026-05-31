@@ -32,6 +32,7 @@ test("returns the original time when it cannot be parsed", () => {
 test("formats compact today hours labels", () => {
   assert.equal(formatTodayHoursLabel("09:00", "18:00", false), "9:00 AM - 6:00 PM");
   assert.equal(formatTodayHoursLabel("19:00", "02:00", false), "7:00 PM - 2:00 AM");
-  assert.equal(formatTodayHoursLabel(null, null, true), "Closed");
+  assert.equal(formatTodayHoursLabel("07:00", "20:00", true), "7:00 AM - 8:00 PM");
+  assert.equal(formatTodayHoursLabel(null, null, true), "Closed today");
   assert.equal(formatTodayHoursLabel(null, null, false), "Hours not listed");
 });

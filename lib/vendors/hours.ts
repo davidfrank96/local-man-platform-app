@@ -1,4 +1,4 @@
-import { formatTodayHoursLabel } from "./time-display.ts";
+import { formatTodayHoursLabel, formatVendorHoursRange } from "./time-display.ts";
 
 export const ABUJA_TIME_ZONE = "Africa/Lagos";
 
@@ -12,6 +12,7 @@ export type VendorHourWindow = {
 export type VendorAvailabilitySnapshot = {
   isOpenNow: boolean;
   todayHours: string;
+  activeHours: string;
 };
 
 type VendorOpenStateResolutionInput = {
@@ -154,7 +155,7 @@ function inferOpenStateFromTodayHours(
     return true;
   }
 
-  if (lower === "closed") {
+  if (lower === "closed" || lower === "closed today") {
     return false;
   }
 
@@ -210,6 +211,8 @@ export function getTodayHoursSummary(
   now = new Date(),
   override: boolean | null = null,
 ): string {
+  void override;
+
   if (!hours?.length) {
     return "Hours not listed";
   }
@@ -229,7 +232,7 @@ export function getTodayHoursSummary(
   }
 
   if (!todayHours) {
-    return "Hours not listed";
+    return "Closed today";
   }
 
   const todayLabel = formatTodayHoursLabel(
@@ -238,11 +241,32 @@ export function getTodayHoursSummary(
     todayHours.is_closed,
   );
 
-  if (override === true && todayLabel === "Closed") {
-    return "Open now";
+  return todayLabel;
+}
+
+export function getVendorActiveHoursSummary(
+  hours: VendorHourWindow[] | null | undefined,
+  now = new Date(),
+): string {
+  if (!hours?.length) {
+    return "Hours not listed";
   }
 
-  return todayLabel;
+  const {
+    todayHours,
+    previousHours,
+    isOpenViaPreviousOvernight,
+  } = getVendorHoursForCurrentTime(hours, now);
+
+  if (isOpenViaPreviousOvernight && previousHours?.open_time && previousHours.close_time) {
+    return formatVendorHoursRange(previousHours.open_time, previousHours.close_time);
+  }
+
+  if (todayHours?.open_time && todayHours.close_time) {
+    return formatVendorHoursRange(todayHours.open_time, todayHours.close_time);
+  }
+
+  return "Closed today";
 }
 
 export function getVendorAvailabilitySnapshot(
@@ -253,6 +277,7 @@ export function getVendorAvailabilitySnapshot(
   return {
     isOpenNow: isVendorOpenNow(hours, override, now),
     todayHours: getTodayHoursSummary(hours, now, override),
+    activeHours: getVendorActiveHoursSummary(hours, now),
   };
 }
 

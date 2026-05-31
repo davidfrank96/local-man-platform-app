@@ -127,31 +127,22 @@ test("public API client reports non-json failures clearly", async () => {
   );
 });
 
-test("public API client returns empty nearby results when a search request fails", async () => {
+test("public API client reports nearby search request failures clearly", async () => {
   const fetchImpl = (async () =>
     new Response("Service unavailable", {
       status: 503,
     })) as typeof fetch;
 
-  const result = await fetchNearbyVendors(
-    {
-      search: "' OR 1=1--",
-    },
-    fetchImpl,
+  await assert.rejects(
+    () =>
+      fetchNearbyVendors(
+        {
+          search: "' OR 1=1--",
+        },
+        fetchImpl,
+      ),
+    /HTTP_ERROR: API request failed with status 503/,
   );
-
-  assert.deepEqual(result, {
-    location: {
-      source: "default_city",
-      label: "Abuja",
-      coordinates: {
-        lat: 9.0765,
-        lng: 7.3986,
-      },
-      isApproximate: true,
-    },
-    vendors: [],
-  });
 });
 
 test("public API client reports malformed API responses clearly", async () => {

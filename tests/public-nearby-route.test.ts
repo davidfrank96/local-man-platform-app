@@ -518,6 +518,87 @@ test("nearby route ranks open vendors by distance with popularity as a close-dis
   }
 });
 
+test("nearby route keeps vendor results when usage-score lookup fails", async () => {
+  const restoreEnv = setPublicEnv();
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  const warnCalls: Array<Record<string, unknown>> = [];
+
+  console.warn = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      warnCalls.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.warn;
+
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = toUrl(input);
+
+    if (url.pathname === "/rest/v1/vendors") {
+      return Response.json([
+        createCandidateVendor(0, {
+          name: "Thirty Kilometer Grill",
+          slug: "thirty-kilometer-grill",
+          longitude: 7.3986 + 0.08,
+        }),
+        createCandidateVendor(1, {
+          name: "Nearby Rice",
+          slug: "nearby-rice",
+          longitude: 7.3986 + 0.01,
+        }),
+      ]);
+    }
+
+    if (
+      url.pathname === "/rest/v1/rpc/get_vendor_usage_scores" ||
+      url.pathname === "/rest/v1/user_events"
+    ) {
+      return Response.json({ message: "usage lookup unavailable" }, { status: 500 });
+    }
+
+    return Response.json([]);
+  }) as typeof fetch;
+
+  try {
+    const response = await nearbyRoute(
+      createNearbyNextRequest(
+        "http://localhost/api/vendors/nearby?lat=9.0765&lng=7.3986&location_source=precise&radius_km=30",
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(
+      body.data.vendors.map((vendor: { slug: string }) => vendor.slug),
+      ["nearby-rice", "thirty-kilometer-grill"],
+    );
+    assert.deepEqual(
+      body.data.vendors.map((vendor: { ranking_score: number }) => vendor.ranking_score),
+      [0, 0],
+    );
+
+    const usageWarning = warnCalls.find(
+      (record) => record.event === "PUBLIC_NEARBY_USAGE_SCORE_FAILED",
+    );
+
+    assert.ok(usageWarning);
+    assert.equal(usageWarning?.status, 200);
+    assert.equal(usageWarning?.errorCode, "UPSTREAM_ERROR");
+    assert.equal(
+      (usageWarning?.metadata as Record<string, unknown> | undefined)?.upstreamArea,
+      "vendor_usage_scores",
+    );
+    assert.equal(
+      (usageWarning?.metadata as Record<string, unknown> | undefined)?.candidateCount,
+      2,
+    );
+  } finally {
+    console.warn = originalWarn;
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("nearby route rate limits repeated public search abuse without blocking normal browsing defaults", async () => {
   const restoreEnv = setPublicEnv();
   const originalFetch = globalThis.fetch;
@@ -557,7 +638,7 @@ test("nearby route rate limits repeated public search abuse without blocking nor
   }
 });
 
-test("nearby route logs degraded empty responses distinctly from true empty results", async () => {
+test("nearby route reports upstream lookup failures without returning a false empty result", async () => {
   const restoreEnv = setPublicEnv();
   const originalFetch = globalThis.fetch;
   const originalError = console.error;
@@ -581,18 +662,18 @@ test("nearby route logs degraded empty responses distinctly from true empty resu
     );
     const body = await response.json();
 
-    assert.equal(response.status, 200);
-    assert.equal(body.success, true);
-    assert.deepEqual(body.data.vendors, []);
+    assert.equal(response.status, 503);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "UPSTREAM_ERROR");
 
     const degradedLog = errorCalls.find((record) => record.event === "PUBLIC_NEARBY_ROUTE_FAILED");
 
     assert.ok(degradedLog);
-    assert.equal(degradedLog?.status, 200);
+    assert.equal(degradedLog?.status, 503);
     assert.equal(degradedLog?.errorCode, "UPSTREAM_ERROR");
     assert.equal(
-      (degradedLog?.metadata as Record<string, unknown> | undefined)?.degraded,
-      true,
+      (degradedLog?.metadata as Record<string, unknown> | undefined)?.degradedResponse,
+      false,
     );
     assert.equal(
       (degradedLog?.metadata as Record<string, unknown> | undefined)?.operatorActionRequired,

@@ -156,10 +156,32 @@ export async function GET(request: NextRequest) {
       resolvedSearch.query,
       config,
     );
-    const usageScores = await fetchVendorUsageScores(
-      candidates.map((vendor) => vendor.id),
-      getSupabaseServiceRoleConfig(),
-    );
+    let usageScores = new Map<string, number>();
+
+    try {
+      usageScores = await fetchVendorUsageScores(
+        candidates.map((vendor) => vendor.id),
+        getSupabaseServiceRoleConfig(),
+      );
+    } catch (usageScoreError) {
+      logRouteEvent("warn", routeLog, {
+        event: "PUBLIC_NEARBY_USAGE_SCORE_FAILED",
+        status: 200,
+        errorCode: "UPSTREAM_ERROR",
+        message: "Nearby request continued without usage scores after ranking lookup failed.",
+        error: usageScoreError,
+        metadata: {
+          degraded: false,
+          operatorActionRequired: true,
+          upstreamArea: "vendor_usage_scores",
+          candidateCount: candidates.length,
+          locationSource: resolvedSearch.location.source,
+          searchPresent: Boolean(query.data.search),
+          radiusKm: query.data.radius_km,
+        },
+      });
+    }
+
     const vendors = findNearbyVendors(
       candidates,
       resolvedSearch.query,
@@ -210,15 +232,15 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logRouteEvent("error", routeLog, {
       event: "PUBLIC_NEARBY_ROUTE_FAILED",
-      status: 200,
+      status: 503,
       errorCode: "UPSTREAM_ERROR",
-      message: "Nearby request degraded to an empty response after an upstream failure.",
+      message: "Nearby request failed after an upstream vendor lookup failure.",
       error,
       metadata: {
-        degraded: true,
-        degradedResponse: true,
+        degraded: false,
+        degradedResponse: false,
         operatorActionRequired: true,
-        publicResponseStatus: 200,
+        publicResponseStatus: 503,
         upstreamArea: "nearby_vendor_lookup",
         locationSource: resolvedSearch.location.source,
         searchPresent: Boolean(query.data.search),
@@ -226,10 +248,16 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const response = apiSuccess({
-      location: resolvedSearch.location,
-      vendors: [],
-    });
+    const response = apiError(
+      "UPSTREAM_ERROR",
+      "Nearby vendor search is temporarily unavailable.",
+      503,
+      {
+        retryable: true,
+        location: resolvedSearch.location,
+      },
+      "Please try again in a moment.",
+    );
 
     return attachRequestIdHeader(
       activeSearchRateLimit
