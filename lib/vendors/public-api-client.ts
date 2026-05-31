@@ -1,5 +1,4 @@
 import type { ApiResponse } from "../api/responses.ts";
-import { DEFAULT_CITY_LOCATION } from "../location/user-location.ts";
 import { getNigerianPhoneTelHref } from "../phone.ts";
 import type {
   LocationSource,
@@ -40,31 +39,6 @@ function appendDefinedParam(params: URLSearchParams, key: string, value: unknown
 
 function encodePublicSearchQuery(input: string): string {
   return encodeURIComponent(input).replaceAll("'", "%27");
-}
-
-function buildNearbyFallbackLocation(
-  filters: PublicNearbyFilters,
-): NearbyVendorsResponseData["location"] {
-  if (typeof filters.lat === "number" && typeof filters.lng === "number") {
-    const source = filters.location_source ?? "precise";
-
-    return {
-      source,
-      label: source === "approximate" ? "Approximate location" : "Current location",
-      coordinates: {
-        lat: filters.lat,
-        lng: filters.lng,
-      },
-      isApproximate: source !== "precise",
-    };
-  }
-
-  return {
-    source: "default_city",
-    label: DEFAULT_CITY_LOCATION.label,
-    coordinates: DEFAULT_CITY_LOCATION.coordinates,
-    isApproximate: true,
-  };
 }
 
 function buildNearbyQueryString(filters: PublicNearbyFilters): string {
@@ -149,23 +123,11 @@ export async function fetchNearbyVendors(
   fetchImpl?: typeof fetch,
 ): Promise<NearbyVendorsResponseData> {
   const queryString = buildNearbyQueryString(filters);
-  const normalizedSearch = sanitizePublicSearchInput(filters.search);
 
-  try {
-    return await requestPublicApi<NearbyVendorsResponseData>(
-      `/api/vendors/nearby${queryString ? `?${queryString}` : ""}`,
-      fetchImpl,
-    );
-  } catch (error) {
-    if (!normalizedSearch) {
-      throw error;
-    }
-
-    return {
-      location: buildNearbyFallbackLocation(filters),
-      vendors: [],
-    };
-  }
+  return requestPublicApi<NearbyVendorsResponseData>(
+    `/api/vendors/nearby${queryString ? `?${queryString}` : ""}`,
+    fetchImpl,
+  );
 }
 
 export async function fetchPublicCategories(

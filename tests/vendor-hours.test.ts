@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ABUJA_TIME_ZONE,
+  getVendorActiveHoursSummary,
   getVendorAvailabilitySnapshot,
   resolveVendorOpenState,
   type VendorHourWindow,
@@ -46,7 +47,7 @@ test("treats 2:04 PM Abuja time as closed for a 5:00 PM - 9:00 PM schedule", () 
   assert.equal(snapshot.todayHours, "5:00 PM - 9:00 PM");
 });
 
-test("treats a closed Abuja day as closed", () => {
+test("treats a closed Abuja day without configured times as closed today", () => {
   const hours: VendorHourWindow[] = [
     {
       day_of_week: 4,
@@ -59,7 +60,62 @@ test("treats a closed Abuja day as closed", () => {
   const snapshot = getVendorAvailabilitySnapshot(hours, null, abujaAfternoon);
 
   assert.equal(snapshot.isOpenNow, false);
-  assert.equal(snapshot.todayHours, "Closed");
+  assert.equal(snapshot.todayHours, "Closed today");
+  assert.equal(snapshot.activeHours, "Closed today");
+});
+
+test("keeps closed-today separate from other weekly operating ranges", () => {
+  const hours: VendorHourWindow[] = [
+    {
+      day_of_week: 0,
+      open_time: null,
+      close_time: null,
+      is_closed: true,
+    },
+    {
+      day_of_week: 1,
+      open_time: "07:00",
+      close_time: "20:00",
+      is_closed: false,
+    },
+    {
+      day_of_week: 2,
+      open_time: "07:00",
+      close_time: "20:00",
+      is_closed: false,
+    },
+  ];
+
+  const snapshot = getVendorAvailabilitySnapshot(
+    hours,
+    null,
+    new Date("2026-05-31T12:00:00Z"),
+  );
+
+  assert.equal(snapshot.isOpenNow, false);
+  assert.equal(snapshot.todayHours, "Closed today");
+  assert.equal(snapshot.activeHours, "Closed today");
+  assert.equal(
+    getVendorActiveHoursSummary(hours, new Date("2026-05-31T12:00:00Z")),
+    "Closed today",
+  );
+});
+
+test("keeps configured active hours visible when the schedule row is marked closed", () => {
+  const hours: VendorHourWindow[] = [
+    {
+      day_of_week: 4,
+      open_time: "07:00",
+      close_time: "20:00",
+      is_closed: true,
+    },
+  ];
+
+  const snapshot = getVendorAvailabilitySnapshot(hours, null, abujaAfternoon);
+
+  assert.equal(snapshot.isOpenNow, false);
+  assert.equal(snapshot.todayHours, "7:00 AM - 8:00 PM");
+  assert.equal(snapshot.activeHours, "7:00 AM - 8:00 PM");
 });
 
 test("fails safely when hours are missing", () => {
@@ -67,6 +123,7 @@ test("fails safely when hours are missing", () => {
 
   assert.equal(snapshot.isOpenNow, false);
   assert.equal(snapshot.todayHours, "Hours not listed");
+  assert.equal(snapshot.activeHours, "Hours not listed");
   assert.equal(
     resolveVendorOpenState({
       isOpenNow: null,
@@ -85,6 +142,17 @@ test("supports overnight hours from the public today-hours label", () => {
       now: abujaAfterMidnight,
     }),
     true,
+  );
+});
+
+test("treats a closed-today public hours label as a closed status for stale snapshots", () => {
+  assert.equal(
+    resolveVendorOpenState({
+      isOpenNow: true,
+      todayHours: "Closed today",
+      now: abujaAfternoon,
+    }),
+    false,
   );
 });
 

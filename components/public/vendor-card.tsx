@@ -3,9 +3,10 @@ import { memo, type ReactNode } from "react";
 import type { LocationSource } from "../../types/index.ts";
 import {
   formatVendorCardDistance,
-  getVendorOpenStateDisplayFromSnapshot,
+  getVendorActiveHoursLabel,
   formatVendorCardPriceBand,
   formatVendorCardRating,
+  getVendorCurrentStatusDisplay,
   getVendorCue,
 } from "../../lib/vendors/card-display.ts";
 import {
@@ -55,6 +56,52 @@ function CardIcon({ children }: { children: ReactNode }) {
   return <span className="vendor-card-icon" aria-hidden="true">{children}</span>;
 }
 
+function formatCategoryFallback(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function getCategoryIcon(label: string): string {
+  const normalizedLabel = label.toLowerCase();
+
+  if (/\b(rice|swallow|jollof)\b/.test(normalizedLabel)) return "🍚";
+  if (/\b(local|african|traditional|native)\b/.test(normalizedLabel)) return "🌍";
+  if (/\b(grill|grills|suya|barbecue|bbq)\b/.test(normalizedLabel)) return "🔥";
+  if (/\b(chicken|turkey|wings)\b/.test(normalizedLabel)) return "🍗";
+  if (/\b(soup|soups|stew|pepper soup)\b/.test(normalizedLabel)) return "🥣";
+  if (/\b(snack|snacks|small chops|pastry|pastries)\b/.test(normalizedLabel)) return "🥟";
+  if (/\b(drink|drinks|juice|smoothie|beverage)\b/.test(normalizedLabel)) return "🥤";
+
+  return "🍛";
+}
+
+function getVendorCategoryTags(vendor: NormalizedVendor): Array<{ label: string; icon: string }> {
+  const categories = Array.isArray(vendor.categories) ? vendor.categories : [];
+  const seenLabels = new Set<string>();
+
+  return categories.flatMap((category) => {
+    const rawName = typeof category.name === "string" ? category.name.trim() : "";
+    const rawSlug = typeof category.slug === "string" ? category.slug.trim() : "";
+    const label = rawName || (rawSlug ? formatCategoryFallback(rawSlug) : "");
+
+    if (!label) return [];
+
+    const normalizedLabel = label.toLowerCase();
+
+    if (seenLabels.has(normalizedLabel)) return [];
+
+    seenLabels.add(normalizedLabel);
+
+    return [{
+      label,
+      icon: getCategoryIcon(label),
+    }];
+  }).slice(0, 2);
+}
+
 function VendorCardComponent({
   vendor,
   selected,
@@ -70,10 +117,7 @@ function VendorCardComponent({
     typeof vendor.area === "string" && vendor.area.trim().length > 0
       ? vendor.area.trim()
       : null;
-  const vendorTodayHours =
-    typeof vendor.today_hours === "string" && vendor.today_hours.trim().length > 0
-      ? vendor.today_hours.trim()
-      : "Hours unavailable";
+  const vendorTodayHours = getVendorActiveHoursLabel(vendor);
   const metaLine = [
     formatVendorCardPriceBand(vendor.price_band),
     vendorArea,
@@ -81,15 +125,13 @@ function VendorCardComponent({
     .filter(Boolean)
     .join(" • ");
   const cue = getVendorCue(vendor);
+  const categoryTags = getVendorCategoryTags(vendor);
   const ratingLabel = formatVendorCardRating(
     vendor.average_rating,
     vendor.review_count,
   );
   const isNewRating = ratingLabel === "New";
-  const openState = getVendorOpenStateDisplayFromSnapshot({
-    isOpenNow: vendor.is_open_now,
-    todayHours: vendorTodayHours,
-  });
+  const openState = getVendorCurrentStatusDisplay(vendor.is_open_now);
   const statusBadgeClassName =
     openState.toneClassName === "vendor-card-status-open"
       ? "vendor-card-status-badge vendor-card-status-open"
@@ -117,6 +159,16 @@ function VendorCardComponent({
                 <h3>{vendorName}</h3>
                 <span className={statusBadgeClassName}>{openState.label}</span>
               </div>
+              {categoryTags.length > 0 ? (
+                <div className="vendor-card-tags" aria-label="Vendor categories">
+                  {categoryTags.map((tag) => (
+                    <span className="vendor-card-category-tag" key={tag.label}>
+                      <span aria-hidden="true">{tag.icon}</span>
+                      <span>{tag.label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {cue ? (
                 <p className="vendor-card-cue">
                   <CardIcon>

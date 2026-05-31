@@ -578,6 +578,46 @@ test("returns compact today hours from nearby vendors", () => {
   );
 
   assert.equal(results[0]?.today_hours, "7:00 PM - 2:00 AM");
+  assert.equal(results[0]?.active_hours, "7:00 PM - 2:00 AM");
+});
+
+test("nearby vendors report closed today when today has no operating window", () => {
+  const results = findNearbyVendors(
+    [
+      {
+        ...baseVendor,
+        id: "weekly-hours",
+        name: "Weekly Hours Vendor",
+        latitude: 0,
+        longitude: 0.01,
+        vendor_hours: [
+          {
+            day_of_week: 0,
+            open_time: null,
+            close_time: null,
+            is_closed: true,
+          },
+          {
+            day_of_week: 1,
+            open_time: "10:30",
+            close_time: "16:00",
+            is_closed: false,
+          },
+        ],
+      },
+    ],
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-05-31T12:00:00Z"),
+  );
+
+  assert.equal(results[0]?.is_open_now, false);
+  assert.equal(results[0]?.today_hours, "Closed today");
+  assert.equal(results[0]?.active_hours, "Closed today");
 });
 
 test("returns an empty list when no vendors are nearby", () => {
@@ -664,7 +704,7 @@ test("nearby response schema accepts the actual nearby result shape", () => {
   }
 });
 
-test("today hours summary handles closed and missing schedules", () => {
+test("today hours summary distinguishes closed days from missing schedules", () => {
   assert.equal(
     getTodayHoursSummary(
       [
@@ -677,7 +717,7 @@ test("today hours summary handles closed and missing schedules", () => {
       ],
       new Date("2026-04-28T12:00:00Z"),
     ),
-    "Closed",
+    "Closed today",
   );
 
   assert.equal(getTodayHoursSummary([], new Date("2026-04-28T12:00:00Z")), "Hours not listed");
@@ -830,7 +870,7 @@ test("today hours summary uses the overnight window that keeps a vendor open aft
   );
 });
 
-test("today hours summary does not contradict a manual open override on a closed day", () => {
+test("today hours summary keeps manual open override separate from closed-day schedule label", () => {
   assert.equal(
     getTodayHoursSummary(
       [
@@ -844,6 +884,6 @@ test("today hours summary does not contradict a manual open override on a closed
       new Date("2026-04-28T12:00:00Z"),
       true,
     ),
-    "Open now",
+    "Closed today",
   );
 });

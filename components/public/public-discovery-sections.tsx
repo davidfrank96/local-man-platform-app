@@ -122,6 +122,7 @@ export function SelectedVendorPanel({
   discoveryReturnTo,
   isApproximateDistance,
   selectedVendor,
+  selectedVendorActiveHours,
   selectedVendorCue,
   selectedVendorOpenState,
 }: {
@@ -129,6 +130,7 @@ export function SelectedVendorPanel({
   discoveryReturnTo: string;
   isApproximateDistance: boolean;
   selectedVendor: NormalizedVendor | null;
+  selectedVendorActiveHours: string;
   selectedVendorCue: string | null;
   selectedVendorOpenState: VendorOpenStateDisplay;
 }) {
@@ -177,7 +179,7 @@ export function SelectedVendorPanel({
                   <path d="M8 4.8v3.6l2.4 1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
-              <span className="selected-vendor-label">Active hours:</span> {selectedVendor.today_hours}
+              <span className="selected-vendor-label">Active hours:</span> {selectedVendorActiveHours}
             </p>
             {selectedVendorCue ? (
               <p className="selected-vendor-slug-line">

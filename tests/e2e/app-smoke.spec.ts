@@ -1369,6 +1369,105 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("vendor cards show two compact category tags without hiding existing details", async ({ page }) => {
+    const errors = trackClientErrors(page);
+    const vendor: MockNearbyVendor = {
+      vendor_id: "90000000-0000-4000-8000-000000000001",
+      name: "Jabi Rice Corner",
+      slug: "jabi-rice-corner",
+      short_description: "Fried rice and chicken",
+      phone_number: "+2348012345678",
+      area: "Jabi",
+      latitude: 9.0765,
+      longitude: 7.4221,
+      price_band: "standard",
+      average_rating: 3.5,
+      review_count: 12,
+      distance_km: 3.6,
+      is_open_now: true,
+      featured_dish: {
+        dish_name: "Fried rice and chicken",
+        description: "A quick plate with salad and spicy sauce.",
+      },
+      categories: [
+        { name: "Rice & Swallow", slug: "rice-swallow" },
+        { name: "Local Dishes", slug: "local-dishes" },
+        { name: "Chicken", slug: "chicken" },
+      ],
+      today_hours: "5:00 PM - 10:00 PM",
+    };
+
+    await primePublicLocation(page);
+    await mockNearbyDiscovery(page, [vendor]);
+    await page.goto("/");
+
+    const firstCard = page.locator(".vendor-card").first();
+    await expect(firstCard).toBeVisible();
+    await expect(firstCard.getByRole("heading", { level: 3, name: "Jabi Rice Corner" })).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-status-badge")).toContainText(/Open|Closed/);
+    await expect(firstCard.locator(".vendor-card-category-tag")).toHaveCount(2);
+    await expect(firstCard.locator(".vendor-card-category-tag").filter({ hasText: "Rice & Swallow" })).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-category-tag").filter({ hasText: "Local Dishes" })).toBeVisible();
+    await expect(firstCard.locator(".vendor-card-category-tag").filter({ hasText: "Chicken" })).toHaveCount(0);
+    await expect(firstCard.locator(".vendor-card-cue")).toContainText("Fried rice and chicken");
+    await expect(firstCard.locator(".vendor-card-status-line")).toContainText("3.6 km");
+    await expect(firstCard.locator(".vendor-card-rating")).toContainText("3.5");
+    await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours: 5:00 PM - 10:00 PM");
+    await expect(firstCard.locator(".vendor-card-meta-line")).toContainText("Everyday price • Jabi");
+    await expect(firstCard.getByRole("link", { name: "Call" })).toBeVisible();
+    await expect(firstCard.getByRole("link", { name: "Directions" })).toBeVisible();
+    await expect(firstCard.getByRole("link", { name: "View details →" })).toBeVisible();
+
+    const desktopLayout = await firstCard.evaluate((card) => {
+      const title = card.querySelector("h3")?.getBoundingClientRect();
+      const status = card.querySelector(".vendor-card-status-badge")?.getBoundingClientRect();
+      const tags = card.querySelector(".vendor-card-tags")?.getBoundingClientRect();
+      const cue = card.querySelector(".vendor-card-cue")?.getBoundingClientRect();
+      const distance = card.querySelector(".vendor-card-status-line")?.getBoundingClientRect();
+      const rating = card.querySelector(".vendor-card-rating")?.getBoundingClientRect();
+
+      return {
+        statusTopRight: Boolean(title && status && Math.abs(title.top - status.top) <= 8 && status.left > title.left),
+        tagsUnderTitle: Boolean(title && tags && title.bottom <= tags.top),
+        cueUnderTags: Boolean(tags && cue && tags.bottom <= cue.top),
+        distanceAndRatingSameRow: Boolean(distance && rating && Math.abs(distance.top - rating.top) <= 4),
+        height: Math.round(card.getBoundingClientRect().height),
+        overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+
+    expect(desktopLayout.statusTopRight).toBe(true);
+    expect(desktopLayout.tagsUnderTitle).toBe(true);
+    expect(desktopLayout.cueUnderTags).toBe(true);
+    expect(desktopLayout.distanceAndRatingSameRow).toBe(true);
+    expect(desktopLayout.height).toBeLessThan(340);
+    expect(desktopLayout.overflowX).toBe(false);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(firstCard.locator(".vendor-card-category-tag")).toHaveCount(2);
+    await expect(firstCard.locator(".vendor-card-hours-line")).toContainText("Active hours: 5:00 PM - 10:00 PM");
+
+    const mobileLayout = await firstCard.evaluate((card) => {
+      const title = card.querySelector("h3")?.getBoundingClientRect();
+      const status = card.querySelector(".vendor-card-status-badge")?.getBoundingClientRect();
+      const distance = card.querySelector(".vendor-card-status-line")?.getBoundingClientRect();
+      const rating = card.querySelector(".vendor-card-rating")?.getBoundingClientRect();
+
+      return {
+        statusTopRight: Boolean(title && status && Math.abs(title.top - status.top) <= 8 && status.left > title.left),
+        distanceAndRatingSameRow: Boolean(distance && rating && Math.abs(distance.top - rating.top) <= 4),
+        height: Math.round(card.getBoundingClientRect().height),
+        overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+
+    expect(mobileLayout.statusTopRight).toBe(true);
+    expect(mobileLayout.distanceAndRatingSameRow).toBe(true);
+    expect(mobileLayout.height).toBeLessThan(340);
+    expect(mobileLayout.overflowX).toBe(false);
+    await expectNoClientErrors(errors);
+  });
+
   test("call and directions actions emit tracking events with vendor context across card, selected preview, and detail views", async ({ page }) => {
     const errors = trackClientErrors(page);
     const trackedBodies: Array<Record<string, unknown>> = [];
@@ -2450,7 +2549,8 @@ test.describe("Phase 3 browser smoke", () => {
           dish_name: "Rice bowl",
           description: null,
         },
-        today_hours: "Closed",
+        today_hours: "Closed today",
+        active_hours: "Closed today",
       },
       {
         vendor_id: "30000000-0000-4000-8000-000000000002",
@@ -2501,11 +2601,11 @@ test.describe("Phase 3 browser smoke", () => {
 
     const closedCard = page.locator(".vendor-card").filter({ hasText: "Closed Sunday Lunch Bowl" });
     await expect(closedCard.locator(".vendor-card-status-line")).toContainText("Closed");
-    await expect(closedCard.locator(".vendor-card-hours-line")).toContainText("Closed");
+    await expect(closedCard.locator(".vendor-card-hours-line")).toContainText("Closed today");
     await closedCard.getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(closedCard.locator(".vendor-card-status-line")).toContainText("Closed");
     await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("Closed");
-    await expect(page.locator(".selected-vendor-panel .selected-vendor-hours-line")).toContainText("Closed");
+    await expect(page.locator(".selected-vendor-panel .selected-vendor-hours-line")).toContainText("Closed today");
     await expect(page.locator(".selected-vendor-panel .selected-vendor-status-line")).toContainText("3.1 km");
 
     const laterCard = page.locator(".vendor-card").filter({ hasText: "Opens Later Rice Corner" });

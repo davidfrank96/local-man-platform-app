@@ -254,6 +254,7 @@ export function normalizeVendor(value: unknown, index: number): NormalizedVendor
     normalizeString(value.phone_number) ?? normalizeString(value.phone);
   const area = normalizeString(value.area);
   const todayHours = normalizeString(value.today_hours) ?? "Hours unavailable";
+  const activeHours = normalizeString(value.active_hours ?? value.activeHours);
   const resolvedIsOpenNow = resolveVendorOpenState({
     isOpenNow: typeof value.is_open_now === "boolean" ? value.is_open_now : null,
     todayHours,
@@ -308,6 +309,7 @@ export function normalizeVendor(value: unknown, index: number): NormalizedVendor
     featured_dish: featuredDish,
     ...(categories ? { categories } : {}),
     today_hours: todayHours,
+    ...(activeHours ? { active_hours: activeHours } : {}),
     imageUrl: FALLBACK_VENDOR_IMAGE_URL,
     hasValidCoordinates,
   };

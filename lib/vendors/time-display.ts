@@ -28,13 +28,13 @@ export function formatTodayHoursLabel(
   closeTime: string | null,
   isClosed: boolean,
 ): string {
+  if (openTime && closeTime) {
+    return formatVendorHoursRange(openTime, closeTime);
+  }
+
   if (isClosed) {
-    return "Closed";
+    return "Closed today";
   }
 
-  if (!openTime || !closeTime) {
-    return "Hours not listed";
-  }
-
-  return formatVendorHoursRange(openTime, closeTime);
+  return "Hours not listed";
 }
