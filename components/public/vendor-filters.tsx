@@ -148,6 +148,7 @@ export function VendorFilters({
   }));
   const draftFilters = draftState.key === filtersStateKey ? draftState.filters : filters;
   const searchApplyTimeoutRef = useRef<number | null>(null);
+  const draftFiltersRef = useRef<DiscoveryFilters>(draftFilters);
   const panelId = useId();
   const activeFilterCount = countActiveDiscoveryFilters(draftFilters);
   const isFloating = variant === "mobileFloating" || variant === "desktopFloating";
@@ -165,6 +166,10 @@ export function VendorFilters({
     };
   }, []);
 
+  useEffect(() => {
+    draftFiltersRef.current = draftFilters;
+  }, [draftFilters]);
+
   function clearPendingSearchApply() {
     if (searchApplyTimeoutRef.current !== null) {
       window.clearTimeout(searchApplyTimeoutRef.current);
@@ -173,6 +178,7 @@ export function VendorFilters({
   }
 
   function setDraftFilters(nextFilters: DiscoveryFilters) {
+    draftFiltersRef.current = nextFilters;
     setDraftState({
       filters: nextFilters,
       key: filtersStateKey,
@@ -182,6 +188,7 @@ export function VendorFilters({
   function updateDraftFilters(
     updater: (current: DiscoveryFilters) => DiscoveryFilters,
   ) {
+    clearPendingSearchApply();
     setDraftFilters(updater(draftFilters));
   }
 
@@ -221,8 +228,13 @@ export function VendorFilters({
 
     searchApplyTimeoutRef.current = window.setTimeout(() => {
       searchApplyTimeoutRef.current = null;
-      onChange(nextFilters, { keepPanelsOpen: true });
-      trackAppliedSearch(nextFilters);
+      const latestFilters = {
+        ...draftFiltersRef.current,
+        search: sanitizePublicSearchInput(draftFiltersRef.current.search),
+      };
+
+      onChange(latestFilters, { keepPanelsOpen: true });
+      trackAppliedSearch(latestFilters);
     }, SEARCH_APPLY_DEBOUNCE_MS);
   }
 

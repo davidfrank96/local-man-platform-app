@@ -338,7 +338,16 @@ export function PublicDiscovery({
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    function markDiscoveryMounted() {
+      isMountedRef.current = true;
+    }
+
+    window.addEventListener("pageshow", markDiscoveryMounted);
+
     return () => {
+      window.removeEventListener("pageshow", markDiscoveryMounted);
       isMountedRef.current = false;
       nearbyRequestIdRef.current += 1;
     };

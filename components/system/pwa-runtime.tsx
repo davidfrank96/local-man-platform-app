@@ -19,6 +19,85 @@ const RECOVERABLE_RUNTIME_ERROR_PATTERNS = [
   /unable to preload CSS/i,
 ];
 
+const EARLY_RECOVERABLE_RUNTIME_ERROR_PATTERNS = [
+  "ChunkLoadError",
+  "Loading chunk",
+  "Loading CSS chunk",
+  "failed to fetch dynamically imported module",
+  "error loading dynamically imported module",
+  "importing a module script failed",
+  "unable to preload CSS",
+];
+
+const PWA_RECOVERY_FALLBACK_HTML = `
+  <style>
+    #${PWA_RECOVERY_FALLBACK_ID} {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: grid;
+      place-items: center;
+      min-height: 100dvh;
+      padding: 24px;
+      background: #faf6f0;
+      color: #111814;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #${PWA_RECOVERY_FALLBACK_ID} .localman-runtime-recovery-card {
+      width: min(100%, 420px);
+      border: 1px solid #e6e2d8;
+      border-radius: 22px;
+      background: #ffffff;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+      padding: 28px;
+      text-align: center;
+    }
+
+    #${PWA_RECOVERY_FALLBACK_ID} img {
+      display: block;
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 18px;
+    }
+
+    #${PWA_RECOVERY_FALLBACK_ID} h1 {
+      margin: 0;
+      font-size: 1.45rem;
+      line-height: 1.2;
+    }
+
+    #${PWA_RECOVERY_FALLBACK_ID} p {
+      margin: 12px 0 0;
+      color: #4f5b53;
+      font-size: 1rem;
+      line-height: 1.55;
+    }
+
+    #${PWA_RECOVERY_FALLBACK_ID} button {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 22px;
+      border: 0;
+      border-radius: 999px;
+      background: #13733d;
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 0 20px;
+    }
+  </style>
+  <div class="localman-runtime-recovery-card">
+    <img src="/icons/pwa-192x192.png" alt="" width="72" height="72">
+    <h1>Localman needs to reload to continue.</h1>
+    <p>Your live marketplace data will refresh when the app reloads.</p>
+    <button type="button">Reload Localman</button>
+  </div>
+`;
+
 type LocalmanPwaRuntimeState = {
   lastUpdateCheckAt: string | null;
   lastRecoveryReason: string | null;
@@ -157,74 +236,7 @@ function showRuntimeRecoveryFallback(reason: string) {
   const fallback = document.createElement("div");
   fallback.id = PWA_RECOVERY_FALLBACK_ID;
   fallback.setAttribute("role", "alert");
-  fallback.innerHTML = `
-    <style>
-      #${PWA_RECOVERY_FALLBACK_ID} {
-        position: fixed;
-        inset: 0;
-        z-index: 2147483647;
-        display: grid;
-        place-items: center;
-        min-height: 100dvh;
-        padding: 24px;
-        background: #faf6f0;
-        color: #111814;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-
-      #${PWA_RECOVERY_FALLBACK_ID} .localman-runtime-recovery-card {
-        width: min(100%, 420px);
-        border: 1px solid #e6e2d8;
-        border-radius: 22px;
-        background: #ffffff;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
-        padding: 28px;
-        text-align: center;
-      }
-
-      #${PWA_RECOVERY_FALLBACK_ID} img {
-        display: block;
-        width: 72px;
-        height: 72px;
-        margin: 0 auto 18px;
-      }
-
-      #${PWA_RECOVERY_FALLBACK_ID} h1 {
-        margin: 0;
-        font-size: 1.45rem;
-        line-height: 1.2;
-      }
-
-      #${PWA_RECOVERY_FALLBACK_ID} p {
-        margin: 12px 0 0;
-        color: #4f5b53;
-        font-size: 1rem;
-        line-height: 1.55;
-      }
-
-      #${PWA_RECOVERY_FALLBACK_ID} button {
-        display: inline-flex;
-        min-height: 48px;
-        align-items: center;
-        justify-content: center;
-        margin-top: 22px;
-        border: 0;
-        border-radius: 999px;
-        background: #13733d;
-        color: #ffffff;
-        cursor: pointer;
-        font: inherit;
-        font-weight: 700;
-        padding: 0 20px;
-      }
-    </style>
-    <div class="localman-runtime-recovery-card">
-      <img src="/icons/pwa-192x192.png" alt="" width="72" height="72">
-      <h1>Localman needs to reload to continue.</h1>
-      <p>Your live marketplace data will refresh when the app reloads.</p>
-      <button type="button">Reload Localman</button>
-    </div>
-  `;
+  fallback.innerHTML = PWA_RECOVERY_FALLBACK_HTML;
 
   fallback.querySelector("button")?.addEventListener("click", () => {
     window.location.reload();
@@ -233,18 +245,101 @@ function showRuntimeRecoveryFallback(reason: string) {
   body.append(fallback);
 }
 
+function getEarlyRecoveryScript(): string {
+  return `
+    (() => {
+      if (window.__LOCALMAN_PWA_EARLY_RECOVERY__) return;
+      window.__LOCALMAN_PWA_EARLY_RECOVERY__ = true;
+
+      const runtimeVersion = ${JSON.stringify(PWA_RUNTIME_VERSION)};
+      const recoveryReloadKey = ${JSON.stringify(PWA_RECOVERY_RELOAD_KEY)};
+      const fallbackId = ${JSON.stringify(PWA_RECOVERY_FALLBACK_ID)};
+      const recoverablePatterns = ${JSON.stringify(EARLY_RECOVERABLE_RUNTIME_ERROR_PATTERNS)};
+
+      const readRuntimeErrorText = (value) => {
+        if (!value) return "";
+        if (typeof value === "string") return value;
+        if (value instanceof Error) return \`\${value.name} \${value.message}\`;
+        if (typeof value === "object") {
+          return [
+            readRuntimeErrorText(value.error),
+            readRuntimeErrorText(value.reason),
+            typeof value.message === "string" ? value.message : "",
+          ].filter(Boolean).join(" ");
+        }
+        return "";
+      };
+
+      const isRecoverableRuntimeError = (value) => {
+        const message = readRuntimeErrorText(value).toLowerCase();
+        return recoverablePatterns.some((pattern) => message.includes(pattern.toLowerCase()));
+      };
+
+      const hasAttemptedRecoveryReload = () => {
+        try {
+          return window.sessionStorage.getItem(recoveryReloadKey) === runtimeVersion;
+        } catch {
+          return false;
+        }
+      };
+
+      const markRecoveryReloadAttempt = () => {
+        try {
+          window.sessionStorage.setItem(recoveryReloadKey, runtimeVersion);
+        } catch {
+          // Session storage can be unavailable in hardened browser modes.
+        }
+      };
+
+      const showRuntimeRecoveryFallback = (reason) => {
+        const body = document.body;
+        if (!body || document.getElementById(fallbackId)) return;
+
+        document.documentElement.dataset.localmanRuntimeRecovery = reason;
+        const fallback = document.createElement("div");
+        fallback.id = fallbackId;
+        fallback.setAttribute("role", "alert");
+        fallback.innerHTML = ${JSON.stringify(PWA_RECOVERY_FALLBACK_HTML)};
+        fallback.querySelector("button")?.addEventListener("click", () => {
+          window.location.reload();
+        });
+        body.append(fallback);
+      };
+
+      const recoverRuntime = (reason) => {
+        if (hasAttemptedRecoveryReload()) {
+          showRuntimeRecoveryFallback(reason);
+          return;
+        }
+
+        markRecoveryReloadAttempt();
+        window.location.reload();
+      };
+
+      window.addEventListener("error", (event) => {
+        if (isRecoverableRuntimeError(event)) {
+          recoverRuntime("runtime_asset_failure");
+        }
+      }, true);
+      window.addEventListener("unhandledrejection", (event) => {
+        if (isRecoverableRuntimeError(event.reason)) {
+          recoverRuntime("runtime_asset_failure");
+        }
+      }, true);
+    })();
+  `;
+}
+
 export function PwaRuntime() {
   useEffect(() => {
-    if (!canRegisterServiceWorker()) {
-      return;
-    }
-
     let isDisposed = false;
     let lastUpdateCheckMs = 0;
     let lastHiddenAt: number | null = document.visibilityState === "hidden" ? Date.now() : null;
     let pendingRecoveryReason: string | null = null;
     let registration: ServiceWorkerRegistration | null = null;
-    const hadServiceWorkerControllerAtStartup = Boolean(navigator.serviceWorker.controller);
+    const canUseServiceWorker = canRegisterServiceWorker();
+    const hadServiceWorkerControllerAtStartup =
+      canUseServiceWorker && Boolean(navigator.serviceWorker.controller);
 
     const recoverRuntime = (reason: string, options: { deferIfActive?: boolean } = {}) => {
       if (isDisposed) {
@@ -385,10 +480,14 @@ export function PwaRuntime() {
       });
     };
 
-    if (document.readyState === "complete") {
-      register();
+    if (canUseServiceWorker) {
+      if (document.readyState === "complete") {
+        register();
+      } else {
+        window.addEventListener("load", register, { once: true });
+      }
     } else {
-      window.addEventListener("load", register, { once: true });
+      exposePwaRuntimeState(null);
     }
 
     clearRecoveryAttemptAfterHealthyLoad();
@@ -397,21 +496,32 @@ export function PwaRuntime() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("pageshow", handlePageShow);
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
-    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    if (canUseServiceWorker) {
+      navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isDisposed = true;
-      window.removeEventListener("load", register);
+      if (canUseServiceWorker) {
+        window.removeEventListener("load", register);
+      }
       window.removeEventListener("error", handleWindowError);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
-      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      if (canUseServiceWorker) {
+        navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
-  return null;
+  return (
+    <script
+      id="localman-pwa-early-recovery"
+      dangerouslySetInnerHTML={{ __html: getEarlyRecoveryScript() }}
+    />
+  );
 }
