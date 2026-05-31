@@ -125,6 +125,21 @@ export function createRetainedVendorPreview(
   };
 }
 
+export function mergeRetainedVendorPreviewWithLiveVendor(
+  retainedVendor: RetainedVendorPreview,
+  liveVendor: NearbyVendor | VendorRetentionSource,
+): RetainedVendorPreview {
+  return {
+    ...retainedVendor,
+    vendor_id: liveVendor.vendor_id,
+    slug: liveVendor.slug,
+    name: liveVendor.name,
+    area: liveVendor.area,
+    today_hours: liveVendor.today_hours,
+    is_open_now: liveVendor.is_open_now,
+  };
+}
+
 export function readRecentlyViewedVendors(storageImpl?: StorageLike): RetainedVendorPreview[] {
   return readStoredArray(RECENTLY_VIEWED_KEY, storageImpl);
 }

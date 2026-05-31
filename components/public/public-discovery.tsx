@@ -30,6 +30,7 @@ import {
 } from "../../lib/public/discovery-cache.ts";
 import {
   createRetainedVendorPreview,
+  mergeRetainedVendorPreviewWithLiveVendor,
   readLastSelectedVendor,
   readRecentlyViewedVendors,
   rememberLastSelectedVendor,
@@ -60,6 +61,7 @@ import {
 } from "../../lib/vendors/card-display.ts";
 import {
   getPopularVendorIds,
+  getPopularVendors,
   sortDiscoveryVendors,
 } from "../../lib/vendors/discovery-ranking.ts";
 import {
@@ -999,8 +1001,18 @@ export function PublicDiscovery({
     [vendors],
   );
   const popularVendors = useMemo(
-    () => vendors.filter((vendor) => popularVendorIds.has(vendor.vendor_id)).slice(0, 3),
-    [popularVendorIds, vendors],
+    () => getPopularVendors(vendors as NearbyVendorsResponseData["vendors"]),
+    [vendors],
+  );
+  const currentRecentlyViewedVendors = useMemo(
+    () =>
+      recentlyViewedVendors.map((retainedVendor) => {
+        const liveVendor = vendorById.get(retainedVendor.vendor_id);
+        return liveVendor
+          ? mergeRetainedVendorPreviewWithLiveVendor(retainedVendor, liveVendor)
+          : retainedVendor;
+      }),
+    [recentlyViewedVendors, vendorById],
   );
   const resolvedLocation = location ?? nearbyData?.location ?? null;
   const selectedVendor = useMemo(
@@ -1026,6 +1038,16 @@ export function PublicDiscovery({
         ? vendorById.get(lastSelectedVendorMemory.vendor_id) ?? null
         : null,
     [lastSelectedVendorMemory, vendorById],
+  );
+  const currentLastSelectedVendorMemory = useMemo(
+    () =>
+      lastSelectedVendorMemory && rememberedSelectedVendor
+        ? mergeRetainedVendorPreviewWithLiveVendor(
+            lastSelectedVendorMemory,
+            rememberedSelectedVendor,
+          )
+        : lastSelectedVendorMemory,
+    [lastSelectedVendorMemory, rememberedSelectedVendor],
   );
   const isResolvingLocation = locationStatus === "resolving";
   const isLoading = canUseNetwork && (isResolvingLocation || isFetchingVendors);
@@ -1408,14 +1430,14 @@ export function PublicDiscovery({
             <div className="result-heading">
               <strong>Recently viewed vendors</strong>
               <span>
-                {recentlyViewedVendors.length > 0
-                  ? `${recentlyViewedVendors.length} saved`
+                {currentRecentlyViewedVendors.length > 0
+                  ? `${currentRecentlyViewedVendors.length} saved`
                   : "No recent views yet"}
               </span>
             </div>
-            {recentlyViewedVendors.length > 0 ? (
+            {currentRecentlyViewedVendors.length > 0 ? (
               <div className="retention-list">
-                {recentlyViewedVendors.map((vendor) => (
+                {currentRecentlyViewedVendors.map((vendor) => (
                   <div key={vendor.vendor_id} className="retention-item">
                     <div className="retention-item-copy">
                       <strong>{vendor.name}</strong>
@@ -1496,16 +1518,18 @@ export function PublicDiscovery({
           >
             <div className="result-heading">
               <strong>Last selected vendor</strong>
-              <span>{lastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}</span>
+              <span>
+                {currentLastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}
+              </span>
             </div>
-            {lastSelectedVendorMemory ? (
+            {currentLastSelectedVendorMemory ? (
               <div className="retention-list">
                 <div className="retention-item">
                   <div className="retention-item-copy">
-                    <strong>{lastSelectedVendorMemory.name}</strong>
+                    <strong>{currentLastSelectedVendorMemory.name}</strong>
                     <span>
-                      {lastSelectedVendorMemory.area ?? "Area not set"} • Today:{" "}
-                      {lastSelectedVendorMemory.today_hours}
+                      {currentLastSelectedVendorMemory.area ?? "Area not set"} • Today:{" "}
+                      {currentLastSelectedVendorMemory.today_hours}
                     </span>
                   </div>
                   {rememberedSelectedVendor ? (
@@ -1533,7 +1557,7 @@ export function PublicDiscovery({
                     <Link
                       className="button-secondary compact-button"
                       href={buildVendorDetailHref(
-                        lastSelectedVendorMemory.slug,
+                        currentLastSelectedVendorMemory.slug,
                         discoveryReturnTo,
                         activeLocationSource ?? null,
                       )}
