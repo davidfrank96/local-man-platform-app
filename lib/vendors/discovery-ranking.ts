@@ -184,17 +184,21 @@ function getDiscoverySearchFields(vendor: DiscoveryRankableVendor): SearchMatchF
   ];
 }
 
-export function getPopularVendorIds(vendors: NearbyVendor[]): Set<string> {
-  const rankedVendors = [...vendors]
-    .filter((vendor) => vendor.ranking_score > 0)
+export function getPopularVendors(vendors: NearbyVendor[]): NearbyVendor[] {
+  return [...vendors]
+    .filter((vendor) => getPopularityRank(vendor) > 0)
     .sort(
       (left, right) =>
-        right.ranking_score - left.ranking_score ||
-        left.distance_km - right.distance_km ||
+        getPopularityRank(right) - getPopularityRank(left) ||
+        getDistanceRank(left) - getDistanceRank(right) ||
         left.name.localeCompare(right.name) ||
         left.vendor_id.localeCompare(right.vendor_id),
     )
     .slice(0, 3);
+}
+
+export function getPopularVendorIds(vendors: NearbyVendor[]): Set<string> {
+  const rankedVendors = getPopularVendors(vendors);
 
   return new Set(rankedVendors.map((vendor) => vendor.vendor_id));
 }

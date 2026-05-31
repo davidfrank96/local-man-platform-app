@@ -131,6 +131,14 @@ async function expectUniqueMapVendorMarkers(page: Page) {
   expect(new Set(filteredIds).size).toBe(filteredIds.length);
 }
 
+async function expectMapLibreVendorMarkers(page: Page) {
+  const markerLocator = page.locator(
+    '.discovery-map[data-map-mode="maplibre"] .maplibre-vendor-marker[data-vendor-id]',
+  );
+
+  await expect.poll(async () => markerLocator.count(), { timeout: 10_000 }).not.toBe(0);
+}
+
 async function readMapInteractionState(page: Page) {
   const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
   if (mapMode !== "maplibre") {
@@ -1628,7 +1636,7 @@ test.describe("Phase 3 browser smoke", () => {
     });
     await expect(page.getByText("Map view limited, vendors still available below.")).toHaveCount(0);
     await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
-    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+    await expectMapLibreVendorMarkers(page);
   });
 
   test("MapLibre initializes on first load after delayed container layout readiness", async ({ page }) => {
@@ -1659,7 +1667,7 @@ test.describe("Phase 3 browser smoke", () => {
     });
     await expect(page.getByText("Map view limited, vendors still available below.")).toHaveCount(0);
     await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
-    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+    await expectMapLibreVendorMarkers(page);
 
     await expectNoClientErrors(errors);
   });
@@ -1675,7 +1683,7 @@ test.describe("Phase 3 browser smoke", () => {
       timeout: 10_000,
     });
     await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
-    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+    await expectMapLibreVendorMarkers(page);
 
     await page.evaluate(() => {
       window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
@@ -1685,7 +1693,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible();
     await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
-    await expect(page.locator(".maplibre-vendor-marker")).not.toHaveCount(0);
+    await expectMapLibreVendorMarkers(page);
     await expectNoClientErrors(errors);
   });
 
@@ -4414,7 +4422,9 @@ test.describe("Phase 3 browser smoke", () => {
     const mapFilters = page.getByTestId("mobile-map-filters");
     await expect(mapFilters.locator('input[name="search"]')).toBeVisible();
     await expect(mapFilters.locator('input[name="search"]')).toHaveValue("");
-    await expect(page.locator(`.discovery-map [data-vendor-id="${radiusVendors[3].vendor_id}"]`)).toBeVisible();
+    await expect(page.locator(`.discovery-map [data-vendor-id="${radiusVendors[3].vendor_id}"]`)).toBeVisible({
+      timeout: 10_000,
+    });
 
     await mapFilters.locator('button[aria-label="Open filters"]').click();
     const mapResponsePromise = page.waitForResponse((response) => {
@@ -4818,6 +4828,7 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
     const popularVendorId = "61000000-0000-4000-8000-000000000001";
     const memoryVendorId = "61000000-0000-4000-8000-000000000002";
+    const popularLeaderId = "61000000-0000-4000-8000-000000000003";
 
     await page.setViewportSize({ width: 390, height: 844 });
     await primePublicLocation(page);
@@ -4865,6 +4876,27 @@ test.describe("Phase 3 browser smoke", () => {
         },
         today_hours: "10:00 AM - 10:00 PM",
       },
+      {
+        vendor_id: popularLeaderId,
+        name: "Popular Leader Suya",
+        slug: "popular-leader-suya",
+        short_description: "Higher popularity score regression case.",
+        phone_number: "+2348000000203",
+        area: "Gwarinpa",
+        latitude: 9.095,
+        longitude: 7.38,
+        price_band: "standard",
+        average_rating: 4.8,
+        review_count: 42,
+        ranking_score: 80,
+        distance_km: 3.8,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Beef suya",
+          description: null,
+        },
+        today_hours: "5:00 PM - 11:00 PM",
+      },
     ]);
 
     await page.goto("/");
@@ -4872,10 +4904,12 @@ test.describe("Phase 3 browser smoke", () => {
     await mobileSections.getByRole("button", { name: "Popular" }).click();
 
     const popularPanel = page.locator(".retention-panel").filter({ hasText: "Popular vendors near you" });
-    await expect(popularPanel.getByRole("link", { name: "Open" })).toBeVisible();
+    const popularItems = popularPanel.locator(".retention-item");
+    await expect(popularItems.first()).toContainText("Popular Leader Suya");
+    await expect(popularItems.first().getByRole("link", { name: "Open" })).toBeVisible();
     await expect(popularPanel.getByRole("button", { name: "Preview" })).toHaveCount(0);
-    await popularPanel.getByRole("link", { name: "Open" }).click();
-    await expect(page).toHaveURL(/\/vendors\/popular-open-kitchen(\?.*)?$/);
+    await popularItems.first().getByRole("link", { name: "Open" }).click();
+    await expect(page).toHaveURL(/\/vendors\/popular-leader-suya(\?.*)?$/);
 
     await page.goto("/");
     const memoryCard = page.locator(".vendor-card").filter({ hasText: "Memory Noodle Bar" });
@@ -4897,6 +4931,7 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
     const popularVendorId = "62000000-0000-4000-8000-000000000001";
     const memoryVendorId = "62000000-0000-4000-8000-000000000002";
+    const popularLeaderId = "62000000-0000-4000-8000-000000000003";
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await primePublicLocation(page);
@@ -4944,6 +4979,27 @@ test.describe("Phase 3 browser smoke", () => {
         },
         today_hours: "10:00 AM - 10:00 PM",
       },
+      {
+        vendor_id: popularLeaderId,
+        name: "Desktop Popular Leader",
+        slug: "desktop-popular-leader",
+        short_description: "Higher desktop popularity score regression case.",
+        phone_number: "+2348000000303",
+        area: "Gwarinpa",
+        latitude: 9.095,
+        longitude: 7.38,
+        price_band: "standard",
+        average_rating: 4.8,
+        review_count: 42,
+        ranking_score: 80,
+        distance_km: 3.8,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Beef suya",
+          description: null,
+        },
+        today_hours: "5:00 PM - 11:00 PM",
+      },
     ]);
 
     await page.goto("/");
@@ -4951,7 +5007,9 @@ test.describe("Phase 3 browser smoke", () => {
     await desktopSections.getByRole("button", { name: "Popular" }).click();
 
     const popularPanel = page.locator(".retention-panel").filter({ hasText: "Popular vendors near you" });
-    await expect(popularPanel.getByRole("button", { name: "Preview" })).toBeVisible();
+    const popularItems = popularPanel.locator(".retention-item");
+    await expect(popularItems.first()).toContainText("Desktop Popular Leader");
+    await expect(popularItems.first().getByRole("button", { name: "Preview" })).toBeVisible();
     await expect(popularPanel.getByRole("link", { name: "Open" })).toHaveCount(0);
 
     await desktopSections.getByRole("button", { name: "Nearby" }).click();

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createRetainedVendorPreview,
+  mergeRetainedVendorPreviewWithLiveVendor,
   readLastSelectedVendor,
   readRecentlyViewedVendors,
   removeRetainedVendorPreview,
@@ -104,6 +105,27 @@ test("retained vendor previews can be created from nearby vendor-like data", () 
   assert.equal(preview.slug, "test-vendor");
   assert.equal(preview.today_hours, "Closed");
   assert.equal(typeof preview.timestamp, "string");
+});
+
+test("retained vendor previews can be refreshed from current nearby data without changing recency", () => {
+  const retainedVendor = createVendor(1);
+  const refreshedVendor = mergeRetainedVendorPreviewWithLiveVendor(retainedVendor, {
+    vendor_id: retainedVendor.vendor_id,
+    slug: "updated-vendor",
+    name: "Updated Vendor",
+    area: "Jabi",
+    today_hours: "10:00 AM - 8:00 PM",
+    is_open_now: true,
+  });
+
+  assert.deepEqual(refreshedVendor, {
+    ...retainedVendor,
+    slug: "updated-vendor",
+    name: "Updated Vendor",
+    area: "Jabi",
+    today_hours: "10:00 AM - 8:00 PM",
+    is_open_now: true,
+  });
 });
 
 test("retained vendor memory rejects known Playwright mock identities", () => {

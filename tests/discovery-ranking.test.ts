@@ -4,6 +4,7 @@ import {
   compareDiscoveryVendors,
   countActiveDiscoveryFilters,
   getPopularVendorIds,
+  getPopularVendors,
   sortDiscoveryVendors,
 } from "../lib/vendors/discovery-ranking.ts";
 import type { NearbyVendorsResponseData } from "../types/index.ts";
@@ -303,6 +304,45 @@ test("popular vendor ids return the top ranked active vendors", () => {
   ];
 
   assert.deepEqual([...getPopularVendorIds(vendors)].sort(), ["2", "3", "4"]);
+});
+
+test("popular vendors keep popularity ordering independent of nearby ordering", () => {
+  const vendors = [
+    createVendor({
+      vendor_id: "1",
+      slug: "nearest-lower-score",
+      name: "Nearest Lower Score",
+      ranking_score: 4,
+      distance_km: 0.4,
+    }),
+    createVendor({
+      vendor_id: "2",
+      slug: "middle-score",
+      name: "Middle Score",
+      ranking_score: 7,
+      distance_km: 1.4,
+    }),
+    createVendor({
+      vendor_id: "3",
+      slug: "highest-score",
+      name: "Highest Score",
+      ranking_score: 12,
+      distance_km: 2.4,
+    }),
+    createVendor({
+      vendor_id: "4",
+      slug: "zero-score",
+      name: "Zero Score",
+      ranking_score: 0,
+      distance_km: 0.1,
+    }),
+  ];
+
+  assert.deepEqual(getPopularVendors(vendors).map((vendor) => vendor.slug), [
+    "highest-score",
+    "middle-score",
+    "nearest-lower-score",
+  ]);
 });
 
 test("active filter count stays lightweight and explicit", () => {

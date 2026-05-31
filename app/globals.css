@@ -3054,6 +3054,8 @@ h2 {
 
 .vendor-card-status-line {
   grid-area: distance;
+  grid-column: 1;
+  grid-row: 1;
   font-weight: 700;
 }
 
@@ -3151,11 +3153,15 @@ h2 {
 
 .vendor-card p.vendor-card-meta-line {
   grid-area: meta;
+  grid-column: 1 / -1;
+  grid-row: 3;
   color: var(--color-muted);
 }
 
 .vendor-card-rating {
   grid-area: rating;
+  grid-column: 2;
+  grid-row: 1;
   justify-self: end;
   color: var(--color-text);
   font-size: 0.9rem;
@@ -3165,6 +3171,8 @@ h2 {
 
 .vendor-card-hours-line {
   grid-area: hours;
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .status-open,
@@ -4716,6 +4724,8 @@ h2 {
 
   .vendor-card-status-line {
     grid-area: distance;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .vendor-card-status-separator,
@@ -4725,6 +4735,8 @@ h2 {
 
   .vendor-card-rating {
     grid-area: rating;
+    grid-column: 2;
+    grid-row: 1;
     justify-self: end;
     text-align: right;
   }
@@ -4735,10 +4747,14 @@ h2 {
 
   .vendor-card-hours-line {
     grid-area: hours;
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .vendor-card-meta-line {
     grid-area: meta;
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
 
   .vendor-card p.vendor-card-cue {
