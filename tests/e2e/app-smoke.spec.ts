@@ -3987,6 +3987,104 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("desktop header bell opens Localman Updates accessibly", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const updatesButton = page.getByRole("button", { name: "Open Localman updates" });
+    await expect(updatesButton).toBeVisible();
+    await expect(updatesButton).toHaveAttribute("aria-expanded", "false");
+    await expect(updatesButton).toHaveAttribute("aria-controls", "localman-updates-panel");
+    await expectNoBoxOverlap(
+      updatesButton,
+      page.locator(".discovery-heading h1"),
+      "desktop updates bell and discovery heading",
+    );
+
+    await updatesButton.click();
+    const updatesPanel = page.getByTestId("localman-updates-panel");
+    await expect(updatesButton).toHaveAttribute("aria-expanded", "true");
+    await expect(updatesPanel).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Localman Updates" })).toBeVisible();
+    await expect(updatesPanel).toContainText("Welcome to Localman");
+    await expect(updatesPanel).toContainText("Discover Local. Empower Local.");
+    await expect(updatesPanel).toContainText("Rider Connect guidance");
+    await expect(updatesPanel).toContainText("Safety reminder");
+    await expect(updatesPanel).toContainText("Vendor discovery tip");
+
+    const panelMetrics = await updatesPanel.evaluate((element) => {
+      const styles = window.getComputedStyle(element);
+
+      return {
+        clientHeight: element.clientHeight,
+        maxAllowedHeight: Math.ceil(window.innerHeight * 0.8),
+        overflowY: styles.overflowY,
+      };
+    });
+    expect(["auto", "scroll"]).toContain(panelMetrics.overflowY);
+    expect(panelMetrics.clientHeight).toBeLessThanOrEqual(panelMetrics.maxAllowedHeight);
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("localman-updates-panel")).toHaveCount(0);
+    await expect(updatesButton).toHaveAttribute("aria-expanded", "false");
+    await expect(updatesButton).toBeFocused();
+
+    await updatesButton.click();
+    await expect(page.getByTestId("localman-updates-panel")).toBeVisible();
+    await page.mouse.click(20, 20);
+    await expect(page.getByTestId("localman-updates-panel")).toHaveCount(0);
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
+  test("tablet landscape header bell keeps Localman Updates responsive", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const updatesButton = page.getByRole("button", { name: "Open Localman updates" });
+    await expect(updatesButton).toBeVisible();
+    await updatesButton.click();
+
+    const updatesPanel = page.getByTestId("localman-updates-panel");
+    await expect(updatesPanel).toBeVisible();
+    await expect(updatesPanel).toContainText("Welcome to Localman");
+
+    const metrics = await updatesPanel.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+
+      return {
+        bottom: box.bottom,
+        left: box.left,
+        right: box.right,
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      };
+    });
+    expect(metrics.left).toBeGreaterThanOrEqual(0);
+    expect(metrics.right).toBeLessThanOrEqual(metrics.viewportWidth);
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewportHeight);
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("mobile About markup hydrates without client/server mismatch", async ({ page }) => {
     const errors = trackClientErrors(page);
 

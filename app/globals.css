@@ -6112,7 +6112,58 @@ h2 {
   .public-discovery-shell .discovery-heading {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
-    padding: 10px 6px 4px;
+    padding: 10px 60px 4px 6px;
+  }
+
+  .public-discovery-shell .discovery-notification-button {
+    appearance: none;
+    position: absolute;
+    top: 10px;
+    right: 6px;
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(230, 226, 216, 0.96);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #111813;
+    box-shadow: var(--localman-lifted-shadow);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .public-discovery-shell .discovery-notification-button svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .public-discovery-shell .discovery-notification-dot {
+    position: absolute;
+    top: 9px;
+    right: 10px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #f59e0b;
+  }
+
+  .public-discovery-shell .discovery-notification-button:focus-visible {
+    outline: 3px solid rgba(159, 230, 74, 0.55);
+    outline-offset: 3px;
+  }
+
+  .localman-updates-overlay {
+    align-items: start;
+    justify-items: start;
+    padding: 32px 24px;
+    background: rgba(17, 24, 20, 0.28);
+  }
+
+  .localman-updates-panel {
+    width: min(460px, calc(100vw - 48px));
+    max-height: min(78vh, 700px);
   }
 
   .public-discovery-shell .discovery-heading h1 {
