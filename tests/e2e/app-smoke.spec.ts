@@ -3932,6 +3932,61 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
+  test("mobile bell opens Localman Updates without hydration or layout regressions", async ({ page }) => {
+    const errors = trackClientErrors(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    await mockReverseGeocode(page, "Wuse II, Abuja");
+    await page.goto("/");
+
+    const updatesButton = page.getByTestId("mobile-updates-button");
+    await expect(updatesButton).toBeVisible();
+    await expect(updatesButton).toHaveAttribute("aria-expanded", "false");
+    await expect(updatesButton).toHaveAttribute("aria-controls", "localman-updates-panel");
+    await expect(page.getByTestId("localman-updates-panel")).toHaveCount(0);
+
+    await updatesButton.click();
+    const updatesPanel = page.getByTestId("localman-updates-panel");
+    await expect(updatesButton).toHaveAttribute("aria-expanded", "true");
+    await expect(updatesPanel).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Localman Updates" })).toBeVisible();
+    await expect(updatesPanel).toContainText("Welcome to Localman");
+    await expect(updatesPanel).toContainText("Discover Local. Empower Local.");
+    await expect(updatesPanel).toContainText("Rider Connect guidance");
+    await expect(updatesPanel).toContainText("Safety reminder");
+    await expect(updatesPanel).toContainText("Vendor discovery tip");
+
+    const panelMetrics = await updatesPanel.evaluate((element) => {
+      const styles = window.getComputedStyle(element);
+
+      return {
+        clientHeight: element.clientHeight,
+        maxAllowedHeight: Math.ceil(window.innerHeight * 0.76),
+        overflowY: styles.overflowY,
+      };
+    });
+    expect(["auto", "scroll"]).toContain(panelMetrics.overflowY);
+    expect(panelMetrics.clientHeight).toBeLessThanOrEqual(panelMetrics.maxAllowedHeight);
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("localman-updates-panel")).toHaveCount(0);
+    await expect(updatesButton).toHaveAttribute("aria-expanded", "false");
+    await expect(updatesButton).toBeFocused();
+
+    await updatesButton.press("Enter");
+    await expect(page.getByTestId("localman-updates-panel")).toBeVisible();
+    await page.getByRole("button", { name: "Close Localman updates" }).click();
+    await expect(page.getByTestId("localman-updates-panel")).toHaveCount(0);
+
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(hasHorizontalOverflow).toBe(false);
+
+    await expectNoClientErrors(errors);
+  });
+
   test("mobile About markup hydrates without client/server mismatch", async ({ page }) => {
     const errors = trackClientErrors(page);
 
