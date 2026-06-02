@@ -53,6 +53,7 @@ import {
   fetchPublicCategories,
   type PublicCategory,
 } from "../../lib/vendors/public-api-client.ts";
+import { getActiveLocalmanUpdates } from "../../lib/public/localman-updates.ts";
 import {
   formatVendorCardDistance,
   getVendorActiveHoursLabel,
@@ -86,6 +87,7 @@ import {
   VendorSectionTabs,
   type VendorSection,
 } from "./public-discovery-sections.tsx";
+import { LocalmanUpdatesCenter } from "./localman-updates-center.tsx";
 import { VendorCard } from "./vendor-card.tsx";
 import { VendorMap } from "./vendor-map.tsx";
 import type { VendorSelectionSource } from "./vendor-map-types.ts";
@@ -214,6 +216,7 @@ export function PublicDiscovery({
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [browserReady, setBrowserReady] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const [updatesCenterOpen, setUpdatesCenterOpen] = useState(false);
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
     useState<RetainedVendorPreview | null>(null);
@@ -298,6 +301,8 @@ export function PublicDiscovery({
     }),
     [],
   );
+  const activeLocalmanUpdates = useMemo(() => getActiveLocalmanUpdates(), []);
+  const hasActiveLocalmanUpdates = activeLocalmanUpdates.length > 0;
 
   const hydrateRetentionState = useCallback(() => {
     applyStoredPublicDiscoveryInvalidationToRetention();
@@ -1243,13 +1248,23 @@ export function PublicDiscovery({
             }
           >
             <p className="eyebrow">Abuja pilot</p>
-            <span className="discovery-notification-button" aria-hidden="true">
-              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
+            <button
+              aria-controls="localman-updates-panel"
+              aria-expanded={updatesCenterOpen}
+              aria-label="Open Localman updates"
+              className="discovery-notification-button"
+              data-testid="mobile-updates-button"
+              onClick={() => setUpdatesCenterOpen(true)}
+              type="button"
+            >
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <path d="M5.7 8.3a4.3 4.3 0 0 1 8.6 0v3.4l1.2 2H4.5l1.2-2V8.3Z" strokeLinejoin="round" />
                 <path d="M8.4 15.6a1.8 1.8 0 0 0 3.2 0" strokeLinecap="round" />
               </svg>
-              <span />
-            </span>
+              {hasActiveLocalmanUpdates ? (
+                <span className="discovery-notification-dot" aria-hidden="true" />
+              ) : null}
+            </button>
             <h1 id="discovery-title">
               {showBrandLogo ? (
                 <span className="discovery-brand-title">
@@ -1652,6 +1667,11 @@ export function PublicDiscovery({
       <FloatingAboutPanel
         supportEmail={LOCALMAN_SUPPORT_EMAIL}
         websiteUrl={LOCALMAN_WEBSITE_URL}
+      />
+      <LocalmanUpdatesCenter
+        onClose={() => setUpdatesCenterOpen(false)}
+        open={updatesCenterOpen}
+        updates={activeLocalmanUpdates}
       />
       <nav
         aria-label="Mobile discovery sections"

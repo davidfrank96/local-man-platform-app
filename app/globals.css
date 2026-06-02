@@ -5222,6 +5222,150 @@ h2 {
   display: none;
 }
 
+.localman-updates-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 18px 14px calc(88px + env(safe-area-inset-bottom));
+  background: rgba(17, 24, 20, 0.38);
+  backdrop-filter: blur(8px);
+}
+
+.localman-updates-panel {
+  width: min(100%, 430px);
+  max-height: min(74vh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(230, 226, 216, 0.96);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 26px 70px rgba(17, 24, 20, 0.22);
+  color: #111813;
+  padding: 16px;
+  animation: localman-updates-in 180ms ease-out;
+}
+
+.localman-updates-panel:focus {
+  outline: none;
+}
+
+.localman-updates-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.localman-updates-header .eyebrow {
+  margin: 0 0 4px;
+  color: var(--localman-green-dark);
+}
+
+.localman-updates-header h2 {
+  margin: 0;
+  font-size: 1.22rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.localman-updates-close,
+.localman-updates-dismiss {
+  appearance: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.localman-updates-close {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(221, 214, 199, 0.92);
+  border-radius: 999px;
+  background: #fff;
+  color: #172016;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.localman-updates-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.localman-update-card {
+  border: 1px solid rgba(226, 220, 204, 0.92);
+  border-radius: 16px;
+  background: rgba(248, 250, 245, 0.9);
+  padding: 12px;
+}
+
+.localman-update-card-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: #62705d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.localman-update-card h3 {
+  margin: 7px 0 5px;
+  color: #172016;
+  font-size: 0.99rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.localman-update-card p {
+  margin: 0;
+  color: #53604e;
+  font-size: 0.91rem;
+  line-height: 1.45;
+}
+
+.localman-update-card-empty {
+  background: #fff;
+}
+
+.localman-updates-dismiss {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--localman-green), var(--localman-green-dark));
+  color: #fff;
+  font-weight: 850;
+  box-shadow: 0 12px 28px rgba(62, 125, 52, 0.18);
+}
+
+.localman-updates-close:focus-visible,
+.localman-updates-dismiss:focus-visible {
+  outline: 3px solid rgba(159, 230, 74, 0.55);
+  outline-offset: 2px;
+}
+
+@keyframes localman-updates-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .public-discovery-shell .discovery-heading h1 {
   color: var(--discovery-heading-title);
   letter-spacing: -0.035em;
@@ -5968,7 +6112,58 @@ h2 {
   .public-discovery-shell .discovery-heading {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
-    padding: 10px 6px 4px;
+    padding: 10px 60px 4px 6px;
+  }
+
+  .public-discovery-shell .discovery-notification-button {
+    appearance: none;
+    position: absolute;
+    top: 10px;
+    right: 6px;
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(230, 226, 216, 0.96);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #111813;
+    box-shadow: var(--localman-lifted-shadow);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .public-discovery-shell .discovery-notification-button svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .public-discovery-shell .discovery-notification-dot {
+    position: absolute;
+    top: 9px;
+    right: 10px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #f59e0b;
+  }
+
+  .public-discovery-shell .discovery-notification-button:focus-visible {
+    outline: 3px solid rgba(159, 230, 74, 0.55);
+    outline-offset: 3px;
+  }
+
+  .localman-updates-overlay {
+    align-items: start;
+    justify-items: start;
+    padding: 32px 24px;
+    background: rgba(17, 24, 20, 0.28);
+  }
+
+  .localman-updates-panel {
+    width: min(460px, calc(100vw - 48px));
+    max-height: min(78vh, 700px);
   }
 
   .public-discovery-shell .discovery-heading h1 {
@@ -6022,6 +6217,7 @@ h2 {
   }
 
   .public-discovery-shell .discovery-notification-button {
+    appearance: none;
     position: relative;
     display: inline-flex;
     grid-column: 2;
@@ -6034,6 +6230,8 @@ h2 {
     background: rgba(255, 255, 255, 0.96);
     color: #111813;
     box-shadow: var(--localman-lifted-shadow);
+    cursor: pointer;
+    padding: 0;
   }
 
   .public-discovery-shell .discovery-notification-button svg {
@@ -6041,7 +6239,7 @@ h2 {
     height: 24px;
   }
 
-  .public-discovery-shell .discovery-notification-button span {
+  .public-discovery-shell .discovery-notification-dot {
     position: absolute;
     top: 10px;
     right: 11px;
@@ -6049,6 +6247,11 @@ h2 {
     height: 8px;
     border-radius: 999px;
     background: #f59e0b;
+  }
+
+  .public-discovery-shell .discovery-notification-button:focus-visible {
+    outline: 3px solid rgba(159, 230, 74, 0.55);
+    outline-offset: 3px;
   }
 
   .public-discovery-shell .discovery-heading h1,
