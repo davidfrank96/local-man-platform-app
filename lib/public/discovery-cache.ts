@@ -30,6 +30,7 @@ export type PublicDiscoverySnapshot<T = unknown> = {
   nearbyData: T | null;
   nearbyDataUpdatedAt?: string | null;
   nearbyRequestKey?: string | null;
+  selectedAreaId?: string | null;
   selectedVendorId: string | null;
   selectedVendorSlug?: string | null;
   scrollY: number;

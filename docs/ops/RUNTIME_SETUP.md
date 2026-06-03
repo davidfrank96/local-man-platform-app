@@ -29,7 +29,7 @@ If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that a
 The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
 `http://127.0.0.1:3000` is also safe for local operator smoke checks because `next.config.ts` explicitly allows that development origin for HMR and chunk requests.
 
-The smoke test verifies precise coordinates, `distance_km`, open/distance/close-popularity nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
+The smoke test verifies precise coordinates, `distance_km`, open/distance/close-popularity nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and the backend Abuja fallback behavior used by direct API/operator checks. The public frontend release gate separately verifies that no-location/no-area users see the discovery-choice state instead of silently loading default-city vendors.
 
 ## Required Tools
 - Node.js and npm

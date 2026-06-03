@@ -10,7 +10,10 @@ The app prefers:
 
 1. precise browser/device location
 2. approximate location when usable and clearly labeled
-3. Abuja default-city fallback when no better location is available
+3. a selected discovery area when precise or approximate location is unavailable
+4. no discovery origin until the user retries location or chooses an area
+
+The backend nearby API still supports an Abuja default-city fallback for direct API callers and operator smoke checks. The public discovery UI must not silently load that fallback when no usable browser location or selected area exists.
 
 ## Location reminder popup
 
@@ -42,11 +45,14 @@ Current responsibilities:
 - show the current location headline
 - show supporting trust/detail text
 - show a retry action
+- show Browse By Area when no usable location is available
+- show the selected discovery area when area fallback is active
 
 Retry behavior:
 
 - uses the existing frontend location refresh path
 - clears stale denied or unavailable state once location resolves again
+- overrides a selected area when precise location succeeds
 - does not create a new permission system
 
 ## Copy rules
@@ -54,7 +60,8 @@ Retry behavior:
 Location copy stays trust-first:
 
 - do not imply exact nearby accuracy from approximate or fallback location
-- do not present Abuja fallback as the user’s exact location
+- do not present the backend Abuja fallback as the user’s exact location
+- do not show default-city vendors in the public frontend when the user has not provided location or selected an area
 - when precise location is active, the UI may show stronger confidence copy
 
 ## Source ownership

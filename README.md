@@ -75,7 +75,9 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - trust-first location behavior:
   - precise browser geolocation
   - approximate location only when usable and clearly labeled
-  - Abuja default city fallback without claiming it is the user’s exact location
+  - a discovery-choice state when no usable location or selected area exists
+  - Browse By Area fallback using curated Abuja discovery areas
+  - backend Abuja default-city fallback remains available for operator/API smoke checks, but the public frontend does not silently load it when location is unavailable
 - lightweight location reminder toast on discovery load with auto-dismiss and manual close
 - bounded public discovery freshness:
   - nearby vendor reads use a short 5 second server revalidation window

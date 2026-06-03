@@ -22,9 +22,10 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - coordinate fallback map when MapLibre or the configured MapTiler style is unavailable or unconfigured
 - browser geolocation for precise location
 - optional approximate location provider interface
+- curated discovery areas for user-selected fallback browsing
 - internal reverse geocoding route for human-readable labels
 - Google Maps deep links for directions only
-- the interactive discovery map should initialize immediately with the default-city center while location resolution and nearby vendor loading continue asynchronously
+- the interactive discovery map should initialize without silently loading default-city vendors when there is no usable location or selected area
 
 ### Deployment
 - DigitalOcean App Platform
@@ -125,11 +126,12 @@ Stores:
 ## Public App Flow
 1. User opens the discovery page
 2. Browser geolocation is attempted
-3. The app resolves precise, approximate, or default-city browse mode
-4. `/api/vendors/nearby` returns nearby vendors
-5. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
-6. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
-7. User opens vendor detail, rates a vendor, requests a rider, or takes actions such as call and directions
+3. The app resolves precise/approximate location, a selected discovery area, or no discovery origin
+4. If no discovery origin exists, the UI shows Retry Location and Browse By Area without fetching vendors
+5. `/api/vendors/nearby` returns vendors after the frontend has a real location or selected area
+6. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
+7. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
+8. User opens vendor detail, rates a vendor, requests a rider, or takes actions such as call and directions
 
 Public rendering rules:
 - discovery/list surfaces use compact no-image vendor cards

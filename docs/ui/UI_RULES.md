@@ -14,7 +14,7 @@ Local Man — UI Rules
 - Homepage must open into mobile Home content on small screens and the combined discovery layout on tablet/desktop.
 - Header branding must keep the Localman icon and visible `Localman` text side-by-side; the icon must not replace the text or inflate the mobile header.
 - The public discovery map may render as MapLibre using the browser-safe MapTiler style URL or as the lightweight coordinate fallback, but vendor browsing must remain usable in either mode.
-- The map should mount immediately on page load; nearby vendors may hydrate asynchronously from default-city data first and then upgrade to precise results when location resolves.
+- The map should mount without pretending to have a discovery origin. Nearby vendors should load only after precise/approximate location is available or the user chooses a discovery area.
 - When MapLibre is active, the map must use one marker system only:
   - oxblood storefront vendor markers
   - green storefront marker state for the selected vendor
@@ -67,13 +67,13 @@ Local Man — UI Rules
 - If reverse lookup does not resolve a useful label, fall back to rounded coordinates instead of inventing a place name.
 - If the user denies location access, use IP-based approximate coordinates internally when available, but only show approximate location in the UI when a usable human-readable label exists.
 - Approximate location copy must never imply exact nearby accuracy; tell the user to turn on location for exact nearby results.
-- If precise and approximate location are unavailable, keep vendor discovery usable internally with the Abuja default city view, but do not present that default city as the user’s exact location.
-- Do not block the public app when location permission is denied.
+- If precise and approximate location are unavailable, show the discovery-choice state with Retry Location and Browse By Area. Do not silently load backend default-city vendors.
+- Do not block the public app when location permission is denied; let the user browse by a curated area instead.
 - Do not imply exact distance when the location source is approximate or default city.
 - Provide a clear path to retry location permission or change location later.
 - Tell mobile users that precise location can take a few seconds before fallback.
 - Retry location must clear stale denied/unavailable copy and update the UI to the current resolved source after success.
-- Denied, unavailable, and default-city fallback states should use calm trust-first copy such as `Showing nearby vendors` and `Turn on location for more accurate nearby vendors.`
+- Denied and unavailable states should use calm trust-first copy such as `Find vendors near you` and `Turn on location for more accurate nearby results.`
 - Do not show raw fallback chains like `Approximate location unavailable` or `Showing Abuja` as if that were the user’s location.
 - Use `hooks/use-user-location.ts` as the frontend location acquisition interface.
 

@@ -11,10 +11,15 @@ import {
 import { useUserLocation } from "../../hooks/use-user-location.ts";
 import { useOnlineStatus } from "../../hooks/use-online-status.ts";
 import type { AcquiredUserLocation } from "../../lib/location/acquisition.ts";
-import { DEFAULT_CITY_LOCATION } from "../../lib/location/user-location.ts";
 import {
   getPublicLocationDisplayModel,
 } from "../../lib/location/display.ts";
+import {
+  createDiscoveryAreaLocation,
+  getDiscoveryAreaById,
+  resolveRestoredDiscoveryAreaId,
+  type DiscoveryAreaId,
+} from "../../lib/location/discovery-areas.ts";
 import {
   ensurePublicTrackingSession,
   trackPublicUserAction,
@@ -83,6 +88,10 @@ import {
 import { AboutLocalmanContent } from "../about/about-localman-content.tsx";
 import { FloatingAboutPanel } from "../about/floating-about-panel.tsx";
 import {
+  AREA_DISCOVERY_MODAL_ID,
+  AreaDiscoveryModal,
+} from "./area-discovery-modal.tsx";
+import {
   SelectedVendorPanel,
   VendorSectionTabs,
   type VendorSection,
@@ -115,7 +124,6 @@ const defaultFilters: DiscoveryFilters = {
   priceBand: "",
   category: "",
 };
-const DEFAULT_CITY_BOOTSTRAP_DELAY_MS = 250;
 const LOCALMAN_WEBSITE_URL =
   process.env.NEXT_PUBLIC_LOCALMAN_WEBSITE_URL ?? "https://localman.app";
 const LOCALMAN_SUPPORT_EMAIL =
@@ -124,6 +132,18 @@ const LOCALMAN_BRAND_ICON_SRC = "/branding/localman-brand-icon.png";
 
 function isLocalmanBrandTitle(title: string): boolean {
   return title.trim().replace(/\s+/g, "").toLowerCase() === "localman";
+}
+
+function shouldRestoreSelectedAreaFromSnapshot(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const navigationEntry = window.performance
+    .getEntriesByType("navigation")
+    .at(0) as PerformanceNavigationTiming | undefined;
+
+  return navigationEntry?.type !== "reload";
 }
 
 function getDiscoveryEmptyStateCopy(
@@ -216,6 +236,9 @@ export function PublicDiscovery({
   const [snapshotHydrated, setSnapshotHydrated] = useState(false);
   const [browserReady, setBrowserReady] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const [areaFallbackOpen, setAreaFallbackOpen] = useState(false);
+  const [selectedFallbackAreaId, setSelectedFallbackAreaId] =
+    useState<DiscoveryAreaId | null>(null);
   const [updatesCenterOpen, setUpdatesCenterOpen] = useState(false);
   const [recentlyViewedVendors, setRecentlyViewedVendors] = useState<RetainedVendorPreview[]>([]);
   const [lastSelectedVendorMemory, setLastSelectedVendorMemory] =
@@ -232,6 +255,7 @@ export function PublicDiscovery({
   const lastSelectedVendorMemoryRef = useRef<RetainedVendorPreview | null>(null);
   const preferredSelectedVendorIdRef = useRef<string | null>(null);
   const restoredSnapshotNeedsLiveFetchRef = useRef(false);
+  const selectedFallbackAreaIdRef = useRef<DiscoveryAreaId | null>(null);
   const selectedVendorIdRef = useRef<string | null>(null);
   const selectionActionTokenRef = useRef(0);
   const selectionSourceRef = useRef<VendorSelectionSource>(null);
@@ -241,6 +265,7 @@ export function PublicDiscovery({
   const isMountedRef = useRef(true);
   const hasRestoredScrollRef = useRef(false);
   const discoveryTopRef = useRef<HTMLElement | null>(null);
+  const areaFallbackButtonRef = useRef<HTMLButtonElement | null>(null);
   const firstRenderTimerStateRef = useRef({
     firstRenderStarted: false,
     firstRenderEnded: false,
@@ -256,8 +281,45 @@ export function PublicDiscovery({
     location,
     refresh: refreshLocation,
   } = useUserLocation({ auto: canUseNetwork });
-  const urlLocationSource = parsedUrlState.locationSource;
-  const activeLocationSource = location?.source ?? nearbyData?.location.source ?? urlLocationSource;
+  const resolvedLocationKey = useMemo(() => {
+    if (!location || location.source === "default_city") {
+      return null;
+    }
+    return `${location.source}:${location.coordinates.lat}:${location.coordinates.lng}`;
+  }, [location]);
+  const activeLocalmanUpdates = useMemo(() => getActiveLocalmanUpdates(), []);
+  const hasActiveLocalmanUpdates = activeLocalmanUpdates.length > 0;
+  const selectedFallbackArea = useMemo(
+    () =>
+      selectedFallbackAreaId
+        ? getDiscoveryAreaById(selectedFallbackAreaId)
+        : null,
+    [selectedFallbackAreaId],
+  );
+  const canUseAreaFallback =
+    locationStatus === "denied" ||
+    locationStatus === "unavailable" ||
+    locationStatus === "error" ||
+    locationStatus === "default_city";
+  const selectedFallbackAreaLocation = useMemo<AcquiredUserLocation | null>(
+    () =>
+      canUseAreaFallback && selectedFallbackArea
+        ? createDiscoveryAreaLocation(selectedFallbackArea)
+        : null,
+    [canUseAreaFallback, selectedFallbackArea],
+  );
+  const activeFetchLocation = useMemo<AcquiredUserLocation | null>(() => {
+    if (location && location.source !== "default_city") {
+      return location;
+    }
+
+    if (selectedFallbackAreaLocation) {
+      return selectedFallbackAreaLocation;
+    }
+
+    return null;
+  }, [location, selectedFallbackAreaLocation]);
+  const activeLocationSource = activeFetchLocation?.source ?? null;
   const discoveryQueryString = useMemo(
     () =>
       buildDiscoverySearchParams(filters, activeLocationSource, defaultFilters.radiusKm).toString(),
@@ -268,13 +330,6 @@ export function PublicDiscovery({
       buildDiscoverySearchParams(filters, activeLocationSource, defaultFilters.radiusKm).toString(),
     [activeLocationSource, filters],
   );
-  const resolvedLocationKey = useMemo(() => {
-    if (!location || location.source === "default_city") {
-      return null;
-    }
-
-    return `${location.source}:${location.coordinates.lat}:${location.coordinates.lng}`;
-  }, [location]);
   const discoverySnapshotKey = useMemo(
     () => getDiscoverySnapshotKey(pathname, discoverySnapshotQueryString),
     [discoverySnapshotQueryString, pathname],
@@ -291,18 +346,6 @@ export function PublicDiscovery({
     () => buildDiscoveryReturnTo(pathname, filters, activeLocationSource, defaultFilters.radiusKm),
     [activeLocationSource, filters, pathname],
   );
-  const fallbackDiscoveryLocation = useMemo<AcquiredUserLocation>(
-    () => ({
-      source: "default_city",
-      label: DEFAULT_CITY_LOCATION.label,
-      coordinates: DEFAULT_CITY_LOCATION.coordinates,
-      isApproximate: true,
-      errors: [],
-    }),
-    [],
-  );
-  const activeLocalmanUpdates = useMemo(() => getActiveLocalmanUpdates(), []);
-  const hasActiveLocalmanUpdates = activeLocalmanUpdates.length > 0;
 
   const hydrateRetentionState = useCallback(() => {
     applyStoredPublicDiscoveryInvalidationToRetention();
@@ -321,6 +364,31 @@ export function PublicDiscovery({
   useEffect(() => {
     selectedVendorIdRef.current = selectedVendorId;
   }, [selectedVendorId]);
+
+  useEffect(() => {
+    selectedFallbackAreaIdRef.current = selectedFallbackAreaId;
+  }, [selectedFallbackAreaId]);
+
+  useEffect(() => {
+    if (!canUseAreaFallback || selectedFallbackAreaLocation || activeFetchLocation) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      nearbyRequestKeyRef.current = null;
+      nearbyDataRef.current = null;
+      nearbyDataUpdatedAtRef.current = null;
+      nearbyDataRequestKeyRef.current = null;
+      preferredSelectedVendorIdRef.current = null;
+      selectedVendorIdRef.current = null;
+      setNearbyData(null);
+      setSelectedVendorId(null);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [activeFetchLocation, canUseAreaFallback, selectedFallbackAreaLocation]);
 
   useEffect(() => {
     firstRenderTimerStateRef.current.firstRenderStarted = true;
@@ -520,6 +588,11 @@ export function PublicDiscovery({
     const timeout = window.setTimeout(() => {
       const hasFreshNearbyData = isPublicDiscoverySnapshotFresh(snapshot);
       const restoredNearbyData = hasFreshNearbyData ? snapshot.nearbyData : null;
+      const restoredSelectedAreaId = resolveRestoredDiscoveryAreaId({
+        currentAreaId: selectedFallbackAreaIdRef.current,
+        shouldRestore: shouldRestoreSelectedAreaFromSnapshot(),
+        snapshotAreaId: snapshot.selectedAreaId,
+      });
       nearbyDataUpdatedAtRef.current = hasFreshNearbyData
         ? snapshot.nearbyDataUpdatedAt ?? null
         : null;
@@ -531,8 +604,10 @@ export function PublicDiscovery({
       const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(snapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
       nearbyDataRef.current = restoredNearbyData;
+      selectedFallbackAreaIdRef.current = restoredSelectedAreaId;
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
+      setSelectedFallbackAreaId(restoredSelectedAreaId);
       setSelectedVendorId(snapshotSelectedVendorId);
       setSnapshotHydrated(true);
 
@@ -556,6 +631,7 @@ export function PublicDiscovery({
       nearbyData,
       nearbyDataUpdatedAt: nearbyData ? nearbyDataUpdatedAtRef.current : null,
       nearbyRequestKey: nearbyData ? nearbyDataRequestKeyRef.current : null,
+      selectedAreaId: selectedFallbackAreaId,
       selectedVendorId,
       scrollY: window.scrollY,
     });
@@ -564,6 +640,7 @@ export function PublicDiscovery({
         nearbyData,
         nearbyDataUpdatedAt: nearbyData ? nearbyDataUpdatedAtRef.current : null,
         nearbyRequestKey: nearbyData ? nearbyDataRequestKeyRef.current : null,
+        selectedAreaId: selectedFallbackAreaId,
         selectedVendorId,
         scrollY: window.scrollY,
       });
@@ -572,6 +649,7 @@ export function PublicDiscovery({
     discoverySnapshotKey,
     fallbackDiscoverySnapshotKey,
     nearbyData,
+    selectedFallbackAreaId,
     selectedVendorId,
     snapshotHydrated,
   ]);
@@ -587,6 +665,7 @@ export function PublicDiscovery({
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt: nearbyDataUpdatedAtRef.current,
         nearbyRequestKey: nearbyDataRequestKeyRef.current,
+        selectedAreaId: selectedFallbackAreaIdRef.current,
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: 0,
       };
@@ -599,6 +678,7 @@ export function PublicDiscovery({
         nearbyRequestKey: nearbyDataRef.current
           ? nearbyDataRequestKeyRef.current ?? snapshot.nearbyRequestKey ?? null
           : null,
+        selectedAreaId: selectedFallbackAreaIdRef.current,
         selectedVendorId: selectedVendorIdRef.current,
         scrollY: window.scrollY,
       });
@@ -609,8 +689,9 @@ export function PublicDiscovery({
           nearbyDataUpdatedAt:
             nearbyDataRef.current ? (nearbyDataUpdatedAtRef.current ?? snapshot.nearbyDataUpdatedAt ?? null) : null,
           nearbyRequestKey: nearbyDataRef.current
-            ? nearbyDataRequestKeyRef.current ?? snapshot.nearbyRequestKey ?? null
-            : null,
+          ? nearbyDataRequestKeyRef.current ?? snapshot.nearbyRequestKey ?? null
+          : null,
+          selectedAreaId: selectedFallbackAreaIdRef.current,
           selectedVendorId: selectedVendorIdRef.current,
           scrollY: window.scrollY,
         });
@@ -666,10 +747,17 @@ export function PublicDiscovery({
 
       const hasFreshNearbyData = isPublicDiscoverySnapshotFresh(restoredSnapshot);
       const restoredNearbyData = hasFreshNearbyData ? restoredSnapshot.nearbyData : null;
+      const restoredSelectedAreaId = resolveRestoredDiscoveryAreaId({
+        currentAreaId: selectedFallbackAreaIdRef.current,
+        shouldRestore: true,
+        snapshotAreaId: restoredSnapshot.selectedAreaId,
+      });
       const snapshotSelectedVendorId = resolveSnapshotSelectedVendorId(restoredSnapshot);
       preferredSelectedVendorIdRef.current = snapshotSelectedVendorId;
+      selectedFallbackAreaIdRef.current = restoredSelectedAreaId;
       selectedVendorIdRef.current = snapshotSelectedVendorId;
       recordSelectionIntent("restore");
+      setSelectedFallbackAreaId(restoredSelectedAreaId);
       setSelectedVendorId(snapshotSelectedVendorId);
       if (restoredNearbyData && !nearbyDataRef.current) {
         nearbyDataRef.current = restoredNearbyData;
@@ -808,24 +896,6 @@ export function PublicDiscovery({
     [recordSelectionIntent],
   );
 
-  const activeFetchLocation = useMemo<AcquiredUserLocation | null>(() => {
-    if (location) {
-      return location;
-    }
-
-    if (nearbyData) {
-      return {
-        source: nearbyData.location.source,
-        label: nearbyData.location.label,
-        coordinates: nearbyData.location.coordinates,
-        isApproximate: nearbyData.location.isApproximate,
-        errors: [],
-      };
-    }
-
-    return fallbackDiscoveryLocation;
-  }, [fallbackDiscoveryLocation, location, nearbyData]);
-
   useEffect(() => {
     if (!snapshotHydrated) {
       return;
@@ -883,17 +953,10 @@ export function PublicDiscovery({
       return;
     }
 
-    const bootstrapDelayMs =
-      !location &&
-      !nearbyData &&
-      activeFetchLocation.source === "default_city"
-        ? DEFAULT_CITY_BOOTSTRAP_DELAY_MS
-        : 0;
-
     const timeout = window.setTimeout(() => {
       nearbyRequestKeyRef.current = requestKey;
       void loadNearbyVendors(activeFetchLocation, filters);
-    }, bootstrapDelayMs);
+    }, 0);
 
     return () => {
       window.clearTimeout(timeout);
@@ -912,6 +975,10 @@ export function PublicDiscovery({
 
   const vendors = useMemo(
     () => {
+      if (!activeFetchLocation) {
+        return [];
+      }
+
       const normalized = normalizeNearbyDiscoveryData(
         {
           location: nearbyData?.location ?? null,
@@ -926,7 +993,7 @@ export function PublicDiscovery({
         filters,
       ) as typeof radiusMatched;
     },
-    [filters, nearbyData],
+    [activeFetchLocation, filters, nearbyData],
   );
   const mappableVendors = useMemo(
     () => vendors.filter(hasValidVendorCoordinates),
@@ -1009,6 +1076,10 @@ export function PublicDiscovery({
     () => getPopularVendors(vendors as NearbyVendorsResponseData["vendors"]),
     [vendors],
   );
+  const popularScopeLabel =
+    selectedFallbackAreaLocation && selectedFallbackArea
+      ? `Based on recent usage near ${selectedFallbackArea.displayName}`
+      : "Based on recent usage";
   const currentRecentlyViewedVendors = useMemo(
     () =>
       recentlyViewedVendors.map((retainedVendor) => {
@@ -1019,7 +1090,6 @@ export function PublicDiscovery({
       }),
     [recentlyViewedVendors, vendorById],
   );
-  const resolvedLocation = location ?? nearbyData?.location ?? null;
   const selectedVendor = useMemo(
     () => (selectedVendorId ? vendorById.get(selectedVendorId) ?? null : null),
     [selectedVendorId, vendorById],
@@ -1057,16 +1127,21 @@ export function PublicDiscovery({
   const isResolvingLocation = locationStatus === "resolving";
   const isLoading = canUseNetwork && (isResolvingLocation || isFetchingVendors);
   const isApproximateDistance = nearbyData?.location.isApproximate ?? true;
+  const showDiscoveryChoiceState =
+    canUseAreaFallback && !selectedFallbackAreaLocation && !activeFetchLocation;
+  const showAreaDiscoveryPanel = showDiscoveryChoiceState && canUseAreaFallback;
   const showNearbyEmptyState =
     snapshotHydrated &&
     vendors.length === 0 &&
     !isLoading &&
-    !nearbyError;
+    !nearbyError &&
+    !showDiscoveryChoiceState;
   const showMapEmptyState =
     snapshotHydrated &&
     mappableVendors.length === 0 &&
     !isLoading &&
-    !nearbyError;
+    !nearbyError &&
+    !showDiscoveryChoiceState;
   const emptyStateCopy = useMemo(
     () => getDiscoveryEmptyStateCopy(filters, isOnline),
     [filters, isOnline],
@@ -1084,6 +1159,27 @@ export function PublicDiscovery({
       }),
     [location, locationDisplayLabel, locationStatus],
   );
+  const locationPanelHeadline = showDiscoveryChoiceState
+    ? "Find vendors near you"
+    : showAreaDiscoveryPanel
+      ? "Find vendors near you"
+    : locationDisplay.headline;
+  const locationPanelDetail = showDiscoveryChoiceState
+    ? "Turn on location for more accurate nearby results."
+    : showAreaDiscoveryPanel
+      ? "Turn on location for more accurate nearby results."
+    : locationDisplay.detail;
+  const locationActionLabel =
+    showAreaDiscoveryPanel || selectedFallbackAreaLocation
+      ? "Use My Location"
+      : "Retry location";
+  const showMapOriginPlaceholder = !activeFetchLocation;
+  const mapOriginPlaceholderTitle = isResolvingLocation
+    ? "Finding your location"
+    : "Choose a discovery starting point";
+  const mapOriginPlaceholderBody = isResolvingLocation
+    ? "The map will appear when Localman has a discovery location."
+    : "The map will appear after you use your location or select an area.";
 
   const applyFilters = useCallback((nextFilters: DiscoveryFilters, options?: {
     keepPanelsOpen?: boolean;
@@ -1155,6 +1251,7 @@ export function PublicDiscovery({
         nearbyData: nearbyDataRef.current,
         nearbyDataUpdatedAt: nearbyDataRef.current ? nearbyDataUpdatedAtRef.current : null,
         nearbyRequestKey: nearbyDataRef.current ? nearbyDataRequestKeyRef.current : null,
+        selectedAreaId: selectedFallbackAreaIdRef.current,
         selectedVendorId: vendor?.vendor_id ?? null,
         scrollY: window.scrollY,
       });
@@ -1187,6 +1284,20 @@ export function PublicDiscovery({
       );
     }
   }, [isOnline, locationStatus, refreshLocation]);
+
+  const closeAreaFallback = useCallback(() => {
+    setAreaFallbackOpen(false);
+  }, []);
+
+  const toggleAreaFallback = useCallback(() => {
+    setAreaFallbackOpen((current) => !current);
+  }, []);
+
+  const handleAreaFallbackChange = useCallback((areaId: DiscoveryAreaId) => {
+    selectedFallbackAreaIdRef.current = areaId;
+    setSelectedFallbackAreaId(areaId);
+    setAreaFallbackOpen(false);
+  }, []);
 
   const refreshMapDiscovery = useCallback(async () => {
     if (!isOnline) {
@@ -1338,32 +1449,133 @@ export function PublicDiscovery({
             </section>
           ) : null}
 
-          <section className="location-panel" aria-live="polite">
+          <section
+            className={
+              showAreaDiscoveryPanel
+                ? "location-panel discovery-choice-panel"
+                : selectedFallbackAreaLocation
+                  ? "location-panel area-active-panel"
+                : "location-panel"
+            }
+            data-testid={showDiscoveryChoiceState ? "discovery-choice-state" : undefined}
+            aria-live="polite"
+          >
             <span className="location-panel-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M12 21s6-5.5 6-11a6 6 0 1 0-12 0c0 5.5 6 11 6 11Z" fill="currentColor" fillOpacity="0.14" strokeLinejoin="round" />
                 <circle cx="12" cy="10" r="2.2" fill="currentColor" stroke="none" />
               </svg>
             </span>
-            <div>
-              <strong>{locationDisplay.headline}</strong>
-              {locationDisplay.detail ? (
-                <span>{locationDisplay.detail}</span>
+            <div className="location-panel-copy">
+              {showAreaDiscoveryPanel ? (
+                <>
+                  <strong className="location-copy-mobile">{locationPanelHeadline}</strong>
+                  <strong className="location-copy-desktop">
+                    Choose how you&apos;d like to explore Localman
+                  </strong>
+                </>
+              ) : (
+                <strong>{locationPanelHeadline}</strong>
+              )}
+              {locationPanelDetail ? (
+                showAreaDiscoveryPanel ? (
+                  <>
+                    <span className="location-copy-mobile">{locationPanelDetail}</span>
+                    <span className="location-copy-desktop">
+                      Use your current location for the most accurate results, or browse vendors by area.
+                    </span>
+                  </>
+                ) : selectedFallbackAreaLocation ? (
+                  <>
+                    <span className="location-copy-mobile">{locationPanelDetail}</span>
+                    <span className="location-copy-desktop">
+                      Turn on location for accurate nearby results.
+                    </span>
+                  </>
+                ) : (
+                  <span>{locationPanelDetail}</span>
+                )
               ) : null}
-              {locationDisplay.trustLine ? (
+              {!showAreaDiscoveryPanel && locationDisplay.trustLine ? (
                 <span className="location-trust-line">{locationDisplay.trustLine}</span>
               ) : null}
             </div>
-            <button
-              className="button-secondary compact-button"
-              disabled={!isOnline || locationStatus === "resolving"}
-              title={!isOnline ? "Reconnect to retry" : undefined}
-              type="button"
-              onClick={() => void retryLocation()}
-            >
-              Retry location
-            </button>
+            <div className="location-panel-actions">
+              <button
+                className={
+                  showDiscoveryChoiceState
+                    ? "button-secondary compact-button location-primary-action"
+                    : "button-secondary compact-button"
+                }
+                disabled={!isOnline || locationStatus === "resolving"}
+                title={!isOnline ? "Reconnect to retry" : undefined}
+                type="button"
+                onClick={() => void retryLocation()}
+              >
+                {showAreaDiscoveryPanel ? (
+                  <span className="location-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                ) : null}
+                {locationActionLabel}
+              </button>
+            {canUseAreaFallback && !selectedFallbackAreaLocation ? (
+              <>
+                <button
+                  ref={areaFallbackButtonRef}
+                  aria-controls={AREA_DISCOVERY_MODAL_ID}
+                  aria-expanded={areaFallbackOpen}
+                  className="button-secondary compact-button location-area-toggle location-secondary-action"
+                  type="button"
+                  onClick={toggleAreaFallback}
+                >
+                  {showAreaDiscoveryPanel ? (
+                    <span className="location-action-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                        <path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2Z" strokeLinejoin="round" />
+                        <path d="M9 4v14M15 6v14" />
+                      </svg>
+                    </span>
+                  ) : null}
+                  Browse By Area
+                </button>
+              </>
+            ) : null}
+            </div>
+            {selectedFallbackAreaLocation && selectedFallbackArea ? (
+              <div className="location-area-feedback" role="status">
+                <span className="location-area-status-icon" aria-hidden="true">
+                  📍
+                </span>
+                <span>
+                  <span className="location-area-label-mobile">Browsing:</span>
+                  <span className="location-area-label-desktop">Browsing:</span>{" "}
+                  <strong>{selectedFallbackArea.displayName}</strong>
+                </span>
+                <button
+                  aria-controls={AREA_DISCOVERY_MODAL_ID}
+                  aria-expanded={areaFallbackOpen}
+                  className="location-area-change"
+                  type="button"
+                  onClick={toggleAreaFallback}
+                >
+                  <span className="location-area-change-mobile">Change</span>
+                  <span className="location-area-change-desktop">Change</span>
+                </button>
+              </div>
+            ) : null}
           </section>
+          {canUseAreaFallback ? (
+            <AreaDiscoveryModal
+              open={areaFallbackOpen}
+              selectedAreaId={selectedFallbackAreaId}
+              onAreaSelect={handleAreaFallbackChange}
+              onClose={closeAreaFallback}
+            />
+          ) : null}
           {!isOnline ? (
             <section
               className="runtime-note"
@@ -1377,216 +1589,220 @@ export function PublicDiscovery({
           {!isOnline && retryMessage ? <p className="runtime-note">{retryMessage}</p> : null}
           {categoryError ? <p className="runtime-note">{categoryError}</p> : null}
 
-          <VendorSectionTabs
-            activeVendorSection={activeVendorSection}
-            className="desktop-vendor-section-nav"
-            onChange={setActiveVendorSection}
-          />
-
-          <VendorSectionTabs
-            activeVendorSection={activeVendorSection}
-            className="vendor-section-nav"
-            onChange={setActiveVendorSection}
-          />
-
-          <section
-            aria-live="polite"
-            className="vendor-results vendor-section-pane"
-            data-desktop-active={activeVendorSection === "nearby"}
-            data-mobile-active={activeVendorSection === "nearby"}
-          >
-            <div className="result-heading">
-              <strong>Nearby vendors</strong>
-              <span>
-                {isLoading
-                  ? "Loading…"
-                  : filters.search
-                    ? "Open matching vendors nearest first"
-                    : filters.openNow
-                      ? "Open now nearest first"
-                      : "Open now, then nearest vendors"}
-              </span>
-            </div>
-            {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
-            {showNearbyEmptyState ? (
-              <div className="empty-state discovery-empty-state" data-testid="discovery-empty-state">
-                <strong>{emptyStateCopy.title}</strong>
-                <p>{emptyStateCopy.body}</p>
-              </div>
-            ) : null}
-            {vendors.map((vendor) => (
-              <VendorCard
-                approximateDistance={isApproximateDistance}
-                detailHref={buildVendorDetailHref(
-                  vendor.slug,
-                  buildDiscoveryReturnTo(
-                    pathname,
-                    filters,
-                    activeLocationSource,
-                    defaultFilters.radiusKm,
-                  ),
-                  activeLocationSource ?? null,
-                )}
-                key={vendor.vendor_id}
-                isPopular={popularVendorIds.has(vendor.vendor_id)}
-                locationSource={activeLocationSource ?? null}
-                selected={vendor.vendor_id === selectedVendorId}
-                vendor={vendor}
-                onSelect={selectVendorById}
+          {!showDiscoveryChoiceState ? (
+            <>
+              <VendorSectionTabs
+                activeVendorSection={activeVendorSection}
+                className="desktop-vendor-section-nav"
+                onChange={setActiveVendorSection}
               />
-            ))}
-          </section>
 
-          <section
-            className="retention-panel retention-panel-muted vendor-section-pane"
-            data-desktop-active={activeVendorSection === "recent"}
-            data-mobile-active={activeVendorSection === "recent"}
-          >
-            <div className="result-heading">
-              <strong>Recently viewed vendors</strong>
-              <span>
-                {currentRecentlyViewedVendors.length > 0
-                  ? `${currentRecentlyViewedVendors.length} saved`
-                  : "No recent views yet"}
-              </span>
-            </div>
-            {currentRecentlyViewedVendors.length > 0 ? (
-              <div className="retention-list">
-                {currentRecentlyViewedVendors.map((vendor) => (
-                  <div key={vendor.vendor_id} className="retention-item">
-                    <div className="retention-item-copy">
-                      <strong>{vendor.name}</strong>
-                      <span>
-                        {vendor.area ?? "Area not set"} • Today: {vendor.today_hours}
-                      </span>
-                    </div>
-                    <Link
-                      className="button-secondary compact-button"
-                      href={buildVendorDetailHref(
-                        vendor.slug,
-                        discoveryReturnTo,
-                        activeLocationSource ?? null,
-                      )}
-                    >
-                      Open
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="runtime-note">Viewed vendor details will appear here.</p>
-            )}
-          </section>
+              <VendorSectionTabs
+                activeVendorSection={activeVendorSection}
+                className="vendor-section-nav"
+                onChange={setActiveVendorSection}
+              />
 
-          <section
-            className="retention-panel retention-panel-muted vendor-section-pane"
-            data-desktop-active={activeVendorSection === "popular"}
-            data-mobile-active={activeVendorSection === "popular"}
-          >
-            <div className="result-heading">
-              <strong>Popular vendors near you</strong>
-              <span>
-                {popularVendors.length > 0 ? "Based on recent usage" : "No popularity signal yet"}
-              </span>
-            </div>
-            {popularVendors.length > 0 ? (
-              <div className="retention-list">
-                {popularVendors.map((vendor) => (
-                  <div key={vendor.vendor_id} className="retention-item">
-                    <div className="retention-item-copy">
-                      <strong>{vendor.name}</strong>
-                      <span>
-                        {formatVendorCardDistance(vendor.distance_km, isApproximateDistance)} •{" "}
-                        Today: {vendor.today_hours}
-                      </span>
-                    </div>
-                    <button
-                      className="button-secondary compact-button retention-desktop-action"
-                      type="button"
-                      onClick={() => selectVendorById(vendor.vendor_id, "card")}
-                    >
-                      Preview
-                    </button>
-                    <Link
-                      className="button-secondary compact-button retention-mobile-action"
-                      href={buildVendorDetailHref(
-                        vendor.slug,
-                        discoveryReturnTo,
-                        activeLocationSource ?? null,
-                      )}
-                      onClick={() => selectVendorById(vendor.vendor_id, "card")}
-                    >
-                      Open
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="runtime-note">Popular nearby vendors will appear as usage builds.</p>
-            )}
-          </section>
-
-          <section
-            className="retention-panel retention-panel-muted retention-panel-secondary vendor-section-pane"
-            data-desktop-active={activeVendorSection === "lastSelected"}
-            data-mobile-active={activeVendorSection === "lastSelected"}
-          >
-            <div className="result-heading">
-              <strong>Last selected vendor</strong>
-              <span>
-                {currentLastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}
-              </span>
-            </div>
-            {currentLastSelectedVendorMemory ? (
-              <div className="retention-list">
-                <div className="retention-item">
-                  <div className="retention-item-copy">
-                    <strong>{currentLastSelectedVendorMemory.name}</strong>
-                    <span>
-                      {currentLastSelectedVendorMemory.area ?? "Area not set"} • Today:{" "}
-                      {currentLastSelectedVendorMemory.today_hours}
-                    </span>
-                  </div>
-                  {rememberedSelectedVendor ? (
-                    <>
-                      <button
-                        className="button-secondary compact-button retention-desktop-action"
-                        type="button"
-                        onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
-                      >
-                        Preview again
-                      </button>
-                      <Link
-                        className="button-secondary compact-button retention-mobile-action"
-                        href={buildVendorDetailHref(
-                          rememberedSelectedVendor.slug,
-                          discoveryReturnTo,
-                          activeLocationSource ?? null,
-                        )}
-                        onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
-                      >
-                        Open
-                      </Link>
-                    </>
-                  ) : (
-                    <Link
-                      className="button-secondary compact-button"
-                      href={buildVendorDetailHref(
-                        currentLastSelectedVendorMemory.slug,
-                        discoveryReturnTo,
-                        activeLocationSource ?? null,
-                      )}
-                    >
-                      <span className="retention-desktop-label">View details</span>
-                      <span className="retention-mobile-label">Open</span>
-                    </Link>
-                  )}
+              <section
+                aria-live="polite"
+                className="vendor-results vendor-section-pane"
+                data-desktop-active={activeVendorSection === "nearby"}
+                data-mobile-active={activeVendorSection === "nearby"}
+              >
+                <div className="result-heading">
+                  <strong>Nearby vendors</strong>
+                  <span>
+                    {isLoading
+                      ? "Loading…"
+                      : filters.search
+                        ? "Open matching vendors nearest first"
+                        : filters.openNow
+                          ? "Open now nearest first"
+                          : "Open now, then nearest vendors"}
+                  </span>
                 </div>
-              </div>
-            ) : (
-              <p className="runtime-note">Your last selected vendor will stay here.</p>
-            )}
-          </section>
+                {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
+                {showNearbyEmptyState ? (
+                  <div className="empty-state discovery-empty-state" data-testid="discovery-empty-state">
+                    <strong>{emptyStateCopy.title}</strong>
+                    <p>{emptyStateCopy.body}</p>
+                  </div>
+                ) : null}
+                {vendors.map((vendor) => (
+                  <VendorCard
+                    approximateDistance={isApproximateDistance}
+                    detailHref={buildVendorDetailHref(
+                      vendor.slug,
+                      buildDiscoveryReturnTo(
+                        pathname,
+                        filters,
+                        activeLocationSource,
+                        defaultFilters.radiusKm,
+                      ),
+                      activeLocationSource ?? null,
+                    )}
+                    key={vendor.vendor_id}
+                    isPopular={popularVendorIds.has(vendor.vendor_id)}
+                    locationSource={activeLocationSource ?? null}
+                    selected={vendor.vendor_id === selectedVendorId}
+                    vendor={vendor}
+                    onSelect={selectVendorById}
+                  />
+                ))}
+              </section>
+
+              <section
+                className="retention-panel retention-panel-muted vendor-section-pane"
+                data-desktop-active={activeVendorSection === "recent"}
+                data-mobile-active={activeVendorSection === "recent"}
+              >
+                <div className="result-heading">
+                  <strong>Recently viewed vendors</strong>
+                  <span>
+                    {currentRecentlyViewedVendors.length > 0
+                      ? `${currentRecentlyViewedVendors.length} saved`
+                      : "No recent views yet"}
+                  </span>
+                </div>
+                {currentRecentlyViewedVendors.length > 0 ? (
+                  <div className="retention-list">
+                    {currentRecentlyViewedVendors.map((vendor) => (
+                      <div key={vendor.vendor_id} className="retention-item">
+                        <div className="retention-item-copy">
+                          <strong>{vendor.name}</strong>
+                          <span>
+                            {vendor.area ?? "Area not set"} • Today: {vendor.today_hours}
+                          </span>
+                        </div>
+                        <Link
+                          className="button-secondary compact-button"
+                          href={buildVendorDetailHref(
+                            vendor.slug,
+                            discoveryReturnTo,
+                            activeLocationSource ?? null,
+                          )}
+                        >
+                          Open
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="runtime-note">Viewed vendor details will appear here.</p>
+                )}
+              </section>
+
+              <section
+                className="retention-panel retention-panel-muted vendor-section-pane"
+                data-desktop-active={activeVendorSection === "popular"}
+                data-mobile-active={activeVendorSection === "popular"}
+              >
+                <div className="result-heading">
+                  <strong>Popular vendors near you</strong>
+                  <span>
+                    {popularVendors.length > 0 ? popularScopeLabel : "No popularity signal yet"}
+                  </span>
+                </div>
+                {popularVendors.length > 0 ? (
+                  <div className="retention-list">
+                    {popularVendors.map((vendor) => (
+                      <div key={vendor.vendor_id} className="retention-item">
+                        <div className="retention-item-copy">
+                          <strong>{vendor.name}</strong>
+                          <span>
+                            {formatVendorCardDistance(vendor.distance_km, isApproximateDistance)} •{" "}
+                            Today: {vendor.today_hours}
+                          </span>
+                        </div>
+                        <button
+                          className="button-secondary compact-button retention-desktop-action"
+                          type="button"
+                          onClick={() => selectVendorById(vendor.vendor_id, "card")}
+                        >
+                          Preview
+                        </button>
+                        <Link
+                          className="button-secondary compact-button retention-mobile-action"
+                          href={buildVendorDetailHref(
+                            vendor.slug,
+                            discoveryReturnTo,
+                            activeLocationSource ?? null,
+                          )}
+                          onClick={() => selectVendorById(vendor.vendor_id, "card")}
+                        >
+                          Open
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="runtime-note">Popular nearby vendors will appear as usage builds.</p>
+                )}
+              </section>
+
+              <section
+                className="retention-panel retention-panel-muted retention-panel-secondary vendor-section-pane"
+                data-desktop-active={activeVendorSection === "lastSelected"}
+                data-mobile-active={activeVendorSection === "lastSelected"}
+              >
+                <div className="result-heading">
+                  <strong>Last selected vendor</strong>
+                  <span>
+                    {currentLastSelectedVendorMemory ? "Saved on this device" : "No saved vendor yet"}
+                  </span>
+                </div>
+                {currentLastSelectedVendorMemory ? (
+                  <div className="retention-list">
+                    <div className="retention-item">
+                      <div className="retention-item-copy">
+                        <strong>{currentLastSelectedVendorMemory.name}</strong>
+                        <span>
+                          {currentLastSelectedVendorMemory.area ?? "Area not set"} • Today:{" "}
+                          {currentLastSelectedVendorMemory.today_hours}
+                        </span>
+                      </div>
+                      {rememberedSelectedVendor ? (
+                        <>
+                          <button
+                            className="button-secondary compact-button retention-desktop-action"
+                            type="button"
+                            onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
+                          >
+                            Preview again
+                          </button>
+                          <Link
+                            className="button-secondary compact-button retention-mobile-action"
+                            href={buildVendorDetailHref(
+                              rememberedSelectedVendor.slug,
+                              discoveryReturnTo,
+                              activeLocationSource ?? null,
+                            )}
+                            onClick={() => selectVendorById(rememberedSelectedVendor.vendor_id, "card")}
+                          >
+                            Open
+                          </Link>
+                        </>
+                      ) : (
+                        <Link
+                          className="button-secondary compact-button"
+                          href={buildVendorDetailHref(
+                            currentLastSelectedVendorMemory.slug,
+                            discoveryReturnTo,
+                            activeLocationSource ?? null,
+                          )}
+                        >
+                          <span className="retention-desktop-label">View details</span>
+                          <span className="retention-mobile-label">Open</span>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="runtime-note">Your last selected vendor will stay here.</p>
+                )}
+              </section>
+            </>
+          ) : null}
         </div>
 
         <div className="discovery-main">
@@ -1602,20 +1818,38 @@ export function PublicDiscovery({
                 onTogglePanel={() => setMobileMapFiltersOpen((current) => !current)}
               />
             </div>
-            <VendorMap
-              key={mapRefreshToken}
-              selectionActionToken={selectionActionToken}
-              selectionSource={selectionSource}
-              selectedVendorId={selectedVendorId}
-              timeTheme={timeTheme}
-              userLocation={resolvedLocation?.coordinates ?? null}
-              vendors={mappableVendors}
-              onSelectVendor={selectVendorById}
-            />
+            {showMapOriginPlaceholder ? (
+              <section
+                className="discovery-map discovery-map-choice-state"
+                data-map-mode="choice"
+                data-testid="discovery-map-choice-state"
+                role="status"
+                aria-live="polite"
+              >
+                <strong>{mapOriginPlaceholderTitle}</strong>
+                <p>{mapOriginPlaceholderBody}</p>
+              </section>
+            ) : (
+              <VendorMap
+                key={mapRefreshToken}
+                selectionActionToken={selectionActionToken}
+                selectionSource={selectionSource}
+                selectedVendorId={selectedVendorId}
+                timeTheme={timeTheme}
+                userLocation={activeFetchLocation?.coordinates ?? null}
+                vendors={mappableVendors}
+                onSelectVendor={selectVendorById}
+              />
+            )}
             <button
               className="mobile-map-refresh-button"
               data-testid="mobile-map-refresh"
-              disabled={!isOnline || isFetchingVendors || locationStatus === "resolving"}
+              disabled={
+                !isOnline ||
+                !activeFetchLocation ||
+                isFetchingVendors ||
+                locationStatus === "resolving"
+              }
               type="button"
               onClick={() => void refreshMapDiscovery()}
             >
@@ -1634,15 +1868,17 @@ export function PublicDiscovery({
             ) : null}
           </div>
 
-          <SelectedVendorPanel
-            activeLocationSource={activeLocationSource ?? null}
-            discoveryReturnTo={discoveryReturnTo}
-            isApproximateDistance={isApproximateDistance}
-            selectedVendor={selectedVendor}
-            selectedVendorActiveHours={selectedVendorActiveHours}
-            selectedVendorCue={selectedVendorCue}
-            selectedVendorOpenState={selectedVendorOpenState}
-          />
+          {!showDiscoveryChoiceState ? (
+            <SelectedVendorPanel
+              activeLocationSource={activeLocationSource ?? null}
+              discoveryReturnTo={discoveryReturnTo}
+              isApproximateDistance={isApproximateDistance}
+              selectedVendor={selectedVendor}
+              selectedVendorActiveHours={selectedVendorActiveHours}
+              selectedVendorCue={selectedVendorCue}
+              selectedVendorOpenState={selectedVendorOpenState}
+            />
+          ) : null}
         </div>
         <AboutLocalmanContent
           className="mobile-about-view"

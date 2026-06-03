@@ -345,6 +345,70 @@ test("popular vendors keep popularity ordering independent of nearby ordering", 
   ]);
 });
 
+test("popular vendors stay constrained to the active GPS discovery dataset", () => {
+  const gpsVendors = [
+    createVendor({
+      vendor_id: "gps-1",
+      slug: "gps-popular-rice",
+      name: "GPS Popular Rice",
+      area: "Jabi",
+      ranking_score: 14,
+      distance_km: 1.1,
+    }),
+    createVendor({
+      vendor_id: "gps-2",
+      slug: "gps-local-suya",
+      name: "GPS Local Suya",
+      area: "Utako",
+      ranking_score: 6,
+      distance_km: 1.6,
+    }),
+  ];
+
+  assert.deepEqual(getPopularVendors(gpsVendors).map((vendor) => vendor.slug), [
+    "gps-popular-rice",
+    "gps-local-suya",
+  ]);
+});
+
+test("popular vendors stay constrained to the active area fallback dataset", () => {
+  const globalPopularVendor = createVendor({
+    vendor_id: "global-1",
+    slug: "global-popular-outside-area",
+    name: "Global Popular Outside Area",
+    area: "Asokoro",
+    ranking_score: 99,
+    distance_km: 15,
+  });
+  const areaVendors = [
+    createVendor({
+      vendor_id: "area-1",
+      slug: "wuse-popular-bowl",
+      name: "Wuse Popular Bowl",
+      area: "Wuse",
+      ranking_score: 11,
+      distance_km: 0.8,
+    }),
+    createVendor({
+      vendor_id: "area-2",
+      slug: "wuse-snack-corner",
+      name: "Wuse Snack Corner",
+      area: "Wuse",
+      ranking_score: 3,
+      distance_km: 1.4,
+    }),
+  ];
+
+  assert.deepEqual(getPopularVendors(areaVendors).map((vendor) => vendor.slug), [
+    "wuse-popular-bowl",
+    "wuse-snack-corner",
+  ]);
+  assert.doesNotMatch(
+    getPopularVendors(areaVendors).map((vendor) => vendor.slug).join(" "),
+    new RegExp(globalPopularVendor.slug),
+  );
+});
+
 test("active filter count stays lightweight and explicit", () => {
   assert.equal(countActiveDiscoveryFilters(baseFilters), 0);
   assert.equal(

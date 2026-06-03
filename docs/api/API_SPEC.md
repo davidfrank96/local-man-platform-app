@@ -38,9 +38,9 @@ Route file:
 - `app/api/vendors/nearby/route.ts`
 
 Query params:
-- lat, optional only when using default city fallback
-- lng, optional only when using default city fallback
-- location_source: `precise`, `approximate`, or `default_city`
+- lat, optional only for backend default-city fallback calls
+- lng, optional only for backend default-city fallback calls
+- location_source: `precise`, `approximate`, `area`, or `default_city`
 - radius_km
 - open_now
 - category
@@ -66,12 +66,13 @@ Current nearby response does **not** include vendor profile images. Vendor cards
 
 Behavior:
 - If `lat` and `lng` are provided, both must be valid coordinates.
-- If both coordinates are missing, the API falls back to the Abuja default city view.
+- If both coordinates are missing, the API falls back to the Abuja default city view for direct API/operator calls.
 - If only one coordinate is provided, the API returns `VALIDATION_ERROR`.
 - `location_source = precise` means browser/device geolocation.
 - `location_source = approximate` means IP-based or other low-accuracy approximation.
-- `location_source = default_city` means no user coordinates were available and Abuja was used.
-- The frontend discovery flow may call `/api/vendors/nearby` without coordinates first so default-city vendors can render while precise browser geolocation is still resolving, then upgrade to precise or approximate coordinates when they become available.
+- `location_source = area` means the frontend is using a user-selected discovery area center.
+- `location_source = default_city` means no coordinates were supplied to the backend and Abuja was used.
+- The public frontend should call `/api/vendors/nearby` only after it has a real browser location or a selected discovery area. If neither exists, it shows the discovery-choice state instead of silently loading default-city vendors.
 - Reverse geocoding is a separate best-effort UI concern and does not block or alter the nearby vendor response.
 - Candidate vendors are fetched with a latitude/longitude bounding box before precise distance calculation.
 - Base candidate filtering for `price_band` is pushed into the Supabase vendor query.
