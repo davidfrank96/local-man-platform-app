@@ -72,7 +72,11 @@ Behavior:
 - `location_source = approximate` means IP-based or other low-accuracy approximation.
 - `location_source = area` means the frontend is using a user-selected discovery area center.
 - `location_source = default_city` means no coordinates were supplied to the backend and Abuja was used.
-- The public frontend should call `/api/vendors/nearby` only after it has a real browser location or a selected discovery area. If neither exists, it shows the discovery-choice state instead of silently loading default-city vendors.
+- The public frontend should call `/api/vendors/nearby` with a real browser location, a selected discovery area, or the default Wuse discovery area. It must not silently call the backend default-city fallback for normal public browsing.
+- Default Wuse is sent as an area-style coordinate origin and uses the same curated area-discovery system as explicit area selection.
+- Supported public discovery areas are Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe.
+- Search and radius parameters apply to the active origin dataset; public search must not broaden into an entire-vendor-database search.
+- Popular surfaces are scoped from the active discovery dataset. Recent and Last viewed/selected surfaces are user-centric client retention and are not area-ranking APIs.
 - Reverse geocoding is a separate best-effort UI concern and does not block or alter the nearby vendor response.
 - Candidate vendors are fetched with a latitude/longitude bounding box before precise distance calculation.
 - Base candidate filtering for `price_band` is pushed into the Supabase vendor query.

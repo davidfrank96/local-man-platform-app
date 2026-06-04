@@ -67,9 +67,9 @@ Local Man — UI Rules
 - If reverse lookup does not resolve a useful label, fall back to rounded coordinates instead of inventing a place name.
 - If the user denies location access, use IP-based approximate coordinates internally when available, but only show approximate location in the UI when a usable human-readable label exists.
 - Approximate location copy must never imply exact nearby accuracy; tell the user to turn on location for exact nearby results.
-- If precise and approximate location are unavailable, show the discovery-choice state with Retry Location and Browse By Area. Do not silently load backend default-city vendors.
-- Do not block the public app when location permission is denied; let the user browse by a curated area instead.
-- Do not imply exact distance when the location source is approximate or default city.
+- If precise and approximate location are unavailable, use default Wuse discovery and show a compact `Browsing: Wuse` area status. Do not silently load backend default-city vendors.
+- Do not block the public app when location permission is denied; let the user browse the default Wuse area or change to another curated area.
+- Do not imply exact distance when the location source is approximate, a selected area, or default Wuse.
 - Provide a clear path to retry location permission or change location later.
 - Tell mobile users that precise location can take a few seconds before fallback.
 - Retry location must clear stale denied/unavailable copy and update the UI to the current resolved source after success.

@@ -107,7 +107,8 @@ Related but separate discovery surfaces:
 - Last selected vendor
 
 These are not selected vendor cards. They are retention/supporting surfaces and should not be documented as the primary preview panel.
-The `Popular vendors near you` surface is visual/supporting; main nearby ordering still follows the discovery ranking contract rather than letting a popularity panel reorder the primary list.
+The `Popular vendors near you` surface is visual/supporting and scoped to the active discovery dataset, whether that origin is GPS, a selected area, or default Wuse. Main nearby ordering still follows the discovery ranking contract rather than letting a popularity panel reorder the primary list.
+Recently viewed and Last selected remain user-centric retention surfaces; they are not area-ranking systems.
 On mobile, Popular and Last selected retention actions use `Open` for direct detail navigation. Desktop can keep preview-style actions where the map context remains visible beside the list.
 
 ## Vendor detail image rule

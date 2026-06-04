@@ -23,6 +23,7 @@ export type DiscoveryArea = {
 
 export const DISCOVERY_AREA_SELECTION_STORAGE_KEY =
   "localman:selected-discovery-area";
+export const DEFAULT_DISCOVERY_AREA_ID: DiscoveryAreaId = "wuse";
 
 export const DISCOVERY_AREAS = [
   {

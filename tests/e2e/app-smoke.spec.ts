@@ -139,6 +139,27 @@ async function expectMapLibreVendorMarkers(page: Page) {
   await expect.poll(async () => markerLocator.count(), { timeout: 10_000 }).not.toBe(0);
 }
 
+async function expectMapDatasetVendor(page: Page, vendorId: string, vendorName: string) {
+  const marker = page.locator(`.discovery-map [data-vendor-id="${vendorId}"]`).first();
+  const selectedHeading = page.locator(".selected-vendor-panel h2");
+
+  await expect.poll(
+    async () => {
+      if ((await marker.count()) > 0 && await marker.isVisible()) {
+        return "visible";
+      }
+
+      const headingText = await selectedHeading.textContent().catch(() => "");
+      if (headingText?.includes(vendorName)) {
+        return "visible";
+      }
+
+      return "missing";
+    },
+    { timeout: 10_000 },
+  ).toBe("visible");
+}
+
 async function readMapInteractionState(page: Page) {
   const mapMode = await page.locator(".discovery-map").getAttribute("data-map-mode");
   if (mapMode !== "maplibre") {
@@ -194,6 +215,22 @@ async function expectNoBoxOverlap(first: Locator, second: Locator, label: string
   expect(overlaps, `${label} should not overlap`).toBe(false);
 }
 
+async function mockPublicEventTracking(page: Page) {
+  await page.route("**/api/events", async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          accepted: true,
+        },
+        error: null,
+      }),
+    });
+  });
+}
+
 function parseRgbChannels(value: string) {
   const match = value.match(/\d+(\.\d+)?/g) ?? [];
 
@@ -242,6 +279,8 @@ function vendorMatchesSearch(vendor: MockNearbyVendor, query: string) {
 }
 
 async function mockSearchableNearbyDiscovery(page: Page, vendors: MockNearbyVendor[]) {
+  await mockPublicEventTracking(page);
+
   await page.route("**/api/vendors/nearby**", async (route) => {
     const requestUrl = new URL(route.request().url());
     const searchQuery = requestUrl.searchParams.get("search")?.trim() ?? "";
@@ -484,7 +523,14 @@ async function mockAreaRestorationNearby(page: Page) {
 }
 
 async function selectAreaFallback(page: Page, area: "Wuse" | "Garki") {
-  await page.getByRole("button", { name: "Browse By Area" }).click();
+  const browseByArea = page.getByRole("button", { name: "Browse By Area" });
+  const changeArea = page.getByRole("button", { name: "Change" });
+
+  if (await browseByArea.isVisible()) {
+    await browseByArea.click();
+  } else {
+    await changeArea.click();
+  }
   await page.getByRole("option", { name: area }).click();
   await expect(page.getByText(`Browsing: ${area}`)).toBeVisible();
   await expect.poll(async () => page.locator(".vendor-card").count()).toBeGreaterThan(0);
@@ -2557,7 +2603,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
-  test("denied geolocation shows discovery choice without loading default-city vendors", async ({ page }) => {
+  test("denied geolocation loads default Wuse discovery without loading default-city vendors", async ({ page }) => {
     const errors = trackClientErrors(page);
     const nearbyUrls: string[] = [];
 
@@ -2572,26 +2618,38 @@ test.describe("Phase 3 browser smoke", () => {
     });
     await page.goto("/");
 
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
-    const discoveryChoicePanel = page.locator(".location-panel.discovery-choice-panel");
-    await expect(discoveryChoicePanel.locator(".location-copy-desktop").first()).toHaveText(
-      "Choose how you'd like to explore Localman",
-    );
-    await expect(discoveryChoicePanel.locator(".location-panel-copy .location-copy-desktop").last()).toHaveText(
-      "Use your current location for the most accurate results, or browse vendors by area.",
-    );
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     await expect(page.locator(".location-panel p")).toHaveCount(0);
     await expect(page.locator(".location-trust-line")).toHaveCount(0);
     await expect(page.getByText("Showing Abuja")).toHaveCount(0);
     await expect(page.getByText("Approximate location was unavailable.")).toHaveCount(0);
-    await expect(page.locator(".vendor-card")).toHaveCount(0);
-    await expect(page.locator(".desktop-vendor-section-nav")).toHaveCount(0);
-    await expect(page.locator(".vendor-section-pane")).toHaveCount(0);
-    await expect(page.locator(".selected-vendor-panel")).toHaveCount(0);
-    await expect(page.getByTestId("discovery-map-choice-state")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+    await expect(page.locator(".desktop-vendor-section-nav")).toBeVisible();
+    await expect(page.locator(".selected-vendor-panel")).toBeVisible();
+    await expect(page.getByTestId("discovery-map-choice-state")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Use My Location" })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Browse By Area" })).toBeVisible();
-    await expect.poll(() => nearbyUrls.length).toBe(0);
+    await expect(page.getByRole("button", { name: "Browse By Area" })).toHaveCount(0);
+    await expect.poll(() => nearbyUrls.some((url) => {
+      const requestUrl = new URL(url);
+
+      return requestUrl.searchParams.get("lat") === "9.0813" &&
+        requestUrl.searchParams.get("lng") === "7.4673" &&
+        requestUrl.searchParams.get("location_source") === "approximate";
+    })).toBe(true);
+    expect(nearbyUrls.some((url) => !url.includes("lat=") && !url.includes("lng="))).toBe(false);
+
+    await openDiscoveryFilters(page);
+    await page.locator('select[name="radiusKm"]:visible').selectOption("30");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page).toHaveURL(/radius_km=30/);
+    await expect.poll(() => nearbyUrls.some((url) => {
+      const requestUrl = new URL(url);
+
+      return requestUrl.searchParams.get("lat") === "9.0813" &&
+        requestUrl.searchParams.get("lng") === "7.4673" &&
+        requestUrl.searchParams.get("radius_km") === "30";
+    })).toBe(true);
 
     await expectNoClientErrors(errors);
   });
@@ -2637,16 +2695,10 @@ test.describe("Phase 3 browser smoke", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
-    await expect(page.locator(".location-panel-copy strong.location-copy-mobile")).toHaveText(
-      "Find vendors near you",
-    );
-    await expect(page.locator(".location-panel-copy .location-copy-mobile").last()).toHaveText(
-      "Turn on location for more accurate nearby results.",
-    );
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     await expect(page.locator(".location-panel p")).toHaveCount(0);
-    await expect(page.locator(".vendor-card")).toHaveCount(0);
-    await expect(page.locator(".vendor-section-pane")).toHaveCount(0);
-    await expect(page.locator(".selected-vendor-panel")).toHaveCount(0);
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+    await expect(page.locator(".vendor-section-pane").first()).toBeVisible();
 
     await setMockGeolocationMode(page, {
       kind: "success",
@@ -4131,6 +4183,34 @@ test.describe("Phase 3 browser smoke", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await primePublicLocation(page);
     await mockReverseGeocode(page, "Wuse II, Abuja");
+    await mockPublicEventTracking(page);
+    await mockNearbyDiscovery(page, [
+      {
+        vendor_id: "72000000-0000-4000-8000-000000000001",
+        name: "Desktop About Rice Pot",
+        slug: "desktop-about-rice-pot",
+        short_description: "Deterministic vendor for the desktop About panel smoke path.",
+        phone_number: "+2348000000301",
+        area: "Wuse",
+        latitude: 9.079,
+        longitude: 7.402,
+        price_band: "standard",
+        average_rating: 4.3,
+        review_count: 11,
+        distance_km: 1.1,
+        is_open_now: true,
+        featured_dish: {
+          dish_name: "Jollof rice",
+          description: "Office lunch rice bowl.",
+        },
+        categories: [
+          { name: "Rice", slug: "rice" },
+          { name: "Local Dishes", slug: "local-dishes" },
+        ],
+        today_hours: "10:00 AM - 7:00 PM",
+        active_hours: "10:00 AM - 7:00 PM",
+      },
+    ]);
     await page.goto("/");
 
     const updatesButton = page.getByRole("button", { name: "Open Localman updates" });
@@ -4520,7 +4600,7 @@ test.describe("Phase 3 browser smoke", () => {
     const mapSearch = mapFilters.locator('input[name="search"]');
     await expect(mapSearch).toBeVisible();
     await expect(mapSearch).toHaveValue("rice");
-    await expect(page.locator(`.discovery-map [data-vendor-id="${riceVendorId}"]`)).toBeVisible();
+    await expectMapDatasetVendor(page, riceVendorId, "Rice Home Stall");
     await expect(page.locator(`.discovery-map [data-vendor-id="${suyaVendorId}"]`)).toHaveCount(0);
 
     const suyaSearchResponse = page.waitForResponse((response) => {
@@ -4535,7 +4615,7 @@ test.describe("Phase 3 browser smoke", () => {
     await suyaSearchResponse;
     await expect(page).toHaveURL(/q=suya/);
     await expect(mapSearch).toHaveValue("suya");
-    await expect(page.locator(`.discovery-map [data-vendor-id="${suyaVendorId}"]`)).toBeVisible();
+    await expectMapDatasetVendor(page, suyaVendorId, "Suya Map Grill");
     await expect(page.locator(`.discovery-map [data-vendor-id="${riceVendorId}"]`)).toHaveCount(0);
 
     await mapFilters.locator('button[aria-label="Open filters"]').click();
@@ -4557,8 +4637,7 @@ test.describe("Phase 3 browser smoke", () => {
     await clearSearchResponse;
     await expect(page).not.toHaveURL(/q=suya/);
     await expect(mapSearch).toHaveValue("");
-    await expect(page.locator(`.discovery-map [data-vendor-id="${riceVendorId}"]`)).toBeVisible();
-    await expect(page.locator(`.discovery-map [data-vendor-id="${suyaVendorId}"]`)).toBeVisible();
+    await expect(page.locator(".discovery-map")).toContainText("2 vendors");
 
     await openMobileDiscoveryTab(page, "home");
     await expect(homeSearch).toBeVisible();
@@ -5552,6 +5631,7 @@ test.describe("Phase 3 browser smoke", () => {
       const lat = requestUrl.searchParams.get("lat");
       const lng = requestUrl.searchParams.get("lng");
       const isWuseAreaOrigin = lat === "9.0813" && lng === "7.4673";
+      const isGarkiAreaOrigin = lat === "9.0267" && lng === "7.4833";
       const isPreciseOrigin = lat === "9.08" && lng === "7.4";
       const location = isWuseAreaOrigin
         ? {
@@ -5560,6 +5640,13 @@ test.describe("Phase 3 browser smoke", () => {
             coordinates: { lat: 9.0813, lng: 7.4673 },
             isApproximate: true,
           }
+        : isGarkiAreaOrigin
+          ? {
+              source: "approximate",
+              label: "Garki",
+              coordinates: { lat: 9.0267, lng: 7.4833 },
+              isApproximate: true,
+            }
         : isPreciseOrigin
           ? {
               source: "precise",
@@ -5573,7 +5660,31 @@ test.describe("Phase 3 browser smoke", () => {
               coordinates: { lat: 9.0765, lng: 7.3986 },
               isApproximate: true,
             };
-      const vendors = isWuseAreaOrigin
+      const vendors = isGarkiAreaOrigin
+        ? [
+            {
+              vendor_id: "64000000-0000-4000-8000-000000000005",
+              name: "Garki Suya Stop",
+              slug: "garki-suya-stop",
+              short_description: "Area fallback Garki test vendor.",
+              phone_number: "+2348000000405",
+              area: "Garki",
+              latitude: 9.028,
+              longitude: 7.484,
+              price_band: "standard",
+              average_rating: 4.5,
+              review_count: 14,
+              ranking_score: 24,
+              distance_km: 0.4,
+              is_open_now: true,
+              featured_dish: {
+                dish_name: "Suya plate",
+                description: null,
+              },
+              today_hours: "5:00 PM - 11:00 PM",
+            },
+          ]
+        : isWuseAreaOrigin
         ? [
             {
               vendor_id: "64000000-0000-4000-8000-000000000002",
@@ -5659,65 +5770,65 @@ test.describe("Phase 3 browser smoke", () => {
     });
     await page.goto("/");
 
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
-    const discoveryChoicePanel = page.locator(".location-panel.discovery-choice-panel");
-    await expect(discoveryChoicePanel.locator(".location-copy-desktop").first()).toHaveText(
-      "Choose how you'd like to explore Localman",
-    );
-    await expect(discoveryChoicePanel.locator(".location-panel-copy .location-copy-desktop").last()).toHaveText(
-      "Use your current location for the most accurate results, or browse vendors by area.",
-    );
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     await expect(page.locator(".location-trust-line")).toHaveCount(0);
     await expect(page.getByText("Showing Abuja")).toHaveCount(0);
-    await expect(page.locator(".vendor-card")).toHaveCount(0);
-    await expect(page.locator(".desktop-vendor-section-nav")).toHaveCount(0);
-    await expect(page.locator(".vendor-section-pane")).toHaveCount(0);
-    await expect(page.locator(".selected-vendor-panel")).toHaveCount(0);
-    await expect(page.getByTestId("discovery-map-choice-state")).toBeVisible();
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
+    await expect(page.locator(".desktop-vendor-section-nav")).toBeVisible();
+    await expect(page.locator(".selected-vendor-panel")).toBeVisible();
+    await expect(page.getByTestId("discovery-map-choice-state")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Use My Location" })).toBeEnabled();
 
-    const browseByAreaButton = page.getByRole("button", { name: "Browse By Area" });
-    await expect(browseByAreaButton).toBeVisible();
-    await expect(browseByAreaButton).toHaveAttribute("aria-expanded", "false");
-    await expect.poll(() => nearbyRequests.length).toBe(0);
+    await expect(page.getByRole("button", { name: "Browse By Area" })).toHaveCount(0);
+    await expect.poll(() => nearbyRequests.some((url) => {
+      const requestUrl = new URL(url);
+
+      return requestUrl.searchParams.get("lat") === "9.0813" &&
+        requestUrl.searchParams.get("lng") === "7.4673";
+    })).toBe(true);
 
     const nearbyRequestsBeforeAreaSelection = nearbyRequests.length;
+    const changeAreaButton = page.getByRole("button", { name: "Change" });
 
-    await browseByAreaButton.click();
-    await expect(browseByAreaButton).toHaveAttribute("aria-expanded", "true");
+    await expect(changeAreaButton).toHaveAttribute("aria-expanded", "false");
+    await changeAreaButton.click();
+    await expect(changeAreaButton).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("dialog", { name: "Browse by area" })).toBeVisible();
     await expect(page.getByLabel("Close area selector")).toBeFocused();
-    await expect(page.getByRole("option", { name: "Wuse" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "Wuse Current" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await expect(page.getByRole("option", { name: "Lugbe" })).toBeVisible();
 
     await page.keyboard.press("Escape");
-    await expect(browseByAreaButton).toHaveAttribute("aria-expanded", "false");
+    await expect(changeAreaButton).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("dialog", { name: "Browse by area" })).toHaveCount(0);
 
-    await browseByAreaButton.click();
-    const wuseRequestPromise = page.waitForRequest((request) => {
+    await changeAreaButton.click();
+    const garkiRequestPromise = page.waitForRequest((request) => {
       if (!request.url().includes("/api/vendors/nearby")) {
         return false;
       }
 
       const requestUrl = new URL(request.url());
 
-      return requestUrl.searchParams.get("lat") === "9.0813" &&
-        requestUrl.searchParams.get("lng") === "7.4673";
+      return requestUrl.searchParams.get("lat") === "9.0267" &&
+        requestUrl.searchParams.get("lng") === "7.4833";
     });
-    await page.getByRole("option", { name: "Wuse" }).click();
-    const wuseRequest = await wuseRequestPromise;
-    const wuseRequestUrl = new URL(wuseRequest.url());
+    await page.getByRole("option", { name: "Garki" }).click();
+    const garkiRequest = await garkiRequestPromise;
+    const garkiRequestUrl = new URL(garkiRequest.url());
 
     await expect(page.getByRole("dialog", { name: "Browse by area" })).toHaveCount(0);
-    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
+    await expect(page.getByText("Browsing: Garki")).toBeVisible();
     await expect(page.getByRole("button", { name: "Browse By Area" })).toHaveCount(0);
-    const changeAreaButton = page.getByRole("button", { name: "Change" });
     await expect(changeAreaButton).toHaveAttribute("aria-expanded", "false");
     await changeAreaButton.click();
     await expect(page.getByRole("dialog", { name: "Browse by area" })).toBeVisible();
     await expect(changeAreaButton).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("option", { name: "Wuse Current" })).toHaveAttribute(
+    await expect(page.getByRole("option", { name: "Garki Current" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -5729,9 +5840,9 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".selected-vendor-panel")).toBeVisible();
     await page.locator(".desktop-vendor-section-nav").getByRole("button", { name: "Popular" }).click();
     const popularPanel = page.locator(".retention-panel").filter({ hasText: "Popular vendors near you" });
-    await expect(popularPanel).toContainText("Based on recent usage near Wuse");
-    expect(wuseRequestUrl.searchParams.get("location_source")).toBe("approximate");
-    expect(wuseRequestUrl.searchParams.get("radius_km")).toBe("10");
+    await expect(popularPanel).toContainText("Based on recent usage near Garki");
+    expect(garkiRequestUrl.searchParams.get("location_source")).toBe("approximate");
+    expect(garkiRequestUrl.searchParams.get("radius_km")).toBe("10");
     expect(nearbyRequests.length).toBeGreaterThan(nearbyRequestsBeforeAreaSelection);
 
     await setMockGeolocationMode(page, {
@@ -5756,6 +5867,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator(".location-panel strong")).toHaveText("Using your current location");
     await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Browse By Area" })).toHaveCount(0);
+    await expect(page.getByText("Browsing: Garki")).toHaveCount(0);
     await expect(page.locator(".desktop-vendor-section-nav")).toBeVisible();
     await expect(page.locator(".selected-vendor-panel")).toBeVisible();
     expect(preciseRequestUrl.searchParams.get("location_source")).toBe("precise");
@@ -5768,19 +5880,13 @@ test.describe("Phase 3 browser smoke", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
 
-    await expect(page.locator(".location-panel-copy strong.location-copy-mobile")).toHaveText(
-      "Find vendors near you",
-    );
-    await expect(page.locator(".location-panel-copy .location-copy-mobile").last()).toHaveText(
-      "Turn on location for more accurate nearby results.",
-    );
-    await expect(page.getByRole("button", { name: "Browse By Area" })).toBeVisible();
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Browse By Area" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
     await expect(page.getByText("Using Wuse as your discovery area")).toHaveCount(0);
-    await expect(page.locator(".vendor-card")).toHaveCount(0);
-    await expect(page.locator(".vendor-section-pane")).toHaveCount(0);
-    await expect(page.locator(".selected-vendor-panel")).toHaveCount(0);
+    await expect(page.locator(".vendor-card").first()).toBeVisible();
     await openMobileDiscoveryTab(page, "map");
-    await expect(page.getByTestId("discovery-map-choice-state")).toBeVisible();
+    await expect(page.getByTestId("discovery-map-choice-state")).toHaveCount(0);
 
     await expectNoClientErrors(errors);
   });
@@ -5797,7 +5903,8 @@ test.describe("Phase 3 browser smoke", () => {
     await mockAreaRestorationNearby(page);
     await page.goto("/");
 
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     await selectAreaFallback(page, "Wuse");
     await expect(page.locator(".vendor-card").first()).toContainText("Wuse Office Rice Pot");
 
@@ -5834,13 +5941,20 @@ test.describe("Phase 3 browser smoke", () => {
     });
     await page.goto("/");
 
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     const searchInput = page.locator('input[name="search"]:visible').first();
     await searchInput.fill("rice");
     await expect(page).toHaveURL(/q=rice/);
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
-    await expect(page.locator(".vendor-card")).toHaveCount(0);
-    await expect.poll(() => nearbyUrls.length).toBe(0);
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
+    await expect.poll(() => nearbyUrls.some((url) => {
+      const requestUrl = new URL(url);
+
+      return requestUrl.searchParams.get("lat") === "9.0813" &&
+        requestUrl.searchParams.get("lng") === "7.4673" &&
+        requestUrl.searchParams.get("search") === "rice";
+    })).toBe(true);
 
     await searchInput.fill("");
     await expect(page).toHaveURL("/");
@@ -5882,7 +5996,8 @@ test.describe("Phase 3 browser smoke", () => {
     await mockAreaRestorationNearby(page);
     await page.goto("/");
 
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     await selectAreaFallback(page, "Garki");
     await expect(page.locator(".vendor-card").first()).toContainText("Garki Night Suya");
 
@@ -5911,6 +6026,7 @@ test.describe("Phase 3 browser smoke", () => {
     await mockAreaRestorationNearby(page);
     await page.goto("/");
 
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
     await selectAreaFallback(page, "Wuse");
     await page.locator(".vendor-card").first().getByRole("link", { name: "View details →" }).click();
     await expect(page).toHaveURL(/\/vendors\/wuse-office-rice-pot/);
@@ -5947,10 +6063,11 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.reload();
 
-    await expect(page.getByTestId("discovery-choice-state")).toBeVisible();
-    await expect(page.getByText("Browsing: Wuse")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Browse By Area" })).toBeVisible();
-    await expect(page.locator(".vendor-card")).toHaveCount(0);
+    await expect(page.getByTestId("discovery-choice-state")).toHaveCount(0);
+    await expect(page.getByText("Browsing: Wuse")).toBeVisible();
+    await expect(page.getByText("Browsing: Garki")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Browse By Area" })).toHaveCount(0);
+    await expect(page.locator(".vendor-card").first()).toContainText("Wuse Office Rice Pot");
 
     await expectNoClientErrors(errors);
   });

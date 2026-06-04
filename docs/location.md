@@ -11,9 +11,29 @@ The app prefers:
 1. precise browser/device location
 2. approximate location when usable and clearly labeled
 3. a selected discovery area when precise or approximate location is unavailable
-4. no discovery origin until the user retries location or chooses an area
+4. the default discovery area, Wuse, when location is unavailable and no area is selected
 
-The backend nearby API still supports an Abuja default-city fallback for direct API callers and operator smoke checks. The public discovery UI must not silently load that fallback when no usable browser location or selected area exists.
+The backend nearby API still supports an Abuja default-city fallback for direct API callers and operator smoke checks. The public discovery UI must not silently load that fallback when browser location is unavailable. Its default browsing fallback is the curated Wuse discovery area, not Abuja-wide discovery or the entire vendor database.
+
+Supported curated discovery areas are:
+
+- Wuse
+- Gwarinpa
+- Jabi
+- Utako
+- Maitama
+- Asokoro
+- Garki
+- Kubwa
+- Lugbe
+
+Area selection updates the active discovery origin, nearby dataset, map origin, Popular dataset, search dataset, and radius filtering. Search and radius never broaden to the entire vendor database.
+
+Area restoration is intentionally short-lived:
+
+- vendor list to vendor profile to back restores the selected area
+- plain page reload returns to GPS when available or default Wuse when GPS is unavailable
+- selected area is not persisted across browser restarts or future sessions
 
 ## Location reminder popup
 
@@ -45,8 +65,9 @@ Current responsibilities:
 - show the current location headline
 - show supporting trust/detail text
 - show a retry action
-- show Browse By Area when no usable location is available
-- show the selected discovery area when area fallback is active
+- show the default Wuse discovery area when no usable location or selected area is available
+- show the selected discovery area when user area fallback is active
+- show Change so users can switch from Wuse to another curated discovery area
 
 Retry behavior:
 
@@ -61,7 +82,7 @@ Location copy stays trust-first:
 
 - do not imply exact nearby accuracy from approximate or fallback location
 - do not present the backend Abuja fallback as the user’s exact location
-- do not show default-city vendors in the public frontend when the user has not provided location or selected an area
+- do not show default-city vendors in the public frontend when the user has not provided location or selected an area; use default Wuse instead
 - when precise location is active, the UI may show stronger confidence copy
 
 ## Source ownership

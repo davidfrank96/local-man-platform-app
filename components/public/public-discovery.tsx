@@ -15,6 +15,7 @@ import {
   getPublicLocationDisplayModel,
 } from "../../lib/location/display.ts";
 import {
+  DEFAULT_DISCOVERY_AREA_ID,
   createDiscoveryAreaLocation,
   getDiscoveryAreaById,
   resolveRestoredDiscoveryAreaId,
@@ -289,18 +290,22 @@ export function PublicDiscovery({
   }, [location]);
   const activeLocalmanUpdates = useMemo(() => getActiveLocalmanUpdates(), []);
   const hasActiveLocalmanUpdates = activeLocalmanUpdates.length > 0;
-  const selectedFallbackArea = useMemo(
-    () =>
-      selectedFallbackAreaId
-        ? getDiscoveryAreaById(selectedFallbackAreaId)
-        : null,
-    [selectedFallbackAreaId],
-  );
   const canUseAreaFallback =
     locationStatus === "denied" ||
     locationStatus === "unavailable" ||
     locationStatus === "error" ||
     locationStatus === "default_city";
+  const effectiveFallbackAreaId =
+    canUseAreaFallback ? selectedFallbackAreaId ?? DEFAULT_DISCOVERY_AREA_ID : null;
+  const isDefaultFallbackAreaActive =
+    canUseAreaFallback && !selectedFallbackAreaId && effectiveFallbackAreaId === DEFAULT_DISCOVERY_AREA_ID;
+  const selectedFallbackArea = useMemo(
+    () =>
+      effectiveFallbackAreaId
+        ? getDiscoveryAreaById(effectiveFallbackAreaId)
+        : null,
+    [effectiveFallbackAreaId],
+  );
   const selectedFallbackAreaLocation = useMemo<AcquiredUserLocation | null>(
     () =>
       canUseAreaFallback && selectedFallbackArea
@@ -1168,6 +1173,8 @@ export function PublicDiscovery({
     ? "Turn on location for more accurate nearby results."
     : showAreaDiscoveryPanel
       ? "Turn on location for more accurate nearby results."
+    : isDefaultFallbackAreaActive
+      ? "Default discovery area. Change area anytime."
     : locationDisplay.detail;
   const locationActionLabel =
     showAreaDiscoveryPanel || selectedFallbackAreaLocation
@@ -1571,7 +1578,7 @@ export function PublicDiscovery({
           {canUseAreaFallback ? (
             <AreaDiscoveryModal
               open={areaFallbackOpen}
-              selectedAreaId={selectedFallbackAreaId}
+              selectedAreaId={effectiveFallbackAreaId}
               onAreaSelect={handleAreaFallbackChange}
               onClose={closeAreaFallback}
             />

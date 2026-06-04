@@ -26,13 +26,17 @@ A user opens the app, sees nearby food vendors on a map, views what they sell, s
 Pilot city: Abuja, Nigeria
 
 Initial focus areas:
-- Guzape
 - Wuse
-- Garki
+- Gwarinpa
 - Jabi
-- Maitama
 - Utako
+- Maitama
+- Asokoro
+- Garki
+- Kubwa
 - Lugbe
+
+These are curated Localman discovery areas, not a complete Abuja district list. When GPS is unavailable and no user area is selected, the public app defaults to Wuse through the same area-discovery system.
 
 ## Primary Users
 ### Buyers
@@ -63,6 +67,7 @@ Small food businesses with:
 ## MVP Features
 ### Public User Features
 - current location detection
+- fallback discovery hierarchy: GPS, selected area, then default Wuse
 - mobile Home tab for search/filter and vendor browsing
 - mobile Map tab for dedicated map context, selected vendor sync, and map refresh
 - mobile About tab for lightweight support, usage, mission, app-install, Terms, and Privacy guidance
@@ -70,6 +75,7 @@ Small food businesses with:
 - vendor detail page
 - search by vendor, dish, or area
 - filtering by radius, category, price, and open now
+- search and radius filtering operate against the active discovery dataset and do not search the entire vendor database
 - call vendor button
 - directions button
 - ratings display

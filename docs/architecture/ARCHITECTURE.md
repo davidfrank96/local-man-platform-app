@@ -25,7 +25,7 @@ Provide a stable, maintainable architecture for a location-based vendor discover
 - curated discovery areas for user-selected fallback browsing
 - internal reverse geocoding route for human-readable labels
 - Google Maps deep links for directions only
-- the interactive discovery map should initialize without silently loading default-city vendors when there is no usable location or selected area
+- the interactive discovery map should initialize from GPS, selected area, or default Wuse without silently loading default-city vendors
 
 ### Deployment
 - DigitalOcean App Platform
@@ -126,9 +126,9 @@ Stores:
 ## Public App Flow
 1. User opens the discovery page
 2. Browser geolocation is attempted
-3. The app resolves precise/approximate location, a selected discovery area, or no discovery origin
-4. If no discovery origin exists, the UI shows Retry Location and Browse By Area without fetching vendors
-5. `/api/vendors/nearby` returns vendors after the frontend has a real location or selected area
+3. The app resolves precise/approximate location, a selected discovery area, or default Wuse discovery
+4. If no user location or selected area exists, Wuse is used as the curated default discovery area
+5. `/api/vendors/nearby` returns vendors after the frontend has a real location, selected area, or default Wuse origin
 6. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
 7. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
 8. User opens vendor detail, rates a vendor, requests a rider, or takes actions such as call and directions
@@ -181,18 +181,22 @@ Approximate method:
 - only shown in the UI when both coordinates and a usable place label are available
 - always labeled approximate, never exact
 
-Default city fallback:
-- Abuja browse mode when precise and approximate coordinates are unavailable
-- `location_source = default_city`
-- used internally to keep discovery working
-- not presented as the user’s exact location
+Area fallback:
+- user-selected discovery areas use curated area centers and `location_source = area`
+- supported discovery areas are Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe
+- when precise/approximate location is unavailable and no area has been selected, the public frontend uses Wuse as the curated default discovery area
+- default Wuse uses the same area-discovery system as an explicit user-selected area
+- default Wuse is not Abuja-wide discovery, not all-vendors mode, and not the backend `default_city` fallback
+- selected areas override default Wuse; GPS overrides selected/restored/default areas
+- selected-area restoration survives vendor-detail back navigation through the short-lived discovery snapshot, but it does not survive a plain page reload or future browser session
 
 Location handling rules:
 - Distance is calculated from the resolved search location, not persisted.
 - Precise and approximate coordinates use the same nearby vendor query path.
-- Missing coordinates are handled gracefully by falling back to Abuja.
+- The public frontend should always send coordinates from GPS, a selected area, or default Wuse before calling nearby discovery.
+- Direct backend calls with missing coordinates still resolve to the Abuja `default_city` fallback for operator/API smoke checks only.
 - Partial coordinates, such as only `lat` or only `lng`, are invalid.
-- Denied or unavailable precise location should fall back to IP approximation first, then the Abuja default city view if approximation is unavailable.
+- Denied or unavailable precise location should fall back to IP approximation first, then selected area, then default Wuse if approximation is unavailable.
 - The frontend should show a location label only when the source is trustworthy enough to present clearly.
 
 Implementation ownership:
@@ -576,7 +580,7 @@ Current implementation:
 - Sponsored/promoted ranking is not implemented.
 - Nearby discovery returns at most `50` vendors per request after filtering and ordering so the map/list payload stays bounded.
 - Default nearby radius is 10 km when `radius_km` is not provided.
-- Missing user coordinates resolve to the Abuja default city view before the nearby query runs.
+- Public frontend nearby requests should not be made without an active origin. GPS, selected area, or default Wuse supplies coordinates before the query runs. Missing-coordinate backend requests still use the Abuja `default_city` path for direct API/operator checks only.
 
 ### Directions
 Use Google Maps deep links using vendor coordinates. Google Maps is not the embedded discovery renderer.

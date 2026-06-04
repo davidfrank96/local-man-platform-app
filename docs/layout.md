@@ -12,12 +12,14 @@ Current mobile discovery uses a fixed bottom dock with three tabs:
 
 The default active tab is `Home`.
 
+Discovery content appears after an active origin exists. The active origin is GPS when available, otherwise a user-selected discovery area, otherwise default Wuse. Default Wuse is a compact area fallback, so normal no-GPS/no-area browsing should render vendor content with compact area status.
+
 ### Home tab order
 
 1. Local Man header block
 2. shared mobile search/filter surface
 3. location reminder toast when visible
-4. location status / retry panel (`Showing nearby vendors` and retry action)
+4. location status / retry panel (`Using your current location` or compact `Browsing: [Area]` status plus retry/change actions)
 5. mobile vendor section navbar
 6. active vendor section content
 7. last-selected vendor panel when that section is active
@@ -95,6 +97,7 @@ The right column contains:
 2. selected vendor card
 
 The search/filter bar and vendor section navbar are not rendered inside the map.
+The map origin follows `activeFetchLocation`, which may be GPS, a selected discovery area, or default Wuse. If MapLibre cannot load, the coordinate fallback remains in this right-column map slot and must not overlap the vendor list.
 
 ## Tablet behavior
 

@@ -23,6 +23,14 @@ The public homepage combines:
 - lightweight retention sections for recent, popular, and last-selected vendors
 - a mobile-only bottom dock with Home, Map, and About tabs
 
+Discovery origin priority is:
+
+1. GPS or precise browser/device location
+2. user-selected discovery area
+3. default discovery area, Wuse
+
+Default Wuse is a curated area-center fallback built on the same area-discovery system as Browse By Area. It is not the backend Abuja `default_city` fallback, not all-vendors mode, and not an Abuja-wide browse mode.
+
 ## Filter surface
 
 Current discovery filters preserve the same query behavior while using a cleaner panel UI:
@@ -41,7 +49,7 @@ Current discovery filters preserve the same query behavior while using a cleaner
 
 The interaction model is:
 
-1. resolve location
+1. resolve GPS, selected area, or default Wuse as the active discovery origin
 2. load nearby vendors
 3. let the user search or filter
 4. let the user select a vendor from the list or map
@@ -87,6 +95,12 @@ Default nearby ordering is:
 - time-based themes: morning, afternoon, night
 - trust-first location copy
 - lightweight location reminder toast
+- curated area discovery for Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe
+- selected-area restoration through vendor-detail back navigation only; it does not persist through page reloads or future sessions
+- GPS always overrides restored, selected, and default areas
+- search and radius filters operate against the active discovery dataset, not the entire vendor database
+- Popular is scoped to the active discovery dataset; Recent and Last selected are user-centric retention surfaces
+- Updates Center entry points through the mobile bell and desktop header bell
 - global toast notifications for success, error, and info messages
 - global client error boundary with safe fallback copy
 - browser-local retention helpers:

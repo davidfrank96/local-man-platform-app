@@ -41,10 +41,14 @@ Test:
 - browser geolocation success
 - IP approximation fallback
 - selected discovery-area fallback when browser location is unavailable
-- no-location/no-area discovery choice state
+- no-location/no-area default Wuse discovery
 - backend Abuja default city fallback through direct API/operator smoke checks
 - approximate location messaging stays approximate and never implies exact nearby accuracy
-- the public frontend does not silently load default-city vendors when no usable location or selected area exists
+- the public frontend does not silently load default-city vendors when no usable location or selected area exists; it uses default Wuse instead
+- default Wuse uses the same curated area-discovery system as explicit area selection
+- GPS overrides restored, selected, and default areas
+- selected area overrides default Wuse
+- selected area survives vendor-profile back navigation but not a plain page reload
 - denied and unavailable states do not print raw fallback chains to users
 
 Current automated coverage:
@@ -61,9 +65,12 @@ Runtime smoke coverage:
 ### Public Discovery Logic
 Test:
 - public nearby API client sends location, radius, search, category, price, and open-now filters
-- no-location/no-area public discovery renders Retry Location and Browse By Area without fetching default-city vendors
+- no-location/no-area public discovery uses default Wuse without fetching backend default-city vendors
 - Browse By Area opens a modal, selecting an area closes it, and the selected area drives nearby, map, radius, and Popular datasets
+- selected areas override default Wuse, and Retry Location/GPS success overrides both
 - Retry Location/GPS success overrides selected-area fallback
+- search and radius filtering operate against GPS, selected-area, and default-Wuse datasets rather than the entire vendor database
+- Popular remains scoped to the active discovery dataset; Recent and Last selected remain user-centric
 - discovery sorting keeps open vendors above closed vendors
 - distance sorts ascending within each open/closed group
 - vendors with higher usage ranking can only beat similarly close vendors within the same open/closed group

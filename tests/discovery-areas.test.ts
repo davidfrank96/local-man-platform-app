@@ -6,6 +6,7 @@ import {
   DISCOVERY_AREAS,
   DISCOVERY_AREA_IDS,
   DISCOVERY_AREA_SELECTION_STORAGE_KEY,
+  DEFAULT_DISCOVERY_AREA_ID,
   createDiscoveryAreaLocation,
   getDiscoveryAreaById,
   getDiscoveryAreaByName,
@@ -19,6 +20,7 @@ function readRepoFile(path: string): string {
 }
 
 test("discovery areas expose the curated phase 1 area list only", () => {
+  assert.equal(DEFAULT_DISCOVERY_AREA_ID, "wuse");
   assert.deepEqual(
     DISCOVERY_AREAS.map((area) => area.displayName),
     [
