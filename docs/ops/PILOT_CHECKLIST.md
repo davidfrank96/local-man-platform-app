@@ -139,6 +139,8 @@ If storage uploads are broken:
 
 ## Weekly Checks
 - [ ] Review new or edited vendors for data quality.
+- [ ] Confirm manually created vendors use canonical governed area names.
+- [ ] Review CSV imports for unknown-area warnings and correct any operator mistakes before broad rollout.
 - [ ] Confirm all active vendors still have valid coordinates.
 - [ ] Confirm hours, dishes, and images are still present for pilot vendors.
 - [ ] Confirm seed images or uploaded images still render.

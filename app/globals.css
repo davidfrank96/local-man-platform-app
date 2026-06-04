@@ -611,6 +611,10 @@ h2 {
   background: rgba(197, 87, 67, 0.06);
 }
 
+.preview-row-warning {
+  background: rgba(202, 146, 54, 0.07);
+}
+
 .preview-badge {
   display: inline-flex;
   min-height: 28px;
@@ -632,11 +636,22 @@ h2 {
   color: #8e2f1d;
 }
 
+.preview-badge-warning {
+  background: rgba(202, 146, 54, 0.16);
+  color: #7a4c0c;
+}
+
 .preview-cell-invalid {
   background: rgba(197, 87, 67, 0.08);
 }
 
+.preview-cell-warning {
+  background: rgba(202, 146, 54, 0.09);
+}
+
 .preview-cell-issue,
+.preview-cell-note,
+.preview-cell-warning-copy,
 .preview-ready-copy {
   display: block;
   margin-top: 4px;
@@ -649,16 +664,31 @@ h2 {
   font-weight: 600;
 }
 
+.preview-cell-warning-copy {
+  color: #7a4c0c;
+  font-weight: 700;
+}
+
+.preview-cell-note {
+  color: var(--color-muted);
+}
+
 .preview-ready-copy {
   color: var(--color-muted);
 }
 
-.preview-issue-list {
+.preview-issue-list,
+.preview-warning-list {
   display: grid;
   gap: 4px;
   margin: 0;
   padding-left: 18px;
   font-size: 0.8rem;
+}
+
+.preview-warning-list {
+  margin-top: 6px;
+  color: #7a4c0c;
 }
 
 .session-summary,
@@ -5017,7 +5047,7 @@ h2 {
       radial-gradient(circle at top right, rgba(242, 139, 29, 0.12), transparent 34%),
       rgba(255, 255, 255, 0.78);
     box-shadow: 0 14px 32px rgba(37, 41, 36, 0.06);
-    padding: 16px;
+    padding: 16px 16px calc(34px + env(safe-area-inset-bottom));
   }
 
   .mobile-about-view h2 {

@@ -30,6 +30,10 @@ import {
   getVendorSlugError,
   slugifyVendorName,
 } from "../../lib/admin/slug.ts";
+import {
+  ABUJA_AREA_DEFINITIONS,
+  type AbujaAreaGroup,
+} from "../../lib/location/area-governance.ts";
 import { slugPattern } from "../../lib/validation/common.ts";
 import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
 import type {
@@ -49,6 +53,15 @@ type AdminCreateVendorOptions = {
   dishesData: CreateVendorDishesRequest | null;
   imageUpload: FormData | null;
 };
+
+const areaGroupLabels: Record<AbujaAreaGroup, string> = {
+  core: "Core Areas",
+  important: "Important Areas",
+  growth: "Growth Areas",
+  satellite: "Satellite Areas",
+};
+
+const areaGroups: AbujaAreaGroup[] = ["core", "important", "growth", "satellite"];
 
 type AdminFormProps = {
   selectedVendor: AdminVendorSummary | null;
@@ -1358,12 +1371,28 @@ function CreateVendorIdentityFields({
       </div>
       <div className="form-grid">
         <label className="field">
-          <span>Area</span>
-          <input
+          <span>
+            Area <span className="field-required" aria-hidden="true">*</span>
+          </span>
+          <select
+            defaultValue=""
             name="area"
-            placeholder="Wuse"
+            required
             onChange={(event) => onAreaChange?.(event.target.value)}
-          />
+          >
+            <option value="">Select area</option>
+            {areaGroups.map((group) => (
+              <optgroup key={group} label={areaGroupLabels[group]}>
+                {ABUJA_AREA_DEFINITIONS
+                  .filter((area) => area.group === group)
+                  .map((area) => (
+                    <option key={area.id} value={area.name}>
+                      {area.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
           {fieldErrors.area ? (
             <span className="field-error">{fieldErrors.area}</span>
           ) : (

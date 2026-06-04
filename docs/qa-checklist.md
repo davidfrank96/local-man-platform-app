@@ -202,11 +202,15 @@ Use this checklist before pushing or releasing UI work.
 
 - [ ] CSV template downloads
 - [ ] CSV template matches the full Create Vendor schema
+- [ ] CSV template presents `area` as the high-level discovery area and keeps zone/street details in `address`
 - [ ] CSV preview shows valid and invalid rows
+- [ ] known area values are normalized in preview, for example `wuse` to `Wuse`
+- [ ] unknown area values show a non-blocking governance warning
 - [ ] invalid cells show inline issues
 - [ ] duplicate rows in file are flagged
 - [ ] duplicate existing vendors are flagged
 - [ ] valid rows still upload when invalid rows are present
+- [ ] rows with unknown areas can still upload after review
 - [ ] CSV rows without coordinates are rejected clearly
 - [ ] legacy minimal CSV format is rejected clearly
 

@@ -420,6 +420,97 @@ test("admin create vendor route writes vendor and audit log", async () => {
   }
 });
 
+test("admin create vendor route stores governed manual area in canonical form", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const vendorCreateBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/vendors" && init?.method === "POST") {
+      const vendorCreateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+      vendorCreateBodies.push(vendorCreateBody);
+      return Response.json([
+        {
+          ...vendorRecord,
+          ...vendorCreateBody,
+        },
+      ]);
+    }
+
+    return createAdminFetchMock(calls)(input, init);
+  }) as typeof fetch;
+
+  try {
+    const response = await createVendorRoute(
+      createAdminRequest("POST", {
+        name: "Canonical Area Vendor",
+        slug: "canonical-area-vendor",
+        category_slug: "rice",
+        short_description: "Test vendor",
+        phone_number: "+2340000000000",
+        address_text: "Test address",
+        city: "Abuja",
+        area: " wuse ",
+        state: "FCT",
+        country: "Nigeria",
+        latitude: 9.0813,
+        longitude: 7.4694,
+        price_band: "budget",
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.equal(vendorCreateBodies[0]?.area, "Wuse");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin create vendor route rejects manual free-text areas", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await createVendorRoute(
+      createAdminRequest("POST", {
+        name: "Unknown Area Vendor",
+        slug: "unknown-area-vendor",
+        category_slug: "rice",
+        short_description: "Test vendor",
+        phone_number: "+2340000000000",
+        address_text: "Test address",
+        city: "Abuja",
+        area: "Frank Area",
+        state: "FCT",
+        country: "Nigeria",
+        latitude: 9.0813,
+        longitude: 7.4694,
+        price_band: "budget",
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+    assert.match(JSON.stringify(body.error.details), /Choose an approved Abuja area/);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("admin update vendor route patches vendor and writes audit log", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -441,6 +532,38 @@ test("admin update vendor route patches vendor and writes audit log", async () =
     assert.equal(body.success, true);
     assert.equal(body.data.vendor.name, "Updated Vendor");
     assert.equal(body.data.vendor.slug, "test-vendor");
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "PATCH /rest/v1/vendors",
+      "POST /rest/v1/audit_logs",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("admin update vendor route keeps existing noncanonical area values editable", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createAdminFetchMock(calls);
+
+  try {
+    const response = await updateVendorRoute(
+      createAdminRequest("PUT", {
+        area: "wuse",
+      }),
+      {
+        params: Promise.resolve({ id: vendorId }),
+      },
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.vendor.area, "wuse");
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",

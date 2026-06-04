@@ -10,6 +10,7 @@ import {
   type VendorIntakePreviewResult,
   type VendorIntakePreviewRow,
   type VendorIntakeRowInput,
+  type VendorIntakeWarning,
 } from "../../lib/admin/api-client.ts";
 import {
   vendorCsvTemplateHeaders,
@@ -44,6 +45,13 @@ function getRowIssue(row: VendorIntakePreviewRow, field: string): VendorIntakeIs
   return row.issues.find((issue) => issue.field === field);
 }
 
+function getRowWarning(
+  row: VendorIntakePreviewRow,
+  field: string,
+): VendorIntakeWarning | undefined {
+  return row.warnings.find((warning) => warning.field === field);
+}
+
 function formatCellValue(value: string | number | null): string {
   if (value === null || value === undefined || value === "") {
     return "—";
@@ -67,6 +75,14 @@ function formatPreviewFieldValue(
   }
 
   return typeof value === "boolean" ? (value ? "Yes" : "No") : value;
+}
+
+function getPreviewRowStatus(row: VendorIntakePreviewRow): "invalid" | "warning" | "valid" {
+  if (row.issues.length > 0) {
+    return "invalid";
+  }
+
+  return row.warnings.length > 0 ? "warning" : "valid";
 }
 
 function selectRowsByNumber(
@@ -93,6 +109,8 @@ export function VendorCsvUploadPanel({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const validPreviewRows = preview?.validRows ?? [];
+  const previewWarningCount =
+    preview?.rows.reduce((total, row) => total + row.warnings.length, 0) ?? 0;
 
   const canUpload = useMemo(
     () => validPreviewRows.length > 0 && !isUploading && !disabled,
@@ -340,6 +358,7 @@ export function VendorCsvUploadPanel({
             <span>{preview.totalRows} total rows</span>
             <span>{preview.validRows.length} valid</span>
             <span>{preview.invalidRows.length} invalid</span>
+            <span>{previewWarningCount} warning{previewWarningCount === 1 ? "" : "s"}</span>
           </div>
           <div className="admin-subsection">
             <div className="admin-section-header">
@@ -368,50 +387,89 @@ export function VendorCsvUploadPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.rows.map((row) => (
-                    <tr
-                      key={`preview-${row.rowNumber}`}
-                      className={row.issues.length > 0 ? "preview-row-invalid" : "preview-row-valid"}
-                    >
-                      <td>
-                        <span
-                          className={row.issues.length > 0 ? "preview-badge preview-badge-invalid" : "preview-badge preview-badge-valid"}
-                        >
-                          {row.issues.length > 0 ? "Invalid" : "Valid"}
-                        </span>
-                      </td>
-                      <td>{row.rowNumber}</td>
-                      {previewFields.map((field) => {
-                        const issue = getRowIssue(row, field);
-                        const value = formatPreviewFieldValue(row, field);
-
-                        return (
-                          <td
-                            key={`${row.rowNumber}-${field}`}
-                            className={issue ? "preview-cell-invalid" : undefined}
+                  {preview.rows.map((row) => {
+                    const rowStatus = getPreviewRowStatus(row);
+                    return (
+                      <tr
+                        key={`preview-${row.rowNumber}`}
+                        className={`preview-row-${rowStatus}`}
+                      >
+                        <td>
+                          <span
+                            className={`preview-badge preview-badge-${rowStatus}`}
                           >
-                            <span>{formatCellValue(value)}</span>
-                            {issue ? <span className="preview-cell-issue">{issue.error}</span> : null}
-                          </td>
-                        );
-                      })}
-                      <td>{row.featured_dishes.length > 0 ? row.featured_dishes.join(", ") : "—"}</td>
-                      <td>{row.image_urls.length > 0 ? `${row.image_urls.length} image URL(s)` : "—"}</td>
-                      <td>
-                        {row.issues.length > 0 ? (
-                          <ul className="preview-issue-list">
-                            {row.issues.map((issue, index) => (
-                              <li key={`${row.rowNumber}-${issue.field}-${issue.code}-${index}`}>
-                                Row {issue.row}: {issue.error} ({issue.code})
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="preview-ready-copy">Ready to upload</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                            {rowStatus === "invalid"
+                              ? "Invalid"
+                              : rowStatus === "warning"
+                                ? "Warning"
+                                : "Valid"}
+                          </span>
+                        </td>
+                        <td>{row.rowNumber}</td>
+                        {previewFields.map((field) => {
+                          const issue = getRowIssue(row, field);
+                          const warning = getRowWarning(row, field);
+                          const value = formatPreviewFieldValue(row, field);
+
+                          return (
+                            <td
+                              key={`${row.rowNumber}-${field}`}
+                              className={
+                                issue
+                                  ? "preview-cell-invalid"
+                                  : warning
+                                    ? "preview-cell-warning"
+                                    : undefined
+                              }
+                            >
+                              <span>{formatCellValue(value)}</span>
+                              {issue ? <span className="preview-cell-issue">{issue.error}</span> : null}
+                              {field === "area" && row.original_area ? (
+                                <span className="preview-cell-note">
+                                  Original area: {row.original_area}
+                                </span>
+                              ) : null}
+                              {field === "area" && row.normalized_area ? (
+                                <span className="preview-cell-note">
+                                  Normalized area: {row.normalized_area}
+                                </span>
+                              ) : null}
+                              {field === "area" && row.area_status === "unknown" ? (
+                                <span className="preview-cell-warning-copy">Status: Unknown Area</span>
+                              ) : null}
+                              {warning ? (
+                                <span className="preview-cell-warning-copy">{warning.message}</span>
+                              ) : null}
+                            </td>
+                          );
+                        })}
+                        <td>{row.featured_dishes.length > 0 ? row.featured_dishes.join(", ") : "—"}</td>
+                        <td>{row.image_urls.length > 0 ? `${row.image_urls.length} image URL(s)` : "—"}</td>
+                        <td>
+                          {row.issues.length > 0 ? (
+                            <ul className="preview-issue-list">
+                              {row.issues.map((issue, index) => (
+                                <li key={`${row.rowNumber}-${issue.field}-${issue.code}-${index}`}>
+                                  Row {issue.row}: {issue.error} ({issue.code})
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="preview-ready-copy">Ready to upload</span>
+                          )}
+                          {row.warnings.length > 0 ? (
+                            <ul className="preview-warning-list">
+                              {row.warnings.map((warning, index) => (
+                                <li key={`${row.rowNumber}-${warning.field}-${warning.code}-${index}`}>
+                                  Warning: {warning.message} Suggested action: {warning.suggestedAction}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

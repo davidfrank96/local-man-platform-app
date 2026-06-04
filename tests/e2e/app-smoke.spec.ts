@@ -1749,7 +1749,7 @@ test.describe("Phase 3 browser smoke", () => {
     } catch {
       await expect(page.locator('.discovery-map[data-map-mode="fallback"]')).toBeVisible();
     }
-    await expect(page.getByText("Map view limited, vendors still available below.")).toBeVisible();
+    await expect(page.getByText("Vendor list remains available below.")).toBeVisible();
     await expect(page.locator(".vendor-card").first()).toBeVisible();
 
     const fallbackMarker = page.locator('.discovery-map[data-map-mode="fallback"] button[aria-label^="Select "]').first();
@@ -1797,7 +1797,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText("Map view limited, vendors still available below.")).toHaveCount(0);
+    await expect(page.getByText("Vendor list remains available below.")).toHaveCount(0);
     await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
     await expectMapLibreVendorMarkers(page);
   });
@@ -1828,7 +1828,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page.locator('.discovery-map[data-map-mode="maplibre"]')).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText("Map view limited, vendors still available below.")).toHaveCount(0);
+    await expect(page.getByText("Vendor list remains available below.")).toHaveCount(0);
     await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
     await expectMapLibreVendorMarkers(page);
 
@@ -2936,7 +2936,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expectNoClientErrors(errors);
   });
 
-  test("nearby vendor cards rank open status, distance, then close-distance popularity", async ({ page }) => {
+  test("nearby vendor cards rank open status, distance, then popularity", async ({ page }) => {
     const errors = trackClientErrors(page);
     const trackedBodies: Array<Record<string, unknown>> = [];
 
@@ -3070,8 +3070,8 @@ test.describe("Phase 3 browser smoke", () => {
 
     const beforeSelectionSnapshot = await readVendorCardStateSnapshot(page);
     expect(beforeSelectionSnapshot.map((vendor) => vendor.name)).toEqual([
-      "Open Popular 1.3km",
       "Open Near 1km",
+      "Open Popular 1.3km",
       "Open Far Popular 6km",
       "Closed Popular Close",
       "Closed Near 2km",
@@ -3844,7 +3844,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.locator('input[name="name"]').fill("Create Upload Probe");
     await page.locator('input[name="phone_number"]').fill("+2348000000000");
-    await page.locator('input[name="area"]').fill("Wuse");
+    await page.locator('select[name="area"]').selectOption("Wuse");
     await page.locator('textarea[name="short_description"]').fill("Testing create image selection state.");
 
     await page.locator('input[name="create-image"]').setInputFiles({
@@ -3862,7 +3862,7 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page).toHaveURL(/\/admin\/vendors\/new$/);
     await expect(page.locator('input[name="name"]')).toHaveValue("Create Upload Probe");
     await expect(page.locator('input[name="phone_number"]')).toHaveValue("+2348000000000");
-    await expect(page.locator('input[name="area"]')).toHaveValue("Wuse");
+    await expect(page.locator('select[name="area"]')).toHaveValue("Wuse");
     await expect(page.locator('textarea[name="short_description"]')).toHaveValue(
       "Testing create image selection state.",
     );
@@ -4213,7 +4213,7 @@ test.describe("Phase 3 browser smoke", () => {
     ]);
     await page.goto("/");
 
-    const updatesButton = page.getByRole("button", { name: "Open Localman updates" });
+    const updatesButton = page.getByRole("button", { name: /Open Localman updates/ });
     await expect(updatesButton).toBeVisible();
     await expect(updatesButton).toHaveAttribute("aria-expanded", "false");
     await expect(updatesButton).toHaveAttribute("aria-controls", "localman-updates-panel");
@@ -4272,7 +4272,7 @@ test.describe("Phase 3 browser smoke", () => {
     await mockReverseGeocode(page, "Wuse II, Abuja");
     await page.goto("/");
 
-    const updatesButton = page.getByRole("button", { name: "Open Localman updates" });
+    const updatesButton = page.getByRole("button", { name: /Open Localman updates/ });
     await expect(updatesButton).toBeVisible();
     await updatesButton.click();
 

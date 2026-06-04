@@ -222,7 +222,7 @@ test("nearby route sanitizes injection-like search input and does not use the ra
   }
 });
 
-test("nearby route searches featured dishes and categories with strong matches first", async () => {
+test("nearby route searches featured dishes and categories after distance ties", async () => {
   const restoreEnv = setPublicEnv();
   const originalFetch = globalThis.fetch;
 
@@ -245,7 +245,7 @@ test("nearby route searches featured dishes and categories with strong matches f
           name: "Evening Grill",
           slug: "evening-grill",
           short_description: "Chicken and chips.",
-          longitude: 7.3986 + 0.002,
+          longitude: 7.3986 + 0.001,
           vendor_featured_dishes: [
             {
               dish_name: "Beef suya",
@@ -259,7 +259,7 @@ test("nearby route searches featured dishes and categories with strong matches f
           name: "Neighborhood Kitchen",
           slug: "neighborhood-kitchen",
           short_description: "Daily meals.",
-          longitude: 7.3986 + 0.003,
+          longitude: 7.3986 + 0.001,
           vendor_category_map: [
             {
               vendor_categories: {
@@ -435,7 +435,7 @@ test("nearby route keeps closer open matches ahead of farther stronger text matc
   }
 });
 
-test("nearby route ranks open vendors by distance with popularity as a close-distance tie-breaker", async () => {
+test("nearby route ranks open vendors by distance before popularity", async () => {
   const restoreEnv = setPublicEnv();
   const originalFetch = globalThis.fetch;
 
@@ -505,8 +505,8 @@ test("nearby route ranks open vendors by distance with popularity as a close-dis
     assert.deepEqual(
       body.data.vendors.map((vendor: { slug: string }) => vendor.slug),
       [
-        "open-popular-similar",
         "open-near",
+        "open-popular-similar",
         "open-far-popular",
         "closed-popular-close",
         "closed-near",

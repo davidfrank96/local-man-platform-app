@@ -114,7 +114,7 @@ export function createVendorPayload(formData: FormData): CreateManagedVendorRequ
     phone_number: readNullableText(formData, "phone_number"),
     address_text: readNullableText(formData, "address_text"),
     city: readNullableText(formData, "city"),
-    area: readNullableText(formData, "area"),
+    area: readText(formData, "area") ?? "",
     state: readNullableText(formData, "state"),
     country: readNullableText(formData, "country"),
     latitude: readNumber(formData, "latitude"),

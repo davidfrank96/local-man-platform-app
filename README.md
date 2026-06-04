@@ -119,6 +119,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - admin rider management page at `/admin/riders` for creating manual rider profiles, reviewing independent rider applications, managing verification/visibility status, and checking unavailable-report signals
 - vendor registry with completeness badges
 - full Create Vendor page for both admins and agents
+- governed manual area selection backed by the shared Abuja area list; the detailed address remains a separate field
 - CSV vendor intake with the same schema and persistence contract as the full Create Vendor page
 - vendor create workflow with:
   - basic details
@@ -399,6 +400,9 @@ Current CSV intake behavior:
 
 - preview validates every row before insert
 - valid rows can upload even when other rows fail
+- known Abuja area values are normalized before import, for example `wuse` and `WUSE` become `Wuse`
+- unknown area values continue with a preview warning instead of blocking upload; operators should review them before import
+- the CSV template treats `area` as the high-level discovery area and keeps details such as `Zone 2, Aminu Kano Crescent` in `address`
 - duplicate detection runs:
   - within the CSV
   - against existing vendors

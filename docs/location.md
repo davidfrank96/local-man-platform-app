@@ -35,6 +35,19 @@ Area restoration is intentionally short-lived:
 - plain page reload returns to GPS when available or default Wuse when GPS is unavailable
 - selected area is not persisted across browser restarts or future sessions
 
+## Area Governance
+
+Localman also maintains a broader governed Abuja area list for data quality in admin and CSV vendor intake. That governance layer normalizes known area names case-insensitively, so entries such as `wuse`, `WUSE`, and ` Wuse ` resolve to `Wuse`.
+
+Manual vendor creation uses the governed area list as a controlled selector. Agents choose a high-level area such as `Wuse`, while the street, zone, landmark, or estate detail belongs in the vendor address field.
+
+CSV vendor intake uses normalize-plus-warning behavior:
+
+- known areas are stored in canonical form
+- unknown areas are shown as preview warnings
+- unknown areas do not block import
+- existing vendor rows are not rewritten by the governance layer
+
 ## Location reminder popup
 
 The homepage includes a lightweight, non-blocking location reminder toast.

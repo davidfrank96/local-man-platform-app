@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { POST as vendorIntakeRoute } from "../app/api/admin/vendors/intake/route.ts";
-import { vendorCsvTemplateHeaders } from "../lib/admin/vendor-intake-contract.ts";
+import {
+  vendorCsvTemplateHeaders,
+  vendorCsvTemplateRows,
+} from "../lib/admin/vendor-intake-contract.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000301";
 const riceCategoryId = "00000000-0000-4000-8000-000000000401";
@@ -98,6 +101,7 @@ function createFetchMock(
       latitude: number;
       longitude: number;
     }>;
+    createdVendorBodies?: Array<Record<string, unknown>>;
     failCategoryInsert?: boolean;
     failDishInsert?: boolean;
     failImageInsert?: boolean;
@@ -152,6 +156,7 @@ function createFetchMock(
 
     if (url.pathname === "/rest/v1/vendors" && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "{}"));
+      options?.createdVendorBodies?.push(body);
       return Response.json([
         {
           id: vendorId,
@@ -270,6 +275,16 @@ test("CSV template headers expose the full vendor intake contract", () => {
   assert.ok(vendorCsvTemplateHeaders.includes("image_url_1"));
   assert.ok(!vendorCsvTemplateHeaders.includes("opening_time"));
   assert.ok(!vendorCsvTemplateHeaders.includes("closing_time"));
+});
+
+test("CSV template models area as high-level area and address as detailed locality", () => {
+  const areaIndex = vendorCsvTemplateHeaders.indexOf("area");
+  const addressIndex = vendorCsvTemplateHeaders.indexOf("address");
+  const templateRow = vendorCsvTemplateRows[0];
+
+  assert.equal(templateRow[areaIndex], "Wuse");
+  assert.match(String(templateRow[addressIndex]), /Zone 2/);
+  assert.match(String(templateRow[addressIndex]), /Wuse/);
 });
 
 test("agent can preview full vendor intake rows and receives row-level validation errors", async () => {
@@ -416,6 +431,144 @@ test("upload parses featured dishes and image URLs from full CSV rows", async ()
     assert.equal(body.data.validRows[0].featured_dishes.length, 2);
     assert.equal(body.data.validRows[0].image_urls.length, 2);
     assert.equal(body.data.validRows[0].open_days, 7);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV preview normalizes known governed areas without blocking rows", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "preview",
+        rows: [
+          createFullVendorRow({
+            area: "wuse",
+          }),
+          createFullVendorRow({
+            row_number: 3,
+            vendor_name: "Jabi Grill Corner",
+            category: "grill",
+            area: "JABI",
+            address: "Shop 2, Jabi Lake Mall, Abuja",
+            latitude: "9.0792",
+            longitude: "7.4262",
+            image_url_1: "https://images.example.com/jabi-grill.jpg",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.validRows.length, 2);
+    assert.equal(body.data.invalidRows.length, 0);
+    assert.equal(body.data.rows[0].original_area, "wuse");
+    assert.equal(body.data.rows[0].normalized_area, "Wuse");
+    assert.equal(body.data.rows[0].area, "Wuse");
+    assert.equal(body.data.rows[0].area_status, "known");
+    assert.equal(body.data.rows[0].warnings.length, 0);
+    assert.equal(body.data.rows[1].original_area, "JABI");
+    assert.equal(body.data.rows[1].normalized_area, "Jabi");
+    assert.equal(body.data.rows[1].area, "Jabi");
+    assert.equal(body.data.rows[1].area_status, "known");
+    assert.equal(body.data.rows[1].warnings.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV preview warns on unknown areas without blocking import eligibility", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "preview",
+        rows: [
+          createFullVendorRow({
+            area: "Frank Area",
+          }),
+          createFullVendorRow({
+            row_number: 3,
+            vendor_name: "Wuse Zone Rice",
+            area: "Wuse Zone 2",
+            address: "Zone 2, Aminu Kano Crescent, Abuja",
+            latitude: "9.0845",
+            longitude: "7.4035",
+            image_url_1: "https://images.example.com/wuse-zone-rice.jpg",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.validRows.length, 2);
+    assert.equal(body.data.invalidRows.length, 0);
+    assert.equal(body.data.rows[0].area, "Frank Area");
+    assert.equal(body.data.rows[0].normalized_area, null);
+    assert.equal(body.data.rows[0].area_status, "unknown");
+    assert.equal(body.data.rows[0].warnings.length, 1);
+    assert.match(body.data.rows[0].warnings[0].message, /Area not recognized/);
+    assert.equal(body.data.rows[1].area, "Wuse Zone 2");
+    assert.equal(body.data.rows[1].area_status, "unknown");
+    assert.equal(body.data.rows[1].warnings.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV upload stores canonical governed areas and still uploads unknown areas with warnings", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdVendorBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdVendorBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            area: "garki",
+          }),
+          createFullVendorRow({
+            row_number: 3,
+            vendor_name: "Custom Market Rice",
+            area: "Custom Market Area",
+            address: "Custom Market, Abuja",
+            latitude: "9.0885",
+            longitude: "7.4115",
+            image_url_1: "https://images.example.com/custom-market-rice.jpg",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 2);
+    assert.equal(body.data.failedRows.length, 0);
+    assert.equal(createdVendorBodies[0].area, "Garki");
+    assert.equal(createdVendorBodies[1].area, "Custom Market Area");
+    assert.equal(body.data.rows[0].warnings.length, 0);
+    assert.equal(body.data.rows[1].warnings.length, 1);
+    assert.match(body.data.rows[1].warnings[0].suggestedAction, /Review area/);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

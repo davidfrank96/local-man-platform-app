@@ -21,6 +21,6 @@ test("public map style url is trimmed", () => {
 test("fallback notice keeps map failure copy calm", () => {
   assert.equal(
     MAP_FALLBACK_NOTICE,
-    "Map view limited, vendors still available below.",
+    "Vendor list remains available below.",
   );
 });

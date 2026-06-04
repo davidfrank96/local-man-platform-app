@@ -348,9 +348,12 @@ Manual admin UI smoke coverage:
   - vendor images
   - review and create
 - create a vendor with Abuja coordinates
+- confirm manual vendor creation uses the governed area selector and stores canonical area names
 - confirm the incomplete-data acknowledgements must be checked before base vendor creation
 - confirm hours, dishes, and image can be provided during create flow
 - confirm partial failures identify the failed create sub-step
+- upload a CSV preview with `wuse` and confirm it normalizes to `Wuse`
+- upload a CSV preview with an unknown area and confirm it warns without blocking valid upload
 - update the selected vendor
 - add one set of seven day hours
 - confirm the current hours render in the edit form before saving changes

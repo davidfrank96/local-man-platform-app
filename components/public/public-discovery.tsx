@@ -1168,13 +1168,17 @@ export function PublicDiscovery({
     ? "Find vendors near you"
     : showAreaDiscoveryPanel
       ? "Find vendors near you"
+    : isDefaultFallbackAreaActive && selectedFallbackArea
+      ? `Browsing ${selectedFallbackArea.displayName} (Default Area)`
+    : selectedFallbackAreaLocation && selectedFallbackArea
+      ? `Browsing ${selectedFallbackArea.displayName}`
     : locationDisplay.headline;
   const locationPanelDetail = showDiscoveryChoiceState
     ? "Turn on location for more accurate nearby results."
     : showAreaDiscoveryPanel
       ? "Turn on location for more accurate nearby results."
-    : isDefaultFallbackAreaActive
-      ? "Default discovery area. Change area anytime."
+    : isDefaultFallbackAreaActive || selectedFallbackAreaLocation
+      ? "Enable location for more accurate nearby results."
     : locationDisplay.detail;
   const locationActionLabel =
     showAreaDiscoveryPanel || selectedFallbackAreaLocation
@@ -1369,10 +1373,15 @@ export function PublicDiscovery({
             <button
               aria-controls="localman-updates-panel"
               aria-expanded={updatesCenterOpen}
-              aria-label="Open Localman updates"
+              aria-label={
+                hasActiveLocalmanUpdates
+                  ? `Open Localman updates (${activeLocalmanUpdates.length} active)`
+                  : "Open Localman updates"
+              }
               className="discovery-notification-button"
               data-testid="mobile-updates-button"
               onClick={() => setUpdatesCenterOpen(true)}
+              title="Localman Updates"
               type="button"
             >
               <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
@@ -1496,7 +1505,7 @@ export function PublicDiscovery({
                   <>
                     <span className="location-copy-mobile">{locationPanelDetail}</span>
                     <span className="location-copy-desktop">
-                      Turn on location for accurate nearby results.
+                      Enable location for more accurate nearby results.
                     </span>
                   </>
                 ) : (
