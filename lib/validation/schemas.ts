@@ -18,6 +18,10 @@ import {
   normalizeNigerianPhoneNumber,
 } from "../phone.ts";
 import {
+  isKnownArea,
+  normalizeArea,
+} from "../location/area-governance.ts";
+import {
   isRatingSignalAllowedForScore,
   positiveRatingSignalSlugs,
   ratingSignalSlugs,
@@ -777,7 +781,22 @@ export const createVendorRequestSchema = z.object({
   is_open_override: z.boolean().nullable().optional(),
 });
 
+const governedManualVendorAreaSchema = z
+  .string()
+  .trim()
+  .min(1, "Area is required.")
+  .superRefine((value, context) => {
+    if (!isKnownArea(value)) {
+      context.addIssue({
+        code: "custom",
+        message: "Choose an approved Abuja area.",
+      });
+    }
+  })
+  .transform((value) => normalizeArea(value) ?? value);
+
 export const createManagedVendorRequestSchema = createVendorRequestSchema.extend({
+  area: governedManualVendorAreaSchema,
   category_slug: slugSchema,
 });
 

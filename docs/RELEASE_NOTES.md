@@ -34,11 +34,20 @@ This branch consolidates completed runtime behavior across Rider Connect, rating
 - Home and Map share one search/filter/selected-vendor state. Search, category, price, open-now, and radius filters persist when switching between them.
 - The selected vendor panel on the mobile Map tab flows naturally below the map through normal page scrolling.
 - Desktop keeps the existing combined discovery layout with list/search content in the left column and map/selected vendor content in the right column.
+- Discovery origin priority is GPS, then user-selected area, then default Wuse.
+- Default Wuse is a curated discovery area using the same area-discovery system as Browse By Area. It is not Abuja `default_city`, not Abuja-wide discovery, and not an all-vendors mode.
+- Supported discovery areas are Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe.
+- Area selection updates Nearby, map, Popular, search, and radius behavior.
+- Selected-area restoration survives vendor-profile back navigation through the short-lived discovery snapshot, but it does not survive a plain page reload or future session.
+- GPS always overrides restored, selected, and default areas.
+- Mobile and desktop header bells open Localman Updates as an informational content center.
 
 ### Search, Radius, Empty States, and Map Refresh
 
 - Radius filters currently support 1 km, 5 km, 10 km, and 30 km.
 - Radius/search/category/open-now/price filters are shared across mobile Home, mobile Map, and desktop discovery.
+- Search operates against the active discovery dataset: GPS dataset in GPS mode, selected-area dataset in area mode, and Wuse dataset in default-Wuse mode. It does not search the entire vendor database.
+- Popular is scoped to the active discovery dataset. Recent and Last selected remain user-centric retention surfaces.
 - The filter panel now shows a `Filters` header, active-filter count pill, `Clear all`, icon-labeled radius/price/category selects, an open-now card, and a primary `Apply filters` CTA while preserving the existing filtering/query behavior.
 - Mobile filter view opens as a bounded sheet with a close button, stacked fields, contained scrolling, and spacing above the fixed bottom dock.
 - Desktop filter view keeps radius and price in a two-column row, then category and open-now as full-width controls.

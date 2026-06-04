@@ -139,7 +139,7 @@ test("sorts nearby vendors by distance before usage ranking when distance differ
   );
 });
 
-test("uses usage ranking as a tie-breaker for similarly close vendors", () => {
+test("keeps distance ahead of usage ranking for open vendors", () => {
   const vendors: VendorLocationRecord[] = [
     {
       ...baseVendor,
@@ -178,8 +178,8 @@ test("uses usage ranking as a tie-breaker for similarly close vendors", () => {
       ranking_score: vendor.ranking_score,
     })),
     [
-      { id: "similar-high-score", ranking_score: 8 },
       { id: "near-low-score", ranking_score: 1 },
+      { id: "similar-high-score", ranking_score: 8 },
     ],
   );
 });
@@ -225,7 +225,7 @@ test("keeps open vendors ahead of closed vendors before ranking and distance", (
   );
 });
 
-test("search ranking keeps closer matches ahead of stronger name matches outside close-distance ties", () => {
+test("search ranking keeps closer matches ahead of stronger name matches", () => {
   const vendors: VendorLocationRecord[] = [
     {
       ...baseVendor,

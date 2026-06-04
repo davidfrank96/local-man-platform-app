@@ -23,6 +23,7 @@ import type {
 import { parseAdminTimeInputTo24Hour } from "./hours-input.ts";
 import { slugifyVendorName } from "./slug.ts";
 import { calculateDistanceKm } from "../location/distance.ts";
+import { normalizeArea } from "../location/area-governance.ts";
 import {
   vendorCsvDayFields,
   vendorCsvDishSlots,
@@ -84,6 +85,9 @@ export type VendorIntakePreviewRow = {
   category: string | null;
   price_band: string | null;
   address: string | null;
+  original_area: string | null;
+  normalized_area: string | null;
+  area_status: "known" | "unknown" | "missing";
   area: string | null;
   city: string | null;
   state: string | null;
@@ -97,6 +101,7 @@ export type VendorIntakePreviewRow = {
   featured_dishes: string[];
   image_urls: string[];
   issues: VendorIntakeIssue[];
+  warnings: VendorIntakeWarning[];
   errors: string[];
 };
 
@@ -105,6 +110,14 @@ export type VendorIntakeIssue = {
   field: string;
   error: string;
   code: string;
+};
+
+export type VendorIntakeWarning = {
+  row: number;
+  field: string;
+  message: string;
+  code: string;
+  suggestedAction: string;
 };
 
 export type VendorIntakePreviewResult = {
@@ -231,6 +244,22 @@ function createIssue(
     field,
     error,
     code,
+  };
+}
+
+function createWarning(
+  row: number,
+  field: string,
+  message: string,
+  code: string,
+  suggestedAction: string,
+): VendorIntakeWarning {
+  return {
+    row,
+    field,
+    message,
+    code,
+    suggestedAction,
   };
 }
 
@@ -530,7 +559,10 @@ async function prepareVendorIntakeRows(
     const description = normalizeNullableText(row.description);
     const phone = normalizeNullableText(row.phone);
     const address = normalizeNullableText(row.address);
-    const area = normalizeNullableText(row.area);
+    const originalArea = normalizeNullableText(row.area);
+    const normalizedArea = originalArea ? normalizeArea(originalArea) : null;
+    const area = normalizedArea ?? originalArea;
+    const areaStatus = originalArea ? (normalizedArea ? "known" : "unknown") : "missing";
     const city = normalizeNullableText(row.city);
     const state = normalizeNullableText(row.state);
     const country = normalizeNullableText(row.country);
@@ -539,6 +571,7 @@ async function prepareVendorIntakeRows(
     const isActiveInput = normalizeBoolean(row.is_active);
     const isActive = isActiveInput === null ? true : Boolean(isActiveInput);
     const issues: VendorIntakeIssue[] = [];
+    const warnings: VendorIntakeWarning[] = [];
     const locationKey = normalizeLocationKey(address);
 
     if (!vendorName) {
@@ -589,6 +622,16 @@ async function prepareVendorIntakeRows(
 
     if (!area) {
       issues.push(createIssue(rowNumber, "area", "Missing area.", "REQUIRED_FIELD"));
+    } else if (areaStatus === "unknown") {
+      warnings.push(
+        createWarning(
+          rowNumber,
+          "area",
+          "Area not recognized by Localman governance list.",
+          "UNKNOWN_AREA",
+          "Review area before import.",
+        ),
+      );
     }
 
     if (!city) {
@@ -786,6 +829,9 @@ async function prepareVendorIntakeRows(
       category: categorySlug,
       price_band: priceBand,
       address,
+      original_area: originalArea,
+      normalized_area: normalizedArea,
+      area_status: areaStatus,
       area,
       city,
       state,
@@ -799,6 +845,7 @@ async function prepareVendorIntakeRows(
       featured_dishes: dishesData?.dishes.map((dish) => dish.dish_name) ?? [],
       image_urls: imagesData?.images.map((image) => image.image_url) ?? [],
       issues,
+      warnings,
       errors: issues.map((issue) => issue.error),
     };
     previewRows.push(preview);

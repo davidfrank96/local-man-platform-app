@@ -96,7 +96,7 @@ test("discovery sorting keeps meaningful distance ahead of popularity within ope
   ]);
 });
 
-test("discovery sorting uses popularity as a close-distance tie-breaker", () => {
+test("discovery sorting keeps distance ahead of popularity even for nearby open vendors", () => {
   const nearOpenVendor = createVendor({
     vendor_id: "00000000-0000-4000-8000-000000000002",
     slug: "near-open-vendor",
@@ -120,8 +120,42 @@ test("discovery sorting uses popularity as a close-distance tie-breaker", () => 
   );
 
   assert.deepEqual(results.map((vendor) => vendor.slug), [
-    "popular-similar-open-vendor",
     "near-open-vendor",
+    "popular-similar-open-vendor",
+  ]);
+});
+
+test("discovery sorting is transitive and prevents distance inversions", () => {
+  const vendors = [
+    createVendor({
+      vendor_id: "00000000-0000-4000-8000-000000000002",
+      slug: "two-km-popular",
+      name: "Two Km Popular",
+      ranking_score: 100,
+      distance_km: 2,
+    }),
+    createVendor({
+      vendor_id: "00000000-0000-4000-8000-000000000003",
+      slug: "three-km-mid",
+      name: "Three Km Mid",
+      ranking_score: 50,
+      distance_km: 3,
+    }),
+    createVendor({
+      vendor_id: "00000000-0000-4000-8000-000000000004",
+      slug: "two-point-four-km-low",
+      name: "Two Point Four Km Low",
+      ranking_score: 1,
+      distance_km: 2.4,
+    }),
+  ];
+
+  const results = sortDiscoveryVendors(vendors, baseFilters);
+
+  assert.deepEqual(results.map((vendor) => vendor.slug), [
+    "two-km-popular",
+    "two-point-four-km-low",
+    "three-km-mid",
   ]);
 });
 
@@ -172,13 +206,13 @@ test("discovery sorting does not let search relevance override the ranking contr
   ]);
 });
 
-test("discovery search ranking prioritizes suya name, dish, and category matches", () => {
+test("discovery search ranking uses text relevance only after distance ties", () => {
   const weakDescriptionMatch = createVendor({
     vendor_id: "00000000-0000-4000-8000-000000000002",
     slug: "everyday-food",
     name: "Everyday Food",
     short_description: "Sometimes serves suya on request.",
-    distance_km: 1.2,
+    distance_km: 1.4,
     ranking_score: 20,
   });
   const dishMatch = createVendor({
@@ -189,7 +223,7 @@ test("discovery search ranking prioritizes suya name, dish, and category matches
       dish_name: "Beef suya",
       description: "Peppered skewers",
     },
-    distance_km: 1.3,
+    distance_km: 1.4,
   });
   const nameMatch = createVendor({
     vendor_id: "00000000-0000-4000-8000-000000000004",
@@ -213,7 +247,7 @@ test("discovery search ranking prioritizes suya name, dish, and category matches
   ]);
 });
 
-test("discovery search ranking keeps proximity ahead of stronger text matches outside close-distance ties", () => {
+test("discovery search ranking keeps proximity ahead of stronger text matches", () => {
   const nearWeakMatch = createVendor({
     vendor_id: "00000000-0000-4000-8000-000000000002",
     slug: "near-rice-area",
@@ -343,6 +377,70 @@ test("popular vendors keep popularity ordering independent of nearby ordering", 
     "middle-score",
     "nearest-lower-score",
   ]);
+});
+
+test("popular vendors stay constrained to the active GPS discovery dataset", () => {
+  const gpsVendors = [
+    createVendor({
+      vendor_id: "gps-1",
+      slug: "gps-popular-rice",
+      name: "GPS Popular Rice",
+      area: "Jabi",
+      ranking_score: 14,
+      distance_km: 1.1,
+    }),
+    createVendor({
+      vendor_id: "gps-2",
+      slug: "gps-local-suya",
+      name: "GPS Local Suya",
+      area: "Utako",
+      ranking_score: 6,
+      distance_km: 1.6,
+    }),
+  ];
+
+  assert.deepEqual(getPopularVendors(gpsVendors).map((vendor) => vendor.slug), [
+    "gps-popular-rice",
+    "gps-local-suya",
+  ]);
+});
+
+test("popular vendors stay constrained to the active area fallback dataset", () => {
+  const globalPopularVendor = createVendor({
+    vendor_id: "global-1",
+    slug: "global-popular-outside-area",
+    name: "Global Popular Outside Area",
+    area: "Asokoro",
+    ranking_score: 99,
+    distance_km: 15,
+  });
+  const areaVendors = [
+    createVendor({
+      vendor_id: "area-1",
+      slug: "wuse-popular-bowl",
+      name: "Wuse Popular Bowl",
+      area: "Wuse",
+      ranking_score: 11,
+      distance_km: 0.8,
+    }),
+    createVendor({
+      vendor_id: "area-2",
+      slug: "wuse-snack-corner",
+      name: "Wuse Snack Corner",
+      area: "Wuse",
+      ranking_score: 3,
+      distance_km: 1.4,
+    }),
+  ];
+
+  assert.deepEqual(getPopularVendors(areaVendors).map((vendor) => vendor.slug), [
+    "wuse-popular-bowl",
+    "wuse-snack-corner",
+  ]);
+  assert.doesNotMatch(
+    getPopularVendors(areaVendors).map((vendor) => vendor.slug).join(" "),
+    new RegExp(globalPopularVendor.slug),
+  );
 });
 
 test("active filter count stays lightweight and explicit", () => {

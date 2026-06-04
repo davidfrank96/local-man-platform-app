@@ -70,8 +70,8 @@ export function getPublicLocationDisplayModel({
   }
 
   return {
-    headline: "Showing nearby vendors",
-    detail: "Turn on location for more accurate nearby vendors.",
+    headline: "Browsing Wuse (Default Area)",
+    detail: "Enable location for more accurate nearby results.",
     trustLine: null,
   };
 }

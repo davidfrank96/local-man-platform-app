@@ -29,7 +29,7 @@ If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that a
 The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
 `http://127.0.0.1:3000` is also safe for local operator smoke checks because `next.config.ts` explicitly allows that development origin for HMR and chunk requests.
 
-The smoke test verifies precise coordinates, `distance_km`, open/distance/close-popularity nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and Abuja fallback behavior.
+The smoke test verifies precise coordinates, `distance_km`, open/distance/close-popularity nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and the backend Abuja fallback behavior used by direct API/operator checks. The public frontend release gate separately verifies that no-location/no-area users get default Wuse discovery instead of silently loading backend default-city vendors.
 
 ## Required Tools
 - Node.js and npm
@@ -307,19 +307,25 @@ The smoke test validates:
 - tight radius filtering
 - invalid coordinate rejection
 - partial coordinate rejection
-- missing coordinate fallback to the Abuja default city view
+- direct API missing-coordinate fallback to the Abuja default city view for operator checks
 
 Client location acquisition behavior:
 - browser geolocation waits up to 10 seconds before giving up
 - browser geolocation requests high accuracy and keeps the accepted cached position window low to avoid stale results
 - if precise location is denied or unavailable, the app tries IP-based approximate location next
-- if approximate location is also unavailable, the app falls back to the Abuja default city view
+- if approximate location is also unavailable, a user-selected discovery area drives discovery when present
+- if no area has been selected, the public frontend uses Wuse as the curated default discovery area
+- default Wuse is the same area-discovery system used by Browse By Area; it is not Abuja-wide discovery, all-vendors mode, or backend `default_city`
+- supported discovery areas are Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe
+- GPS always overrides restored, selected, and default areas
+- selected areas override default Wuse
+- selected-area restoration survives vendor-detail back navigation through the discovery snapshot, but does not survive a plain reload or future session
 - mobile users should see a short "trying to get precise location" status before fallback is chosen
 - precise mode should show a human-readable area label when reverse lookup succeeds, or rounded coordinates otherwise
 - approximate mode must stay labeled approximate and must not imply exact nearby accuracy
 - approximate location should only be shown in the frontend when the app has both usable approximate coordinates and a usable human-readable label
-- if no trustworthy precise or approximate label is available, the frontend should stay neutral with copy such as `Showing nearby vendors`
-- the internal Abuja fallback may keep vendor discovery usable, but it must not be presented as the user’s exact location
+- if no trustworthy precise or approximate label is available, the frontend should show compact area status such as `Browsing: Wuse` or the selected area
+- the backend Abuja fallback is only for direct API/operator checks and must not be presented as the public frontend fallback
 
 The smoke test passes only when:
 - the API returns HTTP 200
@@ -329,7 +335,8 @@ The smoke test passes only when:
 - `distance_km` is numeric and non-negative
 - the response shape remains valid for the current open/distance/close-popularity discovery ranking layer
 - invalid and partial coordinate requests return `VALIDATION_ERROR`
-- fallback requests return `location.source = default_city`
+- direct backend fallback requests return `location.source = default_city`
+- public frontend no-location/no-area release checks use default Wuse coordinates instead of calling nearby without coordinates
 
 ## Manual API Check
 Manual URL:

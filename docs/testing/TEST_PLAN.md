@@ -40,9 +40,15 @@ Test:
 - nearby results stay within radius and expose stable `distance_km` and `ranking_score` fields while preserving open-first, distance-first discovery ordering
 - browser geolocation success
 - IP approximation fallback
-- Abuja default city fallback
+- selected discovery-area fallback when browser location is unavailable
+- no-location/no-area default Wuse discovery
+- backend Abuja default city fallback through direct API/operator smoke checks
 - approximate location messaging stays approximate and never implies exact nearby accuracy
-- default-city fallback does not claim to be the user’s exact location
+- the public frontend does not silently load default-city vendors when no usable location or selected area exists; it uses default Wuse instead
+- default Wuse uses the same curated area-discovery system as explicit area selection
+- GPS overrides restored, selected, and default areas
+- selected area overrides default Wuse
+- selected area survives vendor-profile back navigation but not a plain page reload
 - denied and unavailable states do not print raw fallback chains to users
 
 Current automated coverage:
@@ -54,11 +60,17 @@ Current automated coverage:
 Runtime smoke coverage:
 - `npm run smoke:nearby`
 - Requires real Supabase env vars and seeded Abuja data.
-- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, open/distance/close-popularity ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and Abuja fallback behavior.
+- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, open/distance/close-popularity ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and backend Abuja fallback behavior.
 
 ### Public Discovery Logic
 Test:
 - public nearby API client sends location, radius, search, category, price, and open-now filters
+- no-location/no-area public discovery uses default Wuse without fetching backend default-city vendors
+- Browse By Area opens a modal, selecting an area closes it, and the selected area drives nearby, map, radius, and Popular datasets
+- selected areas override default Wuse, and Retry Location/GPS success overrides both
+- Retry Location/GPS success overrides selected-area fallback
+- search and radius filtering operate against GPS, selected-area, and default-Wuse datasets rather than the entire vendor database
+- Popular remains scoped to the active discovery dataset; Recent and Last selected remain user-centric
 - discovery sorting keeps open vendors above closed vendors
 - distance sorts ascending within each open/closed group
 - vendors with higher usage ranking can only beat similarly close vendors within the same open/closed group
@@ -336,9 +348,12 @@ Manual admin UI smoke coverage:
   - vendor images
   - review and create
 - create a vendor with Abuja coordinates
+- confirm manual vendor creation uses the governed area selector and stores canonical area names
 - confirm the incomplete-data acknowledgements must be checked before base vendor creation
 - confirm hours, dishes, and image can be provided during create flow
 - confirm partial failures identify the failed create sub-step
+- upload a CSV preview with `wuse` and confirm it normalizes to `Wuse`
+- upload a CSV preview with an unknown area and confirm it warns without blocking valid upload
 - update the selected vendor
 - add one set of seven day hours
 - confirm the current hours render in the edit form before saving changes

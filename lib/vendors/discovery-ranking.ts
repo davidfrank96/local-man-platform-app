@@ -26,8 +26,6 @@ type DiscoveryRankableVendor = {
   rawDistanceKm?: number | null;
 };
 
-export const DISCOVERY_POPULARITY_DISTANCE_TIE_THRESHOLD_KM = 0.5;
-
 export type DiscoveryFiltersLike = {
   search: string;
   radiusKm: number;
@@ -55,34 +53,6 @@ function getDistanceRank(vendor: DiscoveryRankableVendor): number {
     : Number.POSITIVE_INFINITY;
 }
 
-function getDistanceDifference(
-  left: DiscoveryRankableVendor,
-  right: DiscoveryRankableVendor,
-): {
-  difference: number;
-  isCloseTie: boolean;
-} {
-  const leftDistance = getDistanceRank(left);
-  const rightDistance = getDistanceRank(right);
-
-  if (leftDistance === rightDistance) {
-    return {
-      difference: 0,
-      isCloseTie: Number.isFinite(leftDistance),
-    };
-  }
-
-  const difference = leftDistance - rightDistance;
-
-  return {
-    difference,
-    isCloseTie:
-      Number.isFinite(leftDistance) &&
-      Number.isFinite(rightDistance) &&
-      Math.abs(difference) <= DISCOVERY_POPULARITY_DISTANCE_TIE_THRESHOLD_KM,
-  };
-}
-
 export function compareDiscoveryVendors(
   left: DiscoveryRankableVendor,
   right: DiscoveryRankableVendor,
@@ -90,16 +60,10 @@ export function compareDiscoveryVendors(
   const openRankDifference = getOpenRank(left) - getOpenRank(right);
   if (openRankDifference !== 0) return openRankDifference;
 
-  const distanceRankDifference = getDistanceDifference(left, right);
+  const distanceRankDifference = getDistanceRank(left) - getDistanceRank(right);
   const popularityRankDifference = getPopularityRank(right) - getPopularityRank(left);
 
-  if (distanceRankDifference.isCloseTie && popularityRankDifference !== 0) {
-    return popularityRankDifference;
-  }
-
-  if (distanceRankDifference.difference !== 0) {
-    return distanceRankDifference.difference;
-  }
+  if (distanceRankDifference !== 0) return distanceRankDifference;
 
   if (popularityRankDifference !== 0) return popularityRankDifference;
 
@@ -115,18 +79,11 @@ export function compareSearchRankedDiscoveryVendors(
   const openRankDifference = getOpenRank(left) - getOpenRank(right);
   if (openRankDifference !== 0) return openRankDifference;
 
-  const distanceRankDifference = getDistanceDifference(left, right);
+  const distanceRankDifference = getDistanceRank(left) - getDistanceRank(right);
   const searchRankDifference = rightSearchScore - leftSearchScore;
   const popularityRankDifference = getPopularityRank(right) - getPopularityRank(left);
 
-  if (distanceRankDifference.isCloseTie) {
-    if (searchRankDifference !== 0) return searchRankDifference;
-    if (popularityRankDifference !== 0) return popularityRankDifference;
-  }
-
-  if (distanceRankDifference.difference !== 0) {
-    return distanceRankDifference.difference;
-  }
+  if (distanceRankDifference !== 0) return distanceRankDifference;
 
   if (searchRankDifference !== 0) return searchRankDifference;
   if (popularityRankDifference !== 0) return popularityRankDifference;

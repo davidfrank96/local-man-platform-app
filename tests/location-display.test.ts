@@ -95,7 +95,7 @@ test("shows approximate location only when a usable human-readable label exists"
   );
 });
 
-test("keeps default and denied fallback copy neutral", () => {
+test("keeps default and denied fallback copy explicit about Wuse", () => {
   assert.deepEqual(
     getPublicLocationDisplayModel({
       status: "denied",
@@ -103,8 +103,8 @@ test("keeps default and denied fallback copy neutral", () => {
       resolvedLocationLabel: null,
     }),
     {
-      headline: "Showing nearby vendors",
-      detail: "Turn on location for more accurate nearby vendors.",
+      headline: "Browsing Wuse (Default Area)",
+      detail: "Enable location for more accurate nearby results.",
       trustLine: null,
     },
   );
@@ -116,8 +116,8 @@ test("keeps default and denied fallback copy neutral", () => {
       resolvedLocationLabel: null,
     }),
     {
-      headline: "Showing nearby vendors",
-      detail: "Turn on location for more accurate nearby vendors.",
+      headline: "Browsing Wuse (Default Area)",
+      detail: "Enable location for more accurate nearby results.",
       trustLine: null,
     },
   );
@@ -137,8 +137,8 @@ test("does not expose low-confidence approximate location without a label", () =
       resolvedLocationLabel: null,
     }),
     {
-      headline: "Showing nearby vendors",
-      detail: "Turn on location for more accurate nearby vendors.",
+      headline: "Browsing Wuse (Default Area)",
+      detail: "Enable location for more accurate nearby results.",
       trustLine: null,
     },
   );

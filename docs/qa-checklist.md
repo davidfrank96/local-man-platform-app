@@ -28,6 +28,17 @@ Use this checklist before pushing or releasing UI work.
 ## Discovery interaction
 
 - [ ] search works
+- [ ] GPS is the highest-priority discovery origin when permission succeeds
+- [ ] selected area overrides default Wuse when GPS is unavailable
+- [ ] default Wuse appears when GPS/approximate location is unavailable and no area has been selected
+- [ ] default Wuse is not presented as Abuja fallback, all-vendors mode, or backend `default_city`
+- [ ] Browse By Area lists Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe
+- [ ] selected area updates Nearby, map, Popular, search, and radius results
+- [ ] selected area restores after vendor detail back navigation
+- [ ] selected area does not persist after a plain page reload
+- [ ] search operates against the active GPS, selected-area, or default-Wuse dataset only
+- [ ] Popular is scoped to the active discovery dataset
+- [ ] Recent and Last selected remain user-centric retention surfaces
 - [ ] filter toggle opens and closes
 - [ ] filter panel shows `Filters`, active count, `Clear all`, and `Apply filters`
 - [ ] `Clear all` is disabled when no non-default filters are active
@@ -70,6 +81,13 @@ Use this checklist before pushing or releasing UI work.
 - [ ] location reminder close button works
 - [ ] location retry panel appears when location is unavailable or denied
 - [ ] retry location action works
+- [ ] GPS success overrides selected/restored/default area and recenters discovery/map
+
+## Updates Center
+
+- [ ] mobile bell opens Localman Updates
+- [ ] desktop bell opens Localman Updates
+- [ ] Updates Center content is informational and does not alter discovery, Rider Connect, ratings, or PWA runtime state
 
 ## Vendor detail
 
@@ -184,11 +202,15 @@ Use this checklist before pushing or releasing UI work.
 
 - [ ] CSV template downloads
 - [ ] CSV template matches the full Create Vendor schema
+- [ ] CSV template presents `area` as the high-level discovery area and keeps zone/street details in `address`
 - [ ] CSV preview shows valid and invalid rows
+- [ ] known area values are normalized in preview, for example `wuse` to `Wuse`
+- [ ] unknown area values show a non-blocking governance warning
 - [ ] invalid cells show inline issues
 - [ ] duplicate rows in file are flagged
 - [ ] duplicate existing vendors are flagged
 - [ ] valid rows still upload when invalid rows are present
+- [ ] rows with unknown areas can still upload after review
 - [ ] CSV rows without coordinates are rejected clearly
 - [ ] legacy minimal CSV format is rejected clearly
 

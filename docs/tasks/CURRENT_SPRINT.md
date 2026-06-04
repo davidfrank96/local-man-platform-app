@@ -15,7 +15,7 @@ Close Phase 6 `Usage Signals` with a stable analytics surface, discovery refinem
 - summarize sessions, events, vendor performance, and drop-off signals safely
 - keep public discovery, vendor cards, selected state, and vendor detail flows aligned with current behavior
 - preserve back-navigation and `Back to map` state restoration
-- keep location handling honest, trust-first, and retryable across precise, approximate, and default-city modes
+- keep location handling honest, trust-first, and retryable across precise, approximate, and selected-area fallback modes
 - maintain human-readable location display with coordinate fallback when reverse lookup fails
 - refine time-based theming without compromising card readability
 - keep admin vendor create, edit, deactivate, hours, dishes, and image flows stable
@@ -56,8 +56,8 @@ Phase 6 signal visibility is ready when:
 - Selected vendor cards and selected vendor preview panels use a stronger, readable highlight treatment.
 - `Back to map` and browser-back restore discovery vendors, filters, selection, and scroll state.
 - Public discovery uses client-local morning, afternoon, and night theming while keeping vendor cards light and readable.
-- Public location handling distinguishes precise, approximate, and default-city modes with explicit trust messaging.
-- Public discovery can bootstrap default-city nearby vendors and the MapLibre surface while precise location is still resolving, then upgrade results when location becomes available.
+- Public location handling distinguishes precise, approximate, selected-area fallback, and default Wuse discovery with explicit trust messaging.
+- Public discovery does not silently bootstrap default-city vendors when location is unavailable; it uses default Wuse until GPS/approximate location or a selected area is available.
 - Trust-first location display shows precise location only when browser geolocation succeeds, approximate location only when a usable approximate label exists, and neutral copy otherwise.
 - Reverse location lookup shows human-readable area labels when available and falls back to rounded coordinates when it is not.
 - Admin vendor creation, editing, deactivation, hours, dishes, and image management remain part of the active maintained surface.

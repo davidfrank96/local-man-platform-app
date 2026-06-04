@@ -183,6 +183,9 @@ export type VendorIntakePreviewRow = {
   category: string | null;
   price_band: string | null;
   address: string | null;
+  original_area: string | null;
+  normalized_area: string | null;
+  area_status: "known" | "unknown" | "missing";
   area: string | null;
   city: string | null;
   state: string | null;
@@ -196,6 +199,7 @@ export type VendorIntakePreviewRow = {
   featured_dishes: string[];
   image_urls: string[];
   issues: VendorIntakeIssue[];
+  warnings: VendorIntakeWarning[];
   errors: string[];
 };
 
@@ -204,6 +208,14 @@ export type VendorIntakeIssue = {
   field: string;
   error: string;
   code: string;
+};
+
+export type VendorIntakeWarning = {
+  row: number;
+  field: string;
+  message: string;
+  code: string;
+  suggestedAction: string;
 };
 
 export type VendorIntakePreviewResult = {

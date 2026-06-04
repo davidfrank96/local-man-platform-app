@@ -2,6 +2,8 @@
 
 This document covers the current search, filter, and section-navigation behavior.
 
+Discovery origin priority is GPS first, then a user-selected discovery area, then the default Wuse discovery area. The default Wuse origin is a curated area-center fallback, not backend `default_city`, not Abuja-wide discovery, and not an all-vendors mode.
+
 ## Mobile navigation
 
 ### Bottom dock
@@ -76,6 +78,14 @@ Default:
 
 It is a section switcher, not a route change.
 
+Section data rules:
+
+- `Nearby` uses the active discovery origin.
+- `Popular` is usage-driven but scoped to the active discovery dataset.
+- `Recent` is user-centric retained history.
+- `Last selected` is user-centric retained selection memory.
+- Switching sections does not change the active discovery origin.
+
 ## Web navigation
 
 ### Search and filter placement
@@ -102,6 +112,8 @@ Default:
 - `Nearby`
 
 `Last selected` is present on web because the page has a real last-selected retention section.
+
+The same section data rules apply on web: Nearby and Popular follow the active discovery origin, while Recent and Last selected remain user-centric.
 
 ## Selected vendor and detail navigation
 
@@ -134,3 +146,10 @@ Supported public discovery filters are:
 
 There is no separate user-facing sort dropdown at the moment. Ordering is automatic and based on discovery logic.
 Search and filter state is shared across mobile Home and Map; do not introduce separate mobile tab-specific filter stores.
+Search operates only against the active discovery dataset:
+
+- GPS mode searches the GPS nearby dataset.
+- selected-area mode searches the selected area dataset.
+- default-Wuse mode searches the Wuse dataset.
+
+Search must not fall back to the entire vendor database. Radius choices are 1 km, 5 km, 10 km, and 30 km and apply under GPS, selected-area, and default-Wuse origins.

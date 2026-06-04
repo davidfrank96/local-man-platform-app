@@ -28,6 +28,10 @@ This document records the current lightweight UI constraints and stability decis
 - map remains visible without oversized decorative UI
 - discovery card and map props should stay stable enough to avoid unnecessary re-renders
 - selected vendor preview stays compact so the map keeps usable space
+- active discovery origin is resolved before nearby data is fetched: GPS, then selected area, then default Wuse
+- default Wuse is a bounded curated area dataset, not all-vendors discovery and not backend `default_city`
+- search and radius filters constrain the active dataset instead of creating broad database searches
+- Popular stays scoped to the active discovery dataset; Recent and Last selected are browser-local retention surfaces
 - filter surfaces are collapsible on mobile and web
 - the current filter panel is CSS and inline-SVG based; it must not add animation libraries, component frameworks, or new runtime-heavy effects
 - mobile filter sheets use contained scrolling and `overscroll-behavior` so they do not trap the page behind the fixed bottom dock

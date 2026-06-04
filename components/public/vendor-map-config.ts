@@ -1,5 +1,5 @@
 export const MAP_FALLBACK_NOTICE =
-  "Map view limited, vendors still available below.";
+  "Vendor list remains available below.";
 
 export function getPublicMapStyleUrl(envValue = process.env.NEXT_PUBLIC_MAP_STYLE_URL): string {
   return envValue?.trim() ?? "";

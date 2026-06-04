@@ -85,10 +85,16 @@ For each vendor before activation:
 - [ ] Test on a mobile browser with location permission allowed.
 - [ ] Confirm precise location can resolve before fallback.
 - [ ] Test with location denied.
-- [ ] Confirm the app falls back to approximate location or Abuja without blocking.
+- [ ] Confirm the app falls back to a selected discovery area when one exists.
+- [ ] Confirm no selected area falls back to default Wuse, not Abuja-wide discovery or all vendors.
+- [ ] Confirm Browse By Area can switch to Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe.
+- [ ] Confirm search and 1 km, 5 km, 10 km, and 30 km radius filters operate against GPS, selected-area, and default-Wuse origins.
+- [ ] Confirm Popular follows the active discovery dataset, while Recent and Last Viewed remain user-centric.
+- [ ] Confirm opening a vendor detail and going back restores the selected area, but a plain page reload returns to default Wuse unless GPS is active.
 - [ ] Test with location unavailable or timed out.
 - [ ] Confirm the fallback message is clear.
 - [ ] Confirm the retry location action still works.
+- [ ] Confirm GPS success overrides selected/restored/default areas and recenters the map.
 
 ## Rollback Steps
 If a vendor record is wrong:
@@ -133,6 +139,8 @@ If storage uploads are broken:
 
 ## Weekly Checks
 - [ ] Review new or edited vendors for data quality.
+- [ ] Confirm manually created vendors use canonical governed area names.
+- [ ] Review CSV imports for unknown-area warnings and correct any operator mistakes before broad rollout.
 - [ ] Confirm all active vendors still have valid coordinates.
 - [ ] Confirm hours, dishes, and images are still present for pilot vendors.
 - [ ] Confirm seed images or uploaded images still render.

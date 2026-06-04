@@ -75,7 +75,18 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - trust-first location behavior:
   - precise browser geolocation
   - approximate location only when usable and clearly labeled
-  - Abuja default city fallback without claiming it is the user’s exact location
+  - default Wuse discovery when GPS/approximate location is unavailable and no area has been selected
+  - Browse By Area fallback using curated Abuja discovery areas: Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe
+  - selected areas override default Wuse; GPS overrides selected, restored, and default areas
+  - selected-area restoration survives vendor-profile back navigation but not plain reloads or future sessions
+  - backend Abuja default-city fallback remains available for operator/API smoke checks, but the public frontend does not silently load it when location is unavailable
+- search and radius filters operate against the active discovery dataset only:
+  - GPS mode searches/filters GPS nearby results
+  - selected-area mode searches/filters that area
+  - default-Wuse mode searches/filters Wuse
+  - search does not query the entire vendor database
+- Popular is scoped to the active discovery dataset; Recent and Last selected are user-centric retention surfaces
+- Localman Updates opens from the mobile bell and desktop header bell as an informational content center
 - lightweight location reminder toast on discovery load with auto-dismiss and manual close
 - bounded public discovery freshness:
   - nearby vendor reads use a short 5 second server revalidation window
@@ -108,6 +119,7 @@ Local Man is a location-based food discovery product for finding nearby local ve
 - admin rider management page at `/admin/riders` for creating manual rider profiles, reviewing independent rider applications, managing verification/visibility status, and checking unavailable-report signals
 - vendor registry with completeness badges
 - full Create Vendor page for both admins and agents
+- governed manual area selection backed by the shared Abuja area list; the detailed address remains a separate field
 - CSV vendor intake with the same schema and persistence contract as the full Create Vendor page
 - vendor create workflow with:
   - basic details
@@ -388,6 +400,9 @@ Current CSV intake behavior:
 
 - preview validates every row before insert
 - valid rows can upload even when other rows fail
+- known Abuja area values are normalized before import, for example `wuse` and `WUSE` become `Wuse`
+- unknown area values continue with a preview warning instead of blocking upload; operators should review them before import
+- the CSV template treats `area` as the high-level discovery area and keeps details such as `Zone 2, Aminu Kano Crescent` in `address`
 - duplicate detection runs:
   - within the CSV
   - against existing vendors
