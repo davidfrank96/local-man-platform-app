@@ -32,7 +32,6 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 const lat = Number(process.env.SMOKE_NEARBY_LAT ?? "9.0765");
 const lng = Number(process.env.SMOKE_NEARBY_LNG ?? "7.3986");
 const radiusKm = Number(process.env.SMOKE_NEARBY_RADIUS_KM ?? "30");
-const POPULARITY_DISTANCE_TIE_THRESHOLD_KM = 0.5;
 
 if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
   throw new Error("Smoke test coordinates and radius must be finite numbers.");
@@ -130,15 +129,7 @@ function compareNearbyRank(left, right) {
       ? right.distance_km
       : Number.POSITIVE_INFINITY;
   const distanceDifference = leftDistance === rightDistance ? 0 : leftDistance - rightDistance;
-  const isCloseDistanceTie =
-    Number.isFinite(leftDistance) &&
-    Number.isFinite(rightDistance) &&
-    Math.abs(distanceDifference) <= POPULARITY_DISTANCE_TIE_THRESHOLD_KM;
   const popularityDifference = right.ranking_score - left.ranking_score;
-
-  if (isCloseDistanceTie && popularityDifference !== 0) {
-    return popularityDifference;
-  }
 
   if (distanceDifference !== 0) {
     return distanceDifference;
