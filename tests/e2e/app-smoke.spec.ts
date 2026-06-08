@@ -4427,6 +4427,14 @@ test.describe("Phase 3 browser smoke", () => {
 
     const mobileSummaryToggle = page.getByTestId("mobile-about-privacy-summary-toggle");
     const mobileSummaryContent = page.getByTestId("mobile-about-privacy-summary-content");
+    const mobileLocalmanToggle = page.getByTestId("mobile-about-privacy-localman-use-toggle");
+    const mobileLocalmanContent = page.getByTestId("mobile-about-privacy-localman-use-content");
+    const mobileRiderPrivacyBlock = page.getByTestId(
+      "mobile-about-privacy-rider-privacy-block",
+    );
+    const mobileLocalmanReadMore = page.getByTestId(
+      "mobile-about-privacy-localman-read-more",
+    );
     const mobileCollectToggle = page.getByTestId("mobile-about-privacy-infocollect-toggle");
     const mobileCollectContent = page.getByTestId("mobile-about-privacy-infocollect-content");
     const mobileContactToggle = page.getByTestId("mobile-about-privacy-contact-toggle");
@@ -4439,6 +4447,27 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(mobileSummaryToggle).toHaveAttribute("aria-expanded", "true");
     await expect(mobileSummaryContent).toBeVisible();
     await expect(mobileSummaryContent).toContainText("We do not process sensitive personal information");
+
+    await expect(mobileLocalmanToggle).toHaveAttribute("aria-expanded", "false");
+    await mobileLocalmanToggle.click();
+    await expect(mobileLocalmanToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(mobileLocalmanContent).toContainText("Platform Operations");
+    await expect(mobileLocalmanContent).toContainText("Rider Privacy");
+    await expect(
+      page.getByTestId("mobile-about-privacy-localman-use-rider-privacy-toggle"),
+    ).toHaveCount(0);
+    await expect(mobileRiderPrivacyBlock).toContainText(
+      "Full rider phone or WhatsApp details are not shown publicly before handoff",
+    );
+    await expect(mobileRiderPrivacyBlock).toContainText("Internal notes are not public");
+    await expect(mobileLocalmanReadMore).toHaveText("Read More");
+    await expect(mobileLocalmanReadMore).toHaveAttribute("aria-expanded", "false");
+    await mobileLocalmanReadMore.click();
+    await expect(mobileLocalmanReadMore).toHaveText("Read Less");
+    await expect(mobileLocalmanReadMore).toHaveAttribute("aria-expanded", "true");
+    await expect(mobileLocalmanContent).toContainText("Policy Updates");
+    await mobileLocalmanReadMore.click();
+    await expect(mobileLocalmanReadMore).toHaveText("Read More");
 
     await mobileCollectToggle.press("Space");
     await expect(mobileCollectToggle).toHaveAttribute("aria-expanded", "true");
@@ -4484,6 +4513,10 @@ test.describe("Phase 3 browser smoke", () => {
     const privacyContent = page.getByTestId("desktop-about-privacy-content");
     const summaryToggle = page.getByTestId("desktop-about-privacy-summary-toggle");
     const summaryContent = page.getByTestId("desktop-about-privacy-summary-content");
+    const localmanToggle = page.getByTestId("desktop-about-privacy-localman-use-toggle");
+    const localmanContent = page.getByTestId("desktop-about-privacy-localman-use-content");
+    const whatsappBlock = page.getByTestId("desktop-about-privacy-whatsapp-block");
+    const localmanReadMore = page.getByTestId("desktop-about-privacy-localman-read-more");
     const requestToggle = page.getByTestId("desktop-about-privacy-request-toggle");
     const requestContent = page.getByTestId("desktop-about-privacy-request-content");
 
@@ -4545,6 +4578,19 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(summaryToggle).toHaveAttribute("aria-expanded", "true");
     await expect(summaryContent).toBeVisible();
     await expect(summaryContent).toContainText("We do not collect any information from third parties");
+
+    await localmanToggle.click();
+    await expect(localmanToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(localmanContent).toContainText("This section supplements the official Privacy Notice");
+    await expect(localmanContent).toContainText("Information We May Handle");
+    await expect(
+      page.getByTestId("desktop-about-privacy-localman-use-whatsapp-toggle"),
+    ).toHaveCount(0);
+    await expect(whatsappBlock).toContainText("WhatsApp has its own privacy practices");
+    await expect(localmanReadMore).toHaveText("Read More");
+    await localmanReadMore.click();
+    await expect(localmanReadMore).toHaveText("Read Less");
+    await expect(localmanContent).toContainText("Your Choices");
 
     await requestToggle.click();
     await expect(requestToggle).toHaveAttribute("aria-expanded", "true");

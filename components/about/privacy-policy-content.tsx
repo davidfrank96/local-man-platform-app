@@ -6,6 +6,7 @@ import {
   OFFICIAL_PRIVACY_POLICY_LAST_UPDATED,
   OFFICIAL_PRIVACY_POLICY_SECTIONS,
   type PrivacyPolicyBlock,
+  type PrivacyPolicySubsection,
 } from "./privacy-policy-data.ts";
 
 type PrivacyPolicyContentProps = {
@@ -69,6 +70,48 @@ function renderPolicyBlock(block: PrivacyPolicyBlock, index: number) {
       <PolicyLink href={block.href} label={block.label} />
       {block.suffix}
     </p>
+  );
+}
+
+function PrivacyPolicySubsections({
+  subsections,
+  testIdPrefix,
+}: {
+  subsections: PrivacyPolicySubsection[];
+  testIdPrefix: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const visibleSubsections = showAll ? subsections : subsections.slice(0, 4);
+  const hasHiddenSubsections = subsections.length > visibleSubsections.length;
+
+  return (
+    <div className="official-privacy-policy-subsections">
+      {visibleSubsections.map((subsection) => (
+        <section
+          className="official-privacy-policy-subsection"
+          data-testid={`${testIdPrefix}-privacy-${subsection.key}-block`}
+          key={subsection.key}
+        >
+          <h4>{subsection.title}</h4>
+          <div className="official-privacy-policy-subcontent">
+            {subsection.blocks.map(renderPolicyBlock)}
+          </div>
+        </section>
+      ))}
+      {subsections.length > 4 ? (
+        <button
+          aria-expanded={showAll}
+          className="official-privacy-policy-read-more"
+          data-testid={`${testIdPrefix}-privacy-localman-read-more`}
+          type="button"
+          onClick={() => {
+            setShowAll((current) => !current);
+          }}
+        >
+          {hasHiddenSubsections ? "Read More" : "Read Less"}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -155,6 +198,12 @@ export function PrivacyPolicyContent({
                 id={contentId}
               >
                 {section.blocks.map(renderPolicyBlock)}
+                {section.subsections ? (
+                  <PrivacyPolicySubsections
+                    subsections={section.subsections}
+                    testIdPrefix={testIdPrefix}
+                  />
+                ) : null}
               </div>
             </section>
           );

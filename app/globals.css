@@ -2541,6 +2541,54 @@ h2 {
   padding-left: 18px;
 }
 
+.official-privacy-policy-subsections {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.official-privacy-policy-subsection {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid rgba(19, 115, 61, 0.18);
+  padding-left: 9px;
+}
+
+.official-privacy-policy-subsection h4 {
+  margin: 0;
+  color: var(--discovery-heading-title);
+  font-size: 0.86rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.official-privacy-policy-subcontent {
+  display: grid;
+  gap: 5px;
+}
+
+.official-privacy-policy-subcontent ul {
+  gap: 3px;
+}
+
+.official-privacy-policy-read-more {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(19, 115, 61, 0.08);
+  color: var(--color-green);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 8px 11px;
+}
+
+.official-privacy-policy-read-more:focus-visible {
+  outline: 2px solid rgba(19, 115, 61, 0.72);
+  outline-offset: 2px;
+}
+
 @media (min-width: 821px) {
   .desktop-floating-about {
     position: fixed;
