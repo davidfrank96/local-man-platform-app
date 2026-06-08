@@ -8,12 +8,13 @@ import {
 
 test("official privacy policy data exposes the required sections", () => {
   assert.equal(OFFICIAL_PRIVACY_POLICY_LAST_UPDATED, "June 05, 2026");
-  assert.equal(OFFICIAL_PRIVACY_POLICY_SECTIONS.length, 14);
+  assert.equal(OFFICIAL_PRIVACY_POLICY_SECTIONS.length, 15);
 
   assert.deepEqual(
     OFFICIAL_PRIVACY_POLICY_SECTIONS.map((section) => section.title),
     [
       "Summary of Key Points",
+      "How Localman Uses Information",
       "What Information Do We Collect?",
       "How Do We Process Your Information?",
       "When and With Whom Do We Share Your Information?",
@@ -38,8 +39,32 @@ test("official privacy policy data keeps required contact and legal details", ()
   assert.match(serialized, /localmanapp@gmail\.com/);
   assert.match(serialized, /localmanapp\.com/);
   assert.match(serialized, /data subject access request/);
+  assert.match(serialized, /How Localman Uses Information/);
+  assert.match(serialized, /Full rider phone or WhatsApp details are not shown publicly/);
+  assert.match(serialized, /approximate location or selected area/);
   assert.match(serialized, /We do not process sensitive personal information/);
   assert.match(serialized, /Do-Not-Track/);
+});
+
+test("Localman privacy summary is placed after key points and uses compact sub-sections", () => {
+  const localmanSection = OFFICIAL_PRIVACY_POLICY_SECTIONS[1];
+
+  assert.equal(localmanSection.key, "localman-use");
+  assert.equal(localmanSection.title, "How Localman Uses Information");
+  assert.deepEqual(
+    localmanSection.subsections?.map((section) => section.title),
+    [
+      "Platform Operations",
+      "Information We May Handle",
+      "Rider Privacy",
+      "WhatsApp Handoff",
+      "Information Retention",
+      "Your Choices",
+      "Security",
+      "Children",
+      "Policy Updates",
+    ],
+  );
 });
 
 test("official privacy policy data excludes raw Termly markup and editor artifacts", () => {

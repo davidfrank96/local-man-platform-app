@@ -15,11 +15,18 @@ export type PrivacyPolicyBlock =
       suffix?: string;
     };
 
+export type PrivacyPolicySubsection = {
+  key: string;
+  title: string;
+  blocks: PrivacyPolicyBlock[];
+};
+
 export type PrivacyPolicySection = {
   key: string;
   title: string;
   summary: string;
   blocks: PrivacyPolicyBlock[];
+  subsections?: PrivacyPolicySubsection[];
 };
 
 export const OFFICIAL_PRIVACY_POLICY_LAST_UPDATED = "June 05, 2026";
@@ -49,6 +56,145 @@ export const OFFICIAL_PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "We may share information in specific situations and with specific categories of third parties.",
           "No electronic transmission over the internet or information storage technology can be guaranteed to be 100% secure.",
           "Depending on where you are located geographically, applicable privacy law may give you certain rights regarding your personal information.",
+        ],
+      },
+    ],
+  },
+  {
+    key: "localman-use",
+    title: "How Localman Uses Information",
+    summary:
+      "A plain-language explanation of how Localman uses information to run discovery, Rider Connect, ratings, sharing, and support.",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "This section supplements the official Privacy Notice. It explains how Localman uses information in normal platform workflows without replacing the legal policy below.",
+      },
+    ],
+    subsections: [
+      {
+        key: "operations",
+        title: "Platform Operations",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "Localman uses information to operate vendor discovery, rider coordination, ratings, sharing, admin management, and abuse prevention.",
+          },
+        ],
+      },
+      {
+        key: "handled-info",
+        title: "Information We May Handle",
+        blocks: [
+          {
+            type: "bullets",
+            items: [
+              "vendor information",
+              "rider information",
+              "admin-entered data",
+              "rider request details",
+              "ratings and signals",
+              "approximate location or selected area",
+              "browser and device information",
+            ],
+          },
+        ],
+      },
+      {
+        key: "rider-privacy",
+        title: "Rider Privacy",
+        blocks: [
+          {
+            type: "bullets",
+            items: [
+              "Full rider phone or WhatsApp details are not shown publicly before handoff.",
+              "Full rider plates are not exposed publicly.",
+              "Masked plate information may appear after rider selection.",
+              "Internal notes are not public.",
+            ],
+          },
+        ],
+      },
+      {
+        key: "whatsapp",
+        title: "WhatsApp Handoff",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "Continuing to WhatsApp opens a service outside Localman. WhatsApp has its own privacy practices.",
+          },
+          {
+            type: "paragraph",
+            text: "Necessary contact and request details may be shared with the selected rider for coordination.",
+          },
+        ],
+      },
+      {
+        key: "retention",
+        title: "Information Retention",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "Localman keeps information as needed for:",
+          },
+          {
+            type: "bullets",
+            items: [
+              "platform operation",
+              "support",
+              "admin records",
+              "abuse prevention",
+              "legal and safety reasons",
+            ],
+          },
+          {
+            type: "paragraph",
+            text: "Retention periods may vary.",
+          },
+        ],
+      },
+      {
+        key: "choices",
+        title: "Your Choices",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "You can choose not to submit rider request details.",
+          },
+          {
+            type: "paragraph",
+            text: "Vendors and riders may request updates or removal through available support or admin processes.",
+          },
+        ],
+      },
+      {
+        key: "security",
+        title: "Security",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "Localman uses reasonable protections. However, no internet service can guarantee perfect security.",
+          },
+        ],
+      },
+      {
+        key: "children",
+        title: "Children",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "Localman is not intended for children. Minors should use the platform only with a parent or guardian.",
+          },
+        ],
+      },
+      {
+        key: "updates",
+        title: "Policy Updates",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "This policy may be updated as Localman grows.",
+          },
         ],
       },
     ],
