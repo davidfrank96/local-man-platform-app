@@ -4419,7 +4419,39 @@ test.describe("Phase 3 browser smoke", () => {
     await privacyToggle.click();
     await expect(privacyToggle).toHaveAttribute("aria-expanded", "true");
     await expect(privacyContent).toBeVisible();
-    await expect(privacyContent).toContainText("Full rider phone or WhatsApp details are not shown publicly");
+    await expect(privacyContent).toContainText("Last updated: June 05, 2026");
+    await expect(privacyContent).toContainText("LocalManApp");
+    await expect(privacyContent).toContainText("localmanapp@gmail.com");
+    await expect(privacyContent).toContainText("Summary of Key Points");
+    await expect(privacyContent).toContainText("What Information Do We Collect?");
+
+    const mobileSummaryToggle = page.getByTestId("mobile-about-privacy-summary-toggle");
+    const mobileSummaryContent = page.getByTestId("mobile-about-privacy-summary-content");
+    const mobileCollectToggle = page.getByTestId("mobile-about-privacy-infocollect-toggle");
+    const mobileCollectContent = page.getByTestId("mobile-about-privacy-infocollect-content");
+    const mobileContactToggle = page.getByTestId("mobile-about-privacy-contact-toggle");
+    const mobileContactContent = page.getByTestId("mobile-about-privacy-contact-content");
+
+    await expect(mobileSummaryToggle).toHaveAttribute("aria-expanded", "false");
+    await mobileSummaryToggle.focus();
+    await expect(mobileSummaryToggle).toBeFocused();
+    await mobileSummaryToggle.press("Enter");
+    await expect(mobileSummaryToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(mobileSummaryContent).toBeVisible();
+    await expect(mobileSummaryContent).toContainText("We do not process sensitive personal information");
+
+    await mobileCollectToggle.press("Space");
+    await expect(mobileCollectToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(mobileSummaryToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(mobileCollectContent).toContainText("Geolocation Information");
+
+    await mobileContactToggle.click();
+    await expect(mobileContactToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(mobileContactContent).toContainText("localmanapp@gmail.com");
+    await expect(mobileContactContent).toContainText("D11T0A9");
+    await expect(page.locator("body")).not.toContainText("data:image/svg+xml;base64");
+    await expect(page.locator("body")).not.toContainText("data-custom-class");
+    await expect(page.locator("body")).not.toContainText("Use something simple and clear");
 
     await privacyToggle.click();
     await expect(privacyToggle).toHaveAttribute("aria-expanded", "false");
@@ -4450,6 +4482,10 @@ test.describe("Phase 3 browser smoke", () => {
     const usingContent = page.getByTestId("desktop-about-using-content");
     const privacyToggle = page.getByTestId("desktop-about-privacy-toggle");
     const privacyContent = page.getByTestId("desktop-about-privacy-content");
+    const summaryToggle = page.getByTestId("desktop-about-privacy-summary-toggle");
+    const summaryContent = page.getByTestId("desktop-about-privacy-summary-content");
+    const requestToggle = page.getByTestId("desktop-about-privacy-request-toggle");
+    const requestContent = page.getByTestId("desktop-about-privacy-request-content");
 
     await expect(aboutButton).toBeVisible();
     await expect(aboutButton).toHaveAttribute("aria-expanded", "false");
@@ -4501,6 +4537,21 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(usingContent).toBeHidden();
     await expect(privacyToggle).toHaveAttribute("aria-expanded", "true");
     await expect(privacyContent).toBeVisible();
+    await expect(privacyContent).toContainText("Last updated: June 05, 2026");
+    await expect(privacyContent).toContainText("Policy sections");
+    await expect(privacyContent).toContainText("localmanapp.com");
+
+    await summaryToggle.click();
+    await expect(summaryToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(summaryContent).toBeVisible();
+    await expect(summaryContent).toContainText("We do not collect any information from third parties");
+
+    await requestToggle.click();
+    await expect(requestToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(requestContent).toBeVisible();
+    await expect(requestContent).toContainText("data subject access request");
+    await expect(page.locator("body")).not.toContainText("data:image/svg+xml;base64");
+    await expect(page.locator("body")).not.toContainText("data-custom-class");
 
     await page.keyboard.press("Escape");
     await expect(aboutPanel).toHaveCount(0);
