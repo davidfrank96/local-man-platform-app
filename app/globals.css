@@ -2420,6 +2420,127 @@ h2 {
   padding-left: 18px;
 }
 
+.official-privacy-policy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.official-privacy-policy-intro,
+.official-privacy-policy-toc {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.official-privacy-policy-intro h3 {
+  font-size: 1rem;
+}
+
+.official-privacy-policy-date {
+  color: var(--discovery-heading-title);
+  font-weight: 900;
+}
+
+.official-privacy-policy-toc {
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 8px;
+  background: rgba(19, 115, 61, 0.04);
+  padding: 10px;
+}
+
+.official-privacy-policy-toc strong {
+  color: var(--discovery-heading-title);
+}
+
+.official-privacy-policy-toc ol {
+  gap: 4px;
+  font-size: 0.84rem;
+}
+
+.official-privacy-policy-sections {
+  display: grid;
+  gap: 8px;
+}
+
+.official-privacy-policy-section {
+  overflow: hidden;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.official-privacy-policy-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--discovery-heading-title);
+  font: inherit;
+  text-align: left;
+  padding: 10px;
+}
+
+.official-privacy-policy-trigger > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.official-privacy-policy-trigger strong {
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.official-privacy-policy-trigger small {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.official-privacy-policy-trigger svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--color-green);
+  transition: transform 140ms ease;
+}
+
+.official-privacy-policy-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.official-privacy-policy-trigger:focus-visible {
+  outline: 2px solid rgba(19, 115, 61, 0.72);
+  outline-offset: -3px;
+}
+
+.official-privacy-policy-content {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid rgba(37, 41, 36, 0.08);
+  padding: 10px;
+}
+
+.official-privacy-policy-content[hidden] {
+  display: none;
+}
+
+.official-privacy-policy-content p,
+.official-privacy-policy-content ul {
+  margin: 0;
+}
+
+.official-privacy-policy-content ul {
+  display: grid;
+  gap: 7px;
+  padding-left: 18px;
+}
+
 @media (min-width: 821px) {
   .desktop-floating-about {
     position: fixed;

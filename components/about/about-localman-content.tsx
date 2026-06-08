@@ -2,6 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 
+import { PrivacyPolicyContent } from "./privacy-policy-content.tsx";
+
 export type AboutLocalmanSection =
   | "using"
   | "mission"
@@ -22,7 +24,13 @@ type AboutLocalmanContentProps = {
 type AboutLocalmanAccordionSection = {
   key: AboutLocalmanSection;
   title: string;
-  renderContent: (supportEmail: string) => ReactNode;
+  renderContent: (
+    supportEmail: string,
+    options: {
+      idPrefix: string;
+      testIdPrefix: string;
+    },
+  ) => ReactNode;
 };
 
 function ChevronIcon() {
@@ -205,50 +213,8 @@ const aboutLocalmanAccordionSections: AboutLocalmanAccordionSection[] = [
   {
     key: "privacy",
     title: "Privacy Policy",
-    renderContent: () => (
-      <>
-        <p>
-          Localman uses information to operate vendor discovery, rider
-          coordination, ratings, sharing, admin management, and abuse
-          prevention.
-        </p>
-        <ul>
-          <li>
-            Localman may handle vendor information, rider information,
-            admin-entered data, rider request details, ratings and signals,
-            approximate location or selected area, and browser or device data.
-          </li>
-          <li>
-            Full rider phone or WhatsApp details are not shown publicly before
-            handoff. Full rider plates are not exposed publicly; a masked plate
-            may appear after rider selection. Internal notes are not public.
-          </li>
-          <li>
-            Continuing to WhatsApp opens a service outside Localman, with its
-            own privacy practices. Necessary contact and request details may be
-            shared with the selected rider for coordination.
-          </li>
-          <li>
-            Localman keeps information as needed for platform operation,
-            support, admin records, abuse prevention, and legal or safety
-            reasons. Exact retention periods may vary.
-          </li>
-          <li>
-            You can choose not to submit rider request details. Vendors and
-            riders may request updates or removal through the available support
-            or admin process.
-          </li>
-          <li>
-            Localman uses reasonable protections, but no internet service can
-            guarantee perfect security.
-          </li>
-          <li>
-            Localman is not intended for children. Minors should use the
-            platform only with a parent or guardian.
-          </li>
-          <li>This policy may be updated as Localman grows.</li>
-        </ul>
-      </>
+    renderContent: (_supportEmail, { idPrefix, testIdPrefix }) => (
+      <PrivacyPolicyContent idPrefix={idPrefix} testIdPrefix={testIdPrefix} />
     ),
   },
 ];
@@ -323,7 +289,10 @@ export function AboutLocalmanContent({
                   hidden={!isExpanded}
                   id={contentId}
                 >
-                  {section.renderContent(supportEmail)}
+                  {section.renderContent(supportEmail, {
+                    idPrefix,
+                    testIdPrefix,
+                  })}
                 </div>
               </section>
             );
