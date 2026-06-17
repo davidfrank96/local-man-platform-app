@@ -1406,7 +1406,8 @@ export function PublicDiscovery({
                       width={512}
                     />
                   </span>
-                  <span>{title}</span>
+                  <span className="discovery-brand-word">{title}</span>
+                  <span className="discovery-brand-suffix">App</span>
                 </span>
               ) : (
                 title
