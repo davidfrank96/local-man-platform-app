@@ -1990,6 +1990,7 @@ h2 {
   align-items: center;
   gap: clamp(6px, 0.8vw, 10px);
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .discovery-brand-icon {
@@ -5606,11 +5607,22 @@ h2 {
   letter-spacing: -0.035em;
 }
 
-.public-discovery-shell .discovery-brand-title > span:last-child {
+.public-discovery-shell .discovery-brand-word {
   background: linear-gradient(90deg, #3b1b06 0%, #4d260c 48%, var(--localman-green) 58%, var(--localman-green-dark) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+.public-discovery-shell .discovery-brand-suffix {
+  align-self: flex-end;
+  margin-left: clamp(-4px, -0.35vw, -2px);
+  padding-bottom: 0.16em;
+  color: var(--localman-green-dark);
+  font-size: 0.34em;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
 }
 
 .public-discovery-shell .discovery-brand-icon {
@@ -7027,6 +7039,12 @@ h2 {
 
   .public-discovery-shell .discovery-brand-title {
     gap: 8px;
+  }
+
+  .public-discovery-shell .discovery-brand-suffix {
+    margin-left: -3px;
+    padding-bottom: 0.18em;
+    font-size: 0.33em;
   }
 
   .public-discovery-shell .discovery-brand-icon {
