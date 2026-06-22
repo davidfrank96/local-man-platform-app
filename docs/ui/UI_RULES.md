@@ -20,8 +20,8 @@ Local Man — UI Rules
   - green storefront marker state for the selected vendor
   - blue user-location marker
   - no clustering
-- Marker click selects a vendor and updates the selected preview, but must not move the camera.
-- Vendor-card selection may gently focus the map marker when that improves orientation.
+- Marker click and vendor-card selection must update the same selected vendor preview and selected marker.
+- Selected vendor camera movement may gently focus the selected marker when that improves orientation, and it must target the selected vendor coordinates.
 - Core mobile discovery uses a fixed bottom dock with:
   - Home
   - Map

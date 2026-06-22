@@ -1,12 +1,12 @@
 # Marketplace Reset
 
-The marketplace reset process clears QA/test marketplace data before production onboarding while retaining platform infrastructure.
+The marketplace reset process clears disposable marketplace data before a controlled onboarding cycle while retaining platform infrastructure.
 
 Do not run execute mode without a current backup and explicit operator approval.
 
 ## Why Reset Exists
 
-Current marketplace data can include QA/test vendors, riders, ratings, images, user events, and operational events. Production onboarding requires an empty marketplace dataset while keeping schema, policies, configuration, admin accounts, categories, and rating signal options intact.
+Marketplace data can include vendors, riders, ratings, images, user events, and operational events that are disposable for a reset cycle. A controlled production reset requires an empty marketplace dataset while keeping schema, policies, configuration, admin accounts, categories, and rating signal options intact.
 
 ## Disposable Tables
 

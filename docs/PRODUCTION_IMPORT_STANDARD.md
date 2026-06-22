@@ -36,11 +36,11 @@ This warning does not block import. It flags the row for manual review because p
 
 One valid Nigerian phone number is required.
 
-Requirements:
+Source and CSV review requirements:
 
-- Store as text/string
-- Preserve leading zero
-- Use 11 digits
+- Treat phone values as text/string during transformation
+- Preserve leading zero in source-derived CSV values
+- Use 11 digits for local Nigerian mobile numbers
 - Use a Nigerian mobile format
 
 Examples:
@@ -59,6 +59,11 @@ Multiple phones:
 No valid phone:
 
 - FAIL
+
+Importer behavior:
+
+- Accepted Nigerian phone inputs may be normalized for storage into the app's canonical callable format.
+- Do not treat canonical storage normalization as source data loss as long as the value remains callable and traceable to the reviewed CSV value.
 
 ## Coordinate Rules
 
@@ -239,6 +244,7 @@ Before importing a production batch:
 - Transform the workbook into the approved Localman CSV format.
 - Verify `vendor_name` follows the identity priority rules.
 - Verify all phone values are stored as text and preserve leading zero.
+- Verify importer storage normalization remains callable.
 - Verify every retained vendor has latitude and longitude.
 - Verify coordinates were not rounded, geocoded, or modified.
 - Verify `area` uses canonical high-level areas where possible.

@@ -1,6 +1,6 @@
 # Localman Architecture
 
-This document describes the current production architecture before marketplace reset and production onboarding.
+This document describes the current production architecture after marketplace reset, production onboarding, import hardening, and the Batch 1-3 vendor imports.
 
 ## System Overview
 
@@ -43,11 +43,20 @@ Search does not query the entire vendor database from the public app.
 
 ## Ranking
 
-Default, GPS, selected-area, and search result ordering use:
+Default, GPS, and selected-area ordering use:
 
 1. Open vendors
 2. Distance
-3. Supporting ranking factors such as popularity or search relevance
+3. Popularity
+4. Stable tie-breakers
+
+Search result ordering uses:
+
+1. Open vendors
+2. Distance
+3. Search relevance
+4. Popularity
+5. Stable tie-breakers
 
 The Popular tab intentionally differs:
 
@@ -56,7 +65,15 @@ The Popular tab intentionally differs:
 
 ## Map
 
-MapLibre renders the map when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. The map follows the active discovery origin and uses the same vendor dataset as the list. Marker selection and selected-vendor cards are synchronized by vendor identity.
+MapLibre renders the map when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. The map follows the active discovery origin and uses the same vendor dataset as the list. Marker selection, selected-vendor cards, and camera movement are synchronized by vendor identity.
+
+Map coordinate handling is explicit:
+
+- stored vendor coordinates are latitude and longitude fields
+- MapLibre camera and marker APIs receive `[longitude, latitude]`
+- invalid or missing coordinates are ignored for map rendering
+- selected vendor camera movement wins over generic bounds fitting after a card or marker selection
+- fallback marker rendering keeps dense and selected markers tappable
 
 If the map style is unavailable, the app falls back to a calm coordinate-based map state without changing discovery behavior.
 
@@ -115,4 +132,14 @@ Vendor image metadata lives in `vendor_images`. Supabase Storage objects live in
 
 ## Operational Boundaries
 
-Do not treat seeded or QA marketplace data as production data. Production onboarding should use the marketplace reset process, then import vetted vendor and rider data.
+Marketplace data is operational data. Production vendor onboarding uses the documented workflow:
+
+1. Raw workbook
+2. Transformation
+3. Validation
+4. Audit
+5. Manual review
+6. Import
+7. Post-import validation
+
+Batch imports are recorded in `docs/PRODUCTION_IMPORT_HISTORY.md`. Reset and release procedures are documented in `docs/MARKETPLACE_RESET.md`, `docs/OPERATIONS.md`, and `docs/MASTER_RELEASE_GATE.md`.

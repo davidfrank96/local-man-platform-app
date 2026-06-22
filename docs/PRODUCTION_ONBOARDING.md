@@ -1,33 +1,34 @@
 # Production Onboarding
 
-This document describes the recommended production onboarding sequence after marketplace reset.
+This document describes the production onboarding sequence for Localman vendor and rider data. The initial marketplace reset and Batch 1-3 vendor onboarding are complete, but the same workflow applies to future batches.
 
 ## Pre-Onboarding Checklist
 
-Before onboarding production data:
+Before onboarding a production batch:
 
 1. Commit and review current code changes.
-2. Run database backup.
-3. Run marketplace reset dry run.
-4. Review disposable table counts and storage candidates.
-5. Execute reset only after explicit approval.
-6. Validate empty marketplace state.
-7. Transform production vendor data into Localman CSV.
-8. Validate the CSV.
+2. Run database backup when the batch or deployment risk warrants it.
+3. Archive the raw workbook unchanged.
+4. Transform production vendor data into the Localman CSV contract.
+5. Generate the validation and audit reports.
+6. Resolve every FAIL row.
+7. Manually approve WARNING rows.
+8. Confirm the import operator, approved CSV, and expected counts.
 
 ## Vendor Onboarding
 
 Recommended vendor onboarding path:
 
 1. Collect raw vendor data.
-2. Normalize business name, area, address, phone, coordinates, hours, category, dishes, and images.
+2. Normalize business name, area, address, phone, coordinates, hours, categories, dishes, and images according to the production import standard.
 3. Convert to Localman CSV template.
 4. Run preview validation.
 5. Resolve blockers.
 6. Review warnings.
-7. Import valid rows.
+7. Import approved rows.
 8. Upload missing media where needed.
-9. Smoke test public vendor cards and profiles.
+9. Run post-import validation.
+10. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
 
 ## Rider Onboarding
 

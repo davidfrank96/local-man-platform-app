@@ -126,25 +126,25 @@ Location response shape:
 Vendor card fields in the nearby response:
 ```json
 {
-  "vendor_id": "20000000-0000-4000-8000-000000000008",
-  "name": "Jabi Office Lunch Bowl",
-  "slug": "jabi-office-lunch-bowl",
-  "short_description": "Test lunch bowl vendor with white rice, stew, and native rice.",
-  "phone_number": "+2340000000000",
-  "area": "Jabi",
-  "latitude": 9.0606,
-  "longitude": 7.4219,
+  "vendor_id": "00000000-0000-4000-8000-000000000001",
+  "name": "Example Local Kitchen",
+  "slug": "example-local-kitchen",
+  "short_description": "Production-safe example vendor summary.",
+  "phone_number": "2348012345678",
+  "area": "Wuse",
+  "latitude": 9.0813,
+  "longitude": 7.4673,
   "price_band": "standard",
   "average_rating": 0,
   "review_count": 0,
   "ranking_score": 0,
-  "distance_km": 3.11,
+  "distance_km": 0.42,
   "is_open_now": true,
   "featured_dish": {
-    "dish_name": "White rice and stew",
-    "description": "Lunch bowl with stew."
+    "dish_name": "Rice and stew",
+    "description": "Example featured dish."
   },
-  "today_hours": "11:00 AM - 3:00 PM"
+  "today_hours": "8:00 AM - 6:00 PM"
 }
 ```
 

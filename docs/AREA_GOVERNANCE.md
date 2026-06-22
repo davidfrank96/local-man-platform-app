@@ -2,6 +2,14 @@
 
 Area governance is a data-quality layer for Abuja vendor onboarding. It is separate from public discovery areas.
 
+## Source Of Truth
+
+Governance area definitions live in `lib/location/area-governance.ts` as `ABUJA_AREA_DEFINITIONS`.
+
+Discovery area definitions live separately in `lib/location/discovery-areas.ts` as `DISCOVERY_AREAS`.
+
+Do not duplicate area lists in UI or import code. Admin vendor creation, validation, and CSV intake should consume the shared governance helpers. Public Browse By Area should consume the shared discovery-area helpers.
+
 ## Governance Areas
 
 Governance areas are canonical high-level Abuja districts used for:
@@ -12,7 +20,7 @@ Governance areas are canonical high-level Abuja districts used for:
 - analytics
 - future data cleanup
 
-Governance areas do not control discovery results directly.
+Governance areas do not control discovery results directly. They control data quality, labels, reporting, and import normalization.
 
 ### Core
 
@@ -79,7 +87,7 @@ Current discovery areas:
 - Kubwa
 - Lugbe
 
-Discovery areas include coordinates. Governance areas do not.
+Discovery areas include coordinates and act as discovery starting points. Governance areas do not provide query coordinates by themselves.
 
 ## Normalization
 
@@ -125,6 +133,13 @@ Unknown area:
 - import: continues
 
 CSV does not reject unknown areas. This avoids import friction while still surfacing data-quality issues.
+
+CSV area behavior:
+
+- known governed area values are stored canonically
+- unknown area values continue with warnings
+- detailed market, street, landmark, zone, and plaza text belongs in `address`
+- discovery still uses coordinates and radius, not the `area` label
 
 ## Guidance For Production Imports
 

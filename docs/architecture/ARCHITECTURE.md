@@ -157,8 +157,9 @@ Public rendering rules:
   - marker highlight
   - selected vendor preview
   - selected vendor list state
-- marker click selects only and must not move the camera
-- vendor-card selection may gently focus the map
+- marker click and vendor-card selection use the same vendor-id selection path
+- selected vendor camera movement targets the selected vendor coordinates in `[longitude, latitude]` order
+- selected vendor camera movement should not be immediately overridden by generic bounds fitting
 - filter and radius apply fit the map to the current visible vendor set
 - locate-me recenters the map on the resolved user location
 - mobile map refresh clears the active request guard and retries nearby discovery for the current filters without reloading the browser page

@@ -9,9 +9,11 @@ Raw production collection data should flow through:
 1. Raw XLSX
 2. Transformation
 3. Validation
-4. Production CSV
-5. Review
-6. Import
+4. Audit report
+5. Production CSV
+6. Manual review
+7. Import
+8. Post-import validation
 
 Do not import raw Jotform-style XLSX files directly. The admin importer expects CSV with Localman template headers.
 
@@ -94,6 +96,8 @@ If multiple numbers are provided, the importer selects the first valid Nigerian 
 
 If no valid phone exists, the row fails.
 
+Source workbooks and generated CSVs should preserve leading-zero Nigerian numbers as text during review. The importer validates those inputs and stores accepted phone values in the app's canonical callable format.
+
 ## Slug Rules
 
 If `slug` is supplied, the importer preserves it.
@@ -118,7 +122,7 @@ The CSV importer supports three featured dish slots:
 - `dish_2_name`, `dish_2_description`, `dish_2_image_url`
 - `dish_3_name`, `dish_3_description`, `dish_3_image_url`
 
-At least one featured dish is required. Production transformation should preserve all three field-collected dishes when available.
+At least one featured dish is required. Production transformation should preserve all three field-collected dishes when available. The operational shorthand `featured_dish_1` through `featured_dish_3` maps to the CSV columns `dish_1_*` through `dish_3_*`.
 
 ## Category Mapping
 
@@ -198,3 +202,17 @@ Before import, review:
 - hours coverage
 - category mapping
 - generated slugs
+
+## Post-Import Validation
+
+After import, validate:
+
+- vendor count matches the approved CSV
+- `vendor_hours` has one row per imported vendor per weekday
+- `vendor_category_map` preserves all valid category assignments
+- featured dishes are present through the third slot where supplied
+- vendor profiles load by slug
+- search finds vendors by name, category, and featured dish
+- default Wuse, selected-area, and GPS discovery still work
+- map markers match selected vendor cards
+- closed days, open-now status, and overnight warnings remain correct

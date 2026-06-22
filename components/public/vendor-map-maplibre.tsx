@@ -14,6 +14,12 @@ import {
   type VendorMapProps,
 } from "./vendor-map-types.ts";
 import { createStoreMarkerIconElement } from "./vendor-marker-icon.tsx";
+import {
+  getSelectedVendorCameraTarget,
+  getVendorMapCenter,
+  isSelectionCameraSource,
+  type VendorMapCenter,
+} from "./vendor-map-camera.ts";
 
 type MapLibreVendorMapProps = VendorMapProps & {
   onMapError: () => void;
@@ -35,7 +41,7 @@ type ThemePalette = {
   background: string;
 };
 
-type CameraActionSource = "initial" | "filter" | "card" | "locate" | "debug";
+type CameraActionSource = "initial" | "filter" | "card" | "map" | "locate" | "debug";
 
 type CameraState = {
   count: number;
@@ -159,7 +165,12 @@ function fitMapToDiscoveryBounds(
   vendors: NearbyVendor[],
   source: "initial" | "filter",
 ) {
-  if (vendors.length === 0) {
+  const vendorCenters = vendors.flatMap((vendor) => {
+    const center = getVendorMapCenter(vendor);
+    return center ? [center] : [];
+  });
+
+  if (vendorCenters.length === 0) {
     easeMapTo(map, cameraStateRef, source, {
       center: [userLocation.lng, userLocation.lat],
       zoom: DEFAULT_VENDOR_MAP_ZOOM,
@@ -169,8 +180,10 @@ function fitMapToDiscoveryBounds(
   }
 
   const bounds = vendors.reduce(
-    (currentBounds, vendor) =>
-      currentBounds.extend([vendor.longitude, vendor.latitude] as [number, number]),
+    (currentBounds, vendor) => {
+      const center = getVendorMapCenter(vendor);
+      return center ? currentBounds.extend(center) : currentBounds;
+    },
     new maplibre.LngLatBounds(
       [userLocation.lng, userLocation.lat],
       [userLocation.lng, userLocation.lat],
@@ -254,6 +267,7 @@ function createVendorMarkerEntry(
   map: MapInstance,
   latestSelectVendorRef: MutableRefObject<VendorMapProps["onSelectVendor"]>,
   vendor: NearbyVendor,
+  center: VendorMapCenter,
 ): VendorMarkerEntry {
   const element = document.createElement("button");
   element.type = "button";
@@ -277,7 +291,7 @@ function createVendorMarkerEntry(
     element,
     anchor: "center",
   })
-    .setLngLat([vendor.longitude, vendor.latitude])
+    .setLngLat(center)
     .addTo(map);
 
   return {
@@ -294,7 +308,8 @@ function syncVendorMarkers(
   vendors: NearbyVendor[],
   selectedVendorId: string | null,
 ) {
-  const nextVendorIds = new Set(vendors.map((vendor) => vendor.vendor_id));
+  const mappableVendors = vendors.filter((vendor) => getVendorMapCenter(vendor) !== null);
+  const nextVendorIds = new Set(mappableVendors.map((vendor) => vendor.vendor_id));
 
   for (const [vendorId, entry] of Object.entries(markersRef.current)) {
     if (nextVendorIds.has(vendorId)) {
@@ -305,17 +320,22 @@ function syncVendorMarkers(
     delete markersRef.current[vendorId];
   }
 
-  vendors.forEach((vendor) => {
+  mappableVendors.forEach((vendor) => {
+    const center = getVendorMapCenter(vendor);
+    if (!center) {
+      return;
+    }
+
     const existingEntry = markersRef.current[vendor.vendor_id];
     const entry =
       existingEntry ??
-      createVendorMarkerEntry(maplibre, map, latestSelectVendorRef, vendor);
+      createVendorMarkerEntry(maplibre, map, latestSelectVendorRef, vendor, center);
 
     if (!existingEntry) {
       markersRef.current[vendor.vendor_id] = entry;
     }
 
-    entry.marker.setLngLat([vendor.longitude, vendor.latitude]);
+    entry.marker.setLngLat(center);
     entry.element.classList.toggle("selected", vendor.vendor_id === selectedVendorId);
     entry.element.setAttribute("aria-pressed", vendor.vendor_id === selectedVendorId ? "true" : "false");
     entry.element.style.zIndex = vendor.vendor_id === selectedVendorId ? "2" : "1";
@@ -360,8 +380,13 @@ function installMapDebug(
         return false;
       }
 
+      const center = getVendorMapCenter(vendor);
+      if (!center) {
+        return false;
+      }
+
       easeMapTo(map, cameraStateRef, "debug", {
-        center: [vendor.longitude, vendor.latitude],
+        center,
         zoom: map.getZoom(),
         duration: 0,
       });
@@ -398,7 +423,12 @@ function installMapDebug(
         return null;
       }
 
-      const point = map.project([vendor.longitude, vendor.latitude]);
+      const center = getVendorMapCenter(vendor);
+      if (!center) {
+        return null;
+      }
+
+      const point = map.project(center);
       return { x: point.x, y: point.y };
     },
     getZoom() {
@@ -422,6 +452,7 @@ export function MapLibreVendorMap({
 }: MapLibreVendorMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapLoadToken, setMapLoadToken] = useState(0);
   const mapRef = useRef<MapInstance | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const userMarkerRef = useRef<MarkerInstance | null>(null);
@@ -588,6 +619,7 @@ export function MapLibreVendorMap({
           }
 
           loadedRef.current = true;
+          setMapLoadToken((current) => current + 1);
           if (loadTimeout !== null) {
             window.clearTimeout(loadTimeout);
           }
@@ -656,6 +688,7 @@ export function MapLibreVendorMap({
       mapRef.current = null;
       maplibreRef.current = null;
       setMapReady(false);
+      setMapLoadToken(0);
       loadedRef.current = false;
       fallbackTriggeredRef.current = false;
       lastViewportKeyRef.current = null;
@@ -777,15 +810,17 @@ export function MapLibreVendorMap({
       return;
     }
 
-    if (!selectedVendorId || selectionSource !== "card") {
+    if (!selectedVendorId || !isSelectionCameraSource(selectionSource)) {
       lastSelectionCameraTokenRef.current = null;
       return;
     }
 
-    const selectedVendor = latestVendorsRef.current.find(
-      (vendor) => vendor.vendor_id === selectedVendorId,
+    const selectedVendorCameraTarget = getSelectedVendorCameraTarget(
+      latestVendorsRef.current,
+      selectedVendorId,
+      map.getZoom(),
     );
-    if (!selectedVendor) {
+    if (!selectedVendorCameraTarget) {
       return;
     }
 
@@ -795,26 +830,12 @@ export function MapLibreVendorMap({
 
     lastSelectionCameraTokenRef.current = selectionActionToken;
 
-    const selectedPoint = map.project([selectedVendor.longitude, selectedVendor.latitude]);
-    const container = map.getContainer();
-    const paddingX = container.clientWidth * 0.18;
-    const paddingY = container.clientHeight * 0.2;
-    const alreadyComfortablyVisible =
-      selectedPoint.x >= paddingX &&
-      selectedPoint.x <= container.clientWidth - paddingX &&
-      selectedPoint.y >= paddingY &&
-      selectedPoint.y <= container.clientHeight - paddingY;
-
-    if (alreadyComfortablyVisible) {
-      return;
-    }
-
-    easeMapTo(map, cameraStateRef, "card", {
-      center: [selectedVendor.longitude, selectedVendor.latitude],
-      zoom: map.getZoom(),
-      duration: 250,
+    easeMapTo(map, cameraStateRef, selectionSource, {
+      center: selectedVendorCameraTarget.center,
+      zoom: selectedVendorCameraTarget.zoom,
+      duration: 350,
     });
-  }, [selectedVendorId, selectionActionToken, selectionSource]);
+  }, [mapLoadToken, selectedVendorId, selectionActionToken, selectionSource]);
 
   return (
     <section
