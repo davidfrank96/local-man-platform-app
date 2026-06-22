@@ -560,6 +560,14 @@ h2 {
   gap: 14px;
 }
 
+.admin-bulk-preview-compact {
+  align-items: start;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px;
+}
+
 .admin-table-shell {
   overflow-x: auto;
 }
@@ -689,6 +697,246 @@ h2 {
 .preview-warning-list {
   margin-top: 6px;
   color: #7a4c0c;
+}
+
+.csv-review-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(17, 24, 20, 0.46);
+  backdrop-filter: blur(8px);
+}
+
+.csv-review-modal {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 14px;
+  width: min(90vw, 1180px);
+  height: min(90vh, 860px);
+  overflow: hidden;
+  border: 1px solid rgba(37, 41, 36, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(36, 97, 79, 0.08), transparent 34%),
+    rgba(255, 253, 246, 0.98);
+  box-shadow: 0 28px 80px rgba(17, 24, 20, 0.28);
+  color: var(--color-text);
+  padding: 18px;
+}
+
+.csv-review-modal:focus {
+  outline: none;
+}
+
+.csv-review-modal-header,
+.csv-review-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.csv-review-modal-header h2,
+.csv-review-modal-header p,
+.csv-review-copy-grid h3,
+.csv-review-copy-grid p,
+.csv-review-list h3 {
+  margin: 0;
+}
+
+.csv-review-modal-header p:not(.eyebrow) {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.csv-review-modal-close {
+  appearance: none;
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(37, 41, 36, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.csv-review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) minmax(220px, 1.5fr);
+  gap: 10px;
+}
+
+.csv-review-summary-grid div {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  align-content: center;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px;
+}
+
+.csv-review-summary-grid span {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.csv-review-summary-grid strong {
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.csv-review-summary-grid .csv-review-readiness-ready strong {
+  color: #2b6a36;
+  font-size: 0.98rem;
+}
+
+.csv-review-summary-grid .csv-review-readiness-blocked strong {
+  color: #8e2f1d;
+  font-size: 0.98rem;
+}
+
+.csv-review-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.csv-review-tabs button {
+  appearance: none;
+  min-height: 40px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(37, 41, 36, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 0 14px;
+}
+
+.csv-review-tabs button.active {
+  border-color: rgba(36, 97, 79, 0.24);
+  background: rgba(36, 97, 79, 0.1);
+  color: var(--color-primary);
+}
+
+.csv-review-modal-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.64);
+  padding: 14px;
+}
+
+.csv-review-copy-grid,
+.csv-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.csv-review-copy-grid > div,
+.csv-review-list article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(37, 41, 36, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 12px;
+}
+
+.csv-review-copy-grid h3,
+.csv-review-list h3 {
+  font-size: 0.98rem;
+}
+
+.csv-review-copy-grid p {
+  color: var(--color-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.csv-review-vendor-table td:first-child strong {
+  display: block;
+  min-width: 180px;
+}
+
+.csv-review-modal-close:focus-visible,
+.csv-review-tabs button:focus-visible {
+  outline: 3px solid rgba(36, 97, 79, 0.22);
+  outline-offset: 2px;
+}
+
+.csv-review-modal-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .csv-review-modal-overlay {
+    padding: 10px;
+  }
+
+  .csv-review-modal {
+    width: min(100%, 96vw);
+    height: min(92vh, 860px);
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .csv-review-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .csv-review-summary-grid div {
+    min-height: 64px;
+  }
+
+  .csv-review-summary-grid .csv-review-readiness-ready,
+  .csv-review-summary-grid .csv-review-readiness-blocked {
+    grid-column: 1 / -1;
+  }
+
+  .csv-review-tabs button {
+    min-height: 38px;
+    font-size: 0.82rem;
+    padding: 0 12px;
+  }
+
+  .csv-review-modal-body {
+    padding: 10px;
+  }
+
+  .csv-review-modal-actions {
+    justify-content: stretch;
+  }
+
+  .csv-review-modal-actions .button-secondary,
+  .csv-review-modal-actions .button-primary {
+    flex: 1 1 150px;
+  }
 }
 
 .session-summary,

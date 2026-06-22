@@ -115,6 +115,8 @@ Recommended for production:
 - [Area Governance](docs/AREA_GOVERNANCE.md)
 - [Import Pipeline](docs/IMPORT_PIPELINE.md)
 - [Production Import Standard](docs/PRODUCTION_IMPORT_STANDARD.md)
+- [Production Import History](docs/PRODUCTION_IMPORT_HISTORY.md)
+- [Production Import Checklist](docs/PRODUCTION_IMPORT_CHECKLIST.md)
 - [Marketplace Reset](docs/MARKETPLACE_RESET.md)
 - [Production Onboarding](docs/PRODUCTION_ONBOARDING.md)
 - [Release Status](docs/RELEASE_STATUS.md)
