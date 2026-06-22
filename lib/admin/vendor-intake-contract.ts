@@ -1,11 +1,11 @@
 export const vendorCsvDayFields = [
-  { dayOfWeek: 0, key: "monday", label: "Monday" },
-  { dayOfWeek: 1, key: "tuesday", label: "Tuesday" },
-  { dayOfWeek: 2, key: "wednesday", label: "Wednesday" },
-  { dayOfWeek: 3, key: "thursday", label: "Thursday" },
-  { dayOfWeek: 4, key: "friday", label: "Friday" },
-  { dayOfWeek: 5, key: "saturday", label: "Saturday" },
-  { dayOfWeek: 6, key: "sunday", label: "Sunday" },
+  { dayOfWeek: 1, key: "monday", label: "Monday" },
+  { dayOfWeek: 2, key: "tuesday", label: "Tuesday" },
+  { dayOfWeek: 3, key: "wednesday", label: "Wednesday" },
+  { dayOfWeek: 4, key: "thursday", label: "Thursday" },
+  { dayOfWeek: 5, key: "friday", label: "Friday" },
+  { dayOfWeek: 6, key: "saturday", label: "Saturday" },
+  { dayOfWeek: 0, key: "sunday", label: "Sunday" },
 ] as const;
 
 export const vendorCsvCategorySlots = [1, 2, 3, 4, 5, 6] as const;

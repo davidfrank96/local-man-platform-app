@@ -108,6 +108,7 @@ function createFetchMock(
     }>;
     createdVendorBodies?: Array<Record<string, unknown>>;
     createdCategoryBodies?: Array<Record<string, unknown>>;
+    createdHoursBodies?: Array<Array<Record<string, unknown>>>;
     createdDishBodies?: Array<Array<Record<string, unknown>>>;
     failCategoryInsert?: boolean;
     failDishInsert?: boolean;
@@ -216,6 +217,7 @@ function createFetchMock(
 
     if (url.pathname === "/rest/v1/vendor_hours" && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "[]"));
+      options?.createdHoursBodies?.push(body);
       return Response.json(
         body.map((entry: Record<string, unknown>, index: number) => ({
           id: `00000000-0000-4000-8000-00000000050${index + 1}`,
@@ -392,6 +394,56 @@ test("agent can upload a valid full vendor intake row", async () => {
       "POST /rest/v1/vendor_images",
       "POST /rest/v1/audit_logs",
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV upload maps weekday columns to the canonical platform day indexes", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdHoursBodies: Array<Array<Record<string, unknown>>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdHoursBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            monday_open: "8:00 AM",
+            monday_close: "6:00 PM",
+            sunday_open: "",
+            sunday_close: "",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(createdHoursBodies.length, 1);
+
+    const mondayHours = createdHoursBodies[0].find((entry) => entry.day_of_week === 1);
+    const sundayHours = createdHoursBodies[0].find((entry) => entry.day_of_week === 0);
+
+    assert.deepEqual(mondayHours, {
+      vendor_id: vendorId,
+      day_of_week: 1,
+      open_time: "08:00",
+      close_time: "18:00",
+      is_closed: false,
+    });
+    assert.deepEqual(sundayHours, {
+      vendor_id: vendorId,
+      day_of_week: 0,
+      open_time: null,
+      close_time: null,
+      is_closed: true,
+    });
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
