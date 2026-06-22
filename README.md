@@ -1,454 +1,135 @@
-## Local Man
+## Localman
 
-Local Man is a location-based food discovery product for finding nearby local vendors, starting with Abuja, Nigeria. The public app helps people see nearby vendors, whether they are open, what they sell, and how to call or reach them. The admin app supports vendor onboarding, maintenance, media upload, and content completeness review.
+Localman is a location-aware marketplace for discovering local food vendors in Abuja, Nigeria. The public app helps users find nearby vendors, understand what they sell, call or get directions, request an independent rider handoff, and submit lightweight ratings. The admin app supports vendor onboarding, rider management, analytics, audit logs, and production data operations.
 
-## Product Surface
+## Core Platform
 
-### Public
-- discovery homepage with mobile bottom-dock navigation and the existing desktop combined discovery layout
-- mobile Home tab for search, filters, nearby vendor cards, recent vendors, popular vendors, and last-selected memory
-- mobile Map tab for the dedicated map view, shared search/filter controls, map refresh, marker selection, and the selected vendor panel
-- mobile About tab for lightweight support, usage, mission, app-install, Terms, and Privacy guidance, without search/filter controls
-- desktop search/filter bar with the map and selected vendor panel in the right column
-- redesigned lightweight filter panel:
-  - search remains in the shared Home/Map/desktop discovery surface
-  - filter toggle opens radius, price, category, and open-now controls
-  - panel header shows `Filters`, an active-filter count pill, and `Clear all`
-  - mobile filter view opens as a viewport-bounded sheet with a close button and `Apply filters`
-  - desktop filter view uses a wider card with radius/price side by side, category full width, and open-now as a tap-friendly card
-- discovery ordering that prioritizes:
-  - open vendors first
-  - distance within the same open/closed group
-  - usage-signal ranking from real engagement events only as a close-distance tie-breaker
-  - capped nearby payloads so the map and list stay bounded
-- vendor cards with:
-  - name
-  - distance
-  - open/closed state
-  - `Active hours:` on discovery cards
-  - featured dish
-  - price band
-  - area
-  - rating or `New`
-  - call, directions, and detail actions
-  - no vendor card photos or thumbnails
-- popular-vendor highlighting when ranking signals exist
-- selected vendor panel below the map on the mobile Map tab and beside the map on web
-  - selected vendor name
-  - distance
-  - open/closed state
-  - `Active hours:`
-  - featured dish or short description cue when available
-  - area
-  - call, directions, and detail actions
-- MapLibre rendered with a single vendor-marker system:
-  - oxblood storefront vendor markers
-  - green storefront marker state for the selected vendor
-  - blue user-location marker
-  - marker tap selects a vendor without moving the map
-  - vendor-card selection may gently focus the map
-  - no clustering in the current release
-- vendor detail pages with compact top summary, call/directions/Request Rider actions, a dedicated share section, weekly hours, featured dishes, vendor images, and `Back to map`
-- lightweight vendor rating input with 1-5 stars, optional predefined rating signals, no free-text reviews, and one rating per vendor per anonymous browser identity
-- conservative public confidence badges may appear on vendor detail only after thresholded positive rating-signal evidence; negative and neutral signals remain internal/admin-only
-- Rider Connect on vendor detail pages:
-  - `Request Rider` opens a disclaimer-gated handoff flow
-  - suggestions include up to 3 verified, visible, currently available independent riders
-  - rider area remains informational only, not a hard dispatch/proximity filter
-  - suggestion responses exclude rider phone, WhatsApp values, full names, notes, and full plate numbers
-  - incomplete contact or delivery details are blocked before rider selection with clear form copy
-  - accepted customer phone examples are `08012345678`, `+2348012345678`, and `2348012345678`
-  - `manual_address` requires a delivery address; `current_location` requires a delivery area
-  - selected-rider verification shows first name and masked plate when available before WhatsApp handoff
-  - WhatsApp click-to-chat URLs are generated only for the selected rider after contact intent creation
-  - users can report a rider as unavailable for admin review
-  - Localman does not collect payment, assign deliveries, send WhatsApp messages, or guarantee delivery
-- public abuse protection on write-heavy and search-heavy routes:
-  - `/api/events` rate limits repeated event floods and deduplicates immediate retry payloads
-  - `/api/vendors/[slug]/ratings` rate limits repeated rating spam, collapses duplicate retry submissions, validates optional rating signals, and rejects repeat ratings for the same vendor/browser identity
-  - `/api/vendors/nearby` rate limits search-bearing abuse traffic without throttling normal default-city browsing
-  - Rider Connect application, suggestion, contact handoff, and unavailable-report routes are rate-limited server-side
-- local retention helpers:
-  - recently viewed vendors
-  - last selected vendor memory
-  - popular vendors near you
-- trust-first location behavior:
-  - precise browser geolocation
-  - approximate location only when usable and clearly labeled
-  - default Wuse discovery when GPS/approximate location is unavailable and no area has been selected
-  - Browse By Area fallback using curated Abuja discovery areas: Wuse, Gwarinpa, Jabi, Utako, Maitama, Asokoro, Garki, Kubwa, and Lugbe
-  - selected areas override default Wuse; GPS overrides selected, restored, and default areas
-  - selected-area restoration survives vendor-profile back navigation but not plain reloads or future sessions
-  - backend Abuja default-city fallback remains available for operator/API smoke checks, but the public frontend does not silently load it when location is unavailable
-- search and radius filters operate against the active discovery dataset only:
-  - GPS mode searches/filters GPS nearby results
-  - selected-area mode searches/filters that area
-  - default-Wuse mode searches/filters Wuse
-  - search does not query the entire vendor database
-- Popular is scoped to the active discovery dataset; Recent and Last selected are user-centric retention surfaces
-- Localman Updates opens from the mobile bell and desktop header bell as an informational content center
-- lightweight location reminder toast on discovery load with auto-dismiss and manual close
-- bounded public discovery freshness:
-  - nearby vendor reads use a short 5 second server revalidation window
-  - session snapshot restore expires after 5 minutes
-  - discovery snapshots include a request-bound nearby key so stale radius/search/category/open-now results cannot hydrate a different filter state
-  - cache envelopes are scoped by version and browser origin
-  - malformed vendor records, known mock vendor ids, and known mock vendor slugs are discarded before browser cache hydration
-  - restored discovery data yields to one live nearby fetch before it becomes authoritative again
-  - admin vendor mutations invalidate restored public discovery vendor data
-- morning, afternoon, and night discovery themes based on browser-local time
-- PWA install groundwork:
-  - Phase 0 manifest and high-definition icons support browser install prompts, home-screen icons, and splash surfaces
-  - production-only service worker caches static shell assets, icons, branding, and seed/static images
-  - dynamic marketplace data stays network-owned and is not cached by the service worker
-  - offline navigation shows a plain reconnect message instead of stale nearby vendors, rider availability, ratings, or search results
-  - Phase 1 runtime update checks run after service-worker registration and on focus/visibility return with a short throttle
-  - a safe runtime marker is exposed at `window.__LOCALMAN_PWA_RUNTIME__` and `html[data-localman-pwa-runtime]` for stale-runtime diagnosis
-
-### Admin
-- Supabase email/password admin login with secure HTTP-only cookie-backed sessions
-- explicit privilege assignment through `admin_users`; authenticated users without a team-access row are denied the workspace
-- role-aware admin landing and dashboards:
-  - `/admin/dashboard` for admins
-  - `/admin/agent` for agents
-- admin dashboard overview cards and quick actions
-- admin analytics dashboard for lightweight usage signals
-- dedicated admin activity page for recent team activity
-- dedicated admin logs page for recent operational warnings, failures, degraded responses, and slow requests
-- admin team access page at `/admin/team`
-- admin rider management page at `/admin/riders` for creating manual rider profiles, reviewing independent rider applications, managing verification/visibility status, and checking unavailable-report signals
-- vendor registry with completeness badges
-- full Create Vendor page for both admins and agents
-- governed manual area selection backed by the shared Abuja area list; the detailed address remains a separate field
-- CSV vendor intake with the same schema and persistence contract as the full Create Vendor page
-- vendor create workflow with:
-  - basic details
-  - category
-  - opening hours
-  - featured dishes
-  - vendor image selection
-  - missing-data acknowledgements
-  - review summary before create
-- focused vendor edit workspace for:
-  - basic details
-  - hours
-  - featured dishes
-  - vendor images
-- workspace team management for admins:
-  - create admin/agent
-  - update admin/agent role and name
-  - delete admin/agent
-  - recover existing auth users cleanly, mirror role metadata, and refresh the list from the authoritative team-access API
-- centralized UI error boundary and toast notifications
-- background admin session refresh keeps authenticated workspace forms mounted so native file-picker focus changes do not reset local form state
+- Public discovery uses GPS, selected-area, or default-Wuse origins.
+- Discovery is coordinate and radius based; vendor area labels are governance/display data, not hard filters.
+- Search and radius filters operate only against the active discovery dataset.
+- Ranking uses open vendors first, distance second, then supporting signals. The Popular tab intentionally uses popularity first.
+- Rider Connect suggests up to 3 verified, visible, currently available riders and exposes only safe public rider details before WhatsApp handoff.
+- Ratings use star scores plus predefined signals; no public free-text reviews are collected.
+- The PWA service worker caches static shell assets only and does not cache marketplace, rider, rating, search, or admin data.
+- Admin workflows include manual vendor creation, CSV vendor intake, vendor media, rider management, analytics, operational logs, and marketplace reset tooling.
 
 ## Tech Stack
+
 - Next.js App Router
-- TypeScript
 - React
-- global CSS styling
-- Supabase Postgres
-- Supabase Auth
-- Supabase Storage
+- TypeScript
+- Supabase Postgres, Auth, and Storage
 - MapLibre GL JS
-- MapTiler browser style URL for the real map
-- Google Maps deep links for directions
+- Zod validation
+- Node test runner
+- Playwright for e2e coverage
 
 ## Project Structure
-- `app/` - App Router pages and route handlers
-- `components/` - admin and public UI
+
+- `app/` - App Router pages and API route handlers
+- `components/` - public and admin UI
+- `features/` - feature-level modules and notes
 - `hooks/` - shared React hooks
-- `lib/` - shared helpers, services, validation, and clients
-- `types/` - shared TypeScript domain and API types
-- `tests/` - unit and browser tests
-- `docs/` - architecture, API, UI, ops, testing, and task docs
-- `supabase/` - migrations, seeds, and ops SQL
+- `lib/` - services, validation, location, analytics, PWA, and Supabase helpers
+- `public/` - static assets, icons, manifest, and service worker assets
+- `scripts/` - database, runtime, reset, and build scripts
+- `supabase/` - migrations, seed data, and ops SQL
+- `tests/` - unit and route tests
+- `docs/` - architecture, discovery, governance, import, reset, ops, QA, and release documentation
 
-## UI Documentation
-- [docs/ui.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ui.md) - current UI overview and behavior
-- [docs/layout.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/layout.md) - mobile/web layout structure and ordering
-- [docs/navigation.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/navigation.md) - search, filters, section navigation, and route-return behavior
-- [docs/vendor-cards.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/vendor-cards.md) - discovery-card and selected-vendor rules
-- [docs/location.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/location.md) - popup, retry UI, and location trust behavior
-- [docs/performance.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/performance.md) - low-bandwidth and UI-stability constraints
-- [docs/pwa-runtime.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/pwa-runtime.md) - PWA install/runtime scope, static cache policy, and offline limitations
-- [docs/qa-checklist.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/qa-checklist.md) - release and regression checklist
-- [docs/rbac.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rbac.md) - admin and agent role rules
-- [docs/ops/SECURITY.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/SECURITY.md) - auth/RBAC, Supabase grants/RLS, public write, cache, and secret-handling security notes
-- [docs/rider-connect.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/rider-connect.md) - Rider Connect MVP model, privacy, abuse limits, copy rules, and QA checklist
-- [docs/audit-logs.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/audit-logs.md) - workspace audit logging behavior
-- [docs/analytics.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/analytics.md) - public event tracking and admin analytics reads
-- [docs/error-handling.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/error-handling.md) - shared error contract, toast system, and error boundary
-- [docs/RELEASE_NOTES.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/RELEASE_NOTES.md) - consolidated branch release notes for Rider Connect, ratings, PWA, UI hardening, cache/runtime safety, and regression coverage
+## Local Development
 
-## Local Setup
-1. Install dependencies:
-   - `npm install`
-2. Create `.env.local`
-3. Set core environment variables:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `RIDER_CONNECT_HASH_SECRET` for staging/production Rider Connect phone hashing
-4. Set `NEXT_PUBLIC_MAP_STYLE_URL` if you want the real MapLibre map locally:
-   - example: `https://api.maptiler.com/maps/openstreetmap/style.json?key=...`
-   - if omitted, the app uses the built-in coordinate fallback map
-5. Optional bootstrap values:
-   - `ADMIN_SEED_EMAIL`
-   - `ADMIN_SEED_PASSWORD`
-6. Apply database migrations before local development:
-   - `npm run db:migrate`
-7. Verify local schema, functions, and policies:
-   - `npm run db:check`
-8. Start the app:
-   - `npm run dev`
-9. Run the standard verification set:
-   - `npm run lint`
-   - `npm run typecheck`
-   - `npm test`
-   - `npm run test:e2e`
-   - `npm run build`
+Install dependencies:
 
-Runtime safety note:
-- `npm run build` now refuses to run while `npm run dev` is active in the same workspace, so the build step cannot wipe or corrupt the live Turbopack dev cache.
-
-## Environment Variables
-
-```text
-NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
-RIDER_CONNECT_HASH_SECRET=<server-only-rider-connect-phone-hash-secret>
-NEXT_PUBLIC_MAP_STYLE_URL=<browser-safe-maptiler-style-json-url>
+```bash
+npm install
 ```
 
-Optional bootstrap and ops variables:
+Run development server:
 
-```text
-ADMIN_SEED_EMAIL=<initial-admin-email>
-ADMIN_SEED_PASSWORD=<initial-admin-password>
-DATABASE_URL=<postgres-connection-string-for-migrations-and-seeds>
-LOCALMAN_LOG_LEVEL=<debug|info|warn|error>
-LOCALMAN_ENABLE_DEBUG_LOGS=<true|false>
-LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=<true|false>
-LOCALMAN_RUNTIME_ENVIRONMENT=<local|staging|production>
-LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS=<days>
+```bash
+npm run dev
 ```
 
-`NEXT_PUBLIC_MAP_STYLE_URL` is optional for overall app startup, but required if you want the real tiled MapLibre map instead of the fallback coordinate map.
+Apply migrations and verify database shape:
 
-Use a browser-safe MapLibre-compatible style URL such as a MapTiler hosted `style.json` endpoint. Do not place server secrets in this value. If your provider requires authentication, use a public token or a style URL that is safe to expose in the browser.
+```bash
+npm run db:migrate
+npm run db:check
+```
 
-`SUPABASE_SERVICE_ROLE_KEY` is required for:
+Run validation:
 
-- admin user creation
-- public analytics event writes at `/api/events`
-- public vendor rating writes at `/api/vendors/[slug]/ratings`
-- Rider Connect application, suggestion, contact handoff, and unavailable-report routes
-- backend analytics and audit-log routes
-- server-side vendor image storage operations
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-`RIDER_CONNECT_HASH_SECRET` is a server-only HMAC secret for Rider Connect customer/reporter phone hashes. Set it in staging and production. If omitted, the MVP falls back to `SUPABASE_SERVICE_ROLE_KEY`; rotating that fallback changes future hashes and can reduce comparability with earlier records.
+Run browser tests:
 
-Privileged admin and agent sessions are now stored in same-origin HTTP-only cookies rather than browser-visible `localStorage` or `sessionStorage`. The browser admin app signs in through `/api/admin/login`, restores identity through `/api/admin/session`, and signs out through `/api/admin/logout`.
-Authentication alone is not enough for workspace access: the authenticated user must already exist in `admin_users`.
+```bash
+npm run test:e2e
+```
 
-Server-side runtime logging is standardized through `lib/observability.ts`:
-- logs are structured and include stable event names plus request ids where available
-- logger metadata is redacted for secrets, tokens, cookies, raw request bodies, and database URLs
-- `LOCALMAN_LOG_LEVEL` defaults to `info`
-- debug output stays off unless `LOCALMAN_ENABLE_DEBUG_LOGS=true` or `LOCALMAN_LOG_LEVEL=debug`
-- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` enables bounded storage of selected warn/error/slow/rate-limited events and selected admin mutation events in `public.operational_events`
-- operational event storage is separate from `audit_logs` and does not store secrets, cookies, auth headers, passwords, raw request bodies, or stack traces
-- admins can review recent persisted operational events at `/admin/logs` when storage is enabled
-- when storage stays disabled, the `/admin/logs` page should load but remain empty; that is expected behavior rather than a runtime failure
-- recent operational events are retained through DB cleanup discipline rather than a full external monitoring platform in this phase
-- changing `LOCALMAN_*` observability env vars requires a dev-server restart locally or a fresh DigitalOcean rebuild/redeploy in production
+Run nearby smoke test:
 
-Public abuse protection is centralized server-side in the API layer:
-- `/api/admin/login`: `5` attempts per `10` minutes per IP/email with a `15` minute block window
-- `/api/events`: `120` accepted requests per `5` minutes per client/IP with a short duplicate-submission collapse window
-- `/api/vendors/[slug]/ratings`: one accepted submission per vendor per anonymous browser identity, plus `8` accepted submissions per `10` minutes per client/IP with duplicate rating retry collapse and max-two predefined rating signals
-- `/api/vendors/nearby` search requests only: `45` requests per minute per client/IP with a `2` minute block window
-- public limiter correlation may issue a non-privileged HTTP-only cookie so repeated browser abuse cannot avoid the per-IP bucket simply by retrying
-- the current limiter is in-memory and process-local, so it is best-effort for a single app instance rather than a distributed global throttle
+```bash
+npm run smoke:nearby
+```
 
-Additional runtime and database-script variables are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
+Marketplace reset dry run:
 
-## Deployment Notes
-- production deployment target: DigitalOcean App Platform
-- backend services: Supabase Postgres, Auth, and Storage
-- real map provider: MapLibre using a MapTiler style URL exposed through `NEXT_PUBLIC_MAP_STYLE_URL`
-- vendor image bucket: `vendor-images`; uploaded vendor photos keep the `5 MB` input cap and are optimized server-side with `sharp` before Storage upload when compression is beneficial
-- local development and smoke testing use `http://localhost:3000`
-- local dev smoke and operator checks may also use `http://127.0.0.1:3000`; `next.config.ts` explicitly allows that origin so HMR and chunk requests are not blocked
-- `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only in DigitalOcean runtime secrets
-- the MapTiler key embedded in `NEXT_PUBLIC_MAP_STYLE_URL` must be browser-safe because the value is public
-- after changing Supabase or map env vars in DigitalOcean, trigger a redeploy so Next.js rebuilds with the updated public env
-- after changing `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE`, `LOCALMAN_RUNTIME_ENVIRONMENT`, or `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`, restart the local server or trigger a new DigitalOcean deploy before validating `/admin/logs`
-- release candidates should come from a clean committed worktree; DigitalOcean builds from the tracked repository state, not local untracked route files or local `.next` output
-- schema-changing releases must apply migrations before the new app build is promoted
-- current migrations are additive; rollback should restore the previous app deploy first rather than manually removing applied schema objects unless a migration defect is confirmed
+```bash
+npm run marketplace:reset -- --dry-run
+```
 
-## Known MVP Limitations
-- Rider Connect is lightweight coordination, not Localman dispatch.
-- There is no realtime rider tracking, rider acceptance lifecycle, rider app, or delivery/order lifecycle.
-- Rider availability is based on admin-managed visibility plus structured availability windows, not a guaranteed live status.
-- WhatsApp handoff is user-controlled click-to-chat; Localman does not send WhatsApp API messages.
-- Public abuse protection is process-local and in-memory, so it is best-effort for a single app instance until a distributed limiter is added.
-- PWA install/runtime support is limited to static shell assets and an offline fallback page. Offline-first discovery, Rider Connect, ratings, maps, and dynamic marketplace caching are not implemented.
-- Real-device PWA install appearance and update behavior still need Android Chrome and iOS Add to Home Screen checks before a public PWA launch.
+Marketplace reset execute mode requires explicit confirmation:
 
-## Runtime Validation
-Before deployment or major continuation work, keep the runtime gate green:
+```bash
+npm run marketplace:reset -- --execute --confirm-marketplace-reset
+```
 
-1. apply migrations
-2. run `npm run db:check`
-3. seed the Abuja pilot dataset
-4. start the app with real Supabase env vars
-5. run:
-   - `npm run smoke:nearby`
+## Environment
 
-Exact runtime steps are documented in [docs/ops/RUNTIME_SETUP.md](/Users/frankenstein/Desktop/Local-man-main-app/local-man-platform-app/docs/ops/RUNTIME_SETUP.md).
+Required for the app:
 
-## Phase Summary
-- Phase 1 — Foundation
-- Phase 2 — Core product
-- Phase 3 — Stability & testing
-- Phase 4 — Usability & admin baseline
-- Phase 5 — UX polish & real-user iteration
-- Phase 6 — Usage signals
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` for migrations, checks, and reset tooling
 
-## Phase 6 Summary
-Phase 6 currently covers:
-- lightweight first-party public event tracking
-- usage-signal vendor ranking from tracked public behavior
-- nearby ranking aggregation executed in SQL for candidate vendor ids only
-- discovery refinement from real usage signals:
-  - open-now priority
-  - distance-first ordering within each open/closed group
-  - usage-signal ranking only as a close-distance tie-breaker
-  - clearer filter state
-  - lower-friction vendor return paths
-- lightweight client-side retention:
-  - recently viewed vendors
-  - last selected vendor memory
-  - popular vendors near you
-- simple public vendor ratings with aggregate score display, optional predefined rating signals, conservative confidence badges, and one anonymous browser rating per vendor
-- tracked events:
-  - `session_started`
-  - `first_interaction`
-  - `last_interaction`
-  - `vendor_selected`
-  - `vendor_detail_opened`
-  - `call_clicked`
-  - `directions_clicked`
-  - `search_used`
-- `filter_applied`
-- admin-only analytics route at `/admin/analytics`
-- admin-only activity route at `/admin/activity`
-- admin-only logs route at `/admin/logs`
-- Rider Connect:
-  - public rider application at `/riders/apply`
-  - admin rider management at `/admin/riders`
-  - vendor-detail `Request Rider` flow
-  - safe verified/visible/currently available rider suggestions
-  - selected-rider verification with masked plate before handoff
-  - selected-rider WhatsApp handoff
-  - unavailable reporting
-  - no payment, dispatch, order tracking, rider app, or WhatsApp API sending
-- PWA:
-  - high-definition icon/manifest groundwork
-  - production-only static-shell service worker
-  - network-owned marketplace data with no service-worker API caching
-  - offline reconnect fallback
-  - runtime version marker and focus/visibility update checks for stale-runtime diagnosis
-- summary cards, vendor performance, drop-off signals, recent user events, and dedicated recent team activity review
-- operational warning and failure review from persisted structured logs
-- non-blocking tracking writes that must never interfere with public discovery
-- backend-only analytics reads in production, with the admin analytics route handling RPC and query fallback server-side
+Recommended for production:
 
-## Admin and Agent Summary
+- `RIDER_CONNECT_HASH_SECRET`
+- `NEXT_PUBLIC_MAP_STYLE_URL`
+- `LOCALMAN_RUNTIME_ENVIRONMENT`
+- `LOCALMAN_LOG_LEVEL`
+- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE`
 
-Current admin workspace behavior:
+## Documentation Index
 
-- `admin`
-  - full dashboard
-  - analytics
-  - team management
-  - audit-log visibility
-  - operational-log visibility
-  - vendor create/edit/delete
-  - sidebar order:
-    - Dashboard
-    - Analytics
-    - Manage vendors
-    - Create vendor
-    - Riders
-    - Team access
-    - Activity
-    - Logs
-- `agent`
-  - redirected to `/admin/agent`
-  - full Create Vendor page
-  - vendor list
-  - vendor edit workspace
-  - CSV vendor intake
-  - no analytics, no team management, no audit-log access, and no operational-log access
-
-Current CSV intake behavior:
-
-- preview validates every row before insert
-- valid rows can upload even when other rows fail
-- known Abuja area values are normalized before import, for example `wuse` and `WUSE` become `Wuse`
-- unknown area values continue with a preview warning instead of blocking upload; operators should review them before import
-- the CSV template treats `area` as the high-level discovery area and keeps details such as `Zone 2, Aminu Kano Crescent` in `address`
-- duplicate detection runs:
-  - within the CSV
-  - against existing vendors
-- coordinates are currently required for CSV intake because the vendor schema and create-vendor pipeline require them
-
-## Phase 5 Summary
-Phase 5 delivered:
-- vendor card redesign
-- `Active hours:` on discovery cards
-- selected vendor highlight behavior
-- browser-back and `Back to map` restoration
-- `Apply filters` button restoration after navigation
-- morning, afternoon, and night discovery theming
-- stable MapLibre marker/card synchronization without marker-tap camera drift
-- oxblood storefront vendor markers, green selected-marker state, and blue user-location marker
-- no clustering in the current shipped map interaction model
-- trust-first location display and retry behavior
-- admin dashboard restructuring
-- fuller vendor onboarding flow
-- vendor image upload pipeline fixes
-- vendor image upload state isolation across vendor switches
-- vendor image metadata-row verification before upload success responses
-- mobile discovery bottom dock with Home, Map, and About tabs
-- mobile About accordions for Using Localman, Why Localman Exists, Install Localman as an App, Terms of Use, and Privacy Policy
-- shared Home/Map search, category, open-now, price, and radius filter state
-- mobile map refresh and empty-state UX without changing MapLibre internals
-- public discovery cache hygiene for request-key mismatches, malformed cached vendor records, and known mock/test vendor identities
-- public analytics FK hardening so stale or nonexistent vendor ids are skipped safely instead of poisoning `user_events`
-- Supabase Data API grant hardening with explicit table/function grants and fail-closed future public-schema defaults
-- featured dish add/remove management
-- simplified 12-hour admin hours input
-
-## Current Release-Gate Notes
-The latest full-platform gate verified the upload, cache, admin, public discovery, map, ratings, DB, and production build paths together. The highest-risk upload checks now include real cross-vendor uploads in both dev and local production runtime:
-- selecting an image must not reload or reset the page
-- switching vendors must clear pending file refs and local previews
-- upload requests must use the current native file input value
-- uploaded image rows must belong to the selected vendor id
-- operational upload logs must show the current filename, size, MIME type, request id, and vendor id
-- a successful upload response must require the `vendor_images` metadata row to be returned
-- mobile discovery regression checks must cover Home/Map shared search state, radius filters, mock-cache rejection, invalid analytics vendor ids, empty states, dock tab state, and map refresh state
-
-Production promotion still requires a clean committed worktree and a green dependency audit. A high-severity `npm audit` result is treated as a deployment blocker even when functional tests pass.
-
-## Working Rules
-- update docs when behavior changes
-- keep runtime and smoke checks aligned with Supabase-backed behavior
-- keep vendor slugs stable after creation unless explicitly edited
-- keep vendor cards text-first and image-free on discovery/list surfaces
+- [Architecture](docs/ARCHITECTURE.md)
+- [Discovery](docs/DISCOVERY.md)
+- [Area Governance](docs/AREA_GOVERNANCE.md)
+- [Import Pipeline](docs/IMPORT_PIPELINE.md)
+- [Marketplace Reset](docs/MARKETPLACE_RESET.md)
+- [Production Onboarding](docs/PRODUCTION_ONBOARDING.md)
+- [Release Status](docs/RELEASE_STATUS.md)
+- [API Spec](docs/api/API_SPEC.md)
+- [Analytics](docs/analytics.md)
+- [Audit Logs](docs/audit-logs.md)
+- [PWA Runtime](docs/pwa-runtime.md)
+- [Rider Connect](docs/rider-connect.md)
+- [RBAC](docs/rbac.md)
+- [Security](docs/ops/SECURITY.md)
+- [Environment Ops](docs/ops/ENV.md)
+- [Runtime Setup](docs/ops/RUNTIME_SETUP.md)
+- [QA Checklist](docs/qa-checklist.md)
+- [Testing Plan](docs/testing/TEST_PLAN.md)
+- [UI Overview](docs/ui.md)
+- [Layout](docs/layout.md)
+- [Navigation](docs/navigation.md)
+- [Vendor Cards](docs/vendor-cards.md)
+- [Release Notes](docs/RELEASE_NOTES.md)

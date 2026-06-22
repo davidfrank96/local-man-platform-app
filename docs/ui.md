@@ -87,7 +87,7 @@ The vendor list is the primary interaction surface.
 Default nearby ordering is:
 - open vendors before closed vendors
 - distance ascending inside the same open/closed group
-- usage-signal popularity only as a close-distance tie-breaker
+- usage-signal popularity after open status and distance
 - stable name/id ordering last
 
 ## Supporting UI systems

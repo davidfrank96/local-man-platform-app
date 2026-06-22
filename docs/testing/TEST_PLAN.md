@@ -60,7 +60,7 @@ Current automated coverage:
 Runtime smoke coverage:
 - `npm run smoke:nearby`
 - Requires real Supabase env vars and seeded Abuja data.
-- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, open/distance/close-popularity ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and backend Abuja fallback behavior.
+- Validates the `/api/vendors/nearby` response shape, non-empty vendor results, computed `distance_km`, computed `ranking_score`, open-first and distance-first ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, and backend Abuja fallback behavior.
 
 ### Public Discovery Logic
 Test:
@@ -73,8 +73,8 @@ Test:
 - Popular remains scoped to the active discovery dataset; Recent and Last selected remain user-centric
 - discovery sorting keeps open vendors above closed vendors
 - distance sorts ascending within each open/closed group
-- vendors with higher usage ranking can only beat similarly close vendors within the same open/closed group
-- search and category filters do not add a relevance sort that overrides open status, distance, or close-distance usage ranking
+- usage ranking is applied only after open status and distance
+- search and category filters do not add a relevance sort that overrides open status or distance
 - popular-vendor highlighting stays bounded and deterministic
 - recently viewed vendors and last selected vendor memory restore cleanly from browser storage
 - call links normalize phone numbers

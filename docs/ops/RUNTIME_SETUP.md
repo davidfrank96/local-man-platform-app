@@ -29,7 +29,7 @@ If the local app is running on another port, set `NEXT_PUBLIC_APP_URL` to that a
 The standard local development port for this repo is `http://localhost:3000`. Older references to `3002` or `3003` should be treated as temporary local overrides rather than the default.
 `http://127.0.0.1:3000` is also safe for local operator smoke checks because `next.config.ts` explicitly allows that development origin for HMR and chunk requests.
 
-The smoke test verifies precise coordinates, `distance_km`, open/distance/close-popularity nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and the backend Abuja fallback behavior used by direct API/operator checks. The public frontend release gate separately verifies that no-location/no-area users get default Wuse discovery instead of silently loading backend default-city vendors.
+The smoke test verifies precise coordinates, `distance_km`, open-first and distance-first nearby ordering, radius filtering, invalid coordinate rejection, partial coordinate rejection, compact `today_hours`, and the backend Abuja fallback behavior used by direct API/operator checks. The public frontend release gate separately verifies that no-location/no-area users get default Wuse discovery instead of silently loading backend default-city vendors.
 
 ## Required Tools
 - Node.js and npm
@@ -302,7 +302,7 @@ SMOKE_NEARBY_TIGHT_RADIUS_KM=2 npm run smoke:nearby
 The smoke test validates:
 - `lat` and `lng` precise coordinate input
 - computed `distance_km` output
-- open/distance/close-popularity discovery ordering
+- open-first and distance-first discovery ordering
 - wide radius filtering
 - tight radius filtering
 - invalid coordinate rejection
@@ -333,7 +333,7 @@ The smoke test passes only when:
 - one or more vendors are returned
 - every vendor includes `vendor_id`, `name`, `latitude`, `longitude`, `distance_km`, `is_open_now`, and `today_hours`
 - `distance_km` is numeric and non-negative
-- the response shape remains valid for the current open/distance/close-popularity discovery ranking layer
+- the response shape remains valid for the current open-first and distance-first discovery ranking layer
 - invalid and partial coordinate requests return `VALIDATION_ERROR`
 - direct backend fallback requests return `location.source = default_city`
 - public frontend no-location/no-area release checks use default Wuse coordinates instead of calling nearby without coordinates
@@ -368,7 +368,7 @@ Expected response shape:
 }
 ```
 
-With the Abuja seed data loaded, `vendors` should contain nearby vendor records with valid `distance_km` values and open/distance/close-popularity ordering.
+With the Abuja seed data loaded, `vendors` should contain nearby vendor records with valid `distance_km` values and open-first, distance-first ordering.
 
 ## Release Gate
 Deployment, pilot validation, or further UX iteration should proceed only after:

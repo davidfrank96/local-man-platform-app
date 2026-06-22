@@ -135,10 +135,10 @@ Local Man — UI Rules
 - If a vendor has no image, show a plain missing-image state instead of stock imagery.
 
 ## Discovery Clarity Rules
-- Nearby results prioritize open-now state, then distance within the same open/closed group. Real usage-signal ranking may only reorder vendors that are similarly close.
+- Nearby results prioritize open-now state, then distance within the same open/closed group. Real usage-signal ranking applies after open status and distance.
 - Search and category controls filter the candidate set; they should not imply sponsored or opaque relevance ranking.
 - Popular nearby badges may highlight top usage-signal vendors, but sponsored/promoted ranking is not implemented.
-- Distances must remain visible and truthful even when open status or close-distance usage ranking affects order.
+- Distances must remain visible and truthful because distance is a primary ordering signal after open status.
 - When filters are active, the current filter state should be obvious and easy to clear.
 - Discovery ordering helper copy may explain the current emphasis, such as open now and nearest vendors.
 - Radius filters currently support 1 km, 5 km, 10 km, and 30 km and must affect Home, Map, and desktop through the same shared filter state.

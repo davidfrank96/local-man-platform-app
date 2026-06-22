@@ -49,7 +49,7 @@ Handles:
 - mobile Home/Map/About dock navigation
 - nearby vendor loading
 - search and filters
-- open-now and distance-first discovery ordering with usage signals as close-distance tie-breakers
+- open-now and distance-first discovery ordering with usage signals after distance
 - selected vendor state through `selectedVendorId`
 - single vendor-marker system and selected preview synchronization
 - local retention surfaces for recent and last-selected vendors
@@ -129,7 +129,7 @@ Stores:
 3. The app resolves precise/approximate location, a selected discovery area, or default Wuse discovery
 4. If no user location or selected area exists, Wuse is used as the curated default discovery area
 5. `/api/vendors/nearby` returns vendors after the frontend has a real location, selected area, or default Wuse origin
-6. Discovery ordering prioritizes open-now state, then distance, with usage ranking only for close-distance ties
+6. Discovery ordering prioritizes open-now state, then distance, then usage ranking
 7. Vendors render in the list, optional MapLibre plus MapTiler map or fallback map, selected preview, and lightweight retention panels
 8. User opens vendor detail, rates a vendor, requests a rider, or takes actions such as call and directions
 
@@ -574,9 +574,9 @@ Current implementation:
 - Final discovery ordering is handled as:
   1. open-now priority
   2. distance within the same open/closed group
-  3. usage-signal `ranking_score` only when vendors are similarly close, currently within about `0.5` km
+  3. usage-signal `ranking_score`
   4. vendor name/id as stable tie-breakers
-- Search, category, price, radius, and open-now filters constrain the candidate set before ranking; search relevance does not override the open/distance/close-popularity contract.
+- Search, category, price, radius, and open-now filters constrain the candidate set before ranking; search relevance does not override the open-first and distance-first contract.
 - Sponsored/promoted ranking is not implemented.
 - Nearby discovery returns at most `50` vendors per request after filtering and ordering so the map/list payload stays bounded.
 - Default nearby radius is 10 km when `radius_km` is not provided.
