@@ -437,6 +437,173 @@ test("upload parses featured dishes and image URLs from full CSV rows", async ()
   }
 });
 
+test("CSV preview accepts leading-zero and compact-meridiem hours", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "preview",
+        rows: [
+          createFullVendorRow({
+            monday_open: "08:00 AM",
+            monday_close: "08:00PM",
+            tuesday_open: "08:30 AM",
+            tuesday_close: "05:30 PM",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.validRows.length, 1);
+    assert.equal(body.data.invalidRows.length, 0);
+    assert.equal(body.data.validRows[0].open_days, 7);
+    assert.doesNotMatch(JSON.stringify(body.data.rows[0].issues), /INVALID_TIME/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV upload allows missing vendor images with a warning and skips image insert", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            image_url_1: "",
+            image_sort_order_1: "0",
+            image_url_2: "",
+            image_sort_order_2: "1",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(body.data.failedRows.length, 0);
+    assert.equal(body.data.rows[0].image_urls.length, 0);
+    assert.ok(
+      body.data.rows[0].warnings.some((warning: { code: string }) => warning.code === "MISSING_IMAGE"),
+    );
+    assert.equal(calls.includes("POST /rest/v1/vendor_images"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV upload selects the first valid Nigerian phone from multiple numbers", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdVendorBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdVendorBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            phone: "09039036107, 08148822097",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(createdVendorBodies[0].phone_number, "2349039036107");
+    assert.ok(
+      body.data.rows[0].warnings.some((warning: { code: string }) => warning.code === "MULTIPLE_PHONES"),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV preview fails rows with no valid Nigerian phone number", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = createFetchMock([], { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "preview",
+        rows: [
+          createFullVendorRow({
+            phone: "not a phone, also bad",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.validRows.length, 0);
+    assert.equal(body.data.invalidRows.length, 1);
+    assert.match(JSON.stringify(body.data.invalidRows[0].issues), /INVALID_PHONE/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV upload preserves supplied slugs instead of overwriting them", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdVendorBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdVendorBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            vendor_name: "Mama Put Rice",
+            slug: "custom-production-slug",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(body.data.uploadedRows[0].vendor.slug, "custom-production-slug");
+    assert.equal(createdVendorBodies[0].slug, "custom-production-slug");
+    assert.equal(
+      body.data.rows[0].warnings.some((warning: { code: string }) => warning.code === "GENERATED_SLUG"),
+      false,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("CSV preview normalizes known governed areas without blocking rows", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -474,12 +641,14 @@ test("CSV preview normalizes known governed areas without blocking rows", async 
     assert.equal(body.data.rows[0].normalized_area, "Wuse");
     assert.equal(body.data.rows[0].area, "Wuse");
     assert.equal(body.data.rows[0].area_status, "known");
-    assert.equal(body.data.rows[0].warnings.length, 0);
+    assert.equal(body.data.rows[0].warnings.length, 1);
+    assert.equal(body.data.rows[0].warnings[0].code, "GENERATED_SLUG");
     assert.equal(body.data.rows[1].original_area, "JABI");
     assert.equal(body.data.rows[1].normalized_area, "Jabi");
     assert.equal(body.data.rows[1].area, "Jabi");
     assert.equal(body.data.rows[1].area_status, "known");
-    assert.equal(body.data.rows[1].warnings.length, 0);
+    assert.equal(body.data.rows[1].warnings.length, 1);
+    assert.equal(body.data.rows[1].warnings[0].code, "GENERATED_SLUG");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -521,11 +690,16 @@ test("CSV preview warns on unknown areas without blocking import eligibility", a
     assert.equal(body.data.rows[0].area, "Frank Area");
     assert.equal(body.data.rows[0].normalized_area, null);
     assert.equal(body.data.rows[0].area_status, "unknown");
-    assert.equal(body.data.rows[0].warnings.length, 1);
-    assert.match(body.data.rows[0].warnings[0].message, /Area not recognized/);
+    assert.equal(body.data.rows[0].warnings.length, 2);
+    assert.ok(
+      body.data.rows[0].warnings.some((warning: { code: string }) => warning.code === "UNKNOWN_AREA"),
+    );
     assert.equal(body.data.rows[1].area, "Wuse Zone 2");
     assert.equal(body.data.rows[1].area_status, "unknown");
-    assert.equal(body.data.rows[1].warnings.length, 1);
+    assert.equal(body.data.rows[1].warnings.length, 2);
+    assert.ok(
+      body.data.rows[1].warnings.some((warning: { code: string }) => warning.code === "UNKNOWN_AREA"),
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -566,9 +740,14 @@ test("CSV upload stores canonical governed areas and still uploads unknown areas
     assert.equal(body.data.failedRows.length, 0);
     assert.equal(createdVendorBodies[0].area, "Garki");
     assert.equal(createdVendorBodies[1].area, "Custom Market Area");
-    assert.equal(body.data.rows[0].warnings.length, 0);
-    assert.equal(body.data.rows[1].warnings.length, 1);
-    assert.match(body.data.rows[1].warnings[0].suggestedAction, /Review area/);
+    assert.equal(body.data.rows[0].warnings.length, 1);
+    assert.equal(body.data.rows[0].warnings[0].code, "GENERATED_SLUG");
+    assert.equal(body.data.rows[1].warnings.length, 2);
+    assert.ok(
+      body.data.rows[1].warnings.some((warning: { suggestedAction: string }) =>
+        /Review area/.test(warning.suggestedAction)
+      ),
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -610,7 +789,7 @@ test("preview rejects the old legacy CSV row format with helpful missing-field e
     assert.match(JSON.stringify(body.data.invalidRows[0].issues), /Missing area/);
     assert.match(JSON.stringify(body.data.invalidRows[0].issues), /At least one day of operating hours is required/);
     assert.match(JSON.stringify(body.data.invalidRows[0].issues), /At least one featured dish is required/);
-    assert.match(JSON.stringify(body.data.invalidRows[0].issues), /At least one remote image URL is required/);
+    assert.match(JSON.stringify(body.data.invalidRows[0].warnings), /MISSING_IMAGE/);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

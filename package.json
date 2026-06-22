@@ -19,6 +19,7 @@
     "db:seed:abuja": "node scripts/run-sql.mjs supabase/seed/20260422_abuja_pilot_seed.sql",
     "db:inspect:playwright": "node scripts/run-sql.mjs supabase/ops/20260507_inventory_playwright_artifacts.sql",
     "db:prune:operational-events": "node scripts/prune-operational-events.mjs",
+    "marketplace:reset": "node --experimental-strip-types scripts/marketplace-reset.ts",
     "db:cleanup:playwright": "node --experimental-strip-types scripts/cleanup-playwright-artifacts.ts",
     "smoke:nearby": "node scripts/smoke-nearby.mjs"
   },
