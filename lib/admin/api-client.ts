@@ -139,6 +139,12 @@ export type VendorIntakeRowInput = {
   vendor_name?: string | number | null;
   slug?: string | number | null;
   category?: string | number | null;
+  category_1?: string | number | null;
+  category_2?: string | number | null;
+  category_3?: string | number | null;
+  category_4?: string | number | null;
+  category_5?: string | number | null;
+  category_6?: string | number | null;
   price_band?: string | number | null;
   is_active?: string | number | null;
   area?: string | number | null;
@@ -170,6 +176,9 @@ export type VendorIntakeRowInput = {
   dish_2_name?: string | number | null;
   dish_2_description?: string | number | null;
   dish_2_image_url?: string | number | null;
+  dish_3_name?: string | number | null;
+  dish_3_description?: string | number | null;
+  dish_3_image_url?: string | number | null;
   image_url_1?: string | number | null;
   image_sort_order_1?: string | number | null;
   image_url_2?: string | number | null;
@@ -181,6 +190,7 @@ export type VendorIntakePreviewRow = {
   vendor_name: string | null;
   slug: string | null;
   category: string | null;
+  categories: string[];
   price_band: string | null;
   address: string | null;
   original_area: string | null;

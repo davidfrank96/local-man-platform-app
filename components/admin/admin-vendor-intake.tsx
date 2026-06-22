@@ -265,7 +265,7 @@ export function VendorCsvUploadPanel({
               }
 
               const missingHeaders = vendorCsvTemplateHeaders.filter(
-                (header) => !(header in parsedCsvRows[0]),
+                (header) => !(header in parsedCsvRows[0]) && !/^category_[1-6]$/.test(header),
               );
 
               if (missingHeaders.length > 0) {
@@ -279,6 +279,12 @@ export function VendorCsvUploadPanel({
                 vendor_name: row.vendor_name,
                 slug: row.slug,
                 category: row.category,
+                category_1: row.category_1,
+                category_2: row.category_2,
+                category_3: row.category_3,
+                category_4: row.category_4,
+                category_5: row.category_5,
+                category_6: row.category_6,
                 price_band: row.price_band,
                 is_active: row.is_active,
                 area: row.area,
@@ -310,6 +316,9 @@ export function VendorCsvUploadPanel({
                 dish_2_name: row.dish_2_name,
                 dish_2_description: row.dish_2_description,
                 dish_2_image_url: row.dish_2_image_url,
+                dish_3_name: row.dish_3_name,
+                dish_3_description: row.dish_3_description,
+                dish_3_image_url: row.dish_3_image_url,
                 image_url_1: row.image_url_1,
                 image_sort_order_1: row.image_sort_order_1,
                 image_url_2: row.image_url_2,

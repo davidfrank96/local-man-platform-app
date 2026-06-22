@@ -8,13 +8,14 @@ export const vendorCsvDayFields = [
   { dayOfWeek: 6, key: "sunday", label: "Sunday" },
 ] as const;
 
-export const vendorCsvDishSlots = [1, 2] as const;
+export const vendorCsvCategorySlots = [1, 2, 3, 4, 5, 6] as const;
+export const vendorCsvDishSlots = [1, 2, 3] as const;
 export const vendorCsvImageSlots = [1, 2] as const;
 
 export const vendorCsvTemplateHeaders = [
   "vendor_name",
   "slug",
-  "category",
+  ...vendorCsvCategorySlots.map((slot) => `category_${slot}`),
   "price_band",
   "description",
   "phone",
@@ -43,6 +44,11 @@ export const vendorCsvTemplateRows = [
     "Mama Put Rice",
     "",
     "rice",
+    "swallow",
+    "drinks",
+    "",
+    "",
+    "",
     "budget",
     "Budget rice and stew spot for lunch rush orders.",
     "+2348000000000",
@@ -74,6 +80,9 @@ export const vendorCsvTemplateRows = [
     "Chicken Suya Combo",
     "Grilled chicken with suya spice and fries.",
     "https://images.example.com/chicken-suya-combo.jpg",
+    "Zobo Drink",
+    "Chilled hibiscus drink.",
+    "https://images.example.com/zobo-drink.jpg",
     "https://images.example.com/mama-put-front.jpg",
     "0",
     "https://images.example.com/mama-put-counter.jpg",
