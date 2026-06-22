@@ -82,7 +82,7 @@ Status: completed
 - discovery ordering informed by usage signals:
   - open-now priority
   - distance-first ordering within the same open/closed group
-  - ranking score only as a close-distance tie-breaker
+  - ranking score after open status and distance
   - search and category remain filters, not sponsored ranking signals
 - lightweight client-side retention:
   - recently viewed vendors

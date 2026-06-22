@@ -94,9 +94,9 @@ Behavior:
 - Final discovery ordering prioritizes:
   1. vendors that are open now
   2. shorter distance within the same open/closed group
-  3. higher `ranking_score` from real usage signals only when vendors are similarly close, currently within about `0.5` km
+  3. higher `ranking_score` from real usage signals
   4. stable vendor name/id tie-breakers
-- Search and category parameters filter the candidate set; they do not add a separate relevance sort that can override open status, distance, or close-distance usage ranking.
+- Search and category parameters filter the candidate set; they do not add a separate relevance sort that can override open status or distance.
 - Sponsored/promoted ranking is not implemented.
 - Nearby results are capped to the top `50` vendors after filtering and ordering so the map/list payload remains bounded.
 - The public map currently renders those vendor results as individual markers when MapLibre is enabled.

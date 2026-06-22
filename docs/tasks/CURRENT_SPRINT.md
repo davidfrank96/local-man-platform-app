@@ -72,7 +72,7 @@ Phase 6 signal visibility is ready when:
 - Admin now includes a read-only analytics workspace for summary metrics, vendor rankings, drop-off signals, and recent user events.
 - Admin now includes a dedicated activity page for recent team activity from the protected audit-log route.
 - Admin now includes a dedicated logs page for persisted operational warnings, degraded responses, rate-limit blocks, and slow requests.
-- Nearby discovery now uses a simple weighted `ranking_score` from usage signals as a close-distance tie-breaker while keeping proximity primary within open/closed groups.
+- Nearby discovery now uses a simple weighted `ranking_score` from usage signals after open status and distance, keeping proximity primary within open/closed groups.
 - Discovery now highlights popular nearby vendors, keeps open vendors easier to find, and keeps search/category behavior as filtering rather than sponsored or opaque relevance ranking.
 - Public discovery now remembers recently viewed vendors and the last selected vendor locally in the browser.
 - Public vendor detail now supports a lightweight 1-5 star rating flow that updates aggregate vendor rating state.
