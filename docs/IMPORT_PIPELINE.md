@@ -21,7 +21,7 @@ CSV headers include:
 
 - `vendor_name`
 - `slug`
-- `category`
+- `category_1` through `category_6`
 - `price_band`
 - `description`
 - `phone`
@@ -34,7 +34,7 @@ CSV headers include:
 - `longitude`
 - `is_active`
 - daily open/close columns for Monday through Sunday
-- featured dish columns
+- featured dish columns for `dish_1`, `dish_2`, and `dish_3`
 - image URL columns
 
 ## Field Mapping
@@ -43,9 +43,9 @@ Raw XLSX forms can contain business name, contact name, street details, coordina
 
 Recommended mapping:
 
-- business display name -> `vendor_name`
+- business/vendor name collected in the field -> `vendor_name`
 - optional approved slug -> `slug`
-- primary category -> `category`
+- all source categories, in source order -> `category_1` through `category_6`
 - high-level district -> `area`
 - detailed street/market/plaza/landmark -> `address`
 - extracted coordinate values -> `latitude`, `longitude`
@@ -106,9 +106,19 @@ Supplied slugs must use lowercase words separated by hyphens.
 
 Missing vendor image URLs are warnings, not blockers.
 
-The import continues and the public app can use placeholder behavior until media is uploaded later.
+The import continues and the public app can use placeholder behavior until real vendor media is uploaded later. Batch 1 production onboarding should not use generated or fake vendor photos.
 
 If image metadata is supplied, it must be valid.
+
+## Featured Dish Policy
+
+The CSV importer supports three featured dish slots:
+
+- `dish_1_name`, `dish_1_description`, `dish_1_image_url`
+- `dish_2_name`, `dish_2_description`, `dish_2_image_url`
+- `dish_3_name`, `dish_3_description`, `dish_3_image_url`
+
+At least one featured dish is required. Production transformation should preserve all three field-collected dishes when available.
 
 ## Category Mapping
 
@@ -125,7 +135,13 @@ Current categories are:
 - `drinks`
 - `budget-friendly`
 
-The CSV intake field currently accepts one primary category. If raw data has multiple labels, choose the best primary category before import.
+The production CSV template supports multiple categories per vendor through `category_1` through `category_6`.
+
+When `category_1` is present, the importer uses `category_1` through `category_6` as the source of truth, validates each non-empty category slug, skips duplicate category values, and creates one `vendor_category_map` row for every valid unique category.
+
+The legacy `category` column remains supported for older CSVs only. If `category_1` is absent and `category` exists, the importer treats `category` as the first category.
+
+Invalid category values warn and are skipped. A row fails only when no valid category exists.
 
 ## Time Normalization
 
@@ -153,6 +169,8 @@ WARNING:
 - area normalization or unknown area
 - multiple phones with at least one valid phone
 - time formatting normalized
+- invalid category value when at least one other valid category exists
+- duplicate category values
 
 FAIL:
 
@@ -161,7 +179,7 @@ FAIL:
 - no valid Nigerian phone
 - missing coordinates
 - invalid coordinates
-- invalid category
+- no valid category
 - invalid price band
 - incomplete hours
 - no operating day

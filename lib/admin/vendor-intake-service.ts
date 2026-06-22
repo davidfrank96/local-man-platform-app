@@ -29,6 +29,7 @@ import {
   normalizeNigerianPhoneNumber,
 } from "../phone.ts";
 import {
+  vendorCsvCategorySlots,
   vendorCsvDayFields,
   vendorCsvDishSlots,
   vendorCsvImageSlots,
@@ -45,6 +46,12 @@ export type VendorIntakeRowInput = {
   vendor_name?: string | number | null;
   slug?: string | number | null;
   category?: string | number | null;
+  category_1?: string | number | null;
+  category_2?: string | number | null;
+  category_3?: string | number | null;
+  category_4?: string | number | null;
+  category_5?: string | number | null;
+  category_6?: string | number | null;
   price_band?: string | number | null;
   description?: string | number | null;
   phone?: string | number | null;
@@ -76,6 +83,9 @@ export type VendorIntakeRowInput = {
   dish_2_name?: string | number | null;
   dish_2_description?: string | number | null;
   dish_2_image_url?: string | number | null;
+  dish_3_name?: string | number | null;
+  dish_3_description?: string | number | null;
+  dish_3_image_url?: string | number | null;
   image_url_1?: string | number | null;
   image_sort_order_1?: string | number | null;
   image_url_2?: string | number | null;
@@ -87,6 +97,7 @@ export type VendorIntakePreviewRow = {
   vendor_name: string | null;
   slug: string | null;
   category: string | null;
+  categories: string[];
   price_band: string | null;
   address: string | null;
   original_area: string | null;
@@ -150,7 +161,7 @@ type PreparedVendorIntakeRow = {
   preview: VendorIntakePreviewRow;
   createVendorData: CreateVendorRequest;
   hoursData: ReplaceVendorHoursRequest;
-  categoryId: string;
+  categoryIds: string[];
   dishesData: CreateVendorDishesRequest;
   imagesData: VendorImageMetadataRequest | { images: [] };
 };
@@ -179,6 +190,45 @@ function normalizeText(value: string | number | null | undefined): string {
 function normalizeNullableText(value: string | number | null | undefined): string | null {
   const normalized = normalizeText(value);
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeCategorySlug(value: string | number | null | undefined): string | null {
+  return normalizeNullableText(value)?.toLowerCase() ?? null;
+}
+
+function collectCategoryInputs(row: VendorIntakeRowInput): Array<{
+  field: string;
+  slug: string;
+}> {
+  const hasNumberedCategoryColumns = Object.prototype.hasOwnProperty.call(row, "category_1");
+  const numberedInputs: Array<{
+    field: string;
+    slug: string;
+  }> = [];
+
+  for (const slot of vendorCsvCategorySlots) {
+    const field = `category_${slot}` as const;
+    const slug = normalizeCategorySlug(row[field]);
+
+    if (slug) {
+      numberedInputs.push({
+        field,
+        slug,
+      });
+    }
+  }
+
+  if (hasNumberedCategoryColumns) {
+    return numberedInputs;
+  }
+
+  const legacyCategory = normalizeCategorySlug(row.category);
+  return legacyCategory
+    ? [{
+        field: "category",
+        slug: legacyCategory,
+      }]
+    : [];
 }
 
 function normalizeCoordinate(value: string | number | null | undefined): number | null {
@@ -584,7 +634,10 @@ async function prepareVendorIntakeRows(
     const vendorName = normalizeNullableText(row.vendor_name);
     const providedSlug = normalizeNullableText(row.slug);
     const slug = providedSlug ?? (vendorName ? slugifyVendorName(vendorName) : null);
-    const categorySlug = normalizeNullableText(row.category)?.toLowerCase() ?? null;
+    const categoryInputs = collectCategoryInputs(row);
+    const validCategorySlugs: string[] = [];
+    const categoryIds: string[] = [];
+    const seenCategorySlugs = new Set<string>();
     const priceBand = normalizeNullableText(row.price_band)?.toLowerCase() ?? null;
     const description = normalizeNullableText(row.description);
     const phoneInput = normalizeVendorIntakePhone(row.phone);
@@ -623,15 +676,51 @@ async function prepareVendorIntakeRows(
       );
     }
 
-    if (!categorySlug) {
+    if (categoryInputs.length === 0) {
       issues.push(createIssue(rowNumber, "category", "Missing category.", "REQUIRED_FIELD"));
-    } else if (!categoryBySlug.has(categorySlug)) {
+    }
+
+    for (const { field, slug: categorySlug } of categoryInputs) {
+      const category = categoryBySlug.get(categorySlug);
+
+      if (!category) {
+        warnings.push(
+          createWarning(
+            rowNumber,
+            field,
+            `Category "${categorySlug}" does not exist and will be skipped.`,
+            "INVALID_CATEGORY_SKIPPED",
+            "Review the category value against Localman vendor categories before import.",
+          ),
+        );
+        continue;
+      }
+
+      if (seenCategorySlugs.has(category.slug)) {
+        warnings.push(
+          createWarning(
+            rowNumber,
+            field,
+            `Duplicate category "${category.slug}" was skipped.`,
+            "DUPLICATE_CATEGORY_SKIPPED",
+            "No action is needed unless this was intended to be a different category.",
+          ),
+        );
+        continue;
+      }
+
+      seenCategorySlugs.add(category.slug);
+      validCategorySlugs.push(category.slug);
+      categoryIds.push(category.id);
+    }
+
+    if (categoryInputs.length > 0 && categoryIds.length === 0) {
       issues.push(
         createIssue(
           rowNumber,
           "category",
-          `category "${categorySlug}" does not exist.`,
-          "INVALID_CATEGORY",
+          "At least one valid category is required.",
+          "NO_VALID_CATEGORY",
         ),
       );
     }
@@ -896,7 +985,8 @@ async function prepareVendorIntakeRows(
       rowNumber,
       vendor_name: vendorName,
       slug,
-      category: categorySlug,
+      category: validCategorySlugs[0] ?? null,
+      categories: validCategorySlugs,
       price_band: priceBand,
       address,
       original_area: originalArea,
@@ -926,7 +1016,7 @@ async function prepareVendorIntakeRows(
       !hoursData ||
       !dishesData ||
       !imagesData ||
-      !categorySlug
+      categoryIds.length === 0
     ) {
       invalidRows.push(preview);
       continue;
@@ -938,7 +1028,7 @@ async function prepareVendorIntakeRows(
       hoursData,
       dishesData,
       imagesData,
-      categoryId: categoryBySlug.get(categorySlug)?.id ?? "",
+      categoryIds,
     });
   }
 
@@ -977,7 +1067,9 @@ export async function uploadVendorIntake(
 
     try {
       createdVendor = await createVendor(row.createVendorData, context);
-      await attachVendorCategory({ id: createdVendor.id }, row.categoryId, context);
+      for (const categoryId of row.categoryIds) {
+        await attachVendorCategory({ id: createdVendor.id }, categoryId, context);
+      }
       await replaceVendorHours({ id: createdVendor.id }, row.hoursData, context);
       await createVendorDishes({ id: createdVendor.id }, row.dishesData, context);
       if (row.imagesData.images.length > 0) {

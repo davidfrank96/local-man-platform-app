@@ -830,6 +830,50 @@ test("supports category filtering when category mappings are present", () => {
   );
 });
 
+test("supports category filtering across multiple mappings on one vendor", () => {
+  const vendors: VendorLocationRecord[] = [
+    {
+      ...baseVendor,
+      id: "multi-category",
+      name: "Rice Swallow Drinks Vendor",
+      latitude: 0,
+      longitude: 0.01,
+      vendor_category_map: [
+        {
+          vendor_categories: {
+            slug: "rice",
+          },
+        },
+        {
+          vendor_categories: {
+            slug: "swallow",
+          },
+        },
+        {
+          vendor_categories: {
+            slug: "drinks",
+          },
+        },
+      ],
+    },
+  ];
+
+  for (const category of ["rice", "swallow", "drinks"]) {
+    const results = findNearbyVendors(vendors, {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+      category,
+    });
+
+    assert.deepEqual(
+      results.map((vendor) => vendor.vendor_id),
+      ["multi-category"],
+    );
+  }
+});
+
 test("supports overnight hours", () => {
   const open = isVendorOpenNow(
     [

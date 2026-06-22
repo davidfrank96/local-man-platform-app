@@ -9,6 +9,8 @@ import {
 const vendorId = "00000000-0000-4000-8000-000000000301";
 const riceCategoryId = "00000000-0000-4000-8000-000000000401";
 const grillCategoryId = "00000000-0000-4000-8000-000000000402";
+const swallowCategoryId = "00000000-0000-4000-8000-000000000403";
+const drinksCategoryId = "00000000-0000-4000-8000-000000000404";
 const timestamp = "2026-04-28T00:00:00+00:00";
 
 function setAdminEnv(): () => void {
@@ -80,6 +82,9 @@ function createFullVendorRow(
     dish_2_name: "Chicken Suya Combo",
     dish_2_description: "Chicken and fries",
     dish_2_image_url: "https://images.example.com/suya.jpg",
+    dish_3_name: "Zobo Drink",
+    dish_3_description: "Chilled hibiscus drink",
+    dish_3_image_url: "https://images.example.com/zobo.jpg",
     image_url_1: "https://images.example.com/vendor-front.jpg",
     image_sort_order_1: "0",
     image_url_2: "https://images.example.com/vendor-counter.jpg",
@@ -102,6 +107,9 @@ function createFetchMock(
       longitude: number;
     }>;
     createdVendorBodies?: Array<Record<string, unknown>>;
+    createdCategoryBodies?: Array<Record<string, unknown>>;
+    createdHoursBodies?: Array<Array<Record<string, unknown>>>;
+    createdDishBodies?: Array<Array<Record<string, unknown>>>;
     failCategoryInsert?: boolean;
     failDishInsert?: boolean;
     failImageInsert?: boolean;
@@ -145,6 +153,18 @@ function createFetchMock(
           id: grillCategoryId,
           name: "Grill",
           slug: "grill",
+          created_at: timestamp,
+        },
+        {
+          id: swallowCategoryId,
+          name: "Swallow",
+          slug: "swallow",
+          created_at: timestamp,
+        },
+        {
+          id: drinksCategoryId,
+          name: "Drinks",
+          slug: "drinks",
           created_at: timestamp,
         },
       ]);
@@ -191,11 +211,13 @@ function createFetchMock(
         return Response.json({ message: "category failed" }, { status: 500 });
       }
 
+      options?.createdCategoryBodies?.push(JSON.parse(String(init?.body ?? "{}")));
       return new Response(null, { status: 201 });
     }
 
     if (url.pathname === "/rest/v1/vendor_hours" && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "[]"));
+      options?.createdHoursBodies?.push(body);
       return Response.json(
         body.map((entry: Record<string, unknown>, index: number) => ({
           id: `00000000-0000-4000-8000-00000000050${index + 1}`,
@@ -216,6 +238,7 @@ function createFetchMock(
       }
 
       const body = JSON.parse(String(init?.body ?? "[]"));
+      options?.createdDishBodies?.push(body);
       return Response.json(
         body.map((entry: Record<string, unknown>, index: number) => ({
           id: `00000000-0000-4000-8000-00000000060${index + 1}`,
@@ -269,9 +292,15 @@ function createRequest(body: unknown, token = "agent-token"): Request {
 
 test("CSV template headers expose the full vendor intake contract", () => {
   assert.ok(vendorCsvTemplateHeaders.includes("price_band"));
+  assert.ok(!vendorCsvTemplateHeaders.includes("category"));
+  assert.ok(vendorCsvTemplateHeaders.includes("category_1"));
+  assert.ok(vendorCsvTemplateHeaders.includes("category_6"));
   assert.ok(vendorCsvTemplateHeaders.includes("monday_open"));
   assert.ok(vendorCsvTemplateHeaders.includes("sunday_close"));
   assert.ok(vendorCsvTemplateHeaders.includes("dish_1_name"));
+  assert.ok(vendorCsvTemplateHeaders.includes("dish_3_name"));
+  assert.ok(vendorCsvTemplateHeaders.includes("dish_3_description"));
+  assert.ok(vendorCsvTemplateHeaders.includes("dish_3_image_url"));
   assert.ok(vendorCsvTemplateHeaders.includes("image_url_1"));
   assert.ok(!vendorCsvTemplateHeaders.includes("opening_time"));
   assert.ok(!vendorCsvTemplateHeaders.includes("closing_time"));
@@ -371,6 +400,179 @@ test("agent can upload a valid full vendor intake row", async () => {
   }
 });
 
+test("CSV upload maps weekday columns to the canonical platform day indexes", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdHoursBodies: Array<Array<Record<string, unknown>>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdHoursBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            monday_open: "8:00 AM",
+            monday_close: "6:00 PM",
+            sunday_open: "",
+            sunday_close: "",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(createdHoursBodies.length, 1);
+
+    const mondayHours = createdHoursBodies[0].find((entry) => entry.day_of_week === 1);
+    const sundayHours = createdHoursBodies[0].find((entry) => entry.day_of_week === 0);
+
+    assert.deepEqual(mondayHours, {
+      vendor_id: vendorId,
+      day_of_week: 1,
+      open_time: "08:00",
+      close_time: "18:00",
+      is_closed: false,
+    });
+    assert.deepEqual(sundayHours, {
+      vendor_id: vendorId,
+      day_of_week: 0,
+      open_time: null,
+      close_time: null,
+      is_closed: true,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("upload attaches every valid unique category from numbered CSV columns", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const createdCategoryBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = createFetchMock(calls, {
+    role: "agent",
+    createdCategoryBodies,
+  });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            category: "",
+            category_1: "rice",
+            category_2: "swallow",
+            category_3: "drinks",
+            category_4: "rice",
+            category_5: "unknown-category",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(body.data.invalidRows.length, 0);
+    assert.deepEqual(
+      body.data.validRows[0].categories,
+      ["rice", "swallow", "drinks"],
+    );
+    assert.match(JSON.stringify(body.data.validRows[0].warnings), /DUPLICATE_CATEGORY_SKIPPED/);
+    assert.match(JSON.stringify(body.data.validRows[0].warnings), /INVALID_CATEGORY_SKIPPED/);
+    assert.deepEqual(
+      createdCategoryBodies.map((entry) => entry.category_id),
+      [riceCategoryId, swallowCategoryId, drinksCategoryId],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("upload ignores legacy category when numbered category columns are present", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const createdCategoryBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = createFetchMock(calls, {
+    role: "agent",
+    createdCategoryBodies,
+  });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            category: "rice",
+            category_1: "swallow",
+            category_2: "drinks",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.deepEqual(
+      body.data.validRows[0].categories,
+      ["swallow", "drinks"],
+    );
+    assert.deepEqual(
+      createdCategoryBodies.map((entry) => entry.category_id),
+      [swallowCategoryId, drinksCategoryId],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("upload fails only when no valid category exists", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [
+          createFullVendorRow({
+            category: "",
+            category_1: "unknown-category",
+            category_2: "another-unknown-category",
+          }),
+        ],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 0);
+    assert.equal(body.data.invalidRows.length, 1);
+    assert.match(JSON.stringify(body.data.invalidRows[0].issues), /NO_VALID_CATEGORY/);
+    assert.match(JSON.stringify(body.data.invalidRows[0].warnings), /INVALID_CATEGORY_SKIPPED/);
+    assert.ok(!calls.includes("POST /rest/v1/vendor_category_map"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("upload blocks invalid coordinates and invalid weekly hours before insert", async () => {
   const restoreEnv = setAdminEnv();
   const originalFetch = globalThis.fetch;
@@ -428,9 +630,43 @@ test("upload parses featured dishes and image URLs from full CSV rows", async ()
     const body = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(body.data.validRows[0].featured_dishes.length, 2);
+    assert.equal(body.data.validRows[0].featured_dishes.length, 3);
+    assert.deepEqual(body.data.validRows[0].featured_dishes, [
+      "Jollof Rice Bowl",
+      "Chicken Suya Combo",
+      "Zobo Drink",
+    ]);
     assert.equal(body.data.validRows[0].image_urls.length, 2);
     assert.equal(body.data.validRows[0].open_days, 7);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("CSV upload inserts all three featured dish slots", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdDishBodies: Array<Array<Record<string, unknown>>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdDishBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows: [createFullVendorRow()],
+      }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.uploadedRows.length, 1);
+    assert.equal(createdDishBodies.length, 1);
+    assert.deepEqual(
+      createdDishBodies[0].map((dish) => dish.dish_name),
+      ["Jollof Rice Bowl", "Chicken Suya Combo", "Zobo Drink"],
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

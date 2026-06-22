@@ -205,13 +205,13 @@ export const apiEndpoints = {
     method: "POST",
     path: "/api/admin/vendors/intake",
     requestShape:
-      "JSON body with action = preview | upload and rows containing the full vendor intake contract: vendor_name, optional slug, category, price_band, description, phone, address, area, city, state, country, latitude, longitude, optional is_active, daily open/close columns for all seven days, featured dish columns, and remote image URL columns.",
+      "JSON body with action = preview | upload and rows containing the full vendor intake contract: vendor_name, optional slug, category_1 through category_6, price_band, description, phone, address, area, city, state, country, latitude, longitude, optional is_active, daily open/close columns for all seven days, featured dish columns, and remote image URL columns. Legacy rows with category but no category_1 remain accepted.",
     responseShape:
       "Preview or upload result with row-by-row validation issues, valid rows, invalid rows, and uploaded vendor summaries when action = upload.",
     validationBoundary: [
       "admin authentication required",
       "rows must be validated before any upload begins",
-      "category must map to a real vendor category",
+      "at least one category must map to a real vendor category",
       "coordinates must be valid when provided",
       "duplicate vendors within the batch and existing vendor set must be flagged before insert",
     ],
