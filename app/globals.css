@@ -3780,8 +3780,6 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  transform: translate(-50%, -50%);
 }
 
 .maplibre-user-marker {
@@ -3865,6 +3863,8 @@ h2 {
   border-radius: 999px;
   background: #1e88e5;
   box-shadow: 0 10px 24px rgba(37, 41, 36, 0.22);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .vendor-marker {
@@ -3878,6 +3878,8 @@ h2 {
   background: var(--color-accent);
   color: white;
   box-shadow: 0 10px 24px rgba(37, 41, 36, 0.24);
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .vendor-marker__icon {
@@ -3894,6 +3896,7 @@ h2 {
   box-shadow:
     0 0 0 4px rgba(36, 97, 79, 0.24),
     0 14px 30px rgba(37, 41, 36, 0.34);
+  z-index: 100;
 }
 
 .map-legend {

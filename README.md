@@ -8,10 +8,27 @@ Localman is a location-aware marketplace for discovering local food vendors in A
 - Discovery is coordinate and radius based; vendor area labels are governance/display data, not hard filters.
 - Search and radius filters operate only against the active discovery dataset.
 - Ranking uses open vendors first, distance second, then supporting signals. The Popular tab intentionally uses popularity first.
+- The map uses MapLibre when available, with fallback marker rendering that keeps selected markers tappable in dense vendor areas.
 - Rider Connect suggests up to 3 verified, visible, currently available riders and exposes only safe public rider details before WhatsApp handoff.
 - Ratings use star scores plus predefined signals; no public free-text reviews are collected.
 - The PWA service worker caches static shell assets only and does not cache marketplace, rider, rating, search, or admin data.
 - Admin workflows include manual vendor creation, CSV vendor intake, vendor media, rider management, analytics, operational logs, and marketplace reset tooling.
+
+## Production Operations
+
+Production onboarding now follows the documented Localman import standard:
+
+```text
+Raw workbook
+-> transformation
+-> validation
+-> audit
+-> manual review
+-> import
+-> post-import validation
+```
+
+Marketplace reset, import history, import checklists, and release gates are documented under `docs/`. Do not import raw field-collection workbooks directly.
 
 ## Tech Stack
 
@@ -119,7 +136,10 @@ Recommended for production:
 - [Production Import Checklist](docs/PRODUCTION_IMPORT_CHECKLIST.md)
 - [Marketplace Reset](docs/MARKETPLACE_RESET.md)
 - [Production Onboarding](docs/PRODUCTION_ONBOARDING.md)
+- [Operations Runbook](docs/OPERATIONS.md)
+- [Master Release Gate](docs/MASTER_RELEASE_GATE.md)
 - [Release Status](docs/RELEASE_STATUS.md)
+- [Production Changelog](docs/CHANGELOG_PRODUCTION.md)
 - [API Spec](docs/api/API_SPEC.md)
 - [Analytics](docs/analytics.md)
 - [Audit Logs](docs/audit-logs.md)

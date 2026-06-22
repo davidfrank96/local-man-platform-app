@@ -1466,10 +1466,32 @@ test.describe("Phase 3 browser smoke", () => {
     expect(selectedCardStyles.boxShadow).not.toBe("none");
 
     await expectUniqueMapVendorMarkers(page);
+    if (await isMapDebugAvailable(page)) {
+      await expect.poll(
+        async () => (await readMapCameraState(page))?.lastAction ?? null,
+        { timeout: 5_000 },
+      ).toEqual({
+        kind: "easeTo",
+        source: "card",
+      });
+      await expect.poll(
+        async () => page.evaluate(() => window.__LOCAL_MAN_MAP_DEBUG__?.getZoom() ?? null),
+        { timeout: 5_000 },
+      ).toBeGreaterThanOrEqual(16);
+    }
 
     await clickVendorOnMap(page, vendorId!);
     await expect(page.locator(".selected-vendor-panel h2")).toContainText(vendorName ?? "");
     await expect(page.locator(`.discovery-map [data-vendor-id="${vendorId}"].selected`)).toBeVisible();
+    if (await isMapDebugAvailable(page)) {
+      await expect.poll(
+        async () => (await readMapCameraState(page))?.lastAction ?? null,
+        { timeout: 5_000 },
+      ).toEqual({
+        kind: "easeTo",
+        source: "map",
+      });
+    }
 
     const mapLibreSurface = page.locator('.discovery-map[data-map-mode="maplibre"]');
     if (await mapLibreSurface.count()) {
@@ -1766,6 +1788,96 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.locator(".vendor-card").first().getByRole("button", { name: /Preview .* on map/ }).click();
     await expect(page.locator(".vendor-card").first()).toHaveClass(/selected/);
+  });
+
+  test("fallback map keeps selected markers topmost and tappable on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primePublicLocation(page);
+    let blockedStyleRequest = false;
+
+    await page.route("**/*", async (route) => {
+      const requestUrl = route.request().url();
+      if (
+        requestUrl.includes("style.json") ||
+        requestUrl.includes("tile.openstreetmap.org") ||
+        requestUrl.includes("maptiler")
+      ) {
+        blockedStyleRequest = true;
+        await route.abort();
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await openMobileDiscoveryTab(page, "map");
+    await expect.poll(async () => blockedStyleRequest).toBe(true);
+    await expect(page.locator('.discovery-map[data-map-mode="fallback"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    const selectedMarker = page.locator(
+      '.discovery-map[data-map-mode="fallback"] .vendor-marker.selected',
+    );
+    await expect(selectedMarker).toBeVisible();
+    const selectedVendorId = await selectedMarker.getAttribute("data-vendor-id");
+    const selectedVendorName = await page.locator(".selected-vendor-panel h2").textContent();
+    expect(selectedVendorId).toBeTruthy();
+    expect(selectedVendorName).toBeTruthy();
+
+    const topSelectedVendorId = await selectedMarker.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const topElement = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+
+      return topElement
+        ?.closest(".vendor-marker")
+        ?.getAttribute("data-vendor-id");
+    });
+    expect(topSelectedVendorId).toBe(selectedVendorId);
+
+    await selectedMarker.click();
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(
+      selectedVendorName?.trim() ?? "",
+    );
+
+    await openMobileDiscoveryTab(page, "home");
+    const nextCard = page.locator(`.vendor-card:not([data-vendor-id="${selectedVendorId}"])`).first();
+    const nextVendorId = await nextCard.getAttribute("data-vendor-id");
+    const nextVendorName = await nextCard.locator("h3").textContent();
+    expect(nextVendorId).toBeTruthy();
+    expect(nextVendorName).toBeTruthy();
+    await page
+      .locator(`.vendor-card[data-vendor-id="${nextVendorId}"]`)
+      .getByRole("button", { name: /Preview .* on map/ })
+      .click();
+    await openMobileDiscoveryTab(page, "map");
+
+    const nextSelectedMarker = page.locator(
+      '.discovery-map[data-map-mode="fallback"] .vendor-marker.selected',
+    );
+    await expect(nextSelectedMarker).toHaveAttribute("data-vendor-id", nextVendorId ?? "");
+
+    const nextTopSelectedVendorId = await nextSelectedMarker.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const topElement = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+
+      return topElement
+        ?.closest(".vendor-marker")
+        ?.getAttribute("data-vendor-id");
+    });
+    expect(nextTopSelectedVendorId).toBe(nextVendorId);
+
+    await nextSelectedMarker.click();
+    await expect(page.locator(".selected-vendor-panel h2")).toContainText(
+      nextVendorName?.trim() ?? "",
+    );
   });
 
   test("MapLibre stays active when non-critical tile or glyph requests fail", async ({ page }) => {

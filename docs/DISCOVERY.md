@@ -63,18 +63,31 @@ Clearing search restores the current active discovery dataset.
 
 ## Ranking
 
-Default, GPS, selected-area, and search result ordering use:
+Default, GPS, and selected-area ordering use:
 
 1. Open vendors
 2. Distance
-3. Supporting ranking factors
+3. Popularity
+4. Stable tie-breakers
 
-Search relevance does not override distance ordering in normal discovery results.
+Search result ordering uses:
+
+1. Open vendors
+2. Distance
+3. Search relevance
+4. Popularity
+5. Stable tie-breakers
+
+Search relevance does not create distance inversions. A farther open vendor should not appear before a nearer open vendor because of popularity or relevance.
 
 Popular intentionally uses:
 
 1. Popularity
 2. Distance
+
+## Map Relationship
+
+The map uses the same active discovery dataset as the list. Selecting a vendor card or marker should keep the selected card, selected marker, and camera target aligned to the same vendor id. MapLibre receives marker and camera coordinates in `[longitude, latitude]` order.
 
 ## Recent And Last Viewed
 
