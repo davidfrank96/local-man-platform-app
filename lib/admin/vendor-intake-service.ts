@@ -25,6 +25,10 @@ import { slugifyVendorName } from "./slug.ts";
 import { calculateDistanceKm } from "../location/distance.ts";
 import { normalizeArea } from "../location/area-governance.ts";
 import {
+  isNigerianPhoneNumber,
+  normalizeNigerianPhoneNumber,
+} from "../phone.ts";
+import {
   vendorCsvDayFields,
   vendorCsvDishSlots,
   vendorCsvImageSlots,
@@ -148,7 +152,7 @@ type PreparedVendorIntakeRow = {
   hoursData: ReplaceVendorHoursRequest;
   categoryId: string;
   dishesData: CreateVendorDishesRequest;
-  imagesData: VendorImageMetadataRequest;
+  imagesData: VendorImageMetadataRequest | { images: [] };
 };
 
 type VendorIntakeContext = {
@@ -217,6 +221,42 @@ function normalizeBoolean(
   }
 
   return Number.NaN;
+}
+
+function normalizeVendorIntakePhone(
+  value: string | number | null | undefined,
+): {
+  phone: string | null;
+  hasInput: boolean;
+  sawMultipleCandidates: boolean;
+  hadInvalidCandidates: boolean;
+} {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return {
+      phone: null,
+      hasInput: false,
+      sawMultipleCandidates: false,
+      hadInvalidCandidates: false,
+    };
+  }
+
+  const candidates = normalized
+    .split(/[,\n;/|]+|\s{2,}/g)
+    .map((candidate) => candidate.trim())
+    .filter(Boolean);
+  const phoneCandidates = candidates.length > 0 ? candidates : [normalized];
+  const firstValid = phoneCandidates
+    .map((candidate) => normalizeNigerianPhoneNumber(candidate))
+    .find((candidate): candidate is string => candidate !== null) ?? null;
+
+  return {
+    phone: firstValid,
+    hasInput: true,
+    sawMultipleCandidates: phoneCandidates.length > 1,
+    hadInvalidCandidates: phoneCandidates.some((candidate) => !isNigerianPhoneNumber(candidate)),
+  };
 }
 
 function normalizeLocationKey(value: string | null): string | null {
@@ -433,26 +473,15 @@ function createImagesDraft(
   row: VendorIntakeRowInput,
   rowNumber: number,
   issues: VendorIntakeIssue[],
-): VendorImageMetadataRequest | null {
+  warnings: VendorIntakeWarning[],
+): VendorImageMetadataRequest | { images: [] } | null {
   const images = vendorCsvImageSlots.flatMap((slot) => {
     const imageUrl = normalizeNullableText(row[`image_url_${slot}` as keyof VendorIntakeRowInput]);
     const sortOrderValue = normalizeInteger(
       row[`image_sort_order_${slot}` as keyof VendorIntakeRowInput],
     );
 
-    if (!imageUrl && sortOrderValue === null) {
-      return [];
-    }
-
     if (!imageUrl) {
-      issues.push(
-        createIssue(
-          rowNumber,
-          `image_url_${slot}`,
-          `image_url_${slot} is required when image_sort_order_${slot} is provided.`,
-          "REQUIRED_FIELD",
-        ),
-      );
       return [];
     }
 
@@ -478,15 +507,16 @@ function createImagesDraft(
   });
 
   if (images.length === 0) {
-    issues.push(
-      createIssue(
+    warnings.push(
+      createWarning(
         rowNumber,
         "image_url_1",
-        "At least one remote image URL is required.",
-        "REQUIRED_IMAGE",
+        "No vendor image provided; import will continue and the app can use a placeholder until media is uploaded.",
+        "MISSING_IMAGE",
+        "Upload vendor media after import.",
       ),
     );
-    return null;
+    return { images: [] };
   }
 
   return vendorImageMetadataRequestSchema.parse({ images });
@@ -557,7 +587,8 @@ async function prepareVendorIntakeRows(
     const categorySlug = normalizeNullableText(row.category)?.toLowerCase() ?? null;
     const priceBand = normalizeNullableText(row.price_band)?.toLowerCase() ?? null;
     const description = normalizeNullableText(row.description);
-    const phone = normalizeNullableText(row.phone);
+    const phoneInput = normalizeVendorIntakePhone(row.phone);
+    const phone = phoneInput.phone;
     const address = normalizeNullableText(row.address);
     const originalArea = normalizeNullableText(row.area);
     const normalizedArea = originalArea ? normalizeArea(originalArea) : null;
@@ -580,6 +611,16 @@ async function prepareVendorIntakeRows(
 
     if (providedSlug && !slug) {
       issues.push(createIssue(rowNumber, "slug", "Invalid slug.", "INVALID_SLUG"));
+    } else if (!providedSlug && slug) {
+      warnings.push(
+        createWarning(
+          rowNumber,
+          "slug",
+          "No slug supplied; Localman generated one from the vendor name.",
+          "GENERATED_SLUG",
+          "Review generated slug before import if a custom slug is required.",
+        ),
+      );
     }
 
     if (!categorySlug) {
@@ -612,8 +653,37 @@ async function prepareVendorIntakeRows(
       issues.push(createIssue(rowNumber, "description", "Missing description.", "REQUIRED_FIELD"));
     }
 
-    if (!phone) {
+    if (!phoneInput.hasInput) {
       issues.push(createIssue(rowNumber, "phone", "Missing phone.", "REQUIRED_FIELD"));
+    } else if (!phone) {
+      issues.push(
+        createIssue(
+          rowNumber,
+          "phone",
+          "Provide at least one valid Nigerian phone number.",
+          "INVALID_PHONE",
+        ),
+      );
+    } else if (phoneInput.sawMultipleCandidates) {
+      warnings.push(
+        createWarning(
+          rowNumber,
+          "phone",
+          "Multiple phone numbers provided; using the first valid Nigerian phone number.",
+          "MULTIPLE_PHONES",
+          "Confirm the primary vendor phone before import.",
+        ),
+      );
+    } else if (phoneInput.hadInvalidCandidates) {
+      warnings.push(
+        createWarning(
+          rowNumber,
+          "phone",
+          "Phone value was normalized to a valid Nigerian phone number.",
+          "PHONE_NORMALIZED",
+          "Review phone formatting before import if needed.",
+        ),
+      );
     }
 
     if (!address) {
@@ -718,7 +788,7 @@ async function prepareVendorIntakeRows(
     const hoursDraft = createHoursDraft(row, rowNumber, issues);
     const openDays = hoursDraft.filter((entry) => !entry.is_closed).length;
     const dishesData = createDishesDraft(row, rowNumber, issues);
-    const imagesData = createImagesDraft(row, rowNumber, issues);
+    const imagesData = createImagesDraft(row, rowNumber, issues, warnings);
 
     if (slug) {
       const matchingRows = (sluggedRows.get(slug) ?? []).filter((candidate) => {
@@ -910,7 +980,9 @@ export async function uploadVendorIntake(
       await attachVendorCategory({ id: createdVendor.id }, row.categoryId, context);
       await replaceVendorHours({ id: createdVendor.id }, row.hoursData, context);
       await createVendorDishes({ id: createdVendor.id }, row.dishesData, context);
-      await createVendorImages({ id: createdVendor.id }, row.imagesData, context);
+      if (row.imagesData.images.length > 0) {
+        await createVendorImages({ id: createdVendor.id }, row.imagesData, context);
+      }
 
       uploadedRows.push({
         rowNumber: row.preview.rowNumber,

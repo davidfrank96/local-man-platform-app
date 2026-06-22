@@ -28,7 +28,7 @@ export function parseAdminTimeInputTo24Hour(
     return null;
   }
 
-  const match = normalizedInput.match(/^([1-9]|1[0-2])(?::([0-5]\d))?\s*([AP]M)$/);
+  const match = normalizedInput.match(/^(0?[1-9]|1[0-2])(?::([0-5]\d))?\s*([AP]M)$/);
 
   if (!match) {
     throw new Error("Use format like 9 AM or 8:30 PM.");
