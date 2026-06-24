@@ -93,7 +93,11 @@ const SELECTED_VENDOR_SOURCE_ID = "localman-selected-vendor";
 const VENDOR_CLUSTERS_LAYER_ID = "vendor-clusters";
 const VENDOR_CLUSTER_COUNT_LAYER_ID = "vendor-cluster-count";
 const VENDOR_UNCLUSTERED_LAYER_ID = "vendor-unclustered";
+const VENDOR_UNCLUSTERED_ICON_LAYER_ID = "vendor-unclustered-icon";
 const VENDOR_SELECTED_OVERLAY_LAYER_ID = "vendor-selected-overlay";
+const VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID = "vendor-selected-overlay-icon";
+const VENDOR_STOREFRONT_ICON_IMAGE_ID = "localman-storefront-marker";
+const VENDOR_STOREFRONT_ICON_PIXEL_SIZE = 28;
 const MOBILE_MAP_MEDIA_QUERY = "(max-width: 767px)";
 
 const THEME_PALETTES: Record<NonNullable<VendorMapProps["timeTheme"]> | "default", ThemePalette> = {
@@ -289,6 +293,50 @@ function getGeoJsonSource(
   return source && "setData" in source ? source as GeoJSONSourceInstance : null;
 }
 
+function createStorefrontIconImage(): ImageData {
+  const canvas = document.createElement("canvas");
+  canvas.width = VENDOR_STOREFRONT_ICON_PIXEL_SIZE;
+  canvas.height = VENDOR_STOREFRONT_ICON_PIXEL_SIZE;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return new ImageData(
+      VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+      VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+    );
+  }
+
+  context.fillStyle = "#fffdf8";
+  context.fillRect(8, 14, 12, 9);
+  context.fillRect(7, 8, 14, 4);
+  context.fillRect(6, 12, 4, 3);
+  context.fillRect(12, 12, 4, 3);
+  context.fillRect(18, 12, 4, 3);
+  context.fillRect(9, 6, 10, 3);
+
+  context.globalCompositeOperation = "destination-out";
+  context.fillRect(10, 16, 3, 3);
+  context.fillRect(15, 16, 3, 7);
+  context.globalCompositeOperation = "source-over";
+
+  return context.getImageData(
+    0,
+    0,
+    VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+    VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+  );
+}
+
+function ensureStorefrontIconImage(map: MapInstance) {
+  if (map.hasImage(VENDOR_STOREFRONT_ICON_IMAGE_ID)) {
+    return;
+  }
+
+  map.addImage(VENDOR_STOREFRONT_ICON_IMAGE_ID, createStorefrontIconImage(), {
+    pixelRatio: 2,
+  });
+}
+
 function syncVendorSourceData(
   map: MapInstance,
   vendorData: VendorFeatureCollection,
@@ -320,6 +368,8 @@ function ensureVendorClusterLayers(
       data: selectedVendorData,
     });
   }
+
+  ensureStorefrontIconImage(map);
 
   if (!map.getLayer(VENDOR_CLUSTERS_LAYER_ID)) {
     map.addLayer({
@@ -397,6 +447,21 @@ function ensureVendorClusterLayers(
     });
   }
 
+  if (!map.getLayer(VENDOR_UNCLUSTERED_ICON_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_UNCLUSTERED_ICON_LAYER_ID,
+      type: "symbol",
+      source: VENDOR_SOURCE_ID,
+      filter: ["!", ["has", "point_count"]],
+      layout: {
+        "icon-image": VENDOR_STOREFRONT_ICON_IMAGE_ID,
+        "icon-size": isMobile ? 1.08 : 1,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+    });
+  }
+
   if (!map.getLayer(VENDOR_SELECTED_OVERLAY_LAYER_ID)) {
     map.addLayer({
       id: VENDOR_SELECTED_OVERLAY_LAYER_ID,
@@ -409,6 +474,20 @@ function ensureVendorClusterLayers(
         "circle-stroke-width": 4,
         "circle-opacity": 0.98,
         "circle-stroke-opacity": 1,
+      },
+    });
+  }
+
+  if (!map.getLayer(VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID,
+      type: "symbol",
+      source: SELECTED_VENDOR_SOURCE_ID,
+      layout: {
+        "icon-image": VENDOR_STOREFRONT_ICON_IMAGE_ID,
+        "icon-size": isMobile ? 1.18 : 1.1,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
       },
     });
   }
@@ -494,7 +573,9 @@ function installMapDebug(
       return map
         .queryRenderedFeatures(point, {
           layers: [
+            VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID,
             VENDOR_SELECTED_OVERLAY_LAYER_ID,
+            VENDOR_UNCLUSTERED_ICON_LAYER_ID,
             VENDOR_UNCLUSTERED_LAYER_ID,
             VENDOR_CLUSTERS_LAYER_ID,
           ],
