@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { POST as vendorIntakeRoute } from "../app/api/admin/vendors/intake/route.ts";
+import {
+  POST as vendorIntakeRoute,
+  VENDOR_INTAKE_MAX_JSON_BODY_BYTES,
+} from "../app/api/admin/vendors/intake/route.ts";
 import {
   vendorCsvTemplateHeaders,
   vendorCsvTemplateRows,
 } from "../lib/admin/vendor-intake-contract.ts";
+import { DEFAULT_MAX_JSON_BODY_BYTES } from "../lib/api/validation.ts";
 
 const vendorId = "00000000-0000-4000-8000-000000000301";
 const riceCategoryId = "00000000-0000-4000-8000-000000000401";
@@ -290,6 +294,46 @@ function createRequest(body: unknown, token = "agent-token"): Request {
   });
 }
 
+function createJsonRequestWithContentLength(
+  body: string,
+  contentLength: number,
+  token = "agent-token",
+): Request {
+  return new Request("http://localhost/api/admin/vendors/intake", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-length": String(contentLength),
+      "content-type": "application/json",
+    },
+    body,
+  });
+}
+
+function createSizedPreviewRequestBody(): string {
+  const rows = Array.from({ length: 48 }, (_, index) =>
+    createFullVendorRow({
+      row_number: index + 2,
+      vendor_name: `Large Preview Vendor ${index + 1}`,
+      slug: `large-preview-vendor-${index + 1}`,
+      description: `Batch preview payload filler ${String(index + 1).padStart(2, "0")} ${"rice ".repeat(20)}`,
+    })
+  );
+  const body = JSON.stringify({ action: "preview", rows });
+  const byteLength = new TextEncoder().encode(body).byteLength;
+
+  assert.ok(
+    byteLength > DEFAULT_MAX_JSON_BODY_BYTES,
+    `Expected preview fixture to exceed shared default limit, got ${byteLength}`,
+  );
+  assert.ok(
+    byteLength < VENDOR_INTAKE_MAX_JSON_BODY_BYTES,
+    `Expected preview fixture to fit intake limit, got ${byteLength}`,
+  );
+
+  return body;
+}
+
 test("CSV template headers expose the full vendor intake contract", () => {
   assert.ok(vendorCsvTemplateHeaders.includes("price_band"));
   assert.ok(!vendorCsvTemplateHeaders.includes("category"));
@@ -314,6 +358,66 @@ test("CSV template models area as high-level area and address as detailed locali
   assert.equal(templateRow[areaIndex], "Wuse");
   assert.match(String(templateRow[addressIndex]), /Zone 2/);
   assert.match(String(templateRow[addressIndex]), /Wuse/);
+});
+
+test("vendor intake preview accepts payloads above shared default but below intake limit", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+  const body = createSizedPreviewRequestBody();
+
+  try {
+    const response = await vendorIntakeRoute(
+      createJsonRequestWithContentLength(
+        body,
+        new TextEncoder().encode(body).byteLength,
+      ),
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.data.totalRows, 48);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+      "GET /rest/v1/vendor_categories",
+      "GET /rest/v1/vendors",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("vendor intake rejects payloads above the route-specific intake limit", async () => {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = createFetchMock(calls, { role: "agent" });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createJsonRequestWithContentLength(
+        "{}",
+        VENDOR_INTAKE_MAX_JSON_BODY_BYTES + 1,
+      ),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 413);
+    assert.equal(body.success, false);
+    assert.equal(body.error.message, "Request body is too large.");
+    assert.equal(body.error.details.max_bytes, VENDOR_INTAKE_MAX_JSON_BODY_BYTES);
+    assert.deepEqual(calls, [
+      "GET /auth/v1/user",
+      "GET /rest/v1/admin_users",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
 });
 
 test("agent can preview full vendor intake rows and receives row-level validation errors", async () => {
