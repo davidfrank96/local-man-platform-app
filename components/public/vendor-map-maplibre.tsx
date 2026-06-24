@@ -13,7 +13,21 @@ import {
   type NearbyVendor,
   type VendorMapProps,
 } from "./vendor-map-types.ts";
-import { createStoreMarkerIconElement } from "./vendor-marker-icon.tsx";
+import {
+  CARD_SELECTION_ANIMATION_MS,
+  CLUSTER_EXPANSION_ANIMATION_MS,
+  MAP_SELECTION_ANIMATION_MS,
+  VENDOR_CLUSTER_MAX_ZOOM,
+  createSelectedVendorFeatureCollection,
+  createVendorFeatureCollection,
+  getClusterExpansionCameraOffset,
+  getSameLocationGroupForVendor,
+  getSameLocationGroups,
+  getSelectionCameraOffset,
+  getVendorClusterRadius,
+  type SameLocationGroup,
+  type VendorFeatureCollection,
+} from "./vendor-map-clustering.ts";
 import {
   getSelectedVendorCameraTarget,
   getVendorMapCenter,
@@ -31,11 +45,7 @@ type MapLibreVendorMapProps = VendorMapProps & {
 type MapLibreModule = typeof import("maplibre-gl");
 type MapInstance = InstanceType<MapLibreModule["Map"]>;
 type MarkerInstance = InstanceType<MapLibreModule["Marker"]>;
-
-type VendorMarkerEntry = {
-  element: HTMLButtonElement;
-  marker: MarkerInstance;
-};
+type GeoJSONSourceInstance = InstanceType<MapLibreModule["GeoJSONSource"]>;
 
 type ThemePalette = {
   background: string;
@@ -77,8 +87,18 @@ const MAPLIBRE_LOAD_TIMEOUT_MS = 8_000;
 const DEFAULT_VENDOR_MAP_ZOOM = 11.5;
 const INITIAL_MAP_FIT_BOUNDS_PADDING = 28;
 const INTERACTIVE_MAP_FIT_BOUNDS_PADDING = 44;
-const MAPLIBRE_CONTAINER_READY_TIMEOUT_MS = 2_500;
 const MAPLIBRE_CONTAINER_RETRY_DELAY_MS = 120;
+const VENDOR_SOURCE_ID = "localman-vendors";
+const SELECTED_VENDOR_SOURCE_ID = "localman-selected-vendor";
+const VENDOR_CLUSTERS_LAYER_ID = "vendor-clusters";
+const VENDOR_CLUSTER_COUNT_LAYER_ID = "vendor-cluster-count";
+const VENDOR_UNCLUSTERED_LAYER_ID = "vendor-unclustered";
+const VENDOR_UNCLUSTERED_ICON_LAYER_ID = "vendor-unclustered-icon";
+const VENDOR_SELECTED_OVERLAY_LAYER_ID = "vendor-selected-overlay";
+const VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID = "vendor-selected-overlay-icon";
+const VENDOR_STOREFRONT_ICON_IMAGE_ID = "localman-storefront-marker";
+const VENDOR_STOREFRONT_ICON_PIXEL_SIZE = 28;
+const MOBILE_MAP_MEDIA_QUERY = "(max-width: 767px)";
 
 const THEME_PALETTES: Record<NonNullable<VendorMapProps["timeTheme"]> | "default", ThemePalette> = {
   default: { background: "#edf3ee" },
@@ -232,13 +252,7 @@ async function waitForRenderableContainer(
   containerRef: MutableRefObject<HTMLDivElement | null>,
   isCancelled: () => boolean,
 ) {
-  const startedAt = window.performance.now();
-
-  while (window.performance.now() - startedAt < MAPLIBRE_CONTAINER_READY_TIMEOUT_MS) {
-    if (isCancelled()) {
-      return null;
-    }
-
+  while (!isCancelled()) {
     const container = containerRef.current;
     if (hasRenderableContainer(container)) {
       return container;
@@ -262,99 +276,231 @@ async function waitForRenderableContainer(
   return null;
 }
 
-function createVendorMarkerEntry(
-  maplibre: MapLibreModule,
-  map: MapInstance,
-  latestSelectVendorRef: MutableRefObject<VendorMapProps["onSelectVendor"]>,
-  vendor: NearbyVendor,
-  center: VendorMapCenter,
-): VendorMarkerEntry {
-  const element = document.createElement("button");
-  element.type = "button";
-  element.className = "maplibre-vendor-marker";
-  element.setAttribute("aria-label", `Select ${vendor.name}`);
-  element.setAttribute("data-vendor-id", vendor.vendor_id);
-  element.title = vendor.name;
+function isMobileMapViewport(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-  const pin = document.createElement("span");
-  pin.className = "maplibre-vendor-marker__pin";
-  pin.setAttribute("aria-hidden", "true");
-
-  pin.append(createStoreMarkerIconElement(document, "maplibre-vendor-marker__icon"));
-  element.append(pin);
-
-  element.addEventListener("click", () => {
-    latestSelectVendorRef.current(vendor.vendor_id, "map");
-  });
-
-  const marker = new maplibre.Marker({
-    element,
-    anchor: "center",
-  })
-    .setLngLat(center)
-    .addTo(map);
-
-  return {
-    element,
-    marker,
-  };
+  return window.matchMedia(MOBILE_MAP_MEDIA_QUERY).matches;
 }
 
-function syncVendorMarkers(
-  maplibre: MapLibreModule,
+function getGeoJsonSource(
   map: MapInstance,
-  markersRef: MutableRefObject<Record<string, VendorMarkerEntry>>,
-  latestSelectVendorRef: MutableRefObject<VendorMapProps["onSelectVendor"]>,
-  vendors: NearbyVendor[],
-  selectedVendorId: string | null,
+  sourceId: string,
+): GeoJSONSourceInstance | null {
+  const source = map.getSource(sourceId);
+
+  return source && "setData" in source ? source as GeoJSONSourceInstance : null;
+}
+
+function createStorefrontIconImage(): ImageData {
+  const canvas = document.createElement("canvas");
+  canvas.width = VENDOR_STOREFRONT_ICON_PIXEL_SIZE;
+  canvas.height = VENDOR_STOREFRONT_ICON_PIXEL_SIZE;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return new ImageData(
+      VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+      VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+    );
+  }
+
+  context.fillStyle = "#fffdf8";
+  context.fillRect(8, 14, 12, 9);
+  context.fillRect(7, 8, 14, 4);
+  context.fillRect(6, 12, 4, 3);
+  context.fillRect(12, 12, 4, 3);
+  context.fillRect(18, 12, 4, 3);
+  context.fillRect(9, 6, 10, 3);
+
+  context.globalCompositeOperation = "destination-out";
+  context.fillRect(10, 16, 3, 3);
+  context.fillRect(15, 16, 3, 7);
+  context.globalCompositeOperation = "source-over";
+
+  return context.getImageData(
+    0,
+    0,
+    VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+    VENDOR_STOREFRONT_ICON_PIXEL_SIZE,
+  );
+}
+
+function ensureStorefrontIconImage(map: MapInstance) {
+  if (map.hasImage(VENDOR_STOREFRONT_ICON_IMAGE_ID)) {
+    return;
+  }
+
+  map.addImage(VENDOR_STOREFRONT_ICON_IMAGE_ID, createStorefrontIconImage(), {
+    pixelRatio: 2,
+  });
+}
+
+function syncVendorSourceData(
+  map: MapInstance,
+  vendorData: VendorFeatureCollection,
+  selectedVendorData: VendorFeatureCollection,
 ) {
-  const mappableVendors = vendors.filter((vendor) => getVendorMapCenter(vendor) !== null);
-  const nextVendorIds = new Set(mappableVendors.map((vendor) => vendor.vendor_id));
-
-  for (const [vendorId, entry] of Object.entries(markersRef.current)) {
-    if (nextVendorIds.has(vendorId)) {
-      continue;
-    }
-
-    entry.marker.remove();
-    delete markersRef.current[vendorId];
-  }
-
-  mappableVendors.forEach((vendor) => {
-    const center = getVendorMapCenter(vendor);
-    if (!center) {
-      return;
-    }
-
-    const existingEntry = markersRef.current[vendor.vendor_id];
-    const entry =
-      existingEntry ??
-      createVendorMarkerEntry(maplibre, map, latestSelectVendorRef, vendor, center);
-
-    if (!existingEntry) {
-      markersRef.current[vendor.vendor_id] = entry;
-    }
-
-    entry.marker.setLngLat(center);
-    entry.element.classList.toggle("selected", vendor.vendor_id === selectedVendorId);
-    entry.element.setAttribute("aria-pressed", vendor.vendor_id === selectedVendorId ? "true" : "false");
-    entry.element.style.zIndex = vendor.vendor_id === selectedVendorId ? "2" : "1";
-  });
+  getGeoJsonSource(map, VENDOR_SOURCE_ID)?.setData(vendorData);
+  getGeoJsonSource(map, SELECTED_VENDOR_SOURCE_ID)?.setData(selectedVendorData);
 }
 
-function removeVendorMarkers(markersRef: MutableRefObject<Record<string, VendorMarkerEntry>>) {
-  for (const entry of Object.values(markersRef.current)) {
-    entry.marker.remove();
+function ensureVendorClusterLayers(
+  map: MapInstance,
+  vendorData: VendorFeatureCollection,
+  selectedVendorData: VendorFeatureCollection,
+  isMobile: boolean,
+) {
+  if (!map.getSource(VENDOR_SOURCE_ID)) {
+    map.addSource(VENDOR_SOURCE_ID, {
+      type: "geojson",
+      data: vendorData,
+      cluster: true,
+      clusterRadius: getVendorClusterRadius(isMobile),
+      clusterMaxZoom: VENDOR_CLUSTER_MAX_ZOOM,
+    });
   }
 
-  markersRef.current = {};
+  if (!map.getSource(SELECTED_VENDOR_SOURCE_ID)) {
+    map.addSource(SELECTED_VENDOR_SOURCE_ID, {
+      type: "geojson",
+      data: selectedVendorData,
+    });
+  }
+
+  ensureStorefrontIconImage(map);
+
+  if (!map.getLayer(VENDOR_CLUSTERS_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_CLUSTERS_LAYER_ID,
+      type: "circle",
+      source: VENDOR_SOURCE_ID,
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-color": [
+          "step",
+          ["get", "point_count"],
+          "#24614f",
+          10,
+          "#b86b1d",
+          50,
+          "#793f2d",
+        ],
+        "circle-radius": [
+          "step",
+          ["get", "point_count"],
+          isMobile ? 20 : 18,
+          10,
+          isMobile ? 26 : 23,
+          50,
+          isMobile ? 32 : 28,
+        ],
+        "circle-stroke-color": "#fffdf8",
+        "circle-stroke-width": 2,
+        "circle-opacity": 0.95,
+      },
+    });
+  }
+
+  if (!map.getLayer(VENDOR_CLUSTER_COUNT_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_CLUSTER_COUNT_LAYER_ID,
+      type: "symbol",
+      source: VENDOR_SOURCE_ID,
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": ["get", "point_count_abbreviated"],
+        "text-size": isMobile ? 13 : 12,
+        "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+        "text-allow-overlap": true,
+      },
+      paint: {
+        "text-color": "#fffdf8",
+      },
+    });
+  }
+
+  if (!map.getLayer(VENDOR_UNCLUSTERED_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_UNCLUSTERED_LAYER_ID,
+      type: "circle",
+      source: VENDOR_SOURCE_ID,
+      filter: ["!", ["has", "point_count"]],
+      paint: {
+        "circle-color": [
+          "case",
+          [">", ["get", "sameLocationCount"], 1],
+          "#b86b1d",
+          "#c7582c",
+        ],
+        "circle-radius": [
+          "case",
+          [">", ["get", "sameLocationCount"], 1],
+          isMobile ? 18 : 16,
+          isMobile ? 16 : 14,
+        ],
+        "circle-stroke-color": "#fffdf8",
+        "circle-stroke-width": 2,
+        "circle-opacity": 0.96,
+      },
+    });
+  }
+
+  if (!map.getLayer(VENDOR_UNCLUSTERED_ICON_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_UNCLUSTERED_ICON_LAYER_ID,
+      type: "symbol",
+      source: VENDOR_SOURCE_ID,
+      filter: ["!", ["has", "point_count"]],
+      layout: {
+        "icon-image": VENDOR_STOREFRONT_ICON_IMAGE_ID,
+        "icon-size": isMobile ? 1.08 : 1,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+    });
+  }
+
+  if (!map.getLayer(VENDOR_SELECTED_OVERLAY_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_SELECTED_OVERLAY_LAYER_ID,
+      type: "circle",
+      source: SELECTED_VENDOR_SOURCE_ID,
+      paint: {
+        "circle-color": "#24614f",
+        "circle-radius": isMobile ? 23 : 20,
+        "circle-stroke-color": "#fffdf8",
+        "circle-stroke-width": 4,
+        "circle-opacity": 0.98,
+        "circle-stroke-opacity": 1,
+      },
+    });
+  }
+
+  if (!map.getLayer(VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID)) {
+    map.addLayer({
+      id: VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID,
+      type: "symbol",
+      source: SELECTED_VENDOR_SOURCE_ID,
+      layout: {
+        "icon-image": VENDOR_STOREFRONT_ICON_IMAGE_ID,
+        "icon-size": isMobile ? 1.18 : 1.1,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+    });
+  }
+}
+
+function setPointerCursor(map: MapInstance, enabled: boolean) {
+  map.getCanvas().style.cursor = enabled ? "pointer" : "";
 }
 
 function installMapDebug(
   map: MapInstance,
   cameraStateRef: MutableRefObject<CameraState>,
   latestVendorsRef: MutableRefObject<NearbyVendor[]>,
-  markersRef: MutableRefObject<Record<string, VendorMarkerEntry>>,
 ) {
   if (
     process.env.NODE_ENV === "production" &&
@@ -393,7 +539,9 @@ function installMapDebug(
       return true;
     },
     getClusterCount() {
-      return 0;
+      return map
+        .querySourceFeatures(VENDOR_SOURCE_ID)
+        .filter((feature) => Boolean(feature.properties?.cluster)).length;
     },
     getInteractionState() {
       return {
@@ -410,12 +558,29 @@ function installMapDebug(
       return cameraStateRef.current;
     },
     getRenderedLayerIdsAtVendor(vendorId: string) {
-      const marker = markersRef.current[vendorId];
-      if (!marker) {
+      const vendor = latestVendorsRef.current.find((entry) => entry.vendor_id === vendorId);
+      if (!vendor) {
         return [];
       }
 
-      return marker.element.classList.contains("selected") ? ["selected-vendor-marker"] : ["vendor-marker"];
+      const center = getVendorMapCenter(vendor);
+      if (!center) {
+        return [];
+      }
+
+      const point = map.project(center);
+
+      return map
+        .queryRenderedFeatures(point, {
+          layers: [
+            VENDOR_SELECTED_OVERLAY_ICON_LAYER_ID,
+            VENDOR_SELECTED_OVERLAY_LAYER_ID,
+            VENDOR_UNCLUSTERED_ICON_LAYER_ID,
+            VENDOR_UNCLUSTERED_LAYER_ID,
+            VENDOR_CLUSTERS_LAYER_ID,
+          ],
+        })
+        .map((feature) => feature.layer.id);
     },
     projectVendor(vendorId: string) {
       const vendor = latestVendorsRef.current.find((entry) => entry.vendor_id === vendorId);
@@ -456,7 +621,6 @@ export function MapLibreVendorMap({
   const mapRef = useRef<MapInstance | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const userMarkerRef = useRef<MarkerInstance | null>(null);
-  const markersRef = useRef<Record<string, VendorMarkerEntry>>({});
   const loadedRef = useRef(false);
   const fallbackTriggeredRef = useRef(false);
   const lastViewportKeyRef = useRef<string | null>(null);
@@ -468,6 +632,7 @@ export function MapLibreVendorMap({
   const latestVendorsRef = useRef(vendors);
   const latestSelectedVendorIdRef = useRef(selectedVendorId);
   const hasReportedVisibleMarkersRef = useRef(false);
+  const [sameLocationVendorId, setSameLocationVendorId] = useState<string | null>(null);
   const cameraStateRef = useRef<CameraState>({
     count: 0,
     lastAction: null,
@@ -482,6 +647,24 @@ export function MapLibreVendorMap({
 
     return `${resolvedUserLocation.lat}:${resolvedUserLocation.lng}:${vendorKey}`;
   }, [resolvedUserLocation.lat, resolvedUserLocation.lng, vendors]);
+  const sameLocationGroups = useMemo(() => getSameLocationGroups(vendors), [vendors]);
+  const vendorFeatureCollection = useMemo(
+    () => createVendorFeatureCollection(vendors, sameLocationGroups),
+    [sameLocationGroups, vendors],
+  );
+  const selectedVendorFeatureCollection = useMemo(
+    () => createSelectedVendorFeatureCollection(vendors, selectedVendorId),
+    [selectedVendorId, vendors],
+  );
+  const activeSameLocationGroup = useMemo<SameLocationGroup | null>(() => {
+    const explicitGroup = getSameLocationGroupForVendor(sameLocationGroups, sameLocationVendorId);
+    if (explicitGroup && explicitGroup.vendors.length > 1) {
+      return explicitGroup;
+    }
+
+    const selectedGroup = getSameLocationGroupForVendor(sameLocationGroups, selectedVendorId);
+    return selectedGroup && selectedGroup.vendors.length > 1 ? selectedGroup : null;
+  }, [sameLocationGroups, sameLocationVendorId, selectedVendorId]);
 
   useEffect(() => {
     latestSelectVendorRef.current = onSelectVendor;
@@ -524,9 +707,6 @@ export function MapLibreVendorMap({
           () => cancelled,
         );
         if (cancelled || !container || mapRef.current) {
-          if (!cancelled && !container) {
-            latestMapErrorRef.current();
-          }
           return;
         }
 
@@ -631,17 +811,24 @@ export function MapLibreVendorMap({
 
             applyThemeBackground(map, timeTheme);
             syncUserMarker(maplibre, map, userMarkerRef, activeUserLocationRef.current);
-            syncVendorMarkers(
-              maplibre,
-              map,
-              markersRef,
-              latestSelectVendorRef,
+            const initialSameLocationGroups = getSameLocationGroups(latestVendorsRef.current);
+            const initialVendorData = createVendorFeatureCollection(
+              latestVendorsRef.current,
+              initialSameLocationGroups,
+            );
+            const initialSelectedVendorData = createSelectedVendorFeatureCollection(
               latestVendorsRef.current,
               latestSelectedVendorIdRef.current,
             );
+            ensureVendorClusterLayers(
+              map,
+              initialVendorData,
+              initialSelectedVendorData,
+              isMobileMapViewport(),
+            );
             if (
               !hasReportedVisibleMarkersRef.current &&
-              Object.keys(markersRef.current).length > 0
+              initialVendorData.features.length > 0
             ) {
               hasReportedVisibleMarkersRef.current = true;
               latestMarkersVisibleRef.current();
@@ -655,7 +842,61 @@ export function MapLibreVendorMap({
               "initial",
             );
             lastViewportKeyRef.current = viewportKey;
-            installMapDebug(map, cameraStateRef, latestVendorsRef, markersRef);
+            installMapDebug(map, cameraStateRef, latestVendorsRef);
+
+            map.on("click", VENDOR_CLUSTERS_LAYER_ID, (event) => {
+              const feature = event.features?.[0];
+              const clusterId = Number(feature?.properties?.cluster_id);
+              const coordinates =
+                feature?.geometry.type === "Point"
+                  ? feature.geometry.coordinates
+                  : null;
+
+              if (!Number.isFinite(clusterId) || !coordinates) {
+                return;
+              }
+
+              const source = getGeoJsonSource(map, VENDOR_SOURCE_ID);
+              void source?.getClusterExpansionZoom(clusterId).then((zoom) => {
+                if (cancelled || !loadedRef.current) {
+                  return;
+                }
+
+                const offset = getClusterExpansionCameraOffset(isMobileMapViewport());
+                easeMapTo(map, cameraStateRef, "map", {
+                  center: coordinates as VendorMapCenter,
+                  zoom: Math.min(Math.max(zoom + 0.25, map.getZoom()), 16),
+                  duration: CLUSTER_EXPANSION_ANIMATION_MS,
+                  ...(offset ? { offset: new maplibre.Point(...offset) } : {}),
+                });
+              });
+            });
+
+            map.on("click", VENDOR_UNCLUSTERED_LAYER_ID, (event) => {
+              const feature = event.features?.[0];
+              const vendorId = feature?.properties?.vendorId;
+
+              if (typeof vendorId !== "string" || vendorId.length === 0) {
+                return;
+              }
+
+              const sameLocationGroup = getSameLocationGroupForVendor(
+                getSameLocationGroups(latestVendorsRef.current),
+                vendorId,
+              );
+
+              setSameLocationVendorId(
+                sameLocationGroup && sameLocationGroup.vendors.length > 1
+                  ? vendorId
+                  : null,
+              );
+              latestSelectVendorRef.current(vendorId, "map");
+            });
+
+            map.on("mouseenter", VENDOR_CLUSTERS_LAYER_ID, () => setPointerCursor(map, true));
+            map.on("mouseleave", VENDOR_CLUSTERS_LAYER_ID, () => setPointerCursor(map, false));
+            map.on("mouseenter", VENDOR_UNCLUSTERED_LAYER_ID, () => setPointerCursor(map, true));
+            map.on("mouseleave", VENDOR_UNCLUSTERED_LAYER_ID, () => setPointerCursor(map, false));
           };
 
           layoutSettleFrame = window.requestAnimationFrame(settleMapLayout);
@@ -681,7 +922,6 @@ export function MapLibreVendorMap({
         window.cancelAnimationFrame(layoutSettleFrame);
       }
 
-      removeVendorMarkers(markersRef);
       userMarkerRef.current?.remove();
       userMarkerRef.current = null;
       mapRef.current?.remove();
@@ -717,15 +957,14 @@ export function MapLibreVendorMap({
     }
 
     syncUserMarker(maplibre, map, userMarkerRef, activeUserLocationRef.current);
-    syncVendorMarkers(
-      maplibre,
+    ensureVendorClusterLayers(
       map,
-      markersRef,
-      latestSelectVendorRef,
-      vendors,
-      selectedVendorId,
+      vendorFeatureCollection,
+      selectedVendorFeatureCollection,
+      isMobileMapViewport(),
     );
-    installMapDebug(map, cameraStateRef, latestVendorsRef, markersRef);
+    syncVendorSourceData(map, vendorFeatureCollection, selectedVendorFeatureCollection);
+    installMapDebug(map, cameraStateRef, latestVendorsRef);
 
     if (lastViewportKeyRef.current !== viewportKey) {
       fitMapToDiscoveryBounds(
@@ -741,12 +980,17 @@ export function MapLibreVendorMap({
 
     if (
       !hasReportedVisibleMarkersRef.current &&
-      Object.keys(markersRef.current).length > 0
+      vendorFeatureCollection.features.length > 0
     ) {
       hasReportedVisibleMarkersRef.current = true;
       latestMarkersVisibleRef.current();
     }
-  }, [selectedVendorId, vendors, viewportKey]);
+  }, [
+    selectedVendorFeatureCollection,
+    vendorFeatureCollection,
+    vendors,
+    viewportKey,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -830,10 +1074,16 @@ export function MapLibreVendorMap({
 
     lastSelectionCameraTokenRef.current = selectionActionToken;
 
+    const maplibre = maplibreRef.current;
+    const offset = getSelectionCameraOffset(isMobileMapViewport());
     easeMapTo(map, cameraStateRef, selectionSource, {
       center: selectedVendorCameraTarget.center,
       zoom: selectedVendorCameraTarget.zoom,
-      duration: 350,
+      duration:
+        selectionSource === "card"
+          ? CARD_SELECTION_ANIMATION_MS
+          : MAP_SELECTION_ANIMATION_MS,
+      ...(offset && maplibre ? { offset: new maplibre.Point(...offset) } : {}),
     });
   }, [mapLoadToken, selectedVendorId, selectionActionToken, selectionSource]);
 
@@ -852,6 +1102,54 @@ export function MapLibreVendorMap({
       >
         <span>Loading map…</span>
       </div>
+      <div className="map-vendor-accessibility-list" aria-label="Map vendors">
+        {vendors.map((vendor) => (
+          <button
+            aria-pressed={vendor.vendor_id === selectedVendorId}
+            className={
+              vendor.vendor_id === selectedVendorId
+                ? "map-vendor-accessibility-button selected"
+                : "map-vendor-accessibility-button"
+            }
+            data-vendor-id={vendor.vendor_id}
+            key={vendor.vendor_id}
+            type="button"
+            onClick={() => onSelectVendor(vendor.vendor_id, "map")}
+          >
+            Select {vendor.name}
+          </button>
+        ))}
+      </div>
+      {activeSameLocationGroup ? (
+        <div
+          className="map-same-location-panel"
+          data-testid="map-same-location-panel"
+        >
+          <strong>{activeSameLocationGroup.vendors.length} vendors at this location</strong>
+          <div className="map-same-location-list">
+            {activeSameLocationGroup.vendors.map((vendor) => (
+              <button
+                aria-current={vendor.vendor_id === selectedVendorId ? "true" : undefined}
+                className={
+                  vendor.vendor_id === selectedVendorId
+                    ? "map-same-location-button selected"
+                    : "map-same-location-button"
+                }
+                data-vendor-id={vendor.vendor_id}
+                key={vendor.vendor_id}
+                type="button"
+                onClick={() => {
+                  setSameLocationVendorId(vendor.vendor_id);
+                  onSelectVendor(vendor.vendor_id, "map");
+                }}
+              >
+                <span>{vendor.name}</span>
+                {vendor.area ? <small>{vendor.area}</small> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="map-legend">
         <span>Search location</span>
         <span>{vendors.length} vendors</span>
