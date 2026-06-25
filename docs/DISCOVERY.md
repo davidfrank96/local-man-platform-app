@@ -49,6 +49,19 @@ Supported radius filters are:
 
 Radius applies to GPS, selected-area, and default-Wuse modes.
 
+Radius produces the complete matching discovery dataset:
+
+```text
+Radius
+↓
+All Matching Vendors
+↓
+Map = All
+Cards = Paginated
+```
+
+The complete matching dataset is the source for search, ranking, map rendering, and card pagination. Pagination is only a card browsing concern.
+
 ## Search
 
 Search filters the active discovery dataset. It does not search the whole vendor database.
@@ -60,6 +73,8 @@ Examples:
 - Default Wuse mode: search filters vendors near Wuse origin.
 
 Clearing search restores the current active discovery dataset.
+
+Search runs before card pagination. A vendor that matches search outside the first card page must still be searchable, included in `map_vendors`, and eligible for card pagination.
 
 ## Ranking
 
@@ -87,7 +102,15 @@ Popular intentionally uses:
 
 ## Map Relationship
 
-The map uses the same active discovery dataset as the list. Selecting a vendor card or marker should keep the selected card, selected marker, and camera target aligned to the same vendor id. MapLibre receives marker and camera coordinates in `[longitude, latitude]` order.
+The map uses all vendors in the active matching discovery dataset. The card list uses a paginated subset of that same ranked result. Selecting a vendor card or marker should keep the selected card, selected marker, and camera target aligned to the same vendor id. MapLibre receives marker and camera coordinates in `[longitude, latitude]` order.
+
+Card pagination must never change:
+
+- map vendor count
+- cluster source
+- marker availability
+- selected vendor identity
+- selected marker visibility
 
 ## Recent And Last Viewed
 

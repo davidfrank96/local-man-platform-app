@@ -55,6 +55,12 @@ import {
   shouldRestoreDiscoveryScroll,
 } from "../../lib/public/discovery-state.ts";
 import {
+  getDiscoveryResultSummary,
+  getLoadedVendorCountLabel,
+  mergeNearbyDiscoveryPage,
+  resetNearbyCardsToFirstPage,
+} from "../../lib/public/discovery-pagination.ts";
+import {
   fetchNearbyVendors,
   fetchPublicCategories,
   type PublicCategory,
@@ -69,7 +75,6 @@ import {
 import {
   getPopularVendorIds,
   getPopularVendors,
-  sortDiscoveryVendors,
 } from "../../lib/vendors/discovery-ranking.ts";
 import {
   buildDiscoveryVendorLookup,
@@ -993,16 +998,9 @@ export function PublicDiscovery({
         return [];
       }
 
-      const radiusMatched = normalizedNearbyData.vendors.filter(
-        (vendor) => vendor.distance_km <= filters.radiusKm,
-      );
-
-      return sortDiscoveryVendors(
-        radiusMatched as NearbyVendorsResponseData["vendors"],
-        filters,
-      ) as typeof radiusMatched;
+      return normalizedNearbyData.vendors;
     },
-    [activeFetchLocation, filters, normalizedNearbyData],
+    [activeFetchLocation, normalizedNearbyData.vendors],
   );
   const mapVendors = useMemo(
     () => {
@@ -1010,16 +1008,9 @@ export function PublicDiscovery({
         return [];
       }
 
-      const radiusMatched = normalizedNearbyData.map_vendors.filter(
-        (vendor) => vendor.distance_km <= filters.radiusKm,
-      );
-
-      return sortDiscoveryVendors(
-        radiusMatched as NearbyVendorsResponseData["vendors"],
-        filters,
-      ) as typeof radiusMatched;
+      return normalizedNearbyData.map_vendors;
     },
-    [activeFetchLocation, filters, normalizedNearbyData],
+    [activeFetchLocation, normalizedNearbyData.map_vendors],
   );
   const mappableVendors = useMemo(
     () => mapVendors.filter(hasValidVendorCoordinates),
@@ -1212,6 +1203,36 @@ export function PublicDiscovery({
   const mapOriginPlaceholderBody = isResolvingLocation
     ? "The map will appear when Localman has a discovery location."
     : "The map will appear after you use your location or select an area.";
+  const hasSearchFilter = filters.search.trim().length > 0;
+  const discoveryResultTotal =
+    mapVendors.length > vendors.length
+      ? mapVendors.length
+      : normalizedNearbyData.pagination.total;
+  const discoverySummaryPagination = useMemo(
+    () => ({
+      ...normalizedNearbyData.pagination,
+      total: discoveryResultTotal,
+    }),
+    [discoveryResultTotal, normalizedNearbyData.pagination],
+  );
+  const discoveryResultSummary = useMemo(
+    () =>
+      getDiscoveryResultSummary({
+        hasSearch: hasSearchFilter,
+        isLoading,
+        pagination: discoverySummaryPagination,
+        visibleCount: vendors.length,
+      }),
+    [discoverySummaryPagination, hasSearchFilter, isLoading, vendors.length],
+  );
+  const loadedVendorCountLabel = useMemo(
+    () =>
+      getLoadedVendorCountLabel({
+        total: discoveryResultTotal,
+        visibleCount: vendors.length,
+      }),
+    [discoveryResultTotal, vendors.length],
+  );
 
   const applyFilters = useCallback((nextFilters: DiscoveryFilters, options?: {
     keepPanelsOpen?: boolean;
@@ -1227,10 +1248,11 @@ export function PublicDiscovery({
       );
 
       if (cachedUnsearchedData) {
-        nearbyDataRef.current = cachedUnsearchedData.data;
+        const resetCachedData = resetNearbyCardsToFirstPage(cachedUnsearchedData.data);
+        nearbyDataRef.current = resetCachedData;
         nearbyDataUpdatedAtRef.current = cachedUnsearchedData.updatedAt;
         nearbyDataRequestKeyRef.current = cachedUnsearchedData.requestKey;
-        setNearbyData(cachedUnsearchedData.data);
+        setNearbyData(resetCachedData);
       }
     }
     setFilters(nextFilters);
@@ -1269,22 +1291,7 @@ export function PublicDiscovery({
       }
 
       const currentNearbyData = nearbyDataRef.current ?? nearbyData;
-      const existingVendorIds = new Set(
-        currentNearbyData?.vendors.map((vendor) => vendor.vendor_id) ?? [],
-      );
-      const appendedVendors = result.vendors.filter(
-        (vendor) => !existingVendorIds.has(vendor.vendor_id),
-      );
-      const nextNearbyData: NearbyVendorsResponseData = currentNearbyData
-        ? {
-            ...result,
-            map_vendors: result.map_vendors.length > 0
-              ? result.map_vendors
-              : currentNearbyData.map_vendors ?? currentNearbyData.vendors,
-            vendors: [...currentNearbyData.vendors, ...appendedVendors],
-            pagination: result.pagination,
-          }
-        : result;
+      const nextNearbyData = mergeNearbyDiscoveryPage(currentNearbyData, result);
       const updatedAt = new Date().toISOString();
       const requestKey = buildNearbyRequestKey(activeFetchLocation, filters);
 
@@ -1740,6 +1747,17 @@ export function PublicDiscovery({
                           : "Open now, then nearest vendors"}
                   </span>
                 </div>
+                {!showNearbyEmptyState ? (
+                  <div
+                    className="discovery-results-summary"
+                    data-testid="discovery-results-summary"
+                  >
+                    <strong>{discoveryResultSummary.primary}</strong>
+                    {discoveryResultSummary.secondary ? (
+                      <span>{discoveryResultSummary.secondary}</span>
+                    ) : null}
+                  </div>
+                ) : null}
                 {nearbyError ? <p className="runtime-error">{nearbyError}</p> : null}
                 {showNearbyEmptyState ? (
                   <div className="empty-state discovery-empty-state" data-testid="discovery-empty-state">
@@ -1769,18 +1787,19 @@ export function PublicDiscovery({
                   />
                 ))}
                 {nearbyData?.pagination.has_more ? (
-                  <div className="runtime-note">
+                  <div
+                    className="discovery-pagination-bar"
+                    data-testid="discovery-pagination-bar"
+                  >
+                    <span>{loadedVendorCountLabel}</span>
                     <button
                       className="button-secondary compact-button"
                       disabled={isLoadingMoreVendors || isFetchingVendors}
                       type="button"
                       onClick={() => void loadMoreNearbyVendors()}
                     >
-                      {isLoadingMoreVendors ? "Loading…" : "Show more vendors"}
+                      {isLoadingMoreVendors ? "Loading…" : "Load more"}
                     </button>
-                    <span>
-                      Showing {vendors.length} of {nearbyData.pagination.total}
-                    </span>
                   </div>
                 ) : null}
               </section>

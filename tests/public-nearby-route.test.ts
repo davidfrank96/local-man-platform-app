@@ -5,10 +5,7 @@ import {
   PUBLIC_NEARBY_SEARCH_RATE_LIMIT,
   resetAbuseProtectionStateForTests,
 } from "../lib/api/abuse-protection.ts";
-import {
-  fetchNearbyVendorCandidates,
-  PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS,
-} from "../lib/vendors/supabase.ts";
+import { fetchNearbyVendorCandidates } from "../lib/vendors/supabase.ts";
 
 const timestamp = "2026-04-22T00:00:00+00:00";
 
@@ -95,11 +92,7 @@ test("nearby candidate query pushes bounding category and price filters into Sup
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = toUrl(input);
-    const requestInit = init as RequestInit & {
-      next?: {
-        revalidate?: number;
-      };
-    };
+    const requestInit = init as RequestInit;
 
     assert.equal(url.pathname, "/rest/v1/vendors");
     assert.match(url.searchParams.get("select") ?? "", /vendor_category_map!inner/);
@@ -108,10 +101,7 @@ test("nearby candidate query pushes bounding category and price filters into Sup
     assert.equal(url.searchParams.get("price_band"), "eq.budget");
     assert.equal(url.searchParams.get("or"), null);
     assert.equal(url.searchParams.get("is_active"), "eq.true");
-    assert.equal(
-      requestInit.next?.revalidate,
-      PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS,
-    );
+    assert.equal(requestInit.cache, "no-store");
 
     return Response.json([
       createCandidateVendor(0, {
@@ -154,20 +144,13 @@ test("nearby candidate query keeps category summaries available for app-side sea
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = toUrl(input);
-    const requestInit = init as RequestInit & {
-      next?: {
-        revalidate?: number;
-      };
-    };
+    const requestInit = init as RequestInit;
 
     assert.equal(url.pathname, "/rest/v1/vendors");
     assert.doesNotMatch(url.searchParams.get("select") ?? "", /!inner/);
     assert.match(url.searchParams.get("select") ?? "", /vendor_category_map\(vendor_categories\(slug,name\)\)/);
     assert.equal(url.searchParams.get("vendor_category_map.vendor_categories.slug"), null);
-    assert.ok(
-      (requestInit.next?.revalidate ?? Number.POSITIVE_INFINITY) <=
-        PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS,
-    );
+    assert.equal(requestInit.cache, "no-store");
 
     return Response.json([createCandidateVendor(0)]);
   }) as typeof fetch;
