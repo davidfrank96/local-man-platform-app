@@ -22,7 +22,8 @@ import {
 } from "./search.ts";
 
 export const DEFAULT_NEARBY_RADIUS_KM = 10;
-export const MAX_NEARBY_VENDOR_RESULTS = 50;
+export const DEFAULT_NEARBY_CARD_PAGE_SIZE = 25;
+export const MAX_NEARBY_CARD_PAGE_SIZE = 50;
 
 export type NearbyVendorFeaturedDishSummary = {
   dish_name: string;
@@ -82,6 +83,24 @@ export type NearbyVendorResult = {
   active_hours: string;
 };
 
+export type NearbyVendorPagination = {
+  page: number;
+  page_size: number;
+  total: number;
+  has_more: boolean;
+};
+
+export type NearbyVendorDiscoveryResult = {
+  map_vendors: NearbyVendorResult[];
+  vendors: NearbyVendorResult[];
+  pagination: NearbyVendorPagination;
+};
+
+export type NearbyVendorPaginationOptions = {
+  page?: number;
+  pageSize?: number;
+};
+
 type NearbyVendorSortable = NearbyVendorResult & {
   rawDistanceKm: number;
   searchRelevanceScore: number;
@@ -100,6 +119,58 @@ export function getNearbyBoundingBox(query: ResolvedNearbyVendorsQuery): Boundin
     { lat: query.lat, lng: query.lng },
     getEffectiveNearbyRadiusKm(query.radius_km),
   );
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.trunc(value));
+}
+
+export function getNearbyCardPage(page: number | undefined): number {
+  return normalizePositiveInteger(page, 1);
+}
+
+export function getNearbyCardPageSize(pageSize: number | undefined): number {
+  return Math.min(
+    MAX_NEARBY_CARD_PAGE_SIZE,
+    normalizePositiveInteger(pageSize, DEFAULT_NEARBY_CARD_PAGE_SIZE),
+  );
+}
+
+export function paginateNearbyVendors(
+  vendors: NearbyVendorResult[],
+  options: NearbyVendorPaginationOptions = {},
+): Pick<NearbyVendorDiscoveryResult, "vendors" | "pagination"> {
+  const page = getNearbyCardPage(options.page);
+  const pageSize = getNearbyCardPageSize(options.pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const pageVendors = vendors.slice(startIndex, startIndex + pageSize);
+
+  return {
+    vendors: pageVendors,
+    pagination: {
+      page,
+      page_size: pageSize,
+      total: vendors.length,
+      has_more: startIndex + pageVendors.length < vendors.length,
+    },
+  };
+}
+
+export function createNearbyDiscoveryResult(
+  vendors: NearbyVendorResult[],
+  options: NearbyVendorPaginationOptions = {},
+): NearbyVendorDiscoveryResult {
+  const paginated = paginateNearbyVendors(vendors, options);
+
+  return {
+    map_vendors: vendors,
+    vendors: paginated.vendors,
+    pagination: paginated.pagination,
+  };
 }
 
 function getVendorCategorySummaries(
@@ -265,7 +336,6 @@ export function findNearbyVendors(
   });
 
   return results
-    .slice(0, MAX_NEARBY_VENDOR_RESULTS)
     .map(({ rawDistanceKm, searchRelevanceScore, ...vendor }) => {
       void rawDistanceKm;
       void searchRelevanceScore;

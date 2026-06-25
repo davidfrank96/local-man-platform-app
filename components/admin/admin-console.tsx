@@ -24,6 +24,7 @@ import {
   listAdminVendors,
   replaceAdminVendorHours,
   updateAdminVendor,
+  type AdminVendorDashboardCounts,
   type AdminVendorFilters,
   type AdminVendorSummary,
 } from "../../lib/admin/api-client.ts";
@@ -142,6 +143,49 @@ function updateVendorImagesCount(
   );
 }
 
+function getLoadedDashboardCountFallback(vendors: AdminVendorSummary[]): AdminVendorDashboardCounts {
+  let activeVendorCount = 0;
+  let missingHoursCount = 0;
+  let missingImagesCount = 0;
+  let missingDishesCount = 0;
+  let needsFollowUpCount = 0;
+
+  for (const vendor of vendors) {
+    const hasMissingHours = vendor.hours_count < 7;
+    const hasMissingImages = vendor.images_count < 1;
+    const hasMissingDishes = vendor.featured_dishes_count < 1;
+
+    if (vendor.is_active) {
+      activeVendorCount += 1;
+    }
+
+    if (hasMissingHours) {
+      missingHoursCount += 1;
+    }
+
+    if (hasMissingImages) {
+      missingImagesCount += 1;
+    }
+
+    if (hasMissingDishes) {
+      missingDishesCount += 1;
+    }
+
+    if (hasMissingHours || hasMissingImages || hasMissingDishes) {
+      needsFollowUpCount += 1;
+    }
+  }
+
+  return {
+    total_vendor_count: vendors.length,
+    active_vendor_count: activeVendorCount,
+    missing_hours_count: missingHoursCount,
+    missing_images_count: missingImagesCount,
+    missing_dishes_count: missingDishesCount,
+    needs_follow_up_count: needsFollowUpCount,
+  };
+}
+
 type AdminConsoleProps = {
   initialSelectedVendorId?: string | null;
   mode?: "dashboard" | "agent" | "vendors" | "create" | "edit";
@@ -164,8 +208,14 @@ export function AdminConsole({
   const initialCachedVendorId = mode === "create"
     ? null
     : initialSelectedVendorId ?? workspaceCacheSnapshot.selectedVendorId;
+  const [dashboardCounts, setDashboardCounts] = useState<AdminVendorDashboardCounts | null>(
+    () => workspaceCacheSnapshot.dashboardCounts,
+  );
   const [filters, setFilters] = useState<AdminVendorFilters>(() => workspaceCacheSnapshot.filters);
   const [vendors, setVendors] = useState<AdminVendorSummary[]>(() => workspaceCacheSnapshot.vendors);
+  const [vendorTotalCount, setVendorTotalCount] = useState<number | null>(
+    () => workspaceCacheSnapshot.vendorTotalCount,
+  );
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(() => initialCachedVendorId);
   const [status, setStatus] = useState("Admin session ready. Load vendors when needed.");
   const [isLoading, setIsLoading] = useState(false);
@@ -203,38 +253,14 @@ export function AdminConsole({
     [selectedVendorId, vendors],
   );
   const {
-    activeVendorCount,
-    vendorsMissingHours,
-    vendorsMissingImages,
-    vendorsMissingDishes,
     incompleteVendors,
   } = useMemo(() => {
-    const active: AdminVendorSummary[] = [];
-    const missingHours: AdminVendorSummary[] = [];
-    const missingImages: AdminVendorSummary[] = [];
-    const missingDishes: AdminVendorSummary[] = [];
     const incomplete: AdminVendorSummary[] = [];
 
     for (const vendor of vendors) {
-      if (vendor.is_active) {
-        active.push(vendor);
-      }
-
       const hasMissingHours = vendor.hours_count < 7;
       const hasMissingImages = vendor.images_count < 1;
       const hasMissingDishes = vendor.featured_dishes_count < 1;
-
-      if (hasMissingHours) {
-        missingHours.push(vendor);
-      }
-
-      if (hasMissingImages) {
-        missingImages.push(vendor);
-      }
-
-      if (hasMissingDishes) {
-        missingDishes.push(vendor);
-      }
 
       if (hasMissingHours || hasMissingImages || hasMissingDishes) {
         incomplete.push(vendor);
@@ -242,22 +268,29 @@ export function AdminConsole({
     }
 
     return {
-      activeVendorCount: active.length,
-      vendorsMissingHours: missingHours,
-      vendorsMissingImages: missingImages,
-      vendorsMissingDishes: missingDishes,
       incompleteVendors: incomplete,
     };
   }, [vendors]);
   const statusTone = getAdminStatusTone(status, isLoading);
+  const loadedCountFallback = useMemo(() => getLoadedDashboardCountFallback(vendors), [vendors]);
+  const dashboardMetricCounts = dashboardCounts ?? {
+    ...loadedCountFallback,
+    total_vendor_count: vendorTotalCount ?? loadedCountFallback.total_vendor_count,
+  };
+  const totalVendorCount = dashboardMetricCounts.total_vendor_count;
+  const loadedVendorSummary = vendorTotalCount === null
+    ? `${vendors.length} loaded`
+    : `Showing ${vendors.length} of ${vendorTotalCount}`;
 
   useEffect(() => {
     updateVendorWorkspaceSnapshot(workspaceCacheScope, {
+      dashboardCounts,
       filters,
+      vendorTotalCount,
       vendors,
       selectedVendorId,
     });
-  }, [filters, selectedVendorId, vendors, workspaceCacheScope]);
+  }, [dashboardCounts, filters, selectedVendorId, vendorTotalCount, vendors, workspaceCacheScope]);
 
   useEffect(() => {
     if (!shouldLoadVendorCategories) {
@@ -516,6 +549,8 @@ export function AdminConsole({
 
   const applyVendorListResult = useCallback((result: Awaited<ReturnType<typeof listAdminVendors>>) => {
     setVendors(result.vendors);
+    setDashboardCounts(result.dashboard_counts);
+    setVendorTotalCount(result.pagination.total_count);
     setSelectedVendorId((current) => {
       if (current && result.vendors.some((vendor) => vendor.id === current)) {
         return current;
@@ -531,7 +566,9 @@ export function AdminConsole({
       return result.vendors[0]?.id ?? null;
     });
     updateVendorWorkspaceSnapshot(workspaceCacheScope, {
+      dashboardCounts: result.dashboard_counts,
       filters,
+      vendorTotalCount: result.pagination.total_count,
       vendors: result.vendors,
     });
   }, [filters, initialSelectedVendorId, workspaceCacheScope]);
@@ -558,7 +595,12 @@ export function AdminConsole({
   }, [refreshVendors]);
 
   useEffect(() => {
-    if (!shouldLoadVendorRegistry || !session || isLoading || vendors.length > 0) {
+    if (
+      !shouldLoadVendorRegistry ||
+      !session ||
+      isLoading ||
+      (vendors.length > 0 && dashboardCounts !== null)
+    ) {
       return;
     }
 
@@ -569,7 +611,7 @@ export function AdminConsole({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [isLoading, refreshVendors, session, shouldLoadVendorRegistry, vendors.length]);
+  }, [dashboardCounts, isLoading, refreshVendors, session, shouldLoadVendorRegistry, vendors.length]);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -849,28 +891,28 @@ export function AdminConsole({
         <>
           <section className="admin-overview-grid" aria-label="Admin overview">
             <article className="admin-metric-panel">
-              <span>Loaded vendors</span>
-              <strong>{vendors.length}</strong>
-              <small>Current registry set</small>
+              <span>Total vendors</span>
+              <strong>{totalVendorCount}</strong>
+              <small>{loadedVendorSummary}</small>
             </article>
             <article className="admin-metric-panel">
-              <span>Loaded active vendors</span>
-              <strong>{activeVendorCount}</strong>
+              <span>Active vendors</span>
+              <strong>{dashboardMetricCounts.active_vendor_count}</strong>
               <small>Available to users</small>
             </article>
             <article className="admin-metric-panel">
               <span>Missing hours</span>
-              <strong>{vendorsMissingHours.length}</strong>
+              <strong>{dashboardMetricCounts.missing_hours_count}</strong>
               <small>Need schedule completion</small>
             </article>
             <article className="admin-metric-panel">
               <span>Missing images</span>
-              <strong>{vendorsMissingImages.length}</strong>
+              <strong>{dashboardMetricCounts.missing_images_count}</strong>
               <small>Need profile media</small>
             </article>
             <article className="admin-metric-panel">
               <span>Missing dishes</span>
-              <strong>{vendorsMissingDishes.length}</strong>
+              <strong>{dashboardMetricCounts.missing_dishes_count}</strong>
               <small>Need menu highlights</small>
             </article>
           </section>
@@ -933,7 +975,7 @@ export function AdminConsole({
                   <p className="eyebrow">Incomplete vendors</p>
                   <h2 id="admin-dashboard-incomplete">Needs follow-up</h2>
                 </div>
-                <span>{incompleteVendors.length} vendors</span>
+                <span>{dashboardMetricCounts.needs_follow_up_count} vendors</span>
               </div>
               <AdminScrollPanel className="admin-scroll-panel-vendors-compact" ariaLabelledBy="admin-dashboard-incomplete">
                 <VendorRegistryList
@@ -1015,7 +1057,7 @@ export function AdminConsole({
                 <p className="eyebrow">Vendor registry</p>
                 <h2 id="agent-dashboard-vendors">Loaded vendors</h2>
               </div>
-              <span>{vendors.length} vendors</span>
+              <span>{loadedVendorSummary}</span>
             </div>
             <AdminScrollPanel className="admin-scroll-panel-vendors-compact" ariaLabelledBy="agent-dashboard-vendors">
               <VendorRegistryList
@@ -1036,6 +1078,7 @@ export function AdminConsole({
             disabled={isLoading}
             filters={filters}
             selectedVendorId={selectedVendorId}
+            totalCount={vendorTotalCount}
             vendors={vendors}
             onSelectVendor={setSelectedVendorId}
             onSubmitFilters={submitFilters}
@@ -1118,6 +1161,7 @@ export function AdminConsole({
             disabled={isLoading}
             filters={filters}
             selectedVendorId={selectedVendorId}
+            totalCount={vendorTotalCount}
             vendors={vendors}
             onSelectVendor={setSelectedVendorId}
             onSubmitFilters={submitFilters}

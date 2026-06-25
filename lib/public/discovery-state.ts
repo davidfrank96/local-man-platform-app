@@ -131,8 +131,11 @@ export function resolveSnapshotSelectedVendorId(snapshot: DiscoverySnapshot): st
   }
 
   return (
+    snapshot.nearbyData.map_vendors?.find((vendor) => vendor.slug === snapshot.selectedVendorSlug)
+      ?.vendor_id ??
     snapshot.nearbyData.vendors.find((vendor) => vendor.slug === snapshot.selectedVendorSlug)
-      ?.vendor_id ?? null
+      ?.vendor_id ??
+    null
   );
 }
 

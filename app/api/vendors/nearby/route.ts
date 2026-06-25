@@ -15,7 +15,10 @@ import {
   logRouteEvent,
 } from "../../../../lib/observability.ts";
 import { nearbyVendorsQuerySchema } from "../../../../lib/validation/index.ts";
-import { findNearbyVendors } from "../../../../lib/vendors/nearby.ts";
+import {
+  createNearbyDiscoveryResult,
+  findNearbyVendors,
+} from "../../../../lib/vendors/nearby.ts";
 import {
   fetchNearbyVendorCandidates,
   fetchVendorUsageScores,
@@ -182,20 +185,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const vendors = findNearbyVendors(
+    const matchingVendors = findNearbyVendors(
       candidates,
       resolvedSearch.query,
       new Date(),
       usageScores,
     );
+    const discoveryResult = createNearbyDiscoveryResult(matchingVendors, {
+      page: query.data.page,
+      pageSize: query.data.page_size,
+    });
 
     const response = apiSuccess({
       location: resolvedSearch.location,
-      vendors,
+      ...discoveryResult,
     });
     const durationMs = Date.now() - routeLog.startedAt;
 
-    if (vendors.length === 0) {
+    if (discoveryResult.pagination.total === 0) {
       logRouteEvent("info", routeLog, {
         event: "PUBLIC_NEARBY_EMPTY_RESULT",
         status: 200,
@@ -215,7 +222,11 @@ export async function GET(request: NextRequest) {
         durationMs,
         message: "Nearby request completed slowly.",
         metadata: {
-          resultCount: vendors.length,
+          resultCount: discoveryResult.vendors.length,
+          mapVendorCount: discoveryResult.map_vendors.length,
+          totalResultCount: discoveryResult.pagination.total,
+          page: discoveryResult.pagination.page,
+          pageSize: discoveryResult.pagination.page_size,
           locationSource: resolvedSearch.location.source,
           searchPresent: Boolean(query.data.search),
           radiusKm: query.data.radius_km,

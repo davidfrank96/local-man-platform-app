@@ -85,19 +85,34 @@ function createNormalizedNearbyData(
 ): NormalizedNearbyVendorsResponseData {
   const nearbyData = createNearbyData(vendorId);
 
-  return {
-    ...nearbyData,
-    vendors: nearbyData.vendors.map((vendor) => ({
-      ...vendor,
-      id: vendor.vendor_id,
+	  return {
+	    ...nearbyData,
+	    map_vendors: nearbyData.vendors.map((vendor) => ({
+	      ...vendor,
+	      id: vendor.vendor_id,
+	      lat: vendor.latitude,
+	      lng: vendor.longitude,
+	      imageUrl: "/seed-images/rice.jpg",
+	      distanceKm: vendor.distance_km,
+	      hasValidCoordinates: true,
+	    })),
+	    vendors: nearbyData.vendors.map((vendor) => ({
+	      ...vendor,
+	      id: vendor.vendor_id,
       lat: vendor.latitude,
       lng: vendor.longitude,
       imageUrl: "/seed-images/rice.jpg",
-      distanceKm: vendor.distance_km,
-      hasValidCoordinates: true,
-    })),
-  };
-}
+	      distanceKm: vendor.distance_km,
+	      hasValidCoordinates: true,
+	    })),
+	    pagination: {
+	      page: 1,
+	      page_size: nearbyData.vendors.length,
+	      total: nearbyData.vendors.length,
+	      has_more: false,
+	    },
+	  };
+	}
 
 function createSnapshot(value: Record<string, unknown>) {
   return {

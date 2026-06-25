@@ -653,6 +653,15 @@ type MockAdminWorkspaceOptions = {
   operationalLogCount?: number;
   operationalLogsHasMore?: boolean;
   vendorCount?: number;
+  vendorDashboardCounts?: {
+    total_vendor_count: number;
+    active_vendor_count: number;
+    missing_hours_count: number;
+    missing_images_count: number;
+    missing_dishes_count: number;
+    needs_follow_up_count: number;
+  };
+  vendorTotalCount?: number;
   riderCount?: number;
   adminRequestLog?: string[];
   riderCreatePayloads?: unknown[];
@@ -740,6 +749,25 @@ function buildMockAdminVendors(count: number) {
     images_count: index % 3 === 0 ? 0 : 2,
     featured_dishes_count: index % 2 === 0 ? 1 : 0,
   }));
+}
+
+function buildMockAdminVendorDashboardCounts(
+  vendors: ReturnType<typeof buildMockAdminVendors>,
+  totalVendorCount: number,
+) {
+  return {
+    total_vendor_count: totalVendorCount,
+    active_vendor_count: vendors.filter((vendor) => vendor.is_active).length,
+    missing_hours_count: vendors.filter((vendor) => vendor.hours_count < 7).length,
+    missing_images_count: vendors.filter((vendor) => vendor.images_count < 1).length,
+    missing_dishes_count: vendors.filter((vendor) => vendor.featured_dishes_count < 1).length,
+    needs_follow_up_count: vendors.filter(
+      (vendor) =>
+        vendor.hours_count < 7 ||
+        vendor.images_count < 1 ||
+        vendor.featured_dishes_count < 1,
+    ).length,
+  };
 }
 
 function buildMockAdminRiders(count: number) {
@@ -832,8 +860,11 @@ async function mockAuthenticatedAdminWorkspace(
   const operationalLogCount = options.operationalLogCount ?? 1;
   const operationalLogsHasMore = options.operationalLogsHasMore ?? false;
   const vendorCount = options.vendorCount ?? 0;
+  const vendorTotalCount = options.vendorTotalCount ?? vendorCount;
   const riderCount = options.riderCount ?? 0;
   const mockVendors = buildMockAdminVendors(vendorCount);
+  const vendorDashboardCounts = options.vendorDashboardCounts ??
+    buildMockAdminVendorDashboardCounts(mockVendors, vendorTotalCount);
   let mockRiders = buildMockAdminRiders(riderCount);
   let hasUploadedVendorImage = false;
   let releaseInitialImageGet: (() => void) | null = null;
@@ -1160,10 +1191,12 @@ async function mockAuthenticatedAdminWorkspace(
         success: true,
         data: {
           vendors: mockVendors,
+          dashboard_counts: vendorDashboardCounts,
           pagination: {
             limit: 100,
             offset: 0,
             count: mockVendors.length,
+            total_count: vendorTotalCount,
           },
         },
         error: null,
@@ -3746,6 +3779,66 @@ test.describe("Phase 3 browser smoke", () => {
 
     await expectNoClientErrors(errors);
   });
+
+  for (const scenario of [
+    {
+      label: "137 vendors",
+      total: 137,
+      active: 111,
+      missingHours: 19,
+      missingImages: 23,
+      missingDishes: 29,
+      needsFollowUp: 41,
+    },
+    {
+      label: "500 vendors",
+      total: 500,
+      active: 421,
+      missingHours: 73,
+      missingImages: 88,
+      missingDishes: 132,
+      needsFollowUp: 190,
+    },
+    {
+      label: "1000 vendors",
+      total: 1000,
+      active: 842,
+      missingHours: 141,
+      missingImages: 176,
+      missingDishes: 244,
+      needsFollowUp: 350,
+    },
+  ]) {
+    test(`admin dashboard shows database aggregate counts with loaded page size at 100 for ${scenario.label}`, async ({ page }) => {
+      const errors = trackClientErrors(page);
+      const auditLogRequests: Array<{ userRole: string; action: string }> = [];
+
+      await mockAuthenticatedAdminWorkspace(page, auditLogRequests, {
+        vendorCount: 100,
+        vendorDashboardCounts: {
+          total_vendor_count: scenario.total,
+          active_vendor_count: scenario.active,
+          missing_hours_count: scenario.missingHours,
+          missing_images_count: scenario.missingImages,
+          missing_dishes_count: scenario.missingDishes,
+          needs_follow_up_count: scenario.needsFollowUp,
+        },
+        vendorTotalCount: scenario.total,
+      });
+
+      await page.goto("/admin/dashboard");
+      await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+      await expect(page.locator(".admin-metric-panel").filter({ hasText: "Total vendors" })).toContainText(String(scenario.total));
+      await expect(page.locator(".admin-metric-panel").filter({ hasText: "Active vendors" })).toContainText(String(scenario.active));
+      await expect(page.locator(".admin-metric-panel").filter({ hasText: "Missing hours" })).toContainText(String(scenario.missingHours));
+      await expect(page.locator(".admin-metric-panel").filter({ hasText: "Missing images" })).toContainText(String(scenario.missingImages));
+      await expect(page.locator(".admin-metric-panel").filter({ hasText: "Missing dishes" })).toContainText(String(scenario.missingDishes));
+      await expect(page.getByText(`Showing 100 of ${scenario.total}`)).toBeVisible();
+      await expect(page.locator('section[aria-labelledby="admin-dashboard-incomplete"]')).toContainText(`${scenario.needsFollowUp} vendors`);
+
+      await expectNoClientErrors(errors);
+    });
+  }
 
   test("admin vendor images upload still posts after native file input reset", async ({ page }) => {
     const errors = trackClientErrors(page);

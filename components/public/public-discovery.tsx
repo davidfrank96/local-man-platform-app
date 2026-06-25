@@ -72,6 +72,7 @@ import {
   sortDiscoveryVendors,
 } from "../../lib/vendors/discovery-ranking.ts";
 import {
+  buildDiscoveryVendorLookup,
   hasValidVendorCoordinates,
   normalizeNearbyDiscoveryData,
 } from "../../lib/public/vendor-normalization.ts";
@@ -216,6 +217,7 @@ export function PublicDiscovery({
   const [nearbyData, setNearbyData] = useState<NearbyVendorsResponseData | null>(null);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [isFetchingVendors, setIsFetchingVendors] = useState(false);
+  const [isLoadingMoreVendors, setIsLoadingMoreVendors] = useState(false);
   const [timeTheme, setTimeTheme] = useState<PublicTimeTheme | null>(null);
   const [resolvedLocationLabel, setResolvedLocationLabel] = useState<{
     key: string;
@@ -841,6 +843,9 @@ export function PublicDiscovery({
         }
         restoredSnapshotNeedsLiveFetchRef.current = false;
         setNearbyData(result);
+        const selectableVendors = result.map_vendors.length > 0
+          ? result.map_vendors
+          : result.vendors;
         const nextSelectionSource =
           selectionSourceRef.current === "filter" ? "filter" : "restore";
         recordSelectionIntent(nextSelectionSource);
@@ -849,13 +854,13 @@ export function PublicDiscovery({
 
           if (
             preferredSelectedVendorId &&
-            result.vendors.some((vendor) => vendor.vendor_id === preferredSelectedVendorId)
+            selectableVendors.some((vendor) => vendor.vendor_id === preferredSelectedVendorId)
           ) {
             selectedVendorIdRef.current = preferredSelectedVendorId;
             return preferredSelectedVendorId;
           }
 
-          if (current && result.vendors.some((vendor) => vendor.vendor_id === current)) {
+          if (current && selectableVendors.some((vendor) => vendor.vendor_id === current)) {
             selectedVendorIdRef.current = current;
             return current;
           }
@@ -864,13 +869,13 @@ export function PublicDiscovery({
 
           if (
             rememberedVendor &&
-            result.vendors.some((vendor) => vendor.vendor_id === rememberedVendor.vendor_id)
+            selectableVendors.some((vendor) => vendor.vendor_id === rememberedVendor.vendor_id)
           ) {
             selectedVendorIdRef.current = rememberedVendor.vendor_id;
             return rememberedVendor.vendor_id;
           }
 
-          const fallbackVendorId = result.vendors[0]?.vendor_id ?? null;
+          const fallbackVendorId = selectableVendors[0]?.vendor_id ?? null;
           selectedVendorIdRef.current = fallbackVendorId;
           preferredSelectedVendorIdRef.current = fallbackVendorId;
           return fallbackVendorId;
@@ -978,31 +983,47 @@ export function PublicDiscovery({
     snapshotHydrated,
   ]);
 
+  const normalizedNearbyData = useMemo(
+    () => normalizeNearbyDiscoveryData(nearbyData, nearbyData?.location ?? null),
+    [nearbyData],
+  );
   const vendors = useMemo(
     () => {
       if (!activeFetchLocation) {
         return [];
       }
 
-      const normalized = normalizeNearbyDiscoveryData(
-        {
-          location: nearbyData?.location ?? null,
-          vendors: nearbyData?.vendors ?? [],
-        },
-        nearbyData?.location ?? null,
-      ).vendors;
-      const radiusMatched = normalized.filter((vendor) => vendor.distance_km <= filters.radiusKm);
+      const radiusMatched = normalizedNearbyData.vendors.filter(
+        (vendor) => vendor.distance_km <= filters.radiusKm,
+      );
 
       return sortDiscoveryVendors(
         radiusMatched as NearbyVendorsResponseData["vendors"],
         filters,
       ) as typeof radiusMatched;
     },
-    [activeFetchLocation, filters, nearbyData],
+    [activeFetchLocation, filters, normalizedNearbyData],
+  );
+  const mapVendors = useMemo(
+    () => {
+      if (!activeFetchLocation) {
+        return [];
+      }
+
+      const radiusMatched = normalizedNearbyData.map_vendors.filter(
+        (vendor) => vendor.distance_km <= filters.radiusKm,
+      );
+
+      return sortDiscoveryVendors(
+        radiusMatched as NearbyVendorsResponseData["vendors"],
+        filters,
+      ) as typeof radiusMatched;
+    },
+    [activeFetchLocation, filters, normalizedNearbyData],
   );
   const mappableVendors = useMemo(
-    () => vendors.filter(hasValidVendorCoordinates),
-    [vendors],
+    () => mapVendors.filter(hasValidVendorCoordinates),
+    [mapVendors],
   );
 
   useEffect(() => {
@@ -1070,16 +1091,16 @@ export function PublicDiscovery({
   }, [activeMobileTab, recordSelectionIntent]);
 
   const vendorById = useMemo(
-    () => new Map(vendors.map((vendor) => [vendor.vendor_id, vendor] as const)),
-    [vendors],
+    () => buildDiscoveryVendorLookup(vendors, mapVendors),
+    [mapVendors, vendors],
   );
   const popularVendorIds = useMemo(
-    () => getPopularVendorIds(vendors as NearbyVendorsResponseData["vendors"]),
-    [vendors],
+    () => getPopularVendorIds(mapVendors as NearbyVendorsResponseData["vendors"]),
+    [mapVendors],
   );
   const popularVendors = useMemo(
-    () => getPopularVendors(vendors as NearbyVendorsResponseData["vendors"]),
-    [vendors],
+    () => getPopularVendors(mapVendors as NearbyVendorsResponseData["vendors"]),
+    [mapVendors],
   );
   const popularScopeLabel =
     selectedFallbackAreaLocation && selectedFallbackArea
@@ -1220,6 +1241,87 @@ export function PublicDiscovery({
       setMobileMapFiltersOpen(false);
     }
   }, [activeFetchLocation, filters.search, recordSelectionIntent]);
+
+  const loadMoreNearbyVendors = useCallback(async () => {
+    const pagination = nearbyData?.pagination;
+
+    if (
+      !activeFetchLocation ||
+      !pagination?.has_more ||
+      isLoadingMoreVendors ||
+      isFetchingVendors
+    ) {
+      return;
+    }
+
+    setIsLoadingMoreVendors(true);
+    setNearbyError(null);
+
+    try {
+      const result = await fetchNearbyVendors({
+        ...createNearbyFilters(activeFetchLocation, filters),
+        page: pagination.page + 1,
+        page_size: pagination.page_size,
+      });
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const currentNearbyData = nearbyDataRef.current ?? nearbyData;
+      const existingVendorIds = new Set(
+        currentNearbyData?.vendors.map((vendor) => vendor.vendor_id) ?? [],
+      );
+      const appendedVendors = result.vendors.filter(
+        (vendor) => !existingVendorIds.has(vendor.vendor_id),
+      );
+      const nextNearbyData: NearbyVendorsResponseData = currentNearbyData
+        ? {
+            ...result,
+            map_vendors: result.map_vendors.length > 0
+              ? result.map_vendors
+              : currentNearbyData.map_vendors ?? currentNearbyData.vendors,
+            vendors: [...currentNearbyData.vendors, ...appendedVendors],
+            pagination: result.pagination,
+          }
+        : result;
+      const updatedAt = new Date().toISOString();
+      const requestKey = buildNearbyRequestKey(activeFetchLocation, filters);
+
+      nearbyDataUpdatedAtRef.current = updatedAt;
+      nearbyDataRequestKeyRef.current = requestKey;
+      nearbyDataRef.current = nextNearbyData;
+      setNearbyData(nextNearbyData);
+      if (filters.search.trim().length === 0) {
+        unsearchedNearbyDataCacheRef.current.set(
+          buildNearbyBaseDatasetKey(activeFetchLocation, filters),
+          {
+            data: nextNearbyData,
+            requestKey,
+            updatedAt,
+          },
+        );
+      }
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setNearbyError(
+        error instanceof Error ? error.message : "Unable to load more nearby vendors.",
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setIsLoadingMoreVendors(false);
+      }
+    }
+  }, [
+    activeFetchLocation,
+    filters,
+    isFetchingVendors,
+    isLoadingMoreVendors,
+    nearbyData,
+  ]);
 
   const selectVendorById = useCallback((vendorId: string, source: "card" | "map" = "map") => {
     const vendor = vendorById.get(vendorId);
@@ -1666,6 +1768,21 @@ export function PublicDiscovery({
                     onSelect={selectVendorById}
                   />
                 ))}
+                {nearbyData?.pagination.has_more ? (
+                  <div className="runtime-note">
+                    <button
+                      className="button-secondary compact-button"
+                      disabled={isLoadingMoreVendors || isFetchingVendors}
+                      type="button"
+                      onClick={() => void loadMoreNearbyVendors()}
+                    >
+                      {isLoadingMoreVendors ? "Loading…" : "Show more vendors"}
+                    </button>
+                    <span>
+                      Showing {vendors.length} of {nearbyData.pagination.total}
+                    </span>
+                  </div>
+                ) : null}
               </section>
 
               <section

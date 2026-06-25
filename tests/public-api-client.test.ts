@@ -40,10 +40,12 @@ test("public API client builds nearby vendor query params", async () => {
       location_source: "precise",
       radius_km: 5,
       open_now: true,
-      category: "rice",
-      price_band: "budget",
-      search: "jollof",
-    },
+	      category: "rice",
+	      price_band: "budget",
+	      search: "jollof",
+	      page: 2,
+	      page_size: 25,
+	    },
     fetchImpl,
   );
   const url = new URL(requestedUrls[0], "http://localhost");
@@ -54,10 +56,12 @@ test("public API client builds nearby vendor query params", async () => {
   assert.equal(url.searchParams.get("location_source"), "precise");
   assert.equal(url.searchParams.get("radius_km"), "5");
   assert.equal(url.searchParams.get("open_now"), "true");
-  assert.equal(url.searchParams.get("category"), "rice");
-  assert.equal(url.searchParams.get("price_band"), "budget");
-  assert.equal(url.searchParams.get("search"), "jollof");
-});
+	  assert.equal(url.searchParams.get("category"), "rice");
+	  assert.equal(url.searchParams.get("price_band"), "budget");
+	  assert.equal(url.searchParams.get("page"), "2");
+	  assert.equal(url.searchParams.get("page_size"), "25");
+	  assert.equal(url.searchParams.get("search"), "jollof");
+	});
 
 test("public API client sanitizes and encodes special-character search input safely", async () => {
   const requestedUrls: string[] = [];

@@ -22,10 +22,12 @@ export type PublicNearbyFilters = {
   location_source?: LocationSource;
   radius_km?: number;
   open_now?: boolean;
-  category?: string;
-  price_band?: PriceBand;
-  search?: string;
-};
+	  category?: string;
+	  price_band?: PriceBand;
+	  search?: string;
+	  page?: number;
+	  page_size?: number;
+	};
 
 export type PublicCategory = Pick<VendorCategory, "id" | "name" | "slug">;
 
@@ -48,8 +50,10 @@ function buildNearbyQueryString(filters: PublicNearbyFilters): string {
   appendDefinedParam(params, "location_source", filters.location_source);
   appendDefinedParam(params, "radius_km", filters.radius_km);
   appendDefinedParam(params, "open_now", filters.open_now);
-  appendDefinedParam(params, "category", filters.category);
-  appendDefinedParam(params, "price_band", filters.price_band);
+	  appendDefinedParam(params, "category", filters.category);
+	  appendDefinedParam(params, "price_band", filters.price_band);
+	  appendDefinedParam(params, "page", filters.page);
+	  appendDefinedParam(params, "page_size", filters.page_size);
 
   const querySegments = [params.toString()];
   const normalizedSearch = sanitizePublicSearchInput(filters.search);

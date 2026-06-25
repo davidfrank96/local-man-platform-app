@@ -110,6 +110,7 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
   disabled,
   filters,
   selectedVendorId,
+  totalCount,
   vendors,
   onSelectVendor,
   onSubmitFilters,
@@ -117,10 +118,15 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
   disabled: boolean;
   filters: AdminVendorFilters;
   selectedVendorId: string | null;
+  totalCount: number | null;
   vendors: AdminVendorSummary[];
   onSelectVendor: (vendorId: string) => void;
   onSubmitFilters: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const registryCountLabel = totalCount === null
+    ? `${vendors.length} loaded`
+    : `Showing ${vendors.length} of ${totalCount}`;
+
   return (
     <section className="admin-panel admin-registry-panel" aria-labelledby="vendor-registry">
       <div className="admin-section-header">
@@ -128,7 +134,7 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
           <p className="eyebrow">Vendor registry</p>
           <h2 id="vendor-registry">Manage vendors</h2>
         </div>
-        <span>{vendors.length} loaded</span>
+        <span>{registryCountLabel}</span>
       </div>
 
       <form className="admin-form" onSubmit={onSubmitFilters}>
