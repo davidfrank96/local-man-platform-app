@@ -102,11 +102,21 @@ export async function mockNearbyDiscovery(page: Page, vendors: MockNearbyVendor[
             },
             isApproximate: false,
           },
-          vendors: vendors.map((vendor) => ({
-            ranking_score: 0,
-            ...vendor,
-          })),
-        },
+	          map_vendors: vendors.map((vendor) => ({
+	            ranking_score: 0,
+	            ...vendor,
+	          })),
+	          vendors: vendors.map((vendor) => ({
+	            ranking_score: 0,
+	            ...vendor,
+	          })),
+	          pagination: {
+	            page: 1,
+	            page_size: vendors.length,
+	            total: vendors.length,
+	            has_more: false,
+	          },
+	        },
         error: null,
       }),
     });

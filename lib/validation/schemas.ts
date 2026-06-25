@@ -731,10 +731,12 @@ export const nearbyVendorsQuerySchema = z
     location_source: locationSourceSchema.optional(),
     radius_km: z.coerce.number().positive().max(100).optional(),
     open_now: booleanLikeSchema.optional(),
-    category: slugSchema.optional(),
-    price_band: priceBandSchema.optional(),
-    search: z.string().trim().max(120).optional(),
-  })
+	    category: slugSchema.optional(),
+	    price_band: priceBandSchema.optional(),
+	    search: z.string().trim().max(120).optional(),
+	    page: z.coerce.number().int().min(1).optional(),
+	    page_size: z.coerce.number().int().min(1).max(50).optional(),
+	  })
   .superRefine((query, context) => {
     const hasLat = query.lat !== undefined;
     const hasLng = query.lng !== undefined;
@@ -1037,6 +1039,27 @@ export const vendorDetailResponseDataSchema = vendorSchema.extend({
   rating_badges: z.array(publicRatingBadgeSchema),
 });
 
+const nearbyVendorSummarySchema = z.object({
+  vendor_id: uuidSchema,
+  name: nonEmptyTextSchema,
+  slug: slugSchema,
+  short_description: z.string().nullable(),
+  phone_number: z.string().nullable(),
+  area: z.string().nullable(),
+  latitude: latitudeSchema,
+  longitude: longitudeSchema,
+  price_band: priceBandSchema.nullable(),
+  average_rating: z.coerce.number().min(0).max(5),
+  review_count: z.coerce.number().int().min(0),
+  ranking_score: z.coerce.number().int().min(0),
+  distance_km: z.number().min(0),
+  is_open_now: z.boolean(),
+  featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),
+  categories: z.array(nearbyVendorCategorySummarySchema).optional(),
+  today_hours: z.string(),
+  active_hours: z.string().optional(),
+});
+
 export const nearbyVendorsResponseDataSchema = z.object({
   location: z.object({
     source: locationSourceSchema,
@@ -1047,26 +1070,12 @@ export const nearbyVendorsResponseDataSchema = z.object({
     }),
     isApproximate: z.boolean(),
   }),
-  vendors: z.array(
-    z.object({
-      vendor_id: uuidSchema,
-      name: nonEmptyTextSchema,
-      slug: slugSchema,
-      short_description: z.string().nullable(),
-      phone_number: z.string().nullable(),
-      area: z.string().nullable(),
-      latitude: latitudeSchema,
-      longitude: longitudeSchema,
-      price_band: priceBandSchema.nullable(),
-      average_rating: z.coerce.number().min(0).max(5),
-      review_count: z.coerce.number().int().min(0),
-      ranking_score: z.coerce.number().int().min(0),
-      distance_km: z.number().min(0),
-      is_open_now: z.boolean(),
-      featured_dish: nearbyVendorFeaturedDishSummarySchema.nullable(),
-      categories: z.array(nearbyVendorCategorySummarySchema).optional(),
-      today_hours: z.string(),
-      active_hours: z.string().optional(),
-    }),
-  ),
+  map_vendors: z.array(nearbyVendorSummarySchema),
+  vendors: z.array(nearbyVendorSummarySchema),
+  pagination: z.object({
+    page: z.number().int().min(1),
+    page_size: z.number().int().min(1).max(50),
+    total: z.number().int().min(0),
+    has_more: z.boolean(),
+  }),
 });

@@ -22,6 +22,9 @@ test("parses natural 12-hour admin input into 24-hour storage time", () => {
     parseAdminTimeInputTo24Hour("7:30 PM"),
     "19:30",
   );
+  assert.equal(parseAdminTimeInputTo24Hour("6:30 AM"), "06:30");
+  assert.equal(parseAdminTimeInputTo24Hour("12:00 PM"), "12:00");
+  assert.equal(parseAdminTimeInputTo24Hour("12:00 AM"), "00:00");
   assert.equal(parseAdminTimeInputTo24Hour("9AM"), "09:00");
   assert.equal(parseAdminTimeInputTo24Hour("9:00 AM"), "09:00");
   assert.equal(parseAdminTimeInputTo24Hour("8 pm"), "20:00");
@@ -48,6 +51,7 @@ test("rejects invalid admin time input", () => {
 
 test("parses stored 24-hour time for 12-hour admin defaults", () => {
   assert.equal(parseStoredTimeForAdmin("00:00"), "12:00 AM");
+  assert.equal(parseStoredTimeForAdmin("12:00:00"), "12:00 PM");
   assert.equal(parseStoredTimeForAdmin("12:15"), "12:15 PM");
   assert.equal(parseStoredTimeForAdmin("19:45:00"), "7:45 PM");
 });

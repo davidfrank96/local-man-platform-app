@@ -108,7 +108,11 @@ function createAdminFetchMock(
 
     if (url.pathname === "/rest/v1/vendors") {
       if (method === "GET") {
-        return Response.json([vendorRecord]);
+        return Response.json([vendorRecord], {
+          headers: {
+            "content-range": "5-5/137",
+          },
+        });
       }
 
       return Response.json([
@@ -159,6 +163,19 @@ function createAdminFetchMock(
       return Response.json([
         {
           vendor_id: vendorId,
+        },
+      ]);
+    }
+
+    if (url.pathname === "/rest/v1/rpc/get_admin_vendor_dashboard_counts") {
+      return Response.json([
+        {
+          total_vendor_count: 137,
+          active_vendor_count: 111,
+          missing_hours_count: 19,
+          missing_images_count: 23,
+          missing_dishes_count: 29,
+          needs_follow_up_count: 41,
         },
       ]);
     }
@@ -214,9 +231,11 @@ test("admin list vendors route returns filtered vendor list", async () => {
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
   const requestedUrls: URL[] = [];
+  const requestedHeaders: Headers[] = [];
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = input instanceof URL ? input : new URL(String(input));
     requestedUrls.push(url);
+    requestedHeaders.push(new Headers(init?.headers));
 
     return createAdminFetchMock(calls)(input, init);
   }) as typeof fetch;
@@ -236,10 +255,19 @@ test("admin list vendors route returns filtered vendor list", async () => {
     assert.equal(body.data.vendors[0].hours_count, 2);
     assert.equal(body.data.vendors[0].images_count, 1);
     assert.equal(body.data.vendors[0].featured_dishes_count, 1);
+    assert.deepEqual(body.data.dashboard_counts, {
+      total_vendor_count: 137,
+      active_vendor_count: 111,
+      missing_hours_count: 19,
+      missing_images_count: 23,
+      missing_dishes_count: 29,
+      needs_follow_up_count: 41,
+    });
     assert.deepEqual(body.data.pagination, {
       limit: 10,
       offset: 5,
       count: 1,
+      total_count: 137,
     });
     assert.equal(vendorUrl?.searchParams.get("limit"), "10");
     assert.equal(vendorUrl?.searchParams.get("offset"), "5");
@@ -250,10 +278,12 @@ test("admin list vendors route returns filtered vendor list", async () => {
       vendorUrl?.searchParams.get("or"),
       "(name.ilike.*rice*,short_description.ilike.*rice*,area.ilike.*rice*)",
     );
+    assert.equal(requestedHeaders[2]?.get("prefer"), "count=exact");
     assert.deepEqual(calls, [
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "GET /rest/v1/vendors",
+      "POST /rest/v1/rpc/get_admin_vendor_dashboard_counts",
       "GET /rest/v1/vendor_hours",
       "GET /rest/v1/vendor_images",
       "GET /rest/v1/vendor_featured_dishes",
@@ -319,6 +349,19 @@ test("admin list vendors route returns controlled error for malformed upstream p
       return Response.json([{ id: vendorId }]);
     }
 
+    if (url.pathname === "/rest/v1/rpc/get_admin_vendor_dashboard_counts") {
+      return Response.json([
+        {
+          total_vendor_count: 137,
+          active_vendor_count: 111,
+          missing_hours_count: 19,
+          missing_images_count: 23,
+          missing_dishes_count: 29,
+          needs_follow_up_count: 41,
+        },
+      ]);
+    }
+
     if (
       url.pathname === "/rest/v1/vendor_hours" ||
       url.pathname === "/rest/v1/vendor_images" ||
@@ -347,6 +390,7 @@ test("admin list vendors route returns controlled error for malformed upstream p
       "GET /auth/v1/user",
       "GET /rest/v1/admin_users",
       "GET /rest/v1/vendors",
+      "POST /rest/v1/rpc/get_admin_vendor_dashboard_counts",
     ]);
   } finally {
     globalThis.fetch = originalFetch;

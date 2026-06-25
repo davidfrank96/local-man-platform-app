@@ -50,12 +50,23 @@ export type AdminVendorSummary = Pick<
   featured_dishes_count: number;
 };
 
+export type AdminVendorDashboardCounts = {
+  total_vendor_count: number;
+  active_vendor_count: number;
+  missing_hours_count: number;
+  missing_images_count: number;
+  missing_dishes_count: number;
+  needs_follow_up_count: number;
+};
+
 export type AdminVendorListResult = {
   vendors: AdminVendorSummary[];
+  dashboard_counts: AdminVendorDashboardCounts;
   pagination: {
     limit: number;
     offset: number;
     count: number;
+    total_count: number;
   };
 };
 

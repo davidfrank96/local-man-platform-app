@@ -8,6 +8,7 @@ import {
 
 test("formats vendor display times in 12-hour AM/PM format", () => {
   assert.equal(formatVendorDisplayTime("04:00"), "4:00 AM");
+  assert.equal(formatVendorDisplayTime("06:30"), "6:30 AM");
   assert.equal(formatVendorDisplayTime("07:00"), "7:00 AM");
   assert.equal(formatVendorDisplayTime("12:00"), "12:00 PM");
   assert.equal(formatVendorDisplayTime("13:30"), "1:30 PM");
@@ -30,6 +31,7 @@ test("returns the original time when it cannot be parsed", () => {
 });
 
 test("formats compact today hours labels", () => {
+  assert.equal(formatTodayHoursLabel("06:30", "12:00", false), "6:30 AM - 12:00 PM");
   assert.equal(formatTodayHoursLabel("09:00", "18:00", false), "9:00 AM - 6:00 PM");
   assert.equal(formatTodayHoursLabel("19:00", "02:00", false), "7:00 PM - 2:00 AM");
   assert.equal(formatTodayHoursLabel("07:00", "20:00", true), "7:00 AM - 8:00 PM");

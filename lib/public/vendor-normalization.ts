@@ -5,6 +5,7 @@ import { resolveVendorOpenState } from "../vendors/hours.ts";
 
 type NearbyVendor = NearbyVendorsResponseData["vendors"][number];
 type NearbyLocation = NearbyVendorsResponseData["location"];
+type NearbyPagination = NearbyVendorsResponseData["pagination"];
 
 type LocationFallback = {
   source?: LocationSource | null;
@@ -29,8 +30,9 @@ export type NormalizedVendor = Omit<NearbyVendor, "latitude" | "longitude"> & {
 
 export type NormalizedNearbyVendorsResponseData = Omit<
   NearbyVendorsResponseData,
-  "vendors"
+  "map_vendors" | "vendors"
 > & {
+  map_vendors: NormalizedVendor[];
   vendors: NormalizedVendor[];
 };
 
@@ -327,23 +329,43 @@ export function hasValidVendorCoordinates(
   return vendor.hasValidCoordinates;
 }
 
-export function normalizeNearbyDiscoveryData(
-  value: unknown,
-  fallbackLocation?: LocationFallback,
-): NormalizedNearbyVendorsResponseData {
-  const location = isObject(value)
-    ? normalizeLocation(value.location, fallbackLocation)
-    : createFallbackLocation(fallbackLocation);
+function createFallbackPagination(
+  vendors: NormalizedVendor[],
+  mapVendors: NormalizedVendor[],
+): NearbyPagination {
+  return {
+    page: 1,
+    page_size: vendors.length || mapVendors.length || 25,
+    total: mapVendors.length || vendors.length,
+    has_more: false,
+  };
+}
 
+function normalizePagination(
+  value: unknown,
+  vendors: NormalizedVendor[],
+  mapVendors: NormalizedVendor[],
+): NearbyPagination {
   if (!isObject(value)) {
-    return {
-      location,
-      vendors: [],
-    };
+    return createFallbackPagination(vendors, mapVendors);
   }
 
-  const rawVendors = Array.isArray(value.vendors) ? value.vendors : [];
+  const page = normalizeInteger(value.page, 1);
+  const pageSize = normalizeInteger(value.page_size, vendors.length || 25);
+  const total = normalizeInteger(value.total, mapVendors.length || vendors.length);
 
+  return {
+    page: Math.max(1, page),
+    page_size: Math.max(1, Math.min(50, pageSize)),
+    total,
+    has_more: typeof value.has_more === "boolean" ? value.has_more : page * pageSize < total,
+  };
+}
+
+function normalizeVendorList(
+  rawVendors: unknown[],
+  location: NearbyLocation,
+): NormalizedVendor[] {
   const uniqueVendors = new Map<string, NormalizedVendor>();
 
   for (const [index, vendor] of rawVendors.entries()) {
@@ -379,8 +401,44 @@ export function normalizeNearbyDiscoveryData(
     uniqueVendors.set(dedupeKey, dedupedVendor);
   }
 
+  return Array.from(uniqueVendors.values());
+}
+
+export function buildDiscoveryVendorLookup(
+  vendors: NormalizedVendor[],
+  mapVendors: NormalizedVendor[],
+): Map<string, NormalizedVendor> {
+  return new Map(
+    [...mapVendors, ...vendors].map((vendor) => [vendor.vendor_id, vendor] as const),
+  );
+}
+
+export function normalizeNearbyDiscoveryData(
+  value: unknown,
+  fallbackLocation?: LocationFallback,
+): NormalizedNearbyVendorsResponseData {
+  const location = isObject(value)
+    ? normalizeLocation(value.location, fallbackLocation)
+    : createFallbackLocation(fallbackLocation);
+
+  if (!isObject(value)) {
+    return {
+      location,
+      map_vendors: [],
+      vendors: [],
+      pagination: createFallbackPagination([], []),
+    };
+  }
+
+  const rawVendors = Array.isArray(value.vendors) ? value.vendors : [];
+  const rawMapVendors = Array.isArray(value.map_vendors) ? value.map_vendors : rawVendors;
+  const vendors = normalizeVendorList(rawVendors, location);
+  const mapVendors = normalizeVendorList(rawMapVendors, location);
+
   return {
     location,
-    vendors: Array.from(uniqueVendors.values()),
+    map_vendors: mapVendors,
+    vendors,
+    pagination: normalizePagination(value.pagination, vendors, mapVendors),
   };
 }

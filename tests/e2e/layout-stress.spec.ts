@@ -80,14 +80,21 @@ async function mockDiscovery(page: Page, options: {
       body: JSON.stringify({
         success: true,
         data: {
-          location: {
-            source: locationSource,
-            label: locationLabel,
-            coordinates: { lat: 9.08, lng: 7.4 },
-            isApproximate: locationSource !== "precise",
-          },
-          vendors,
-        },
+	          location: {
+	            source: locationSource,
+	            label: locationLabel,
+	            coordinates: { lat: 9.08, lng: 7.4 },
+	            isApproximate: locationSource !== "precise",
+	          },
+	          map_vendors: vendors,
+	          vendors,
+	          pagination: {
+	            page: 1,
+	            page_size: vendors.length,
+	            total: vendors.length,
+	            has_more: false,
+	          },
+	        },
         error: null,
       }),
     });

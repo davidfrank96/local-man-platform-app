@@ -50,6 +50,15 @@ export type VendorHoursRecord = z.infer<typeof vendorHoursSchema>;
 export type VendorImageRecord = z.infer<typeof vendorImageSchema>;
 export type VendorFeaturedDishRecord = z.infer<typeof vendorFeaturedDishSchema>;
 export type AdminRatingSignalSummaryRecord = z.infer<typeof adminRatingSignalSummarySchema>;
+const adminVendorDashboardCountsSchema = z.object({
+  total_vendor_count: z.coerce.number().int().min(0),
+  active_vendor_count: z.coerce.number().int().min(0),
+  missing_hours_count: z.coerce.number().int().min(0),
+  missing_images_count: z.coerce.number().int().min(0),
+  missing_dishes_count: z.coerce.number().int().min(0),
+  needs_follow_up_count: z.coerce.number().int().min(0),
+});
+export type AdminVendorDashboardCountsRecord = z.infer<typeof adminVendorDashboardCountsSchema>;
 export type VendorDuplicateCandidateRecord = Pick<
   VendorRecord,
   "id" | "name" | "slug" | "address_text" | "area" | "latitude" | "longitude"
@@ -82,10 +91,12 @@ export type CleanupQaAdminVendorsResult = {
 
 export type ListVendorsResult = {
   vendors: VendorSummaryRecord[];
+  dashboard_counts: AdminVendorDashboardCountsRecord;
   pagination: {
     limit: number;
     offset: number;
     count: number;
+    total_count: number;
   };
 };
 
@@ -171,6 +182,41 @@ async function fetchJson(
   }
 
   return payload;
+}
+
+async function fetchJsonResponse(
+  url: URL,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+): Promise<{ payload: unknown; response: Response }> {
+  const response = await fetchImpl(url, init);
+  const payload = await readJson(response);
+
+  if (!response.ok) {
+    throw new AdminServiceError(
+      "UPSTREAM_ERROR",
+      `Supabase admin operation failed with HTTP ${response.status}.`,
+      502,
+      payload,
+    );
+  }
+
+  return { payload, response };
+}
+
+function parseContentRangeTotal(value: string | null, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const totalSegment = value.split("/").at(1);
+
+  if (!totalSegment || totalSegment === "*") {
+    return fallback;
+  }
+
+  const total = Number(totalSegment);
+  return Number.isInteger(total) && total >= 0 ? total : fallback;
 }
 
 function parseSupabasePayload<T>(schema: z.ZodType<T>, payload: unknown): T {
@@ -285,6 +331,28 @@ function parseReturnedAdminRatingSignalSummary(
   return rows[0] ?? getEmptyAdminRatingSignalSummary();
 }
 
+function getEmptyAdminVendorDashboardCounts(): AdminVendorDashboardCountsRecord {
+  return {
+    total_vendor_count: 0,
+    active_vendor_count: 0,
+    missing_hours_count: 0,
+    missing_images_count: 0,
+    missing_dishes_count: 0,
+    needs_follow_up_count: 0,
+  };
+}
+
+function parseReturnedAdminVendorDashboardCounts(
+  payload: unknown,
+): AdminVendorDashboardCountsRecord {
+  const rows = parseSupabasePayload(
+    z.array(adminVendorDashboardCountsSchema),
+    payload,
+  );
+
+  return rows[0] ?? getEmptyAdminVendorDashboardCounts();
+}
+
 function parseReturnedCategories(payload: unknown): VendorCategoryRecord[] {
   return parseSupabasePayload(z.array(vendorCategorySchema), payload);
 }
@@ -343,6 +411,37 @@ async function deleteVendorRow(
   }
 }
 
+async function fetchAdminVendorDashboardCounts(
+  resolvedConfig: AdminAuthConfig,
+  fetchImpl: typeof fetch,
+): Promise<AdminVendorDashboardCountsRecord> {
+  const serviceRoleKey = resolvedConfig.supabaseServiceRoleKey?.trim();
+
+  if (!serviceRoleKey) {
+    throw new AdminServiceError(
+      "CONFIGURATION_ERROR",
+      "A service role key is required to read admin vendor dashboard counts.",
+      503,
+    );
+  }
+
+  const payload = await fetchJson(
+    createRestUrl(resolvedConfig, "rpc/get_admin_vendor_dashboard_counts"),
+    {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    },
+    fetchImpl,
+  );
+
+  return parseReturnedAdminVendorDashboardCounts(payload);
+}
+
 export async function listVendors(
   query: AdminVendorsQuery,
   {
@@ -352,6 +451,7 @@ export async function listVendors(
   }: AdminVendorServiceContext,
 ): Promise<ListVendorsResult> {
   const resolvedConfig = requireServiceConfig(config);
+  const baseFilters: Record<string, string> = {};
   const filters: Record<string, string> = {
     select: [
       "id",
@@ -374,39 +474,53 @@ export async function listVendors(
   };
 
   if (query.is_active !== undefined) {
-    filters.is_active = `eq.${query.is_active}`;
+    baseFilters.is_active = `eq.${query.is_active}`;
   }
 
   if (query.price_band) {
-    filters.price_band = `eq.${query.price_band}`;
+    baseFilters.price_band = `eq.${query.price_band}`;
   }
 
   if (query.area) {
-    filters.area = `ilike.*${sanitizeSupabaseSearch(query.area)}*`;
+    baseFilters.area = `ilike.*${sanitizeSupabaseSearch(query.area)}*`;
   }
 
   if (query.search) {
     const search = sanitizeSupabaseSearch(query.search);
-    filters.or = `(name.ilike.*${search}*,short_description.ilike.*${search}*,area.ilike.*${search}*)`;
+    baseFilters.or = `(name.ilike.*${search}*,short_description.ilike.*${search}*,area.ilike.*${search}*)`;
   }
 
-  const payload = await fetchJson(
-    createRestUrl(resolvedConfig, "vendors", filters),
-    {
-      method: "GET",
-      headers: createHeaders(session, resolvedConfig, ""),
-    },
-    fetchImpl,
-  );
+  Object.assign(filters, baseFilters);
+
+  const [
+    { payload, response },
+    dashboardCounts,
+  ] = await Promise.all([
+    fetchJsonResponse(
+      createRestUrl(resolvedConfig, "vendors", filters),
+      {
+        method: "GET",
+        headers: createHeaders(session, resolvedConfig, "count=exact"),
+      },
+      fetchImpl,
+    ),
+    fetchAdminVendorDashboardCounts(resolvedConfig, fetchImpl),
+  ]);
   const vendorRows = parseSupabasePayload(z.array(vendorSummarySchema), payload);
+  const totalCount = parseContentRangeTotal(
+    response.headers.get("content-range"),
+    query.offset + vendorRows.length,
+  );
 
   if (vendorRows.length === 0) {
     return {
       vendors: [],
+      dashboard_counts: dashboardCounts,
       pagination: {
         limit: query.limit,
         offset: query.offset,
         count: 0,
+        total_count: totalCount,
       },
     };
   }
@@ -502,10 +616,12 @@ export async function listVendors(
 
   return {
     vendors,
+    dashboard_counts: dashboardCounts,
     pagination: {
       limit: query.limit,
       offset: query.offset,
       count: vendors.length,
+      total_count: totalCount,
     },
   };
 }

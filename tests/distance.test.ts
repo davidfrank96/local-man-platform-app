@@ -6,10 +6,13 @@ import {
   roundDistanceKm,
 } from "../lib/location/distance.ts";
 import {
+  createNearbyDiscoveryResult,
+  DEFAULT_NEARBY_CARD_PAGE_SIZE,
   findNearbyVendors,
   getTodayHoursSummary,
   isVendorOpenNow,
-  MAX_NEARBY_VENDOR_RESULTS,
+  MAX_NEARBY_CARD_PAGE_SIZE,
+  paginateNearbyVendors,
   type VendorLocationRecord,
 } from "../lib/vendors/nearby.ts";
 import {
@@ -581,6 +584,72 @@ test("returns compact today hours from nearby vendors", () => {
   assert.equal(results[0]?.active_hours, "7:00 PM - 2:00 AM");
 });
 
+test("nearby vendors close after a 12 PM closing time without drifting to midnight", () => {
+  const results = findNearbyVendors(
+    [
+      {
+        ...baseVendor,
+        id: "noon-close",
+        name: "Noon Close Vendor",
+        latitude: 0,
+        longitude: 0.01,
+        vendor_hours: [
+          {
+            day_of_week: 3,
+            open_time: "06:30",
+            close_time: "12:00",
+            is_closed: false,
+          },
+        ],
+      },
+    ],
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-06-24T12:30:00Z"),
+  );
+
+  assert.equal(results[0]?.today_hours, "6:30 AM - 12:00 PM");
+  assert.equal(results[0]?.active_hours, "6:30 AM - 12:00 PM");
+  assert.equal(results[0]?.is_open_now, false);
+});
+
+test("nearby vendors with true midnight closing stay open before midnight", () => {
+  const results = findNearbyVendors(
+    [
+      {
+        ...baseVendor,
+        id: "midnight-close",
+        name: "Midnight Close Vendor",
+        latitude: 0,
+        longitude: 0.01,
+        vendor_hours: [
+          {
+            day_of_week: 3,
+            open_time: "18:00",
+            close_time: "00:00",
+            is_closed: false,
+          },
+        ],
+      },
+    ],
+    {
+      lat: 0,
+      lng: 0,
+      location_source: "precise",
+      radius_km: 5,
+    },
+    new Date("2026-06-24T22:30:00Z"),
+  );
+
+  assert.equal(results[0]?.today_hours, "6:00 PM - 12:00 AM");
+  assert.equal(results[0]?.active_hours, "6:00 PM - 12:00 AM");
+  assert.equal(results[0]?.is_open_now, true);
+});
+
 test("nearby vendors report closed today when today has no operating window", () => {
   const results = findNearbyVendors(
     [
@@ -642,9 +711,9 @@ test("returns an empty list when no vendors are nearby", () => {
   assert.deepEqual(results, []);
 });
 
-test("caps nearby results to the public payload limit", () => {
+test("returns all 56 matching vendors for map visibility", () => {
   const vendors: VendorLocationRecord[] = Array.from(
-    { length: MAX_NEARBY_VENDOR_RESULTS + 5 },
+    { length: 56 },
     (_, index) => ({
       ...baseVendor,
       id: `vendor-${index + 1}`,
@@ -662,9 +731,103 @@ test("caps nearby results to the public payload limit", () => {
     radius_km: 10,
   });
 
-  assert.equal(results.length, MAX_NEARBY_VENDOR_RESULTS);
+  assert.equal(results.length, 56);
   assert.equal(results[0]?.vendor_id, "vendor-1");
-  assert.equal(results.at(-1)?.vendor_id, `vendor-${MAX_NEARBY_VENDOR_RESULTS}`);
+  assert.equal(results.at(-1)?.vendor_id, "vendor-56");
+});
+
+test("splits 137 matching vendors into full map payload and default card page", () => {
+  const vendors: VendorLocationRecord[] = Array.from(
+    { length: 137 },
+    (_, index) => ({
+      ...baseVendor,
+      id: `vendor-${index + 1}`,
+      name: `Vendor ${String(index + 1).padStart(3, "0")}`,
+      latitude: 0,
+      longitude: 0.0005 * (index + 1),
+      is_open_override: true,
+    }),
+  );
+
+  const results = findNearbyVendors(vendors, {
+    lat: 0,
+    lng: 0,
+    location_source: "precise",
+    radius_km: 10,
+  });
+  const discoveryResult = createNearbyDiscoveryResult(results);
+
+  assert.equal(discoveryResult.map_vendors.length, 137);
+  assert.equal(discoveryResult.vendors.length, DEFAULT_NEARBY_CARD_PAGE_SIZE);
+  assert.equal(discoveryResult.pagination.total, 137);
+  assert.equal(discoveryResult.pagination.page, 1);
+  assert.equal(discoveryResult.pagination.page_size, DEFAULT_NEARBY_CARD_PAGE_SIZE);
+  assert.equal(discoveryResult.pagination.has_more, true);
+});
+
+test("paginates nearby card vendors without reducing map visibility", () => {
+  const vendors: VendorLocationRecord[] = Array.from(
+    { length: 137 },
+    (_, index) => ({
+      ...baseVendor,
+      id: `vendor-${index + 1}`,
+      name: `Vendor ${String(index + 1).padStart(3, "0")}`,
+      latitude: 0,
+      longitude: 0.0005 * (index + 1),
+      is_open_override: true,
+    }),
+  );
+
+  const results = findNearbyVendors(vendors, {
+    lat: 0,
+    lng: 0,
+    location_source: "precise",
+    radius_km: 10,
+  });
+  const pageTwo = createNearbyDiscoveryResult(results, { page: 2, pageSize: 25 });
+  const lastPage = createNearbyDiscoveryResult(results, { page: 6, pageSize: 25 });
+  const oversizedPage = paginateNearbyVendors(results, { pageSize: 100 });
+
+  assert.equal(pageTwo.map_vendors.length, 137);
+  assert.equal(pageTwo.vendors.length, 25);
+  assert.equal(pageTwo.vendors[0]?.vendor_id, "vendor-26");
+  assert.equal(pageTwo.pagination.has_more, true);
+  assert.equal(lastPage.vendors.length, 12);
+  assert.equal(lastPage.pagination.has_more, false);
+  assert.equal(oversizedPage.vendors.length, MAX_NEARBY_CARD_PAGE_SIZE);
+  assert.equal(oversizedPage.pagination.page_size, MAX_NEARBY_CARD_PAGE_SIZE);
+});
+
+test("search considers matching vendors beyond the first card page before pagination", () => {
+  const vendors: VendorLocationRecord[] = Array.from(
+    { length: 56 },
+    (_, index) => ({
+      ...baseVendor,
+      id: `vendor-${index + 1}`,
+      name: `Vendor ${String(index + 1).padStart(2, "0")}`,
+      latitude: 0,
+      longitude: 0.0005 * (index + 1),
+      is_open_override: true,
+      vendor_featured_dishes:
+        index === 55
+          ? [{ dish_name: "Masa", description: null, is_featured: true }]
+          : null,
+    }),
+  );
+
+  const results = findNearbyVendors(vendors, {
+    lat: 0,
+    lng: 0,
+    location_source: "precise",
+    radius_km: 10,
+    search: "masa",
+  });
+  const discoveryResult = createNearbyDiscoveryResult(results);
+
+  assert.equal(results.length, 1);
+  assert.equal(discoveryResult.map_vendors[0]?.vendor_id, "vendor-56");
+  assert.equal(discoveryResult.vendors[0]?.vendor_id, "vendor-56");
+  assert.equal(discoveryResult.pagination.total, 1);
 });
 
 test("nearby response schema accepts the actual nearby result shape", () => {
@@ -686,18 +849,25 @@ test("nearby response schema accepts the actual nearby result shape", () => {
     },
   );
 
-  const parsed = nearbyVendorsResponseDataSchema.safeParse({
-    location: {
+	  const parsed = nearbyVendorsResponseDataSchema.safeParse({
+	    location: {
       source: "precise",
       label: "Current location",
       coordinates: {
         lat: 0,
         lng: 0,
-      },
-      isApproximate: false,
-    },
-    vendors: results,
-  });
+	      },
+	      isApproximate: false,
+	    },
+	    map_vendors: results,
+	    vendors: results,
+	    pagination: {
+	      page: 1,
+	      page_size: 25,
+	      total: results.length,
+	      has_more: false,
+	    },
+	  });
 
   if (!parsed.success) {
     assert.fail(JSON.stringify(parsed.error.issues));

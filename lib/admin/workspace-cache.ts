@@ -10,6 +10,7 @@ import type {
 } from "../../types/index.ts";
 import type {
   AdminAuditLogListResult,
+  AdminVendorDashboardCounts,
   AdminVendorFilters,
   AdminVendorSummary,
 } from "./api-client.ts";
@@ -21,8 +22,10 @@ type VendorArtifactsCache = {
 };
 
 type VendorWorkspaceCache = {
+  dashboardCounts: AdminVendorDashboardCounts | null;
   filters: AdminVendorFilters;
   selectedVendorId: string | null;
+  vendorTotalCount: number | null;
   vendors: AdminVendorSummary[];
 } & VendorArtifactsCache;
 
@@ -41,8 +44,10 @@ function getOrCreateVendorWorkspaceCache(scope: string): VendorWorkspaceCache {
   }
 
   const next: VendorWorkspaceCache = {
+    dashboardCounts: null,
     filters: defaultVendorFilters,
     selectedVendorId: null,
+    vendorTotalCount: null,
     vendors: [],
     hoursByVendorId: {},
     imagesByVendorId: {},

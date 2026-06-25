@@ -8,6 +8,8 @@ import {
 } from "../../../../../lib/admin/vendor-intake-service.ts";
 import { vendorIntakeRequestSchema } from "../../../../../lib/validation/index.ts";
 
+export const VENDOR_INTAKE_MAX_JSON_BODY_BYTES = 192 * 1024;
+
 export async function POST(request: Request) {
   const admin = await requireAdmin(request);
 
@@ -15,7 +17,9 @@ export async function POST(request: Request) {
     return admin.response;
   }
 
-  const body = await validateJsonBody(request, vendorIntakeRequestSchema);
+  const body = await validateJsonBody(request, vendorIntakeRequestSchema, {
+    maxBytes: VENDOR_INTAKE_MAX_JSON_BODY_BYTES,
+  });
 
   if (!body.success) {
     return body.response;

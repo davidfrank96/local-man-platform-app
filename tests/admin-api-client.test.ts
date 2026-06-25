@@ -178,10 +178,19 @@ test("admin API client sends same-origin requests without exposing bearer tokens
           success: true,
           data: {
             vendors: [createAdminVendorSummary()],
+            dashboard_counts: {
+              total_vendor_count: 137,
+              active_vendor_count: 111,
+              missing_hours_count: 19,
+              missing_images_count: 23,
+              missing_dishes_count: 29,
+              needs_follow_up_count: 41,
+            },
             pagination: {
               limit: 100,
               offset: 0,
               count: 1,
+              total_count: 137,
             },
           },
           error: null,
@@ -200,6 +209,11 @@ test("admin API client sends same-origin requests without exposing bearer tokens
   assert.equal(url.searchParams.get("area"), "Wuse");
   assert.equal(url.searchParams.get("is_active"), "true");
   assert.equal(url.searchParams.get("price_band"), "budget");
+  assert.equal(url.searchParams.get("limit"), "100");
+  assert.equal(url.searchParams.get("offset"), "0");
+  assert.equal(result.pagination.total_count, 137);
+  assert.equal(result.dashboard_counts.active_vendor_count, 111);
+  assert.equal(result.dashboard_counts.needs_follow_up_count, 41);
 });
 
 test("admin API client reads vendor rating signal summaries through protected app route", async () => {
