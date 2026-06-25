@@ -47,8 +47,6 @@ type VendorUsageEventRow = {
   event_type: VendorUsageEventType | null;
 };
 
-export const PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS = 5;
-
 const nearbyVendorBaseSelect = [
   "id",
   "name",
@@ -297,7 +295,7 @@ export async function fetchNearbyVendorCandidates(
     config,
     "Supabase nearby vendor query failed",
     {
-      revalidate: PUBLIC_NEARBY_VENDOR_REVALIDATE_SECONDS,
+      cache: "no-store",
     },
   );
 }

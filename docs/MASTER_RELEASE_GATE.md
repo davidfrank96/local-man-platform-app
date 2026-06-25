@@ -80,12 +80,26 @@ Verify:
 - nearby API parameters
 - radius behavior for 1 km, 5 km, 10 km, and 30 km
 - selected-area and default-Wuse map origins
+- complete matching dataset is built before card pagination
+- map vendor count equals the complete matching dataset
+- card list is paginated without limiting map vendors
 
 Discovery priority must remain:
 
 1. GPS
 2. Selected area
 3. Default Wuse
+
+Discovery scaling contract must remain:
+
+```text
+Radius
+↓
+All Matching Vendors
+↓
+Map = All
+Cards = Paginated
+```
 
 Normal ranking must remain:
 
@@ -103,6 +117,9 @@ Verify:
 - category search
 - category filters
 - clear-search restoration
+- search runs against the complete matching dataset before pagination
+- category filters run against the complete matching dataset before pagination
+- search and category result maps include all matching vendors, not only the current card page
 
 Search ranking must remain:
 
@@ -126,6 +143,8 @@ Verify on desktop and mobile:
 - camera and marker coordinates use `[longitude, latitude]`
 - dense markers remain tappable
 - selected markers do not get intercepted by neighboring marker hitboxes
+- cluster source receives all matching vendors
+- loading more card vendors does not remove or add map vendors except through a true discovery filter change
 
 Block if card selection, marker selection, or camera target references the wrong vendor.
 

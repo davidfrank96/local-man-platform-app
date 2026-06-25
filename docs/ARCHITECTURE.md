@@ -29,6 +29,19 @@ The active discovery origin feeds:
 - search scope
 - Popular tab scope
 
+Discovery result ownership is split after the complete matching dataset is built:
+
+```text
+Radius
+↓
+All Matching Vendors
+↓
+Map = All
+Cards = Paginated
+```
+
+Radius determines the complete matching dataset. Search and ranking run against that complete dataset before pagination. The map receives all matching vendors so clustering and marker visibility are not affected by card-page size. The card list receives a paginated subset for browsing.
+
 Recent and Last Viewed are user-centric retention surfaces and are not area-centric.
 
 ## Search
@@ -40,6 +53,8 @@ Search runs against the active discovery dataset:
 - Default-Wuse mode searches vendors near Wuse.
 
 Search does not query the entire vendor database from the public app.
+
+Search also does not run against only the currently loaded card page. It filters the complete radius-matched dataset, then map vendors and card vendors are split from that result.
 
 ## Ranking
 
@@ -65,7 +80,7 @@ The Popular tab intentionally differs:
 
 ## Map
 
-MapLibre renders the map when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. The map follows the active discovery origin and uses the same vendor dataset as the list. Marker selection, selected-vendor cards, and camera movement are synchronized by vendor identity.
+MapLibre renders the map when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. The map follows the active discovery origin and receives all matching vendors from the active discovery dataset. Card pagination must not remove vendors from the map or clustering source. Marker selection, selected-vendor cards, and camera movement are synchronized by vendor identity.
 
 Map coordinate handling is explicit:
 
