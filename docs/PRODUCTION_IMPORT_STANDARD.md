@@ -1,18 +1,225 @@
 # Production Import Standard
 
-This document defines the permanent onboarding standard for future Localman production vendor imports. It captures the rules learned from the first production batch so future batches can be transformed, validated, reviewed, and imported repeatably.
+This document defines the permanent onboarding standard for all Localman production vendor imports.
 
-Do not import raw field-collection workbooks directly. Every batch must pass through transformation, validation, audit reporting, and manual review before import.
+Version: `v1.0`
 
-## Standard Workflow
+This replaces all previous ad-hoc onboarding. Do not import raw field-collection workbooks directly. Every batch must complete every phase below before production import. No production import may skip a phase.
+
+## Permanent Rules
+
+Never:
+
+- Silently remap governance areas
+- Silently update coordinates
+- Silently overwrite phone values
+- Silently overwrite vendor or business names
+- Invent coordinates, hours, dishes, images, descriptions, or vendor identity
+- Collapse secondary categories or discard the third featured dish
+
+Always:
+
+- Preserve the unchanged source workbook
+- Produce review packages before production writes
+- Resolve every FAIL before import
+- Manually approve WARNING and REVIEW rows before import
+- Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`
+
+## Required Batch Deliverables
+
+Every vendor batch must produce:
+
+1. Production CSV
+2. Validation report
+3. Audit report
+4. Excluded vendors report
+5. Coordinate review package
+6. Release gate report
+7. Quality score
+8. Import history update
+
+## Permanent Workflow v1.0
+
+### Phase 1 - Source Validation
+
+Validate workbook integrity before any transformation.
+
+Check:
+
+- Duplicate rows
+- Duplicate phones
+- Duplicate business names
+- Missing vendor names
+- Missing addresses
+- Missing coordinates
+- Malformed coordinates
+- Malformed phones
+
+Output:
+
+- Batch validation report
+
+### Phase 2 - Data Normalization
+
+Normalize only:
+
+- Phones
+- Governance areas
+- Category fields
+- Hours formatting
+- Slugs
+
+Never modify these source fields unless explicitly approved and documented:
+
+- Vendor names
+- Business names
+- Featured dishes
+- Addresses
+- Coordinates
+
+### Phase 3 - Governance Review
+
+Check every source area against Localman area governance.
+
+If the area is unknown:
+
+- Do not silently remap it
+- Report the candidate mapping
+- Report mapping confidence
+- Require manual approval or governance addition before import readiness
+
+### Phase 4 - Coordinate Validation
+
+For every vendor, verify that area, address, and coordinates agree.
+
+Check:
+
+- Coordinates are inside Abuja/FCT bounds
+- Coordinates are plausible for the assigned area
+- Coordinates are not duplicate placeholder coordinates
+- Coordinates are not clearly in another city/state
+
+Classify each row:
+
+- `PASS`
+- `WARNING`
+- `FAIL`
+
+### Phase 5 - Duplicate Coordinate Audit
+
+This phase is mandatory before every import.
+
+Detect vendors sharing identical coordinates, group them, and classify the groups:
+
+- `APPROVED`
+- `REVIEW`
+- `REVISIT`
+
+Never update coordinates automatically. Coordinate corrections require a separate review package and approval trail.
+
+### Phase 6 - Description Review
+
+Review vendor descriptions and dish descriptions.
+
+Rules:
+
+- Keep descriptions short
+- Keep descriptions clear
+- Keep descriptions customer-focused
+- Do not invent marketing language
+- Do not invent dishes, quality claims, popularity claims, or history
+
+### Phase 7 - Import Package
+
+Generate the production import package only after all blockers are resolved.
+
+Required outputs:
+
+- CSV
+- Audit report
+- Validation report
+
+### Phase 8 - Release Gate
+
+Before import, verify:
+
+- Phones
+- Coordinates
+- Hours
+- Categories
+- Slugs
+- Areas
+- Featured dishes
+- CSV safety
+
+### Phase 9 - Post Import
+
+After import, verify:
+
+- Vendor count
+- Category count
+- Hours
+- Search
+- Map
+- Clusters
+- Dashboard
+
+### Phase 10 - Post Import Quality
+
+Immediately run a duplicate coordinate audit on production after import.
+
+If duplicate coordinate groups exist, create:
+
+- Approved package
+- Review package
+- Revisit package
+
+### Phase 11 - Quality Score
+
+Every batch receives a quality score.
+
+Required scoring output:
+
+- Final grade: `PASS`, `WARNING`, or `FAIL`
+- Overall quality percentage
+- Warning count
+- Fail count
+- Manual review count
+
+Example:
+
+```text
+Final grade: PASS
+Overall quality: 98%
+```
+
+### Phase 12 - Documentation
+
+Update `docs/PRODUCTION_IMPORT_HISTORY.md` before the batch is considered complete.
+
+Record:
+
+- Batch number
+- Vendor count
+- Warnings
+- Manual reviews
+- Approved coordinate corrections
+- Release verdict
+
+## Legacy Workflow Reference
 
 1. Raw workbook
 2. Transformation into the Localman CSV contract
 3. Validation
 4. Audit report generation
 5. Manual review
-6. Import
-7. Post-import smoke test
+6. Release gate
+7. Import
+8. Post-import validation
+9. Post-import quality audit
+10. Import history update
+
+The 12-phase workflow above is authoritative. This condensed list is only a quick reference.
 
 ## Vendor Name Rules
 
@@ -77,10 +284,12 @@ Required fields:
 Rules:
 
 - Preserve coordinates exactly from the source
-- Do not geocode
-- Do not modify
+- Do not geocode during source transformation
+- Do not modify during source transformation
 - Do not round
 - Do not infer coordinates from address or area
+
+Coordinate candidate generation is allowed only inside the duplicate-coordinate or correction-review package. Candidate coordinates are never production data until manually approved and applied through a separate guarded update.
 
 Missing or malformed coordinates:
 
@@ -102,6 +311,8 @@ Unknown area:
 - Not FAIL
 
 Area warnings should not block import because discovery uses coordinates and radius. Area values still matter for governance, reporting, filtering context, and user-facing labels.
+
+Unknown or ambiguous area mappings must be reported during Phase 3. Do not silently map an unknown workbook value to an existing governance area.
 
 ## Category Rules
 
@@ -241,7 +452,12 @@ FAIL:
 Before importing a production batch:
 
 - Confirm the raw workbook is archived unchanged.
+- Complete Phase 1 source validation.
 - Transform the workbook into the approved Localman CSV format.
+- Complete Phase 3 governance review.
+- Complete Phase 4 coordinate validation.
+- Complete Phase 5 duplicate coordinate audit.
+- Complete Phase 6 description review.
 - Verify `vendor_name` follows the identity priority rules.
 - Verify all phone values are stored as text and preserve leading zero.
 - Verify importer storage normalization remains callable.
@@ -256,8 +472,12 @@ Before importing a production batch:
 - Review suspicious overnight or reversed hours.
 - Verify missing images are warnings, not blockers.
 - Generate and review the validation report.
+- Generate and review the audit report.
+- Generate and review the excluded vendors report.
+- Generate and review the coordinate review package.
 - Resolve every FAIL row before import.
 - Manually approve WARNING rows before import.
+- Run the release gate.
 
 ## Future Batch Post-Import Smoke Test
 
@@ -275,6 +495,10 @@ After importing a production batch:
 - Confirm closed days display as closed and do not create phantom hours.
 - Confirm admin vendor list and edit screens load imported vendors.
 - Confirm Rider Connect, ratings, and public discovery remain functional.
+- Run the post-import duplicate coordinate audit.
+- Create approved/review/revisit coordinate packages if duplicate groups remain.
+- Assign the final batch quality score.
+- Update `docs/PRODUCTION_IMPORT_HISTORY.md`.
 
 ## Import Standards Summary
 

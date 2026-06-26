@@ -16,19 +16,26 @@ Localman is a location-aware marketplace for discovering local food vendors in A
 
 ## Production Operations
 
-Production onboarding now follows the documented Localman import standard:
+Production onboarding now follows the permanent Localman import standard v1.0:
 
 ```text
 Raw workbook
--> transformation
--> validation
--> audit
--> manual review
+-> source validation
+-> normalization
+-> governance review
+-> coordinate validation
+-> duplicate coordinate audit
+-> description review
+-> import package
+-> release gate
 -> import
 -> post-import validation
+-> post-import quality audit
+-> quality score
+-> import history update
 ```
 
-Marketplace reset, import history, import checklists, and release gates are documented under `docs/`. Do not import raw field-collection workbooks directly.
+Marketplace reset, import history, import checklists, and release gates are documented under `docs/`. Do not import raw field-collection workbooks directly, and do not skip any onboarding phase.
 
 ## Tech Stack
 

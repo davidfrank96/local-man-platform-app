@@ -174,8 +174,17 @@ Blank open and blank close means a closed day in the current importer.
 
 ## 8. Import Pipeline Validation
 
+For vendor onboarding batches, confirm `docs/PRODUCTION_IMPORT_STANDARD.md` v1.0 was completed before import.
+
 Verify:
 
+- source validation report exists
+- governance review exists and unknown areas were not silently remapped
+- coordinate validation checked area, address, latitude, and longitude together
+- duplicate coordinate audit and coordinate review package exist
+- description review exists
+- excluded vendors report exists
+- quality score is prepared
 - phone validation and callable storage normalization
 - slug preservation when supplied
 - slug generation when missing
@@ -186,7 +195,7 @@ Verify:
 - area normalization and unknown-area warnings
 - CSV escaping and stable column counts
 
-Block on invalid phone, invalid coordinates, no valid category, missing vendor name, missing all featured dishes, or incomplete hours pairs.
+Block on skipped onboarding phases, invalid phone, invalid coordinates, unreviewed coordinate duplicates, no valid category, missing vendor name, missing all featured dishes, or incomplete hours pairs.
 
 ## 9. Admin Validation
 
@@ -225,6 +234,8 @@ For imports, verify:
 - governed or warning areas
 - hours rows
 - featured dish rows
+- no unapproved coordinate corrections were applied
+- no production import skipped the duplicate-coordinate audit
 
 Block on duplicate slugs, invalid phones, invalid coordinates, or missing required fields.
 
@@ -239,5 +250,8 @@ After any import, verify:
 - map marker selection matches cards
 - hours display correctly
 - admin pages load imported vendors
+- post-import duplicate coordinate audit completed
+- approved/review/revisit coordinate packages created when duplicate groups remain
+- final quality score assigned
 
 Record the final result in `docs/PRODUCTION_IMPORT_HISTORY.md`.

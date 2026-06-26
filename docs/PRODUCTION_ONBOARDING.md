@@ -1,6 +1,10 @@
 # Production Onboarding
 
-This document describes the production onboarding sequence for Localman vendor and rider data. The initial marketplace reset and Batch 1-3 vendor onboarding are complete, but the same workflow applies to future batches.
+This document describes the production onboarding sequence for Localman vendor and rider data. The initial marketplace reset and early vendor onboarding are complete. All future vendor batches must follow the permanent production onboarding workflow in `docs/PRODUCTION_IMPORT_STANDARD.md`.
+
+Vendor onboarding workflow version: `v1.0`
+
+This replaces prior ad-hoc onboarding. No production vendor import may skip any required phase.
 
 ## Pre-Onboarding Checklist
 
@@ -9,26 +13,33 @@ Before onboarding a production batch:
 1. Commit and review current code changes.
 2. Run database backup when the batch or deployment risk warrants it.
 3. Archive the raw workbook unchanged.
-4. Transform production vendor data into the Localman CSV contract.
-5. Generate the validation and audit reports.
-6. Resolve every FAIL row.
-7. Manually approve WARNING rows.
-8. Confirm the import operator, approved CSV, and expected counts.
+4. Complete source validation.
+5. Complete data normalization.
+6. Complete governance review.
+7. Complete coordinate validation.
+8. Complete duplicate coordinate audit.
+9. Complete description review.
+10. Generate the import package.
+11. Run the release gate.
+12. Confirm the import operator, approved CSV, and expected counts.
 
 ## Vendor Onboarding
 
 Recommended vendor onboarding path:
 
 1. Collect raw vendor data.
-2. Normalize business name, area, address, phone, coordinates, hours, categories, dishes, and images according to the production import standard.
-3. Convert to Localman CSV template.
-4. Run preview validation.
-5. Resolve blockers.
-6. Review warnings.
-7. Import approved rows.
-8. Upload missing media where needed.
-9. Run post-import validation.
-10. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
+2. Validate source workbook integrity.
+3. Normalize only approved fields: phones, governance areas, category fields, hours formatting, and slugs.
+4. Run governance review for unknown or ambiguous areas.
+5. Validate area, address, and coordinates together.
+6. Run the mandatory duplicate coordinate audit.
+7. Review vendor and dish descriptions.
+8. Convert to the Localman CSV template only after blockers are resolved.
+9. Generate CSV, audit report, validation report, excluded vendors report, coordinate review package, release gate, and quality score.
+10. Import approved rows only.
+11. Run post-import validation.
+12. Run post-import duplicate coordinate audit and produce approved/review/revisit packages if needed.
+13. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
 
 ## Rider Onboarding
 
@@ -52,12 +63,15 @@ For vendor data, validate:
 - vendor count
 - unique phones
 - canonical or warning areas
-- coordinates present and parseable
+- coordinates present, parseable, inside Abuja/FCT, plausible for area, and not duplicate placeholders
 - at least one operating day
 - featured dishes present
 - category valid
 - image warnings understood
 - generated slugs reviewed
+- duplicate coordinate groups classified
+- descriptions reviewed
+- quality score assigned
 
 For riders, validate:
 
@@ -85,6 +99,9 @@ After import:
 10. Test Rider Connect handoff with approved production riders.
 11. Review admin analytics and logs.
 12. Verify PWA launch and offline fallback.
+13. Run duplicate coordinate audit against production.
+14. Confirm map clusters and selected vendor behavior remain valid.
+15. Update import history.
 
 ## Launch Readiness
 

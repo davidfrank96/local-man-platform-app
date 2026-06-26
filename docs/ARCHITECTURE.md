@@ -147,14 +147,19 @@ Vendor image metadata lives in `vendor_images`. Supabase Storage objects live in
 
 ## Operational Boundaries
 
-Marketplace data is operational data. Production vendor onboarding uses the documented workflow:
+Marketplace data is operational data. Production vendor onboarding uses the documented workflow v1.0:
 
-1. Raw workbook
-2. Transformation
-3. Validation
-4. Audit
-5. Manual review
-6. Import
-7. Post-import validation
+1. Source validation
+2. Data normalization
+3. Governance review
+4. Coordinate validation
+5. Duplicate coordinate audit
+6. Description review
+7. Import package
+8. Release gate
+9. Import
+10. Post-import validation
+11. Post-import quality audit
+12. Quality score and import history update
 
-Batch imports are recorded in `docs/PRODUCTION_IMPORT_HISTORY.md`. Reset and release procedures are documented in `docs/MARKETPLACE_RESET.md`, `docs/OPERATIONS.md`, and `docs/MASTER_RELEASE_GATE.md`.
+No production import may skip a phase. Batch imports are recorded in `docs/PRODUCTION_IMPORT_HISTORY.md`. Reset and release procedures are documented in `docs/MARKETPLACE_RESET.md`, `docs/OPERATIONS.md`, and `docs/MASTER_RELEASE_GATE.md`.

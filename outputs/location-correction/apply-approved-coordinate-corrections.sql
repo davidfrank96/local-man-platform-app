@@ -1,0 +1,14 @@
+-- Localman duplicate coordinate correction draft
+-- Generated for manual review only.
+-- DO NOT EXECUTE until coordinates have been manually approved.
+--
+-- Safety pattern:
+-- update public.vendors
+-- set latitude = <approved_latitude>,
+--     longitude = <approved_longitude>,
+--     updated_at = now()
+-- where slug = '<vendor_slug>'
+--   and latitude = <old_latitude>
+--   and longitude = <old_longitude>;
+--
+-- No rows are approved by this audit, so this file intentionally contains no active UPDATE statements.
