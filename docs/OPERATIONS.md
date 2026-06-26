@@ -52,28 +52,42 @@ Do not run execute mode as part of normal documentation, validation, or release-
 
 Production vendor onboarding must follow this workflow:
 
+Workflow version: `v1.0`
+
 ```text
 Raw workbook
--> transformation
--> validation
--> audit
--> manual review
+-> source validation
+-> data normalization
+-> governance review
+-> coordinate validation
+-> duplicate coordinate audit
+-> description review
+-> import package
+-> release gate
 -> import
 -> post-import validation
+-> post-import quality audit
+-> quality score
+-> import history update
 ```
 
-Never import a raw field-collection workbook directly.
+Never import a raw field-collection workbook directly. Never skip a phase in `docs/PRODUCTION_IMPORT_STANDARD.md`.
 
 ## Vendor Imports
 
 Before import:
 
 1. Archive the raw workbook unchanged.
-2. Transform it into the Localman CSV contract.
-3. Generate validation and audit reports.
-4. Resolve every FAIL row.
-5. Manually approve WARNING rows.
-6. Confirm expected vendor, category, hours, and featured-dish counts.
+2. Complete source validation.
+3. Normalize only approved fields: phones, governance areas, categories, hours formatting, and slugs.
+4. Complete governance review without silent remaps.
+5. Complete coordinate validation against area, address, and Abuja/FCT bounds.
+6. Complete duplicate coordinate audit and coordinate review packaging.
+7. Complete description review.
+8. Generate CSV, audit report, validation report, excluded vendors report, release gate, and quality score.
+9. Resolve every FAIL row.
+10. Manually approve WARNING and REVIEW rows.
+11. Confirm expected vendor, category, hours, and featured-dish counts.
 
 Import rules are defined in `docs/PRODUCTION_IMPORT_STANDARD.md` and `docs/IMPORT_PIPELINE.md`.
 
@@ -84,7 +98,10 @@ After import:
 3. Confirm categories are preserved through `vendor_category_map`.
 4. Confirm hours and closed days display correctly.
 5. Confirm discovery, search, map, vendor profiles, and admin pages work.
-6. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
+6. Run the post-import duplicate coordinate audit.
+7. Create approved/review/revisit coordinate packages when duplicate groups remain.
+8. Record quality score and release verdict.
+9. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
 
 ## Rider Imports
 

@@ -2,7 +2,9 @@
 
 This file is the permanent record of Localman production marketplace imports.
 
-Record every production vendor onboarding batch here before the batch is considered complete. The history should stay factual: counts, areas, warnings, validation outcome, and sign-off status. Do not use this file for raw vendor data, credentials, private rider information, or database exports.
+Current vendor onboarding workflow version: `v1.0`
+
+Record every production vendor onboarding batch here before the batch is considered complete. The history should stay factual: counts, areas, warnings, validation outcome, coordinate review outcome, quality score, and sign-off status. Do not use this file for raw vendor data, credentials, private rider information, or database exports.
 
 ## Batch History
 
@@ -62,19 +64,39 @@ Copy this block for each new production import batch.
 
 ### Validation Summary
 
+- Source validation:
+- Governance review:
 - Pre-import validation:
 - CSV parser validation:
 - Phone validation:
 - Coordinate validation:
+- Duplicate coordinate audit:
+- Description review:
 - Category validation:
 - Hours validation:
 - Duplicate slug check:
 - Dry-run result:
+- Release gate result:
 
 ### Warnings
 
 - Warning 1:
 - Warning 2:
+
+### Exclusions And Manual Review
+
+- Excluded vendor count:
+- Exclusion reasons:
+- Manual review count:
+- Approved warnings:
+
+### Coordinate Review
+
+- Duplicate coordinate groups before import:
+- Approved coordinate candidates:
+- Review coordinate candidates:
+- Revisit coordinate candidates:
+- Approved coordinate corrections applied:
 
 ### Post-Import Verification
 
@@ -88,6 +110,17 @@ Copy this block for each new production import batch.
 - Search checks:
 - Vendor profile checks:
 - Admin checks:
+- Map and cluster checks:
+- Dashboard count checks:
+- Post-import duplicate coordinate audit:
+
+### Quality Score
+
+- Grade: PASS / WARNING / FAIL
+- Overall quality:
+- Warning count:
+- Fail count:
+- Manual review count:
 
 ### Outcome
 
