@@ -91,7 +91,7 @@ Test:
 - selected vendor preview exposes `View details`, `Call`, and `Directions`
 - selected vendor preview keeps the existing `View details` icon behavior while preserving `Call` and `Directions` icons
 - vendor card metadata row keeps distance and open/closed state visible together
-- the real map uses one vendor-marker system only with no clustering
+- the real map uses native clustering for dense vendor sets while keeping unclustered storefront markers tappable
 - marker taps update the selected vendor preview without moving the camera
 - storefront icon markers remain tappable and update the selected vendor preview
 - card selection may gently focus the map without causing page scroll drift
@@ -446,7 +446,7 @@ Manual UI checks:
 - header branding renders the Localman icon beside the existing text without mobile overflow, navigation collision, or layout shift
 - map controls stay visible
 - MapLibre should load when `NEXT_PUBLIC_MAP_STYLE_URL` is configured, and the coordinate fallback map should take over quietly when it is not or when map loading fails.
-- the real map should show oxblood storefront markers by default, a green storefront marker when selected, a blue user-location marker, and no cluster bubbles
+- the real map should show count-only cluster bubbles, oxblood storefront markers by default, a green storefront marker when selected, and a blue user-location marker
 - mobile Map selected vendor panel should flow below the map through normal page scrolling
 - mobile marker taps should update the selected preview without drifting the map or scrolling the page down
 - mobile pinch zoom and drag-pan should be checked on a real device before final release confidence

@@ -1,21 +1,29 @@
 # Import Pipeline
 
-This document describes the production vendor import workflow and validation rules.
+This document describes the permanent production vendor import workflow and validation rules. This v1.0 workflow replaces ad-hoc onboarding. Every future batch must complete every phase before production import.
 
 ## Workflow
 
-Raw production collection data should flow through:
+Raw production collection data must flow through:
 
 1. Raw XLSX
-2. Transformation
-3. Validation
-4. Audit report
-5. Production CSV
-6. Manual review
-7. Import
-8. Post-import validation
+2. Source validation
+3. Data normalization
+4. Governance review
+5. Coordinate validation
+6. Duplicate coordinate audit
+7. Description review
+8. Production CSV package
+9. Release gate
+10. Manual review
+11. Import
+12. Post-import validation
+13. Post-import duplicate coordinate audit
+14. Quality score and import history update
 
 Do not import raw Jotform-style XLSX files directly. The admin importer expects CSV with Localman template headers.
+
+No production import may skip phases. Review artifacts must be generated before import, including the validation report, audit report, excluded vendors report, coordinate review package, release gate result, quality score, and import history entry.
 
 ## Production CSV Contract
 
@@ -62,7 +70,7 @@ Examples:
 - `Jabi Bitikuwe street by Car wash` -> area `Jabi`, address keeps the full street detail
 - `Utako market opposite SAY plaza` -> area `Utako`, address keeps the full market detail
 
-Unknown areas warn but do not block CSV import.
+Unknown areas are governance findings and must not be silently remapped. A batch can proceed only when every unknown value has an explicit recommendation: safe mapping to an existing governed area, approved governance addition, warning with manual acceptance, or vendor exclusion.
 
 ## Coordinate Extraction
 
@@ -81,6 +89,8 @@ Into:
 - `longitude`: `7.4328425`
 
 Missing or malformed coordinates block import.
+
+Coordinates must also be geographically plausible for the assigned area and address. Validation checks must compare `area`, `address`, `latitude`, and `longitude` together, confirm the point is inside Abuja/FCT bounds, and flag duplicate placeholder coordinates.
 
 ## Phone Normalization
 
@@ -147,6 +157,8 @@ The legacy `category` column remains supported for older CSVs only. If `category
 
 Invalid category values warn and are skipped. A row fails only when no valid category exists.
 
+Category preservation is a permanent lock. Production transformation must preserve `category_1` through `category_6`; the importer must create one mapping row for every valid unique category and must not collapse multi-category vendors to a single category.
+
 ## Time Normalization
 
 The importer accepts common field-collection formats:
@@ -159,6 +171,26 @@ The importer accepts common field-collection formats:
 Times are normalized internally to stored 24-hour values.
 
 Incomplete day pairs still fail. At least one open day is required.
+
+Blank open and blank close means a closed day. One side missing is a row failure. Suspicious overnight ranges are warnings for manual review unless explicitly approved.
+
+## Duplicate Coordinate Audit
+
+Every batch must include a duplicate coordinate audit before import and a production duplicate-coordinate audit after import.
+
+The audit must:
+
+- group vendors sharing exact latitude and longitude
+- extract address evidence for each duplicate group
+- classify candidates as approved, review, or revisit
+- produce a human-review coordinate package
+- avoid automatic coordinate updates
+
+No geocoded coordinate may be applied without human approval. Approved coordinate update scripts must update only latitude and longitude, target vendors by id or slug, and include old-coordinate guards in the `WHERE` clause.
+
+## Description Review
+
+Descriptions and dish descriptions are reviewable text fields. They may be edited for clarity only when the review preserves meaning and does not invent dishes, quality claims, popularity claims, history, or pricing assertions.
 
 ## PASS / WARNING / FAIL
 
@@ -189,6 +221,20 @@ FAIL:
 - no operating day
 - missing featured dish
 
+## CSV Safety
+
+Generated CSVs must be importer-safe:
+
+- no embedded newlines in fields
+- stable column count on every row
+- no duplicate slugs unless resolved before import
+- no coordinate loss
+- no category loss
+- no featured dish loss
+- leading-zero phone values preserved as text in review artifacts
+
+Rows with unresolved blockers are excluded into a correction workbook rather than silently corrected.
+
 ## Review Before Import
 
 Before import, review:
@@ -202,6 +248,9 @@ Before import, review:
 - hours coverage
 - category mapping
 - generated slugs
+- duplicate coordinate groups
+- excluded vendor package
+- quality score
 
 ## Post-Import Validation
 
@@ -216,3 +265,7 @@ After import, validate:
 - default Wuse, selected-area, and GPS discovery still work
 - map markers match selected vendor cards
 - closed days, open-now status, and overnight warnings remain correct
+- dashboard database totals and vendor registry pagination remain correct
+- post-import duplicate coordinate audit is complete
+
+Record every completed import in `docs/PRODUCTION_IMPORT_HISTORY.md`, including batch number, vendor count, warnings, manual reviews, coordinate corrections, and final quality score.

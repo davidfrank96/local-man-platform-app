@@ -98,9 +98,12 @@ Behavior:
   4. stable vendor name/id tie-breakers
 - Search and category parameters filter the candidate set; they do not add a separate relevance sort that can override open status or distance.
 - Sponsored/promoted ranking is not implemented.
-- Nearby results are capped to the top `50` vendors after filtering and ordering so the map/list payload remains bounded.
-- The public map currently renders those vendor results as individual markers when MapLibre is enabled.
-- Clustering is disabled in the current release, so the API response does not carry any cluster-specific contract.
+- Nearby discovery builds the complete matching dataset after filtering and ordering, then splits response ownership:
+  - `map_vendors` contains all matching vendors for map rendering and clustering
+  - `vendors` contains the current paginated card page
+  - `pagination` contains the card-list paging metadata
+- Card pagination defaults to `25` vendors and is capped at `50` vendors per page.
+- The public MapLibre map receives `map_vendors`, uses native clustering for dense results, and keeps clustering as a rendering concern rather than a discovery filter.
 - Distance is not stored in the database.
 - Search-bearing requests are abuse-protected with a centralized limiter:
   - threshold: `45` requests per `60` seconds per client/IP

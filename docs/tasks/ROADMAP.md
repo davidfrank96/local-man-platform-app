@@ -55,7 +55,7 @@ Local Man — Roadmap
 - browser-back and `Back to map` restoration
 - `Apply filters` button restoration after navigation
 - time-based morning, afternoon, and night discovery theming
-- MapLibre interactive map with fallback coordinate map, selected-preview sync, oxblood storefront vendor markers, green selected-marker state, and no clustering
+- MapLibre interactive map with fallback coordinate map, selected-preview sync, oxblood storefront vendor markers, green selected-marker state, and native count-only clustering
 - trust-first precise, approximate, and default-city location messaging
 - reverse location display with human-readable area labels
 - structured admin workspace routes for dashboard, registry, create, and edit flows

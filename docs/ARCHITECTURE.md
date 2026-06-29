@@ -1,6 +1,6 @@
 # Localman Architecture
 
-This document describes the current production architecture after marketplace reset, production onboarding, import hardening, and the Batch 1-3 vendor imports.
+This document describes the current production architecture after marketplace reset, production onboarding, import hardening, Batch 1-4 vendor imports, discovery scaling, map clustering, admin count corrections, and admin edit-state lockdown.
 
 ## System Overview
 
@@ -42,6 +42,14 @@ Cards = Paginated
 
 Radius determines the complete matching dataset. Search and ranking run against that complete dataset before pagination. The map receives all matching vendors so clustering and marker visibility are not affected by card-page size. The card list receives a paginated subset for browsing.
 
+The nearby response is split by ownership:
+
+- `map_vendors`: all vendors matching the active radius/search/filter dataset
+- `vendors`: the current card page
+- `pagination`: card-list pagination metadata
+
+Default card page size is 25. The maximum accepted card page size is 50.
+
 Recent and Last Viewed are user-centric retention surfaces and are not area-centric.
 
 ## Search
@@ -55,6 +63,8 @@ Search runs against the active discovery dataset:
 Search does not query the entire vendor database from the public app.
 
 Search also does not run against only the currently loaded card page. It filters the complete radius-matched dataset, then map vendors and card vendors are split from that result.
+
+Search covers the approved searchable vendor fields, including vendor name, descriptions, category assignments, and featured dishes. Multi-category vendors remain searchable and filterable under every valid `vendor_category_map` assignment.
 
 ## Ranking
 
@@ -81,6 +91,16 @@ The Popular tab intentionally differs:
 ## Map
 
 MapLibre renders the map when `NEXT_PUBLIC_MAP_STYLE_URL` is configured. The map follows the active discovery origin and receives all matching vendors from the active discovery dataset. Card pagination must not remove vendors from the map or clustering source. Marker selection, selected-vendor cards, and camera movement are synchronized by vendor identity.
+
+The production map uses native MapLibre clustering for vendor density:
+
+- cluster bubbles display vendor counts only
+- unclustered vendor markers use the Localman storefront marker visual
+- selected vendor overlay is independent of clustered source state
+- card click always wins: card selection sets the selected vendor, moves the camera, expands the cluster if needed, and keeps the selected marker visible
+- cluster taps expand the cluster and do not select a vendor
+- duplicate-coordinate vendor groups use the same-location selector instead of hiding choices behind one marker
+- mobile selected-vendor camera movement uses an upward offset so the marker is not covered by the bottom card/sheet
 
 Map coordinate handling is explicit:
 
@@ -131,6 +151,10 @@ Admin capabilities include:
 - team management
 - marketplace reset dry-run and execute tooling
 
+Admin dashboard totals are database totals, not loaded-page counts. Vendor registry pagination remains in place and can display "showing N of total" without fetching every vendor.
+
+The admin edit workspace is keyed by selected vendor id so switching vendors remounts the form and clears uncontrolled/default input state. Image upload and save paths must use the current selected vendor id at the time of action.
+
 ## PWA
 
 The PWA layer is intentionally conservative:
@@ -163,3 +187,5 @@ Marketplace data is operational data. Production vendor onboarding uses the docu
 12. Quality score and import history update
 
 No production import may skip a phase. Batch imports are recorded in `docs/PRODUCTION_IMPORT_HISTORY.md`. Reset and release procedures are documented in `docs/MARKETPLACE_RESET.md`, `docs/OPERATIONS.md`, and `docs/MASTER_RELEASE_GATE.md`.
+
+Coordinates are production trust data. Duplicate coordinate audits are mandatory for every batch. Candidate coordinate corrections are prepared as human-review packages first; production coordinates are never automatically changed by import, geocoding, or discovery code.

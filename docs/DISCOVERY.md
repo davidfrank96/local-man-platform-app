@@ -62,6 +62,14 @@ Cards = Paginated
 
 The complete matching dataset is the source for search, ranking, map rendering, and card pagination. Pagination is only a card browsing concern.
 
+The nearby response contract is:
+
+- `map_vendors`: all matching vendors
+- `vendors`: the current card page
+- `pagination`: card-list pagination metadata
+
+The default card page size is 25. The maximum card page size is 50. Pagination never changes discovery, search, ranking, clustering, marker availability, or selected vendor identity.
+
 ## Search
 
 Search filters the active discovery dataset. It does not search the whole vendor database.
@@ -75,6 +83,8 @@ Examples:
 Clearing search restores the current active discovery dataset.
 
 Search runs before card pagination. A vendor that matches search outside the first card page must still be searchable, included in `map_vendors`, and eligible for card pagination.
+
+Search covers vendor identity, descriptions, featured dishes, and category assignments. Multi-category vendors must remain visible in every assigned category because category filtering uses the preserved `vendor_category_map` data, not a single flattened category.
 
 ## Ranking
 
@@ -104,13 +114,18 @@ Popular intentionally uses:
 
 The map uses all vendors in the active matching discovery dataset. The card list uses a paginated subset of that same ranked result. Selecting a vendor card or marker should keep the selected card, selected marker, and camera target aligned to the same vendor id. MapLibre receives marker and camera coordinates in `[longitude, latitude]` order.
 
+MapLibre clustering is a rendering concern only. It never changes the discovery dataset. Cluster bubbles show counts, unclustered vendors use storefront markers, selected vendors render through the selected overlay, and same-location groups expose a selector when multiple vendors share exact coordinates.
+
 Card pagination must never change:
 
 - map vendor count
 - cluster source
 - marker availability
+- cluster contents
 - selected vendor identity
 - selected marker visibility
+
+Card click has priority over cluster state. If a selected vendor is currently clustered, the selection flow must expand or move the camera enough to keep that vendor visible without changing the ranked dataset.
 
 ## Recent And Last Viewed
 

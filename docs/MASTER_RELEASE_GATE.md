@@ -30,6 +30,8 @@ git diff --check
 
 Block on merge conflicts or broken diffs.
 
+The worktree should be clean for a final deploy gate. If intentional release changes are present, list them explicitly and treat the gate as pre-commit until they are reviewed and staged.
+
 ## 2. Static Validation
 
 Commands:
@@ -108,6 +110,14 @@ Normal ranking must remain:
 3. Popularity
 4. Stable tie-breakers
 
+Card pagination contract:
+
+- default page size is 25
+- maximum page size is 50
+- Load More appends without duplicates or skipped vendors
+- pagination resets only when radius, area, search, category, price, or open-now filter changes
+- pagination never changes map vendors, clustering, search scope, or ranking
+
 ## 5. Search And Category Validation
 
 Verify:
@@ -144,6 +154,12 @@ Verify on desktop and mobile:
 - dense markers remain tappable
 - selected markers do not get intercepted by neighboring marker hitboxes
 - cluster source receives all matching vendors
+- cluster bubbles display counts only
+- unclustered vendors display storefront markers
+- selected vendor overlay remains topmost and visible
+- same-location selector works for duplicate coordinate groups
+- cluster expansion does not select a vendor
+- card click wins over cluster state
 - loading more card vendors does not remove or add map vendors except through a true discovery filter change
 
 Block if card selection, marker selection, or camera target references the wrong vendor.
@@ -207,6 +223,11 @@ Verify:
 - analytics
 - audit logs
 - operational logs
+- dashboard cards use database totals rather than loaded-page counts
+- vendor registry remains paginated and displays total-count metadata
+- edit workspace remounts or resets on selected vendor id change
+- image upload targets the current selected vendor id
+- save path submits the current selected vendor identity
 
 Block on runtime errors or broken admin navigation.
 
@@ -236,6 +257,8 @@ For imports, verify:
 - featured dish rows
 - no unapproved coordinate corrections were applied
 - no production import skipped the duplicate-coordinate audit
+- no governance value was silently remapped
+- no category, phone, coordinate, featured dish, or hours data was silently overwritten
 
 Block on duplicate slugs, invalid phones, invalid coordinates, or missing required fields.
 
@@ -255,3 +278,27 @@ After any import, verify:
 - final quality score assigned
 
 Record the final result in `docs/PRODUCTION_IMPORT_HISTORY.md`.
+
+## 13. Performance Validation
+
+Measure or smoke-test:
+
+- discovery request latency
+- search latency
+- map render and cluster render
+- Load More response time
+- selected vendor camera movement
+
+Validate at current production scale and with regression fixtures for 100, 500, and 1000 vendors when available. Block on severe regressions that make the public discovery flow unusable.
+
+## 14. Permanent Regression Locks
+
+Before a deployment or import, verify `docs/PERMANENT_REGRESSION_LOCKS.md` still matches the implemented behavior for:
+
+- discovery dataset ownership
+- search before pagination
+- map all-vendor clustering
+- admin database totals
+- admin edit-state reset
+- import governance and coordinate review
+- duplicate coordinate audit and human approval
