@@ -19,7 +19,7 @@ Local Man — UI Rules
   - oxblood storefront vendor markers
   - green storefront marker state for the selected vendor
   - blue user-location marker
-  - no clustering
+  - native MapLibre clusters with count-only cluster bubbles
 - Marker click and vendor-card selection must update the same selected vendor preview and selected marker.
 - Selected vendor camera movement may gently focus the selected marker when that improves orientation, and it must target the selected vendor coordinates.
 - Core mobile discovery uses a fixed bottom dock with:

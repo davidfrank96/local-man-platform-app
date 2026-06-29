@@ -1167,6 +1167,7 @@ export function AdminConsole({
             onSubmitFilters={submitFilters}
           />
           <EditVendorWorkspace
+            key={`admin-edit-workspace:${selectedVendor?.id ?? "none"}`}
             canDeleteVendor={canDeleteVendor}
             canReadRatingSignals={canReadAnalytics}
             disabled={isLoading}

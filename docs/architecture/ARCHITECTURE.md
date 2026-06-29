@@ -146,7 +146,7 @@ Public rendering rules:
   - oxblood storefront vendor markers
   - green storefront marker state for the selected vendor
   - blue user-location marker
-  - no clustering
+  - native MapLibre clusters with count-only cluster bubbles
 - vendor detail uses a shorter hero and compact summary blocks to reduce scrolling
 - vendor detail sharing is client-side only: the UI builds the canonical `/vendors/[slug]` URL for native share and copy-link actions without adding tracking params or a backend share endpoint
 - Rider Connect and rating prompt modal/sheet flows trap focus, close on `Escape`, and return focus to the trigger so keyboard users do not lose their place
@@ -540,7 +540,7 @@ The public app keeps a small amount of client-only memory:
 
 - structured logs exist for auth, abuse protection, analytics, audit-log flows, and the admin logs surface, but the repo does not yet provide distributed tracing or a centralized observability backend
 - public discovery prefers graceful degraded responses over hard crashes, so some upstream nearby failures may surface as unexpectedly empty vendor results until logs or smoke checks are reviewed
-- the current real map intentionally ships without clustering; revisit clustering only if pilot density makes marker usability worse than the current single-marker interaction model
+- the current real map intentionally uses native MapLibre clustering for marker density; clustering must remain a rendering concern and must not change discovery, search, ranking, or selected vendor identity
 
 ## Core Product Logic
 
