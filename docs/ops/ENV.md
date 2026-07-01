@@ -20,11 +20,22 @@ Local Man — Environment Variables
 - `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE`: optional explicit toggle for safe internal persistence of selected structured operational events. Defaults to `false`.
 - `LOCALMAN_RUNTIME_ENVIRONMENT`: optional label stored with persisted operational events, such as `local`, `staging`, or `production`.
 - `LOCALMAN_OPERATIONAL_EVENT_RETENTION_DAYS`: optional retention window used by `npm run db:prune:operational-events`. Defaults to `30`.
+- `ADMIN_LOGIN_PROTECTION_ENABLED`: optional toggle for persistent admin login protection. Defaults to enabled.
+- `ADMIN_LOGIN_PROTECTION_TABLE`: optional table override. Defaults to `admin_login_security_events`.
+- `ADMIN_SESSION_GOVERNANCE_ENABLED`: optional toggle for governed browser sessions. Defaults to enabled.
+- `ADMIN_SESSION_GOVERNANCE_TABLE`: optional table override. Defaults to `admin_sessions`.
+- `ADMIN_SESSION_IDLE_TIMEOUT_MS`: optional admin idle-timeout override. Defaults to 60 minutes.
+- `ADMIN_SESSION_ABSOLUTE_TIMEOUT_MS`: optional admin absolute-session-lifetime override. Defaults to 24 hours.
+- `ADMIN_SESSION_ACTIVITY_UPDATE_THRESHOLD_MS`: optional activity-write throttle. Defaults to 5 minutes.
+- `ADMIN_PASSWORD_MIN_LENGTH`, `ADMIN_PASSWORD_REQUIRE_UPPERCASE`, `ADMIN_PASSWORD_REQUIRE_LOWERCASE`, `ADMIN_PASSWORD_REQUIRE_NUMBER`, `ADMIN_PASSWORD_REQUIRE_SPECIAL`, and `ADMIN_PASSWORD_BLOCK_COMMON`: optional centralized admin password-policy overrides.
 
 ## Runtime Requirements
 - Local static checks and unit tests do not require environment variables.
 - Public Supabase-backed routes require `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - Admin login uses the public Supabase env vars for the server-side `/api/admin/login` password exchange against Supabase Auth.
+- Admin login protection uses the server-only `admin_login_security_events` table and fails closed if the persistent protection store cannot be evaluated.
+- Admin browser session governance uses the server-only `admin_sessions` table and fails closed if governed session validation cannot complete.
+- Forgot password, reset password, and change password use Supabase Auth. Localman does not store reset tokens or raw passwords.
 - Browser admin and agent sessions are persisted in same-origin HTTP-only cookies, not `localStorage` or `sessionStorage`.
 - Browser admin API calls now authenticate through those cookies and `/api/admin/session`; callers no longer need to attach a bearer token manually.
 - Vendor image uploads and deletes use the server-only service role key against the `vendor-images` Supabase Storage bucket created by the migration.

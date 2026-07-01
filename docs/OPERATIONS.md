@@ -145,10 +145,17 @@ Release gates must respect the production override model. Production differences
 
 ## Admin Auth Operations
 
+Authentication Hardening v1.0 status: `GREEN`.
+
 Admin auth hardening depends on two server-only tables:
 
 - `admin_login_security_events`
 - `admin_sessions`
+
+Applied auth migrations:
+
+- `20260701120000_admin_login_security_events.sql`
+- `20260701130000_admin_sessions.sql`
 
 Before deploying auth changes, run `npm run db:check` and confirm no auth migrations are pending. The application intentionally fails closed for login/session governance when required service-role access is unavailable.
 
@@ -183,6 +190,14 @@ Password management operations:
 - Change password requires an authenticated admin session, verifies the current password through Supabase Auth, updates through Supabase Auth, then revokes other governed sessions.
 - Password reset responses must remain generic and must not reveal whether an email belongs to an admin account.
 - Password audit events must not include raw passwords, recovery tokens, access tokens, refresh tokens, or service-role keys.
+
+Authentication UI operations:
+
+- login, forgot password, reset password, and change password share `components/admin/admin-auth-experience.tsx`
+- UI changes must not modify API routes, Supabase Auth calls, login protection, session governance, audit logging, or password policy
+- migration and database consistency warnings must remain visible to administrators
+- reset-link hash parsing must remain post-hydration to avoid SSR mismatches
+- invalid and expired reset links must display user-safe errors while audit logging continues
 
 Password policy environment overrides:
 

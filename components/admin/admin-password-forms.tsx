@@ -1,7 +1,24 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import {
+  AdminAuthCard,
+  AdminAuthDivider,
+  AdminAuthField,
+  AdminAuthFields,
+  AdminAuthLayout,
+  AdminAuthMessage,
+  AdminAuthPasswordField,
+  AdminAuthSecondaryAction,
+  AdminAuthSecurityNotice,
+  AdminAuthSubmitButton,
+  AdminPasswordStrength,
+} from "./admin-auth-experience.tsx";
+import {
+  initialAdminResetLinkState,
+  parseAdminResetLinkHash,
+  type AdminResetLinkState,
+} from "../../lib/admin/password-reset-link.ts";
 
 type ApiPayload = {
   success: boolean;
@@ -63,80 +80,68 @@ export function AdminForgotPasswordForm() {
   }
 
   return (
-    <main className="page-shell">
-      <p className="eyebrow">Admin access</p>
-      <h1>Reset your password</h1>
-      <p className="page-intro">
-        Enter your admin email. If the account exists, a reset link will be sent.
-      </p>
-      <form className="admin-form admin-login-form" onSubmit={handleSubmit}>
-        <label className="field field-wide">
-          <span>Email</span>
-          <input
+    <AdminAuthLayout formLabel="Admin password recovery">
+      <AdminAuthCard
+        title="Forgot your password?"
+        description="Enter your administrator email address. We'll send secure password reset instructions."
+        onSubmit={handleSubmit}
+      >
+        <AdminAuthFields>
+          <AdminAuthField
             autoComplete="email"
+            disabled={status === "submitting"}
+            icon="mail"
+            id="admin-forgot-password-email"
             inputMode="email"
+            label="Email address"
             name="email"
             required
             type="email"
             value={email}
+            aria-invalid={error ? "true" : undefined}
             onChange={(event) => setEmail(event.target.value)}
           />
-        </label>
+        </AdminAuthFields>
+
         {status === "sent" ? (
-          <p className="success-copy">
-            If an admin account exists for that email, a password reset link will be sent.
-          </p>
+          <AdminAuthMessage tone="success">
+            If an account exists for that email, password reset instructions have been sent.
+          </AdminAuthMessage>
         ) : null}
-        {error ? <p className="runtime-error">{error}</p> : null}
-        <div className="action-row">
-          <button className="button-primary" disabled={status === "submitting"} type="submit">
-            Send reset link
-          </button>
-          <Link className="button-secondary" href="/admin/login">
-            Back to login
-          </Link>
-        </div>
-      </form>
-    </main>
+        {error ? <AdminAuthMessage tone="error">{error}</AdminAuthMessage> : null}
+
+        <AdminAuthSubmitButton disabled={status === "submitting"}>
+          {status === "submitting" ? "Sending reset link..." : "Send reset link"}
+        </AdminAuthSubmitButton>
+
+        <AdminAuthDivider />
+
+        <AdminAuthSecondaryAction href="/admin/login" icon="arrow-left">
+          Back to login
+        </AdminAuthSecondaryAction>
+
+        <AdminAuthSecurityNotice>
+          Password recovery is protected by the same admin security controls.
+        </AdminAuthSecurityNotice>
+      </AdminAuthCard>
+    </AdminAuthLayout>
   );
 }
 
 export function AdminResetPasswordForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [resetLink] = useState(() => {
-    if (typeof window === "undefined") {
-      return {
-        accessToken: null as string | null,
-        linkError: null as string | null,
-      };
-    }
-
-    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const token = params.get("access_token");
-    const errorDescription = params.get("error_description");
-
-    if (errorDescription) {
-      return {
-        accessToken: null,
-        linkError: errorDescription,
-      };
-    }
-
-    if (!token) {
-      return {
-        accessToken: null,
-        linkError: "This password reset link is invalid or expired.",
-      };
-    }
-
-    return {
-      accessToken: token,
-      linkError: null,
-    };
-  });
+  const [resetLink, setResetLink] = useState<AdminResetLinkState>(initialAdminResetLinkState);
   const [status, setStatus] = useState<"idle" | "submitting" | "complete">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setResetLink(parseAdminResetLinkHash(window.location.hash));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (resetLink.accessToken) {
@@ -170,50 +175,58 @@ export function AdminResetPasswordForm() {
   }
 
   return (
-    <main className="page-shell">
-      <p className="eyebrow">Admin access</p>
-      <h1>Choose a new password</h1>
-      <p className="page-intro">Use a strong password for your Localman admin account.</p>
-      <form className="admin-form admin-login-form" onSubmit={handleSubmit}>
-        {resetLink.linkError ? <p className="runtime-error">{resetLink.linkError}</p> : null}
-        <label className="field field-wide">
-          <span>New password</span>
-          <input
+    <AdminAuthLayout formLabel="Admin password reset">
+      <AdminAuthCard
+        title="Create a new password"
+        description="Choose a strong password for your administrator account."
+        onSubmit={handleSubmit}
+      >
+        {resetLink.linkError ? <AdminAuthMessage tone="error">{resetLink.linkError}</AdminAuthMessage> : null}
+
+        <AdminAuthFields>
+          <AdminAuthPasswordField
             autoComplete="new-password"
             disabled={!resetLink.accessToken || status === "complete"}
+            id="admin-reset-password-new"
+            label="New password"
             name="password"
             required
-            type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
-        </label>
-        <label className="field field-wide">
-          <span>Confirm password</span>
-          <input
+          <AdminPasswordStrength password={password} />
+          <AdminAuthPasswordField
             autoComplete="new-password"
             disabled={!resetLink.accessToken || status === "complete"}
+            id="admin-reset-password-confirm"
+            label="Confirm password"
             name="confirm_password"
             required
-            type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
           />
-        </label>
+        </AdminAuthFields>
+
         {status === "complete" ? (
-          <p className="success-copy">Password reset complete. Sign in with your new password.</p>
+          <AdminAuthMessage tone="success">Password updated successfully. Return to login.</AdminAuthMessage>
         ) : null}
-        {error ? <p className="runtime-error">{error}</p> : null}
-        <div className="action-row">
-          <button className="button-primary" disabled={!canSubmit} type="submit">
-            Update password
-          </button>
-          <Link className="button-secondary" href="/admin/login">
-            Back to login
-          </Link>
-        </div>
-      </form>
-    </main>
+        {error ? <AdminAuthMessage tone="error">{error}</AdminAuthMessage> : null}
+
+        <AdminAuthSubmitButton disabled={!canSubmit}>
+          {status === "submitting" ? "Updating password..." : "Update password"}
+        </AdminAuthSubmitButton>
+
+        <AdminAuthDivider />
+
+        <AdminAuthSecondaryAction href="/admin/login" icon="arrow-left">
+          Return to login
+        </AdminAuthSecondaryAction>
+
+        <AdminAuthSecurityNotice>
+          Successful resets revoke governed admin sessions for this account.
+        </AdminAuthSecurityNotice>
+      </AdminAuthCard>
+    </AdminAuthLayout>
   );
 }
 
@@ -246,55 +259,63 @@ export function AdminChangePasswordForm() {
   }
 
   return (
-    <main className="page-shell">
-      <p className="eyebrow">Admin security</p>
-      <h1>Change password</h1>
-      <p className="page-intro">Update your admin password. Other active sessions will be revoked.</p>
-      <form className="admin-form admin-login-form" onSubmit={handleSubmit}>
-        <label className="field field-wide">
-          <span>Current password</span>
-          <input
+    <AdminAuthLayout formLabel="Admin change password">
+      <AdminAuthCard
+        title="Change password"
+        description="Update your admin password. Other active sessions will be revoked."
+        onSubmit={handleSubmit}
+      >
+        <AdminAuthFields>
+          <AdminAuthPasswordField
             autoComplete="current-password"
+            disabled={status === "submitting"}
+            id="admin-change-password-current"
+            label="Current password"
             name="current_password"
             required
-            type="password"
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
           />
-        </label>
-        <label className="field field-wide">
-          <span>New password</span>
-          <input
+          <AdminAuthPasswordField
             autoComplete="new-password"
+            disabled={status === "submitting"}
+            id="admin-change-password-new"
+            label="New password"
             name="password"
             required
-            type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
-        </label>
-        <label className="field field-wide">
-          <span>Confirm password</span>
-          <input
+          <AdminPasswordStrength password={password} />
+          <AdminAuthPasswordField
             autoComplete="new-password"
+            disabled={status === "submitting"}
+            id="admin-change-password-confirm"
+            label="Confirm password"
             name="confirm_password"
             required
-            type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
           />
-        </label>
-        {status === "complete" ? <p className="success-copy">Password changed.</p> : null}
-        {error ? <p className="runtime-error">{error}</p> : null}
-        <div className="action-row">
-          <button className="button-primary" disabled={status === "submitting"} type="submit">
-            Change password
-          </button>
-          <Link className="button-secondary" href="/admin/dashboard">
-            Back to dashboard
-          </Link>
-        </div>
-      </form>
-    </main>
+        </AdminAuthFields>
+
+        {status === "complete" ? <AdminAuthMessage tone="success">Password changed.</AdminAuthMessage> : null}
+        {error ? <AdminAuthMessage tone="error">{error}</AdminAuthMessage> : null}
+
+        <AdminAuthSubmitButton disabled={status === "submitting"}>
+          {status === "submitting" ? "Saving password..." : "Save password"}
+        </AdminAuthSubmitButton>
+
+        <AdminAuthDivider />
+
+        <AdminAuthSecondaryAction href="/admin/dashboard" icon="arrow-left">
+          Back to dashboard
+        </AdminAuthSecondaryAction>
+
+        <AdminAuthSecurityNotice>
+          Password changes preserve audit logging and session governance.
+        </AdminAuthSecurityNotice>
+      </AdminAuthCard>
+    </AdminAuthLayout>
   );
 }

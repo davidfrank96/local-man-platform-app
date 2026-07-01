@@ -1,6 +1,6 @@
 # Localman Architecture
 
-This document describes the current production architecture after marketplace reset, production onboarding, import hardening, Batch 1-4 vendor imports, discovery scaling, map clustering, admin count corrections, and admin edit-state lockdown.
+This document describes the current production architecture after marketplace reset, production onboarding, import hardening, Batch 1-4 vendor imports, discovery scaling, map clustering, admin count corrections, admin edit-state lockdown, and Admin Portal v2 Authentication Hardening v1.0.
 
 ## System Overview
 
@@ -149,6 +149,17 @@ Admin password management remains Supabase Auth-owned:
 - change-password verifies the current password through Supabase Auth, updates the password, and revokes other governed sessions
 - password policy is centralized in `lib/admin/password-policy.ts`
 - password events are recorded through structured operational audit events without raw tokens or passwords
+
+Admin authentication pages share the Authentication Experience System:
+
+- `/admin/login`
+- `/admin/forgot-password`
+- `/admin/reset-password`
+- `/admin/change-password`
+
+The shared UI lives in `components/admin/admin-auth-experience.tsx` and provides the split authentication layout, Localman brand treatment, cards, fields, password fields, password visibility toggles, password-strength display, error/success presentation, security notice, and responsive behavior. The UI layer is presentation-only and must not alter login protection, password management, session governance, audit logging, or API behavior.
+
+Reset-password rendering is SSR-safe. The server and first client render use identical initial reset-link state; browser hash parsing runs after hydration. Authentication pages must not read `window`, `document`, `location`, `localStorage`, `sessionStorage`, or other browser-only APIs during initial render.
 
 Admin capabilities include:
 

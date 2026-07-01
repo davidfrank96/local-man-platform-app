@@ -3,6 +3,7 @@ import test from "node:test";
 import { POST as forgotPassword } from "../app/api/admin/password/forgot/route.ts";
 import { POST as resetPassword } from "../app/api/admin/password/reset/route.ts";
 import { POST as changePassword } from "../app/api/admin/password/change/route.ts";
+import { parseAdminResetLinkHash } from "../lib/admin/password-reset-link.ts";
 import {
   validateAdminPassword,
   type AdminPasswordPolicyConfig,
@@ -148,6 +149,27 @@ test("admin password policy rejects obvious weak passwords", () => {
 
   assert.deepEqual(validateAdminPassword("password123", policy).success, false);
   assert.deepEqual(validateAdminPassword("StrongerPass123!", policy).success, true);
+});
+
+test("reset password hash parser accepts valid Supabase recovery tokens", () => {
+  assert.deepEqual(parseAdminResetLinkHash("#access_token=reset-token&type=recovery"), {
+    accessToken: "reset-token",
+    linkError: null,
+  });
+});
+
+test("reset password hash parser preserves Supabase recovery errors", () => {
+  assert.deepEqual(parseAdminResetLinkHash("#error_description=Email%20link%20is%20invalid%20or%20has%20expired"), {
+    accessToken: null,
+    linkError: "Email link is invalid or has expired",
+  });
+});
+
+test("reset password hash parser reports missing tokens after hydration", () => {
+  assert.deepEqual(parseAdminResetLinkHash(""), {
+    accessToken: null,
+    linkError: "This password reset link is invalid or expired.",
+  });
 });
 
 test("forgot password request returns a generic success response", async () => {

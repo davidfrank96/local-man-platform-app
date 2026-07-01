@@ -233,6 +233,11 @@ Verify:
 - password policy remains centralized and enforced by reset/change routes
 - password audit events contain no raw passwords, reset tokens, access tokens, or refresh tokens
 - cookie-backed admin sessions cannot authenticate after revocation
+- login, forgot password, reset password, and change password share the Authentication Experience System
+- password visibility toggles and password strength display work without changing backend validation
+- reset password valid-link, invalid-link, and expired-link states render without hydration warnings
+- authentication pages keep operational warnings, migration warnings, validation errors, rate-limit errors, and password/session errors visible
+- authentication UI changes do not alter API routes, Supabase Auth calls, session governance, login protection, audit logging, or password policy
 - vendor management
 - rider management
 - CSV intake and review modal

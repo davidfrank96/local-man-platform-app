@@ -219,6 +219,12 @@ Pages:
 - `/admin/reset-password`
 - `/admin/change-password`
 
+Shared authentication UI:
+
+- `components/admin/admin-auth-experience.tsx`
+- `components/admin/admin-login-form.tsx`
+- `components/admin/admin-password-forms.tsx`
+
 Password policy is centralized in `lib/admin/password-policy.ts`. The default policy requires 12 or more characters, uppercase, lowercase, number, special character, and blocks obvious weak passwords. Environment overrides may tune the policy without duplicating validation rules in routes.
 
 Password audit events are structured operational events and are eligible for durable persistence in `operational_events` when operational event storage is enabled:
@@ -232,6 +238,28 @@ Password audit events are structured operational events and are eligible for dur
 - `SESSIONS_REVOKED_AFTER_PASSWORD_CHANGE`
 
 Audit logs must not include raw passwords, reset tokens, access tokens, refresh tokens, or service-role keys. Email values are redacted and hashed before logging.
+
+## Authentication Experience System
+
+The authentication UI is a shared system, not four independent page designs.
+
+The approved login page is the visual baseline. Forgot password, reset password, and change password reuse the same layout, card, fields, button treatment, message presentation, password visibility control, security notice, and responsive behavior.
+
+UI rules:
+
+- no authentication route, API, Supabase Auth call, login-protection rule, session-governance rule, or audit event may be changed for visual polish
+- operational warnings and migration banners remain visible
+- runtime, validation, rate-limit, password-reset, and session errors must still display
+- production users receive safe error copy while internal logging continues
+- development warnings remain visible for engineering work
+- password strength display is advisory UI; backend password policy remains authoritative
+
+SSR rules:
+
+- server and first client render must match
+- browser-only state is evaluated after hydration
+- reset recovery hash parsing must not run during initial render
+- do not use `dynamic(..., { ssr: false })` to hide authentication hydration problems
 
 ### Forgot Password
 

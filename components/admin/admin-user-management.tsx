@@ -290,7 +290,7 @@ export function AdminUserManagement() {
               </label>
               <label className="field field-wide">
                 <span>Temporary password</span>
-                <input name="password" required minLength={8} type="password" placeholder="Minimum 8 characters" />
+                <input name="password" required minLength={12} type="password" placeholder="Minimum 12 characters" />
               </label>
             </div>
             <div className="action-row">

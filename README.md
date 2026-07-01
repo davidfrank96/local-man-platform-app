@@ -13,6 +13,7 @@ Localman is a location-aware marketplace for discovering local food vendors in A
 - Ratings use star scores plus predefined signals; no public free-text reviews are collected.
 - The PWA service worker caches static shell assets only and does not cache marketplace, rider, rating, search, or admin data.
 - Admin workflows include manual vendor creation, CSV vendor intake, vendor media, rider management, analytics, operational logs, and marketplace reset tooling.
+- Admin Portal v2 authentication is hardened with distributed login protection, governed HttpOnly browser sessions, centralized password management, SSR-safe authentication pages, and shared authentication UI components.
 
 ## Production Operations
 
@@ -149,6 +150,8 @@ Recommended for production:
 - [Production Override Policy](docs/PRODUCTION_OVERRIDE_POLICY.md)
 - [Production Changelog](docs/PRODUCTION_CHANGELOG.md)
 - [Production Hardening Summary](docs/PRODUCTION_HARDENING_SUMMARY.md)
+- [Admin Auth Security](docs/ADMIN_AUTH_SECURITY.md)
+- [Admin Auth Certification](docs/ADMIN_AUTH_CERTIFICATION.md)
 - [Localman Food Dictionary](docs/LOCALMAN_FOOD_DICTIONARY.md)
 - [Permanent Regression Locks](docs/PERMANENT_REGRESSION_LOCKS.md)
 - [Codex Guidelines](docs/CODEX_GUIDELINES.md)

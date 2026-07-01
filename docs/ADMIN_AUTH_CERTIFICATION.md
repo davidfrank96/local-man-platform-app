@@ -2,44 +2,64 @@
 
 Date: 2026-07-01
 
-Verdict: APPROVED WITH CONDITIONS
+Milestone: Authentication Hardening v1.0
 
-This certification reviews the Localman Admin authentication subsystem after the distributed login protection, session governance, and password management hardening sprints. It is a validation artifact only; it does not introduce new authentication behavior.
+Verdict: GREEN
+
+This certification reviews the Localman Admin authentication subsystem after distributed login protection, session governance, password management, SSR-safe authentication pages, shared authentication UI components, and database migration deployment. It is a validation artifact only; it does not introduce new authentication behavior.
 
 ## 1. Executive Summary
 
-The authentication architecture is production-grade at the application layer. Login, logout, password reset, password change, RBAC, cookie handling, login protection, and governed browser sessions are covered by focused automated tests and the full test suite.
+Authentication Hardening v1.0 is complete and ready to merge.
 
-The system is not yet approved for production deployment without conditions because the target database is still missing the two auth hardening migrations:
+The subsystem now has:
+
+- Supabase Auth email/password login with explicit `admin_users` membership enforcement
+- persistent distributed login protection through `admin_login_security_events`
+- progressive delay and cooldown behavior across IP, account, and IP+account scopes
+- governed browser sessions through `admin_sessions`
+- HttpOnly access, refresh, and governed session cookies
+- idle timeout, absolute lifetime, activity throttling, refresh tracking, and revocation
+- forgot password, reset password, and change password flows owned by Supabase Auth
+- centralized password policy enforcement
+- structured audit logging for login, session, and password events
+- SSR-safe authentication UI pages
+- reusable authentication experience components for login, forgot password, reset password, and change password
+
+`npm run db:check` reports zero pending migrations. The previous migration blocker is resolved.
+
+## 2. Migration Status
+
+Required auth hardening migrations are applied:
 
 - `20260701120000_admin_login_security_events.sql`
 - `20260701130000_admin_sessions.sql`
 
-`npm run db:check` reports this as a critical migration mismatch. Production approval requires applying those migrations and rerunning `npm run db:check` to green.
+Current migration check:
 
-## 2. Security Findings
+- repo migrations: 33
+- applied migrations: 33
+- pending migrations: none
+- missing auth tables: none
 
-No critical application-code authentication defect was confirmed.
+Both auth tables are server-only:
 
-Findings:
-
-- BLOCKER: auth security migrations are pending in the target database.
-- CONDITION: durable password-management audit events require operational event storage to be enabled in production.
-- RESIDUAL RISK: bearer-token authorization is stateless and does not consult `admin_sessions`; this is acceptable only while bearer tokens remain server/internal and browser admin sessions use HttpOnly cookies plus governed session ids.
-- LOW: admin user creation UI still communicates an older minimum of 8 characters while backend policy now requires the centralized stronger policy.
-- LOW: retention and cleanup policies for `admin_login_security_events` and `admin_sessions` are operationally documented but not automated in this sprint.
+- RLS enabled
+- public, anon, and authenticated grants revoked
+- service role receives the required table access
+- application access occurs through protected server routes only
 
 ## 3. Authentication Validation
 
 Validated flows:
 
-- Login evaluates same-origin policy before processing unsafe requests.
-- Login evaluates distributed persistent login protection before Supabase password grant.
-- Successful login requires Supabase Auth success and `admin_users` membership.
-- Users with Supabase Auth but no `admin_users` row are denied.
-- Login creates HttpOnly access, refresh, and governed session cookies.
-- Logout calls Supabase logout when an access token exists, marks governed session logged out when a session id exists, and clears cookies.
-- Session route can refresh cookie-backed sessions server-side and updates session governance state.
+- same-origin validation before unsafe login handling
+- persistent login protection before Supabase password grant
+- successful login requires Supabase Auth success and active `admin_users` membership
+- authenticated users without `admin_users` membership are denied
+- login creates HttpOnly access, refresh, and governed session cookies
+- logout calls Supabase logout when an access token exists, marks governed sessions logged out when a session id exists, and clears cookies
+- session refresh rotates Supabase cookies and updates session-governance state
 
 Evidence:
 
@@ -48,50 +68,98 @@ Evidence:
 - `tests/admin-auth.test.ts`
 - `tests/security-hardening.test.ts`
 
-## 4. Session Validation
+## 4. Login Protection Validation
 
 Validated:
 
-- session inventory creation
+- persistent event-backed failure windows
+- IP scope
+- account/email scope
+- combined IP+account scope
+- progressive login delay
+- temporary cooldown
+- cooldown started and cooldown ended events
+- fail-closed behavior when the persistent protection store is unavailable
+
+The admin login path must not fall back to process-local memory limiting. Public route abuse protection may remain process-local where documented, but admin login protection is permanently distributed.
+
+## 5. Session Governance Validation
+
+Validated:
+
+- governed session creation on login
 - idle timeout
 - absolute timeout
 - revoked session rejection
 - session activity throttling
-- refresh token hash rotation tracking
+- refresh-token hash rotation tracking
 - current-session logout
-- all-session revocation
+- specific-session and all-session revocation helpers
 - password reset session revocation
 - password change other-session revocation
-- membership removal cookie clearing
+- membership-removal cookie clearing
 
-Session governance uses `admin_sessions` with service-role-only access, RLS enabled, and indexes for auth-user/status and expiry lookups.
+Browser administrator sessions must continue using HttpOnly cookies plus governed session ids. Bearer-token compatibility remains for server/internal route tests and must not become the normal browser authorization model.
 
-## 5. Password Validation
+## 6. Password Management Validation
 
 Validated:
 
 - forgot password calls Supabase Auth recovery
-- forgot password returns generic success for known and unknown emails
-- no email enumeration via reset request responses
-- reset password validates Supabase recovery access token before update
-- invalid reset token is rejected before password update
-- expired reset token is classified separately
+- forgot password returns generic success for known, unknown, and provider-rejected emails after syntactic validation
+- reset password validates the Supabase recovery token before password update
+- invalid reset tokens are rejected before update
+- expired reset tokens are classified separately
 - password confirmation is enforced
-- weak password rejection uses centralized policy
-- change password verifies current password through Supabase Auth
-- password reset revokes all governed sessions
-- password change revokes other governed sessions
+- weak passwords are rejected by centralized policy
+- change password verifies the current password through Supabase Auth
+- password reset revokes all governed sessions for the auth user
+- password change revokes other governed sessions for the auth user
 
 Password policy defaults:
 
 - minimum 12 characters
-- uppercase
-- lowercase
-- number
-- special character
-- common weak password blocking
+- uppercase required
+- lowercase required
+- number required
+- special character required
+- common weak passwords blocked
 
-## 6. RBAC Validation
+## 7. Authentication UI Validation
+
+Authentication pages now share a reusable visual system:
+
+- `/admin/login`
+- `/admin/forgot-password`
+- `/admin/reset-password`
+- `/admin/change-password`
+
+Shared components cover:
+
+- authentication split layout
+- Localman brand/logo
+- authentication card
+- authentication fields
+- password fields with visibility toggle
+- submit and secondary actions
+- error and success messages
+- security notice
+- password strength meter
+
+SSR safety is locked:
+
+- reset-link hash parsing runs after hydration
+- initial server and client HTML match
+- no browser-only APIs are read during initial render
+- invalid and expired token messages remain visible after hydration
+
+Responsive validation:
+
+- desktop uses the approved split layout
+- tablet keeps the balanced split layout
+- mobile hides the illustration panel and keeps the logo, title, form, buttons, and security footer
+
+## 8. RBAC Validation
 
 Server-side RBAC remains enforced through `requireAdmin` and `requireAdminPermission`.
 
@@ -107,20 +175,20 @@ Validated protected areas include:
 
 Agent role has no elevated permissions in `hasAdminPermission`. Admin role has all defined admin permissions.
 
-## 7. Cookie Validation
+## 9. Cookie Validation
 
 Validated:
 
-- HttpOnly cookies are set for access, refresh, and governed session id.
-- SameSite=Lax is set.
-- Secure is set in production runtime through cookie serializer defaults.
-- Cookie refresh rotates access and refresh cookies.
-- Logout clears all admin cookies with `Max-Age=0`.
-- Membership removal clears admin cookies.
-- Revoked governed sessions are rejected and cookies are cleared.
-- Client code does not expose bearer tokens for normal admin API calls.
+- HttpOnly cookies are set for access, refresh, and governed session id
+- SameSite=Lax is set
+- Secure is set in production runtime through cookie serializer defaults
+- cookie refresh rotates access and refresh cookies
+- logout clears all admin cookies with `Max-Age=0`
+- membership removal clears admin cookies
+- revoked governed sessions are rejected and cookies are cleared
+- client code does not expose bearer tokens for normal admin API calls
 
-## 8. Audit Validation
+## 10. Audit And Observability Validation
 
 Validated persistent login security events:
 
@@ -151,27 +219,18 @@ Sensitive values are redacted:
 - authorization headers
 - cookies
 
-Condition: production must keep operational event storage enabled for durable password-event persistence.
+Operational logging remains non-blocking for rendering and request paths. Database consistency checks return status objects for warning banners and must not crash Admin Layout rendering.
 
-## 9. Performance Findings
+## 11. Performance Findings
 
 The auth subsystem is acceptable for current production scale.
 
-Observed validation performance:
-
-- Full test suite: 580 passing tests in about 4.9 seconds.
-- Production build: compiled successfully in about 2.5 seconds, static generation completed for 40 pages.
 - Session activity writes are throttled by `ADMIN_SESSION_ACTIVITY_UPDATE_THRESHOLD_MS`.
 - Login protection reads persisted events and writes bounded scope events.
 - Session governance uses indexed lookups by session id, auth user/status, admin user/status, expiry, and refresh token hash.
+- Authentication UI uses shared components and no heavy UI dependency.
 
-No expensive middleware, broad table scans, or fetch-all auth patterns were found in the reviewed authentication path.
-
-## 10. Operational Findings
-
-Blocking operational item:
-
-- Apply pending auth migrations and rerun `npm run db:check`.
+## 12. Operational Requirements
 
 Required production configuration:
 
@@ -179,91 +238,68 @@ Required production configuration:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_APP_URL`
-- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` for durable password audit persistence
-
-Operational controls:
-
-- Admin login protection fails closed if persistent protection evaluation is unavailable.
-- Session governance fails closed when governed session creation or validation cannot complete.
-- Password reset/change require service-role configuration because governed session revocation is mandatory.
+- `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true` for durable operational-event persistence
 
 Recommended maintenance:
 
-- Add scheduled retention cleanup for old `admin_login_security_events`.
-- Add scheduled retention cleanup for old inactive `admin_sessions`.
-- Monitor failed auth events and operational-event persistence failures.
+- add scheduled retention cleanup for old `admin_login_security_events`
+- add scheduled retention cleanup for old inactive `admin_sessions`
+- monitor failed auth events and operational-event persistence failures
+- keep Supabase Auth token TTL short for admin users
 
-## 11. Documentation Findings
+## 13. Remaining Risks
 
-Documentation is mostly aligned with implementation.
+- Durable password audit retention depends on production operational-event storage configuration.
+- Login security and session tables need retention cleanup before event volume grows.
+- Bearer-token compatibility must remain server/internal and must not replace governed browser sessions.
+- Live production smoke testing still depends on a real admin account and the target deployment environment.
 
-Reviewed documents:
-
-- `docs/ADMIN_AUTH_SECURITY.md`
-- `docs/ARCHITECTURE.md`
-- `docs/OPERATIONS.md`
-- `docs/MASTER_RELEASE_GATE.md`
-- `docs/PERMANENT_REGRESSION_LOCKS.md`
-
-Minor stale item:
-
-- Admin user management UI copy still says temporary password minimum is 8 characters. Backend now enforces the centralized stronger policy.
-
-## 12. Remaining Risks
-
-- Pending migrations are the release blocker.
-- Durable password audit events depend on operational event storage configuration.
-- Stateless bearer-token auth should remain internal/server-only; browser admin sessions must continue using governed HttpOnly cookies.
-- Retention and cleanup need an operational job before auth event volume grows.
-- Production validation must be repeated after migrations are applied.
-
-## 13. Recommended Improvements
-
-Before production:
-
-1. Apply `admin_login_security_events` and `admin_sessions` migrations.
-2. Rerun `npm run db:check` and confirm zero pending migrations.
-3. Confirm `LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE=true`.
-4. Smoke test login, logout, session refresh, reset password, and change password against production-like environment.
-
-Post-production hardening:
-
-1. Add scheduled cleanup for old security/session events.
-2. Add dashboard or alerting for login-rate-limit events and password-change failures.
-3. Update admin user temporary-password UI copy to match the centralized policy.
-4. Keep Supabase access-token TTL short for admin users.
+These are operational follow-ups, not release blockers for Authentication Hardening v1.0.
 
 ## 14. Production Readiness Scores
 
 | Area | Score |
 | --- | ---: |
-| Authentication Architecture | 9/10 |
-| Login Protection | 9/10 |
-| Session Governance | 9/10 |
-| Password Management | 8/10 |
-| RBAC | 8/10 |
-| Audit Logging | 8/10 |
-| Operational Monitoring | 7/10 |
-| Maintainability | 8/10 |
-| Scalability | 8/10 |
-| Security | 8/10 |
-| Overall Production Readiness | 8/10 |
+| Authentication Architecture | 10/10 |
+| Login Protection | 10/10 |
+| Session Governance | 10/10 |
+| Password Management | 9/10 |
+| Authentication UI | 9/10 |
+| SSR Safety | 10/10 |
+| RBAC | 9/10 |
+| Audit Logging | 9/10 |
+| Operational Monitoring | 8/10 |
+| Maintainability | 9/10 |
+| Scalability | 9/10 |
+| Security | 9/10 |
+| Overall Production Readiness | 9/10 |
 
 ## 15. Validation Results
 
-Commands run:
+Commands run for the final gate:
 
 - `npm run lint`: PASS
 - `npm run typecheck`: PASS
-- `npm test`: PASS, 580 passed / 0 failed
-- `npm run build`: PASS after stopping local `next dev` runtime that was blocking build
+- `npm test`: PASS, 588 passed / 0 failed
+- `npm run build`: PASS
+- `npm run db:check`: PASS, zero pending migrations
 - `git diff --check`: PASS
-- `npm run db:check`: FAIL, pending migrations listed above
+
+Browser validation:
+
+- login page rendered without framework overlay
+- forgot password page rendered without framework overlay
+- reset password valid-link state rendered without hydration warnings
+- reset password invalid-link state showed the expected error after hydration
+- change password page rendered on mobile
+- password visibility toggles worked
+- password strength indicator worked
+- desktop, tablet, and mobile layouts had no horizontal overflow
 
 ## 16. Final Release Gate
 
-Release gate: YELLOW
+Release gate: GREEN
 
-Authentication subsystem approval: APPROVED WITH CONDITIONS
+Authentication subsystem approval: APPROVED
 
-The application-layer authentication subsystem is suitable for production after the database is brought into alignment and durable audit storage is confirmed. Do not deploy this auth hardening to production while `npm run db:check` reports pending auth migrations.
+Authentication Hardening v1.0 is ready to merge. Do not change authentication behavior without updating this certification, `docs/ADMIN_AUTH_SECURITY.md`, `docs/MASTER_RELEASE_GATE.md`, and `docs/PERMANENT_REGRESSION_LOCKS.md`.
