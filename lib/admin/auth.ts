@@ -2,11 +2,21 @@ import { apiError } from "../api/responses.ts";
 import { AppError } from "../errors/app-error.ts";
 import { getOrCreateRequestId, logStructuredEvent } from "../observability.ts";
 import {
+  appendAdminSessionIdCookie,
   appendAdminSessionCookies,
   appendClearedAdminSessionCookies,
   readAdminSessionCookies,
+  type AdminCookieSession,
   refreshAdminCookieSession,
 } from "./session-cookies.ts";
+import {
+  ensureAdminGovernedSession,
+  getAdminSessionClientIp,
+  getAdminSessionGovernanceConfig,
+  markAdminSessionRefreshed,
+  revokeAdminSession,
+  revokeAllAdminSessionsForUser,
+} from "./session-governance.ts";
 import {
   hasAdminPermission,
   isAdminRole,
@@ -261,6 +271,13 @@ export async function requireAdmin(
   let accessToken = bearerToken ?? cookieSession.accessToken;
   const responseHeaders = new Headers();
   let hasRefreshedCookieSession = false;
+  let refreshedCookieSession: AdminCookieSession | null = null;
+  const governanceIdentity = {
+    sessionId: cookieSession.adminSessionId,
+    ipAddress: getAdminSessionClientIp(request),
+    userAgent: request.headers.get("user-agent"),
+    requestId,
+  };
 
   const refreshCookieSession = async () => {
     if (bearerToken || !allowCookieRefresh || !cookieSession.refreshToken) {
@@ -275,6 +292,7 @@ export async function requireAdmin(
     accessToken = refreshedSession.accessToken;
     appendAdminSessionCookies(responseHeaders, refreshedSession);
     hasRefreshedCookieSession = true;
+    refreshedCookieSession = refreshedSession;
     return true;
   };
 
@@ -318,6 +336,20 @@ export async function requireAdmin(
     const adminUser = await fetchAdminUser(user.id, accessToken, config, fetchImpl);
 
     if (!adminUser) {
+      if (usingCookieSession && config.supabaseServiceRoleKey && user.id) {
+        await revokeAllAdminSessionsForUser(
+          config,
+          user.id,
+          "admin_membership_removed",
+          { fetchImpl },
+        ).catch((error) => {
+          logAdminAuthEvent("error", "admin sessions could not be revoked after membership removal", {
+            requestId,
+            userId: user.id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
+        });
+      }
       logStructuredEvent("warn", {
         type: "ADMIN_USER_MISSING",
         requestId,
@@ -336,6 +368,57 @@ export async function requireAdmin(
         status: 403,
         clearCookies: usingCookieSession,
       });
+    }
+
+    if (usingCookieSession && config.supabaseServiceRoleKey) {
+      const rotatedCookieSession = refreshedCookieSession as AdminCookieSession | null;
+      const governance = await ensureAdminGovernedSession(
+        config,
+        user,
+        adminUser,
+        {
+          accessToken,
+          refreshToken: rotatedCookieSession?.refreshToken ?? cookieSession.refreshToken,
+          adminSessionId: cookieSession.adminSessionId,
+        },
+        governanceIdentity,
+        { fetchImpl },
+      );
+
+      if (!governance.success) {
+        logAdminAuthEvent("warn", "admin governed session rejected", {
+          requestId,
+          userId: user.id,
+          reason: governance.failure.code,
+        });
+        return createAuthFailureResponse({
+          code: "UNAUTHORIZED",
+          message: governance.failure.message,
+          status: governance.failure.status,
+          clearCookies: true,
+        });
+      }
+
+      if (governance.setSessionCookie) {
+        appendAdminSessionIdCookie(
+          responseHeaders,
+          governance.sessionId,
+          Math.ceil(getAdminSessionGovernanceConfig().absoluteTimeoutMs / 1000),
+        );
+      }
+
+      if (rotatedCookieSession) {
+        await markAdminSessionRefreshed(
+          config,
+          governance.sessionId,
+          rotatedCookieSession,
+          {
+            ...governanceIdentity,
+            sessionId: governance.sessionId,
+          },
+          { fetchImpl },
+        );
+      }
     }
 
     logAdminAuthEvent("info", "admin membership verified", {
@@ -357,6 +440,15 @@ export async function requireAdmin(
       responseHeaders: [...responseHeaders.keys()].length > 0 ? responseHeaders : null,
     };
   } catch (error) {
+    if (error instanceof AppError && usingCookieSession && config.supabaseServiceRoleKey && cookieSession.adminSessionId) {
+      await revokeAdminSession(
+        config,
+        cookieSession.adminSessionId,
+        error.code === "AUTH_ERROR" ? "supabase_auth_rejected" : "session_error",
+        { fetchImpl },
+      ).catch(() => undefined);
+    }
+
     if (error instanceof AppError && usingCookieSession) {
       return createAuthFailureResponse({
         code: error.code === "AUTH_ERROR" ? "UNAUTHORIZED" : error.code,

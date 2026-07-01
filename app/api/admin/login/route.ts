@@ -1,16 +1,27 @@
 import { z } from "zod";
 import { apiError, apiSuccess } from "../../../../lib/api/responses.ts";
-import {
-  ADMIN_LOGIN_RATE_LIMIT,
-  applyRateLimitResponseHeaders,
-  consumeRateLimit,
-} from "../../../../lib/api/abuse-protection.ts";
 import { validateJsonBody } from "../../../../lib/api/validation.ts";
 import {
   applyAdminSessionResponseHeaders,
   getAdminAuthConfig,
   requireAdmin,
 } from "../../../../lib/admin/auth.ts";
+import {
+  adminLoginProtectionRateLimitedResponse,
+  applyAdminLoginProtectionHeaders,
+  evaluateAdminLoginProtection,
+  getAdminLoginClientIp,
+  recordAdminLoginDelayApplied,
+  recordAdminLoginProtectionOutcome,
+  waitForAdminLoginProtectionDelay,
+  type AdminLoginProtectionDecision,
+  type AdminLoginProtectionIdentity,
+} from "../../../../lib/admin/login-protection.ts";
+import {
+  createAdminGovernedSession,
+  getAdminSessionClientIp,
+  getAdminSessionGovernanceConfig,
+} from "../../../../lib/admin/session-governance.ts";
 import { validateAdminUnsafeRequestOrigin } from "../../../../lib/admin/origin.ts";
 import {
   appendAdminSessionCookies,
@@ -28,6 +39,40 @@ const adminLoginRequestSchema = z.object({
   email: z.email(),
   password: z.string().min(1),
 });
+
+async function recordLoginProtectionOutcomeSafely(
+  config: NonNullable<ReturnType<typeof getAdminAuthConfig>>,
+  identity: AdminLoginProtectionIdentity,
+  action: "LOGIN_SUCCESS" | "LOGIN_FAILED",
+  routeLog: ReturnType<typeof createRouteLogContext>,
+  emailHint: string,
+): Promise<void> {
+  try {
+    await recordAdminLoginProtectionOutcome(config, identity, action);
+  } catch (error) {
+    logRouteEvent("error", routeLog, {
+      event: "ADMIN_LOGIN_PROTECTION_WRITE_FAILED",
+      status: 500,
+      message: "Admin login protection outcome could not be persisted.",
+      error,
+      metadata: {
+        emailHint,
+        outcomeAction: action,
+      },
+    });
+  }
+}
+
+function attachLoginProtectionHeaders(
+  response: Response,
+  decision: AdminLoginProtectionDecision,
+  requestId: string,
+): Response {
+  return attachRequestIdHeader(
+    applyAdminLoginProtectionHeaders(response, decision),
+    requestId,
+  );
+}
 
 export async function POST(request: Request) {
   const routeLog = createRouteLogContext(request, {
@@ -55,40 +100,7 @@ export async function POST(request: Request) {
     });
     return attachRequestIdHeader(body.response, routeLog.requestId);
   }
-  const emailHint = redactEmailForLog(body.data.email);
-
-  const rateLimit = consumeRateLimit(request, {
-    policy: ADMIN_LOGIN_RATE_LIMIT,
-    scope: body.data.email,
-    useClientCookie: false,
-  });
-
-  if (!rateLimit.allowed) {
-    logRouteEvent("warn", routeLog, {
-      event: "ADMIN_LOGIN_RATE_LIMITED",
-      status: 429,
-      message: "Admin login request was rate limited.",
-      metadata: {
-        emailHint,
-        retryAfterSeconds: rateLimit.retryAfterSeconds,
-      },
-    });
-    return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(
-        apiError(
-          "TOO_MANY_REQUESTS",
-          "Too many login attempts. Please wait before trying again.",
-          429,
-          {
-            retry_after_seconds: rateLimit.retryAfterSeconds,
-          },
-          "Authentication is temporarily rate limited to protect Local Man.",
-        ),
-        rateLimit,
-      ),
-      routeLog.requestId,
-    );
-  }
+  const emailHint = redactEmailForLog(body.data.email) ?? "unknown";
 
   const config = getAdminAuthConfig();
 
@@ -102,16 +114,88 @@ export async function POST(request: Request) {
       },
     });
     return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(
-        apiError(
-          "CONFIGURATION_ERROR",
-          "Admin authentication is unavailable.",
-          503,
-        ),
-        rateLimit,
+      apiError(
+        "CONFIGURATION_ERROR",
+        "Admin authentication is unavailable.",
+        503,
       ),
       routeLog.requestId,
     );
+  }
+
+  const loginProtectionIdentity: AdminLoginProtectionIdentity = {
+    email: body.data.email,
+    ipAddress: getAdminLoginClientIp(request),
+    userAgent: request.headers.get("user-agent"),
+    requestId: routeLog.requestId,
+  };
+  let protectionDecision: AdminLoginProtectionDecision;
+
+  try {
+    protectionDecision = await evaluateAdminLoginProtection(config, loginProtectionIdentity);
+  } catch (error) {
+    logRouteEvent("error", routeLog, {
+      event: "ADMIN_LOGIN_PROTECTION_UNAVAILABLE",
+      status: 503,
+      message: "Admin login protection could not evaluate this request.",
+      error,
+      metadata: {
+        emailHint,
+      },
+    });
+    return attachRequestIdHeader(
+      apiError(
+        "UPSTREAM_ERROR",
+        "Admin authentication is temporarily unavailable.",
+        503,
+      ),
+      routeLog.requestId,
+    );
+  }
+
+  if (!protectionDecision.allowed) {
+    logRouteEvent("warn", routeLog, {
+      event: "ADMIN_LOGIN_RATE_LIMITED",
+      status: 429,
+      message: "Admin login request was rate limited by persistent protection.",
+      metadata: {
+        emailHint,
+        activeScope: protectionDecision.activeScope,
+        retryAfterSeconds: protectionDecision.retryAfterSeconds,
+      },
+    });
+    return attachRequestIdHeader(
+      adminLoginProtectionRateLimitedResponse(protectionDecision),
+      routeLog.requestId,
+    );
+  }
+
+  if (protectionDecision.delayMs > 0) {
+    try {
+      await recordAdminLoginDelayApplied(config, loginProtectionIdentity, protectionDecision);
+    } catch (error) {
+      logRouteEvent("error", routeLog, {
+        event: "ADMIN_LOGIN_PROTECTION_DELAY_WRITE_FAILED",
+        status: 500,
+        message: "Admin login progressive delay event could not be persisted.",
+        error,
+        metadata: {
+          emailHint,
+          delayMs: protectionDecision.delayMs,
+        },
+      });
+    }
+    logRouteEvent("info", routeLog, {
+      event: "ADMIN_LOGIN_DELAY_APPLIED",
+      status: 202,
+      message: "Admin login request received a progressive delay.",
+      metadata: {
+        emailHint,
+        delayMs: protectionDecision.delayMs,
+        activeScope: protectionDecision.activeScope,
+      },
+    });
+    await waitForAdminLoginProtectionDelay(protectionDecision.delayMs);
   }
 
   try {
@@ -132,6 +216,13 @@ export async function POST(request: Request) {
     });
 
     if (!admin.success) {
+      await recordLoginProtectionOutcomeSafely(
+        config,
+        loginProtectionIdentity,
+        "LOGIN_FAILED",
+        routeLog,
+        emailHint,
+      );
       logRouteEvent("warn", routeLog, {
         event: "ADMIN_LOGIN_DENIED",
         status: admin.response.status,
@@ -140,18 +231,59 @@ export async function POST(request: Request) {
           emailHint,
         },
       });
-      return attachRequestIdHeader(
-        applyRateLimitResponseHeaders(admin.response, rateLimit),
-        routeLog.requestId,
-      );
+      return attachLoginProtectionHeaders(admin.response, protectionDecision, routeLog.requestId);
     }
 
     const response = apiSuccess({
       user: admin.session.user,
       adminUser: admin.session.adminUser,
     });
+    let governedSessionId: string | null = null;
 
-    appendAdminSessionCookies(response.headers, cookieSession);
+    try {
+      governedSessionId = await createAdminGovernedSession(
+        config,
+        admin.session.user,
+        admin.session.adminUser,
+        cookieSession,
+        {
+          sessionId: null,
+          ipAddress: getAdminSessionClientIp(request),
+          userAgent: request.headers.get("user-agent"),
+          requestId: routeLog.requestId,
+        },
+      );
+    } catch (error) {
+      logRouteEvent("error", routeLog, {
+        event: "ADMIN_SESSION_GOVERNANCE_CREATE_FAILED",
+        status: 503,
+        message: "Admin governed session could not be created.",
+        error,
+        metadata: {
+          emailHint,
+        },
+      });
+      return attachRequestIdHeader(
+        apiError(
+          "UPSTREAM_ERROR",
+          "Admin authentication is temporarily unavailable.",
+          503,
+        ),
+        routeLog.requestId,
+      );
+    }
+
+    await recordLoginProtectionOutcomeSafely(
+      config,
+      loginProtectionIdentity,
+      "LOGIN_SUCCESS",
+      routeLog,
+      emailHint,
+    );
+    appendAdminSessionCookies(response.headers, cookieSession, {
+      adminSessionId: governedSessionId,
+      adminSessionMaxAgeSeconds: Math.ceil(getAdminSessionGovernanceConfig().absoluteTimeoutMs / 1000),
+    });
     logRouteEvent("info", routeLog, {
       event: "ADMIN_LOGIN_SUCCEEDED",
       status: 200,
@@ -163,11 +295,9 @@ export async function POST(request: Request) {
         emailHint,
       },
     });
-    return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(
-        applyAdminSessionResponseHeaders(response, admin.responseHeaders),
-        rateLimit,
-      ),
+    return attachLoginProtectionHeaders(
+      applyAdminSessionResponseHeaders(response, admin.responseHeaders),
+      protectionDecision,
       routeLog.requestId,
     );
   } catch (error) {
@@ -190,16 +320,21 @@ export async function POST(request: Request) {
         emailHint,
       },
     });
+    await recordLoginProtectionOutcomeSafely(
+      config,
+      loginProtectionIdentity,
+      "LOGIN_FAILED",
+      routeLog,
+      emailHint,
+    );
 
-    return attachRequestIdHeader(
-      applyRateLimitResponseHeaders(
-        apiError(
-          mapped.code,
-          "Admin authentication failed.",
-          mapped.status ?? 500,
-        ),
-        rateLimit,
+    return attachLoginProtectionHeaders(
+      apiError(
+        mapped.code,
+        "Admin authentication failed.",
+        mapped.status ?? 500,
       ),
+      protectionDecision,
       routeLog.requestId,
     );
   }

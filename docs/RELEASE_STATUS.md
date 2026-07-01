@@ -15,13 +15,14 @@ This document summarizes the current release state after marketplace reset, prod
 | Governance | Stable | Area governance exists for manual creation and CSV normalization. |
 | Reset Script | Ready | Dry-run mode passed previously; execute mode requires explicit confirmation. |
 | Import Hardening | Ready | Time, image, phone, slug, category, featured dish, day mapping, duplicate-coordinate, governance, content-quality, and warning policies are aligned with production field collection. |
-| Admin | Stable | Dashboard counts use database totals, registry remains paginated, and edit workspace state resets on selected vendor changes. |
+| Admin | Stable | Dashboard counts use database totals, registry remains paginated, edit workspace state resets on selected vendor changes, and Authentication Hardening v1.0 is green. |
+| Admin Auth | Certified | Distributed login protection, governed sessions, password management, shared auth UI, SSR-safe reset rendering, and auth migrations are complete. |
 | Production Data | Certified | Production Data v1.0 is closed at 137 active vendors, 435 category mappings, 959 hours rows, and 189 featured dish rows under the approved override model. |
 | Documentation | Updated | Production reset, import, onboarding, area, discovery, architecture, override policy, release gate, and operations docs are consolidated. |
 
 ## Current Next Steps
 
-1. Commit the hardening closeout documentation.
+1. Commit the hardening closeout and Authentication Hardening v1.0 documentation.
 2. Run the master release gate before deployment or any additional production import.
 3. Continue future vendor onboarding through the production import standard.
 4. Record every batch and approved production override in the permanent docs.
@@ -37,6 +38,7 @@ This document summarizes the current release state after marketplace reset, prod
 - If production onboarding depends on manual creation outside the current governance list, update governance before manual entry.
 - Keep stale E2E fixtures aligned with production-safe examples so release gates do not fail for removed QA vendors.
 - Do not treat production/workbook differences as failures when the value is recorded as an approved production override.
+- Do not change authentication UI in a way that alters login protection, session governance, Supabase Auth calls, password policy, audit logging, or operational warning visibility.
 
 ## Validation Commands
 

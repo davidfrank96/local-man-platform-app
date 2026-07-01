@@ -396,7 +396,7 @@ test("admin API client creates managed users through the app route", async () =>
   const result = await createManagedAdminUser(
     {
       email: "Agent@Example.com",
-      password: "temp-pass-123",
+      password: "TempPass123!",
       full_name: "Agent User",
       role: "agent",
     },
@@ -426,7 +426,7 @@ test("admin API client creates managed users through the app route", async () =>
   assert.equal(result.adminUser.role, "agent");
   assert.deepEqual(requestedBodies[0], {
     email: "Agent@Example.com",
-    password: "temp-pass-123",
+    password: "TempPass123!",
     full_name: "Agent User",
     role: "agent",
   });

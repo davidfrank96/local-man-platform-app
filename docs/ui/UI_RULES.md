@@ -208,7 +208,10 @@ Local Man — UI Rules
 - admin vendor edit workflows must load current hours, current uploaded images, and current featured dishes before editing so updates do not start from a blank state
 - current featured dishes should have a clear remove action in the same selected-vendor edit surface
 - destructive actions must be confirmed
-- Admin access should use a simple Supabase email/password login flow and session validation instead of manual token paste.
+- Admin access uses Supabase email/password login plus explicit `admin_users` membership, distributed login protection, and governed HttpOnly browser sessions.
+- Login, forgot password, reset password, and change password should use the shared Authentication Experience System in `components/admin/admin-auth-experience.tsx`.
+- Authentication UI work must preserve login protection, session governance, password management, audit logging, operational warnings, migration warnings, and SSR-safe rendering.
+- Reset-password UI must not read browser-only recovery-link state during initial render.
 - admin screens must stay functional and restrained until runtime data operations are validated.
 - Vendor creation should auto-generate a valid slug from the vendor name.
 - Vendor editing should keep the existing slug stable by default, because the slug controls the public URL.

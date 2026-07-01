@@ -3,10 +3,7 @@ import test from "node:test";
 import { GET as getAdminSession } from "../app/api/admin/session/route.ts";
 import { POST as loginAdmin } from "../app/api/admin/login/route.ts";
 import { POST as logoutAdmin } from "../app/api/admin/logout/route.ts";
-import {
-  ADMIN_LOGIN_RATE_LIMIT,
-  resetAbuseProtectionStateForTests,
-} from "../lib/api/abuse-protection.ts";
+import { DEFAULT_ADMIN_LOGIN_PROTECTION_CONFIG } from "../lib/admin/login-protection.ts";
 import {
   flushOperationalEventWritesForTests,
   resetOperationalEventPersistenceForTests,
@@ -19,6 +16,132 @@ const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+type AdminLoginSecurityEventRow = Record<string, unknown> & {
+  created_at: string;
+};
+
+type AdminSessionRow = Record<string, unknown> & {
+  id: string;
+  created_at: string;
+  login_at: string;
+  last_activity_at: string;
+  expires_at: string;
+  status: string;
+};
+
+function createAdminLoginProtectionFetchHandler() {
+  const rows: AdminLoginSecurityEventRow[] = [];
+
+  return {
+    rows,
+    handle(input: URL | RequestInfo, init?: RequestInit): Response | null {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname !== "/rest/v1/admin_login_security_events") {
+        return null;
+      }
+
+      const method = (init?.method ?? "GET").toUpperCase();
+
+      if (method === "GET") {
+        return Response.json(rows);
+      }
+
+      if (method === "POST") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+
+        rows.unshift({
+          ...body,
+          created_at: new Date().toISOString(),
+        });
+        return new Response(null, { status: 201 });
+      }
+
+      throw new Error(`Unexpected login protection method: ${method}`);
+    },
+  };
+}
+
+function createAdminSessionGovernanceFetchHandler() {
+  const rows: AdminSessionRow[] = [];
+
+  return {
+    rows,
+    handle(input: URL | RequestInfo, init?: RequestInit): Response | null {
+      const url = input instanceof URL ? input : new URL(String(input));
+
+      if (url.pathname !== "/rest/v1/admin_sessions") {
+        return null;
+      }
+
+      const method = (init?.method ?? "GET").toUpperCase();
+
+      if (method === "GET") {
+        const idFilter = url.searchParams.get("id");
+        const filteredRows = idFilter?.startsWith("eq.")
+          ? rows.filter((row) => row.id === idFilter.slice(3))
+          : rows;
+
+        return Response.json(filteredRows);
+      }
+
+      if (method === "POST") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        const now = new Date().toISOString();
+
+        rows.unshift({
+          ...body,
+          id: String(body.id),
+          created_at: now,
+          login_at: String(body.login_at ?? now),
+          last_activity_at: String(body.last_activity_at ?? now),
+          expires_at: String(body.expires_at ?? new Date(Date.now() + 86_400_000).toISOString()),
+          status: String(body.status ?? "active"),
+        });
+        return Response.json([rows[0]], { status: 201 });
+      }
+
+      if (method === "PATCH") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        const idFilter = url.searchParams.get("id");
+        const statusFilter = url.searchParams.get("status");
+        const authUserFilter = url.searchParams.get("auth_user_id");
+
+        for (const row of rows) {
+          const idMatches = !idFilter?.startsWith("eq.") || row.id === idFilter.slice(3);
+          const statusMatches = !statusFilter?.startsWith("eq.") || row.status === statusFilter.slice(3);
+          const authUserMatches = !authUserFilter?.startsWith("eq.") || row.auth_user_id === authUserFilter.slice(3);
+
+          if (idMatches && statusMatches && authUserMatches) {
+            Object.assign(row, body);
+          }
+        }
+
+        return new Response(null, { status: 204 });
+      }
+
+      throw new Error(`Unexpected admin session governance method: ${method}`);
+    },
+  };
+}
+
+function withAdminLoginProtectionFetch(
+  handler: (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>,
+): typeof fetch {
+  const loginProtection = createAdminLoginProtectionFetchHandler();
+  const sessionGovernance = createAdminSessionGovernanceFetchHandler();
+
+  return (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const response = loginProtection.handle(input, init) ?? sessionGovernance.handle(input, init);
+
+    if (response) {
+      return response;
+    }
+
+    return handler(input, init);
+  }) as typeof fetch;
+}
 
 function overrideNodeEnvForTest(value: string): () => void {
   const previousDescriptor = Object.getOwnPropertyDescriptor(process.env, "NODE_ENV");
@@ -41,7 +164,6 @@ function overrideNodeEnvForTest(value: string): () => void {
 }
 
 test.beforeEach(() => {
-  resetAbuseProtectionStateForTests();
   resetOperationalEventPersistenceForTests();
 });
 
@@ -70,7 +192,7 @@ test("admin login route sets httpOnly session cookies after a valid login", asyn
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(String(input));
 
       if (url.pathname === "/auth/v1/token") {
@@ -108,7 +230,7 @@ test("admin login route sets httpOnly session cookies after a valid login", asyn
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname}`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
@@ -129,6 +251,7 @@ test("admin login route sets httpOnly session cookies after a valid login", asyn
     assert.equal(response.status, 200);
     assert.equal(payload.data.adminUser.role, "admin");
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=")), true);
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_session=")), true);
     assert.equal(setCookies.some((value) => value.includes("HttpOnly")), true);
     assert.equal(setCookies.some((value) => value.includes("SameSite=Lax")), true);
   } finally {
@@ -148,7 +271,7 @@ test("admin login route accepts same-origin production proxy headers", async () 
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(String(input));
 
       if (url.pathname === "/auth/v1/token") {
@@ -186,7 +309,7 @@ test("admin login route accepts same-origin production proxy headers", async () 
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname}`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
@@ -211,6 +334,7 @@ test("admin login route accepts same-origin production proxy headers", async () 
     assert.equal(response.status, 200);
     assert.equal(payload.data.adminUser.role, "admin");
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=")), true);
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_session=")), true);
     assert.equal(setCookies.some((value) => value.includes("HttpOnly")), true);
     assert.equal(setCookies.some((value) => value.includes("SameSite=Lax")), true);
   } finally {
@@ -234,7 +358,7 @@ test("admin login route denies authenticated users without an explicit admin_use
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(String(input));
 
       if (url.pathname === "/auth/v1/token") {
@@ -261,7 +385,7 @@ test("admin login route denies authenticated users without an explicit admin_use
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname} (${init?.method ?? "GET"})`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
@@ -297,7 +421,7 @@ test("admin login route rate limits repeated invalid credential attempts", async
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo) => {
       const url = input instanceof URL ? input : new URL(String(input));
 
       if (url.pathname === "/auth/v1/token") {
@@ -312,13 +436,13 @@ test("admin login route rate limits repeated invalid credential attempts", async
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname}`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
     let lastResponse: Response | null = null;
 
-    for (let index = 0; index <= ADMIN_LOGIN_RATE_LIMIT.maxRequests; index += 1) {
+    for (let index = 0; index <= DEFAULT_ADMIN_LOGIN_PROTECTION_CONFIG.account.maxFailures; index += 1) {
       lastResponse = await loginAdmin(new Request("http://localhost/api/admin/login", {
         method: "POST",
         body: JSON.stringify({
@@ -337,7 +461,7 @@ test("admin login route rate limits repeated invalid credential attempts", async
 
     assert.equal(lastResponse!.status, 429);
     assert.equal(payload.error.code, "TOO_MANY_REQUESTS");
-    assert.equal(tokenAttempts, ADMIN_LOGIN_RATE_LIMIT.maxRequests);
+    assert.equal(tokenAttempts, DEFAULT_ADMIN_LOGIN_PROTECTION_CONFIG.account.maxFailures);
   } finally {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
@@ -434,7 +558,7 @@ test("admin session route can refresh a cookie-backed session server-side", asyn
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(String(input));
 
       if (url.pathname === "/auth/v1/token") {
@@ -472,7 +596,7 @@ test("admin session route can refresh a cookie-backed session server-side", asyn
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname}`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
@@ -489,6 +613,7 @@ test("admin session route can refresh a cookie-backed session server-side", asyn
     assert.equal(payload.data.adminUser.role, "agent");
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=new-access-token")), true);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=new-refresh-token")), true);
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_session=")), true);
   } finally {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
@@ -502,7 +627,7 @@ test("admin session route clears cookies when admin_users membership has been re
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo) => {
       const url = input instanceof URL ? input : new URL(String(input));
 
       if (url.pathname === "/auth/v1/user") {
@@ -517,7 +642,7 @@ test("admin session route clears cookies when admin_users membership has been re
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname}`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
@@ -549,7 +674,7 @@ test("admin logout route clears session cookies", async () => {
 
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: (async (input: URL | RequestInfo, init?: RequestInit) => {
+    value: withAdminLoginProtectionFetch(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(String(input));
       if (url.pathname === "/auth/v1/logout") {
         logoutCalled = true;
@@ -558,7 +683,7 @@ test("admin logout route clears session cookies", async () => {
       }
 
       throw new Error(`Unexpected fetch: ${url.pathname}`);
-    }) as typeof fetch,
+    }),
   });
 
   try {
@@ -574,6 +699,7 @@ test("admin logout route clears session cookies", async () => {
     assert.equal(logoutCalled, true);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_access=") && value.includes("Max-Age=0")), true);
     assert.equal(setCookies.some((value) => value.includes("localman_admin_refresh=") && value.includes("Max-Age=0")), true);
+    assert.equal(setCookies.some((value) => value.includes("localman_admin_session=") && value.includes("Max-Age=0")), true);
   } finally {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,

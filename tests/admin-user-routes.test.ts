@@ -323,7 +323,7 @@ test("admin can create an agent account", async () => {
     const response = await createAdminUserRoute(
       createRequest("/api/admin/admin-users", "POST", {
         email: "new.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "New Agent",
         role: "agent",
       }),
@@ -337,7 +337,7 @@ test("admin can create an agent account", async () => {
     assert.deepEqual(authCreateBodies, [
       {
         email: "new.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         email_confirm: true,
         user_metadata: {
           role: "agent",
@@ -369,7 +369,7 @@ test("dedicated create-user route creates an agent account through the server", 
     const response = await createManagedUserRoute(
       createRequest("/api/admin/create-user", "POST", {
         email: "new.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "New Agent",
         role: "agent",
       }),
@@ -383,7 +383,7 @@ test("dedicated create-user route creates an agent account through the server", 
     assert.deepEqual(authCreateBodies, [
       {
         email: "new.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         email_confirm: true,
         user_metadata: {
           role: "agent",
@@ -415,7 +415,7 @@ test("admin can create an admin account", async () => {
     const response = await createAdminUserRoute(
       createRequest("/api/admin/admin-users", "POST", {
         email: "new.admin@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "New Admin",
         role: "admin",
       }),
@@ -429,7 +429,7 @@ test("admin can create an admin account", async () => {
     assert.deepEqual(authCreateBodies, [
       {
         email: "new.admin@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         email_confirm: true,
         user_metadata: {
           role: "admin",
@@ -552,7 +552,7 @@ test("creating an existing auth user recovers and assigns the role without faili
     const response = await createAdminUserRoute(
       createRequest("/api/admin/admin-users", "POST", {
         email: "existing.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "Existing Agent",
         role: "agent",
       }),
@@ -646,7 +646,7 @@ test("creating a duplicate admin/agent email still returns a clear conflict when
     const response = await createAdminUserRoute(
       createRequest("/api/admin/admin-users", "POST", {
         email: "existing.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "Existing Agent",
         role: "agent",
       }),
@@ -728,7 +728,7 @@ test("admin creation returns a retryable timeout when auth user creation stalls"
     const response = await createAdminUserRoute(
       createRequest("/api/admin/admin-users", "POST", {
         email: "slow.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "Slow Agent",
         role: "agent",
       }),
@@ -877,7 +877,7 @@ test("admin can still create an agent when audit logging fails", async () => {
     const response = await createAdminUserRoute(
       createRequest("/api/admin/admin-users", "POST", {
         email: "new.agent@example.com",
-        password: "temp-pass-123",
+        password: "TempPass123!",
         full_name: "New Agent",
         role: "agent",
       }),

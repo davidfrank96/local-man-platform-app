@@ -48,6 +48,23 @@ This document records Localman behavior that must not regress without an explici
 
 ## Admin
 
+- Admin login protection is persistent and distributed through `admin_login_security_events`.
+- Admin login protection must evaluate IP, account, and IP+account scopes before the Supabase password grant.
+- Admin login must not fall back to process-local memory rate limiting.
+- Cookie-backed admin sessions must use `admin_sessions` for inventory, idle timeout, absolute timeout, activity tracking, and revocation.
+- Admin session activity updates must remain throttled and must not write to the database on every request.
+- Admin logout must clear cookies and mark the current governed session logged out when a session id is present.
+- Forgot password must use Supabase Auth recovery and return generic success without account enumeration.
+- Reset password must consume Supabase recovery sessions only; Localman must not create or store reset tokens.
+- Successful password reset must revoke all governed sessions for the auth user.
+- Change password must require an authenticated admin, verify current password through Supabase Auth, and revoke other governed sessions.
+- Password policy must stay centralized in `lib/admin/password-policy.ts`.
+- Password audit events must not log raw passwords, recovery tokens, access tokens, refresh tokens, or service-role keys.
+- Login, forgot password, reset password, and change password must use the shared Authentication Experience System unless an explicit architecture decision replaces it.
+- Authentication UI changes must not modify login protection, session governance, Supabase Auth calls, API routes, password policy, audit logging, or database consistency monitoring.
+- Reset-password pages must keep server and first client render identical; browser recovery-link hash parsing must remain post-hydration.
+- Authentication pages must not read `window`, `document`, `location`, `localStorage`, `sessionStorage`, or `navigator` during initial render.
+- Authentication error states, rate-limit states, migration warnings, operational warnings, and development diagnostics must remain visible.
 - Dashboard cards use database aggregate totals, not loaded-page counts.
 - Vendor registry remains paginated and displays total-count metadata.
 - Admin analytics use aggregate queries or RPCs rather than fetching all vendors for counts.

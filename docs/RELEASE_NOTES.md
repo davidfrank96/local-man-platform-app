@@ -1,5 +1,111 @@
 # Local Man Release Notes
 
+## 2026-07 Authentication Hardening v1.0
+
+Authentication Hardening v1.0 completes the Admin Portal v2 authentication foundation. This release is an authentication, security, session-governance, password-management, and authentication-UI hardening milestone. It does not add marketplace, discovery, import, map, ranking, or vendor-data behavior.
+
+### Overview
+
+- Admin access remains Supabase Auth plus explicit `admin_users` membership.
+- Supabase authentication alone is not sufficient for workspace access.
+- Browser admin sessions are HttpOnly cookie-backed and governed server-side.
+- Login protection, session governance, password management, and audit logging are release-gated together.
+- Authentication pages now share one visual system across login, forgot password, reset password, and change password.
+
+### Architecture Improvements
+
+- `/api/admin/login` evaluates persistent login protection before the Supabase password grant.
+- `admin_login_security_events` stores login security outcomes for distributed protection.
+- `admin_sessions` stores governed browser session inventory and revocation state.
+- Runtime database consistency checks return warning status objects instead of crashing Admin Layout rendering.
+- Observability remains non-blocking; logging failures must not break authentication page rendering or request handling.
+
+### Security Improvements
+
+- Login protection tracks IP, account/email, and IP+account scopes.
+- Repeated failures receive progressive delays and temporary cooldowns.
+- Login protection fails closed if the persistent protection store cannot be evaluated.
+- Admin sessions support idle timeout, absolute lifetime, activity throttling, refresh-token hash tracking, and revocation.
+- Password reset and password change flows revoke governed sessions appropriately.
+- Sensitive data is redacted from logs: passwords, recovery tokens, access tokens, refresh tokens, cookies, authorization headers, and service-role keys.
+
+### Session Governance
+
+- Successful login creates a governed session row and HttpOnly session cookie.
+- Session refresh rotates Supabase cookies and updates governed session state.
+- Logout marks the governed session logged out and clears cookies.
+- Revoked, idle-expired, absolute-expired, or membership-removed sessions cannot continue as browser admin sessions.
+- Bearer-token compatibility remains server/internal and must not replace governed browser sessions.
+
+### Password Management
+
+- Forgot password uses Supabase Auth recovery and returns generic success to prevent email enumeration.
+- Reset password consumes Supabase recovery tokens only; Localman does not create or store reset tokens.
+- Reset password validates invalid and expired tokens separately and audits both cases.
+- Change password verifies the current password through Supabase Auth before update.
+- Password policy is centralized in `lib/admin/password-policy.ts`.
+
+### Authentication UI Improvements
+
+- Added shared `components/admin/admin-auth-experience.tsx`.
+- Login, forgot password, reset password, and change password use the same Localman-branded split layout and card system.
+- Password fields support visibility toggles.
+- Reset and change password screens include a password strength indicator.
+- Error, success, divider, action, and security-notice presentation is shared.
+- Desktop and tablet keep the split layout; mobile hides the illustration panel and keeps the compact authentication card.
+
+### SSR Fixes
+
+- Reset-link hash parsing is performed after hydration.
+- Server and first client render use identical initial reset-link state.
+- Invalid and expired reset-link messages display after hydration without suppressing SSR.
+- Authentication pages must not access browser-only APIs during initial render.
+
+### Migration Summary
+
+Applied migrations:
+
+- `20260701120000_admin_login_security_events.sql`
+- `20260701130000_admin_sessions.sql`
+
+`npm run db:check` reports 33 repo migrations, 33 applied migrations, and zero pending migrations.
+
+### Regression Summary
+
+Final validation passed:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test` - 588 passed, 0 failed
+- `npm run build`
+- `npm run db:check`
+- `git diff --check`
+
+Browser validation covered:
+
+- login
+- forgot password
+- reset password valid-link state
+- reset password invalid-link state
+- change password mobile rendering
+- password visibility toggles
+- password strength display
+- desktop, tablet, and mobile responsive layouts
+- no hydration or framework-overlay warnings
+
+### Known Limitations
+
+- Durable operational-event persistence depends on production configuration.
+- `admin_login_security_events` and inactive `admin_sessions` need retention cleanup before event volume grows.
+- Live smoke testing still depends on a real target deployment and admin account.
+
+### Future Roadmap
+
+- Add scheduled cleanup for old login security events and inactive sessions.
+- Add operator-facing monitoring for rate-limit, cooldown, password failure, and session revocation trends.
+- Keep Supabase Auth token TTL short for administrator accounts.
+- Continue Admin Portal redesign on top of this certified authentication baseline.
+
 ## 2026-05 Mobile, Cache, Security, and Regression Lockdown
 
 This note summarizes the current branch behavior after the mobile discovery restructure, cache/security hardening, admin upload/session stabilization, and regression-lockdown coverage.

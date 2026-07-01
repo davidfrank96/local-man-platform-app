@@ -9,6 +9,7 @@ import {
 import { AdminServiceError } from "./errors.ts";
 import { writeAuditLogSafely } from "./audit-log-service.ts";
 import { logStructuredEvent } from "../observability.ts";
+import { validateAdminPassword } from "./password-policy.ts";
 import type { AdminRole, AdminUser } from "../../types/index.ts";
 
 type AdminUserServiceContext = {
@@ -239,13 +240,15 @@ async function createAuthUser(
     );
   }
 
-  if (input.password.trim().length < 8) {
+  const passwordValidation = validateAdminPassword(input.password);
+
+  if (!passwordValidation.success) {
     throw new AdminServiceError(
       "INVALID_PASSWORD",
       "Password must be stronger.",
       400,
-      { field: "password", minimum_length: 8 },
-      "Use at least 8 characters for the temporary password.",
+      { field: "password", issues: passwordValidation.issues },
+      passwordValidation.issues.join(" "),
     );
   }
 

@@ -143,6 +143,15 @@ Migration files:
 - `supabase/migrations/20260513035000_revoke_public_default_privileges.sql`
 - `supabase/migrations/20260513036000_revoke_additional_default_privileges.sql`
 - `supabase/migrations/20260517090000_rider_connect_schema.sql`
+- `supabase/migrations/20260520090000_rating_signals_schema.sql`
+- `supabase/migrations/20260520091000_rating_signals_rpc_persistence.sql`
+- `supabase/migrations/20260520092000_rating_signal_public_badges.sql`
+- `supabase/migrations/20260520093000_admin_rating_signal_summary.sql`
+- `supabase/migrations/20260525120000_rider_structured_availability.sql`
+- `supabase/migrations/20260530090000_restrict_rating_anonymous_hash_select.sql`
+- `supabase/migrations/20260624140000_admin_vendor_dashboard_counts.sql`
+- `supabase/migrations/20260701120000_admin_login_security_events.sql`
+- `supabase/migrations/20260701130000_admin_sessions.sql`
 
 Preferred command when `psql` is available:
 
@@ -168,6 +177,9 @@ Dashboard fallback:
 9. Confirm Data API grants are explicit and least privilege: public read tables remain selectable by anon/authenticated where intended, admin/internal tables are not anon-readable, and `app_schema_migrations` is inaccessible to client roles.
 10. Confirm future default privileges are revoked for public-schema tables, functions, and sequences so new migrations fail closed until grants are added.
 11. Confirm Rider Connect tables have RLS enabled, no anon grants, authenticated admin access through RLS, and service-role access for server routes.
+12. Confirm `public.admin_login_security_events` exists with RLS enabled and service-role-only table access.
+13. Confirm `public.admin_sessions` exists with RLS enabled and service-role-only table access.
+14. Confirm `npm run db:check` reports zero pending migrations before testing admin login.
 
 Rollback note:
 - current migrations are additive and tracked in `public.app_schema_migrations`

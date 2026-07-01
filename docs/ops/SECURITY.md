@@ -5,11 +5,16 @@ This document records the current application security posture for release revie
 ## Admin Auth and RBAC
 
 - Admin login uses Supabase email/password auth.
+- Admin login protection is persistent and distributed through `admin_login_security_events`; it evaluates IP, account, and IP+account scopes before the Supabase password grant.
 - Browser workspace sessions are stored in same-origin HTTP-only cookies.
+- Browser workspace sessions are governed by `admin_sessions` for session inventory, idle timeout, absolute lifetime, activity tracking, refresh-token rotation tracking, and revocation.
 - Privileged access requires an explicit `admin_users` row; Supabase authentication alone is not enough.
 - Backend `/api/admin/**` routes enforce session and permission checks before privileged reads or writes.
 - Client-side navigation hiding and route guards are UX controls only, not authorization boundaries.
 - Background focus/visibility session refresh keeps authenticated pages mounted so create/edit forms and file-picker state are preserved.
+- Forgot password, reset password, and change password use Supabase Auth as the password source of truth. Localman must not store reset tokens or raw passwords.
+- Authentication UI polish must not hide operational warnings, migration warnings, validation errors, rate-limit errors, or password/session errors.
+- Reset-password pages must remain SSR-safe; browser recovery-link hashes are parsed after hydration, not during initial render.
 
 ## Public Writes
 
@@ -47,6 +52,7 @@ This document records the current application security posture for release revie
 - Public discovery read tables are granted only the access required for public reads.
 - Rider Connect tables are not granted to anon because rider phone/WhatsApp fields live in `public.riders`.
 - Admin/internal tables are not exposed to anon.
+- `admin_login_security_events` and `admin_sessions` are not exposed to anon or authenticated roles; only service-role-backed server routes may access them.
 - `app_schema_migrations` has RLS enabled and a deny-all client policy.
 - Service-role access is reserved for server routes, migrations, analytics/event writes, ratings, and storage/image bookkeeping.
 - Future public-schema tables, functions, and sequences fail closed until a migration grants access intentionally.

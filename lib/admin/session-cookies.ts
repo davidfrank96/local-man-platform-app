@@ -3,6 +3,7 @@ import type { AdminAuthConfig, SupabaseAuthUser } from "./auth.ts";
 
 export const ADMIN_ACCESS_COOKIE_NAME = "localman_admin_access";
 export const ADMIN_REFRESH_COOKIE_NAME = "localman_admin_refresh";
+export const ADMIN_SESSION_COOKIE_NAME = "localman_admin_session";
 
 const ADMIN_ACCESS_COOKIE_FALLBACK_MAX_AGE_SECONDS = 60 * 60;
 const ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -120,16 +121,25 @@ export function createAdminCookieSession(payload: SupabaseAuthPayload): AdminCoo
 export function readAdminSessionCookies(request: Request): {
   accessToken: string | null;
   refreshToken: string | null;
+  adminSessionId: string | null;
 } {
   const cookies = parseCookieHeader(request.headers.get("cookie"));
 
   return {
     accessToken: cookies.get(ADMIN_ACCESS_COOKIE_NAME) ?? null,
     refreshToken: cookies.get(ADMIN_REFRESH_COOKIE_NAME) ?? null,
+    adminSessionId: cookies.get(ADMIN_SESSION_COOKIE_NAME) ?? null,
   };
 }
 
-export function appendAdminSessionCookies(headers: Headers, session: AdminCookieSession): void {
+export function appendAdminSessionCookies(
+  headers: Headers,
+  session: AdminCookieSession,
+  options: {
+    adminSessionId?: string | null;
+    adminSessionMaxAgeSeconds?: number | null;
+  } = {},
+): void {
   const accessMaxAge = session.expiresAt
     ? Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000))
     : ADMIN_ACCESS_COOKIE_FALLBACK_MAX_AGE_SECONDS;
@@ -156,6 +166,28 @@ export function appendAdminSessionCookies(headers: Headers, session: AdminCookie
       }),
     );
   }
+
+  if (options.adminSessionId) {
+    headers.append(
+      "set-cookie",
+      serializeCookie(ADMIN_SESSION_COOKIE_NAME, options.adminSessionId, {
+        maxAge: options.adminSessionMaxAgeSeconds ?? ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS,
+      }),
+    );
+  }
+}
+
+export function appendAdminSessionIdCookie(
+  headers: Headers,
+  adminSessionId: string,
+  maxAgeSeconds: number,
+): void {
+  headers.append(
+    "set-cookie",
+    serializeCookie(ADMIN_SESSION_COOKIE_NAME, adminSessionId, {
+      maxAge: maxAgeSeconds,
+    }),
+  );
 }
 
 export function appendClearedAdminSessionCookies(headers: Headers): void {
@@ -168,6 +200,12 @@ export function appendClearedAdminSessionCookies(headers: Headers): void {
   headers.append(
     "set-cookie",
     serializeCookie(ADMIN_REFRESH_COOKIE_NAME, "", {
+      maxAge: 0,
+    }),
+  );
+  headers.append(
+    "set-cookie",
+    serializeCookie(ADMIN_SESSION_COOKIE_NAME, "", {
       maxAge: 0,
     }),
   );
