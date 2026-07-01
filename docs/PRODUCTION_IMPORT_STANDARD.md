@@ -24,6 +24,7 @@ Always:
 - Resolve every FAIL before import
 - Manually approve WARNING and REVIEW rows before import
 - Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`
+- Update the production baseline and override register after certification
 
 ## Required Batch Deliverables
 
@@ -37,6 +38,8 @@ Every vendor batch must produce:
 6. Release gate report
 7. Quality score
 8. Import history update
+9. Production baseline update
+10. Approved override register update, if production corrections become baseline
 
 ## Permanent Workflow v1.0
 
@@ -205,6 +208,8 @@ Record:
 - Manual reviews
 - Approved coordinate corrections
 - Release verdict
+- Production baseline update
+- Approved production overrides
 
 ## Legacy Workflow Reference
 
@@ -218,8 +223,10 @@ Record:
 8. Post-import validation
 9. Post-import quality audit
 10. Import history update
+11. Production baseline update
+12. Approved override register update
 
-The 12-phase workflow above is authoritative. This condensed list is only a quick reference.
+The full workflow above is authoritative. This condensed list is only a quick reference.
 
 ## Vendor Name Rules
 

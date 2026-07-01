@@ -64,6 +64,23 @@ This document records Localman behavior that must not regress without an explici
 - Approved update scripts must target vendor id or slug and include old latitude and longitude guards.
 - Production discovery, search, map, or import code must not silently correct coordinates.
 
+## Production Overrides
+
+- Production Data v1.0 is the operational source of truth after hardening closeout.
+- Original onboarding workbooks remain historical source documents.
+- Approved production overrides must be recorded in `docs/PRODUCTION_CHANGELOG.md`.
+- Future certifications classify checked fields as `SOURCE_MATCH`, `APPROVED_PRODUCTION_OVERRIDE`, or `UNEXPECTED_CHANGE`.
+- Approved overrides must never be treated as failures.
+- Pending, rejected, or undocumented changes must not be used to pass certification.
+
+## Codex And Operator Rules
+
+- Never treat production differences as automatic errors.
+- Always investigate before correcting.
+- Never overwrite phone, coordinates, governance, vendor identity, or hours without verification.
+- If production differs from workbook, determine whether it is `SOURCE_ERROR`, `APPROVED_OVERRIDE`, or `UNEXPECTED_CHANGE`.
+- Never guess vendor identity, local food names, coordinates, phones, or hours.
+
 ## Release Gate Enforcement
 
 Every master release gate must run:
@@ -77,4 +94,4 @@ Every master release gate must run:
 - diff whitespace check
 - discovery, search, map, admin, import, performance, and mobile smoke validation
 
-A `GREEN` verdict requires all blockers resolved, no migration mismatch, and no unreviewed production-data risk. `YELLOW` is allowed only for documented non-blocking warnings. `RED` blocks deployment.
+A `GREEN` verdict requires all blockers resolved, no migration mismatch, no unreviewed production-data risk, and no `UNEXPECTED_CHANGE` in certified production data. `YELLOW` is allowed only for documented non-blocking warnings. `RED` blocks deployment.

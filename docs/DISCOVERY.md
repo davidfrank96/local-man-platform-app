@@ -2,6 +2,8 @@
 
 This document describes how public vendor discovery currently works.
 
+Production Data v1.0 is the operational vendor baseline used by discovery. Original onboarding workbooks are historical source documents and do not drive runtime discovery behavior.
+
 ## Origin Priority
 
 Discovery origin priority is:

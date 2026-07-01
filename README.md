@@ -16,7 +16,7 @@ Localman is a location-aware marketplace for discovering local food vendors in A
 
 ## Production Operations
 
-Production onboarding now follows the permanent Localman import standard v1.0:
+Production onboarding follows the permanent Localman import standard v1.0:
 
 ```text
 Raw workbook
@@ -33,9 +33,12 @@ Raw workbook
 -> post-import quality audit
 -> quality score
 -> import history update
+-> production baseline update
 ```
 
-Marketplace reset, import history, import checklists, and release gates are documented under `docs/`. Do not import raw field-collection workbooks directly, and do not skip any onboarding phase.
+Production Data v1.0 is closed under the hardening governance model. Production is now the operational source of truth. Original onboarding workbooks remain historical source documents, and approved production overrides are recorded in `docs/PRODUCTION_CHANGELOG.md` before future certification work treats them as baseline.
+
+Marketplace reset, import history, import checklists, override policy, and release gates are documented under `docs/`. Do not import raw field-collection workbooks directly, and do not skip any onboarding phase.
 
 ## Tech Stack
 
@@ -141,12 +144,20 @@ Recommended for production:
 - [Production Import Standard](docs/PRODUCTION_IMPORT_STANDARD.md)
 - [Production Import History](docs/PRODUCTION_IMPORT_HISTORY.md)
 - [Production Import Checklist](docs/PRODUCTION_IMPORT_CHECKLIST.md)
+- [Production Data Baseline](docs/PRODUCTION_DATA_BASELINE.md)
+- [Production Data Integrity](docs/PRODUCTION_DATA_INTEGRITY.md)
+- [Production Override Policy](docs/PRODUCTION_OVERRIDE_POLICY.md)
+- [Production Changelog](docs/PRODUCTION_CHANGELOG.md)
+- [Production Hardening Summary](docs/PRODUCTION_HARDENING_SUMMARY.md)
+- [Localman Food Dictionary](docs/LOCALMAN_FOOD_DICTIONARY.md)
+- [Permanent Regression Locks](docs/PERMANENT_REGRESSION_LOCKS.md)
+- [Codex Guidelines](docs/CODEX_GUIDELINES.md)
 - [Marketplace Reset](docs/MARKETPLACE_RESET.md)
 - [Production Onboarding](docs/PRODUCTION_ONBOARDING.md)
 - [Operations Runbook](docs/OPERATIONS.md)
 - [Master Release Gate](docs/MASTER_RELEASE_GATE.md)
 - [Release Status](docs/RELEASE_STATUS.md)
-- [Production Changelog](docs/CHANGELOG_PRODUCTION.md)
+- [Historical Production Changelog](docs/CHANGELOG_PRODUCTION.md)
 - [API Spec](docs/api/API_SPEC.md)
 - [Analytics](docs/analytics.md)
 - [Audit Logs](docs/audit-logs.md)
