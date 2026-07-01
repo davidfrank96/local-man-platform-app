@@ -167,6 +167,10 @@ const persistedOperationalInfoEvents = new Set([
   "ADMIN_VENDOR_DISHES_CREATED",
   "ADMIN_VENDOR_DISH_DELETED",
   "ADMIN_VENDOR_HOURS_REPLACED",
+  "PASSWORD_RESET_REQUESTED",
+  "PASSWORD_RESET_COMPLETED",
+  "PASSWORD_CHANGED",
+  "SESSIONS_REVOKED_AFTER_PASSWORD_CHANGE",
 ]);
 const persistedLowVolumeWarnAreas = new Set([
   "auth",
@@ -791,41 +795,87 @@ async function persistOperationalLogRecord(
   }
 }
 
+function writeConsoleRecordSafely(
+  level: LogLevel,
+  record: StructuredLogRecord,
+): void {
+  try {
+    const logger = console[level] ?? console.info;
+    logger(record);
+  } catch (error) {
+    writeObservabilityFallbackSafely("STRUCTURED_LOG_CONSOLE_WRITE_FAILED", error, {
+      attemptedLevel: level,
+      attemptedEvent: record.event,
+    });
+  }
+}
+
+function writeObservabilityFallbackSafely(
+  event: string,
+  error: unknown,
+  metadata?: Record<string, unknown>,
+): void {
+  try {
+    const fallbackRecord = {
+      timestamp: new Date().toISOString(),
+      level: "warn",
+      event,
+      area: "db",
+      message: "Observability pipeline failed and was isolated from application flow.",
+      ...serializeErrorForLog(error),
+      metadata: sanitizeLogMetadata(metadata ?? {}),
+    };
+    const logger = console.warn ?? console.info;
+    logger(fallbackRecord);
+  } catch {
+    // Observability must never become a render or request-path dependency.
+  }
+}
+
 function trackOperationalEventWrite(write: Promise<void>): void {
   pendingOperationalEventWrites.add(write);
-  void write.finally(() => {
-    pendingOperationalEventWrites.delete(write);
-  });
+  void write.then(
+    () => {
+      pendingOperationalEventWrites.delete(write);
+    },
+    () => {
+      pendingOperationalEventWrites.delete(write);
+    },
+  );
 }
 
 function reportOperationalEventPersistenceFailure(
   record: StructuredLogRecord,
   error: unknown,
 ): void {
-  const now = Date.now();
+  try {
+    const now = Date.now();
 
-  if (
-    now - lastOperationalEventPersistenceFailureAt <
-    operationalEventPersistenceFailureCooldownMs
-  ) {
-    return;
+    if (
+      now - lastOperationalEventPersistenceFailureAt <
+      operationalEventPersistenceFailureCooldownMs
+    ) {
+      return;
+    }
+
+    lastOperationalEventPersistenceFailureAt = now;
+    writeConsoleRecordSafely("error", createStructuredLogRecord("error", {
+      event: "OPERATIONAL_EVENT_PERSIST_FAILED",
+      area: "db",
+      route: record.route ?? null,
+      method: record.method ?? null,
+      requestId: record.requestId ?? null,
+      message: "Operational event storage write failed.",
+      error,
+      metadata: {
+        originalEvent: record.event,
+        originalLevel: record.level,
+        targetTable: "operational_events",
+      },
+    }));
+  } catch (fallbackError) {
+    writeObservabilityFallbackSafely("OPERATIONAL_EVENT_PERSIST_REPORT_FAILED", fallbackError);
   }
-
-  lastOperationalEventPersistenceFailureAt = now;
-  console.error(createStructuredLogRecord("error", {
-    event: "OPERATIONAL_EVENT_PERSIST_FAILED",
-    area: "db",
-    route: record.route ?? null,
-    method: record.method ?? null,
-    requestId: record.requestId ?? null,
-    message: "Operational event storage write failed.",
-    error,
-    metadata: {
-      originalEvent: record.event,
-      originalLevel: record.level,
-      targetTable: "operational_events",
-    },
-  }));
 }
 
 export async function flushOperationalEventWritesForTests(): Promise<void> {
@@ -845,18 +895,24 @@ export function logStructuredEvent(
   level: LogLevel,
   event: StructuredLogEvent,
 ): void {
-  if (!isLogLevelEnabled(level)) {
-    return;
-  }
+  try {
+    if (!isLogLevelEnabled(level)) {
+      return;
+    }
 
-  const logger = console[level] ?? console.info;
-  const record = createStructuredLogRecord(level, event);
-  logger(record);
+    const record = createStructuredLogRecord(level, event);
+    writeConsoleRecordSafely(level, record);
 
-  const persistenceWrite = persistOperationalLogRecord(record)
-    .catch((error) => {
-      reportOperationalEventPersistenceFailure(record, error);
+    const persistenceWrite = persistOperationalLogRecord(record)
+      .catch((error) => {
+        reportOperationalEventPersistenceFailure(record, error);
+      });
+
+    trackOperationalEventWrite(persistenceWrite);
+  } catch (error) {
+    writeObservabilityFallbackSafely("STRUCTURED_LOGGING_FAILED", error, {
+      attemptedLevel: level,
+      attemptedEvent: normalizeShortText(event.event ?? event.type, 120) ?? null,
     });
-
-  trackOperationalEventWrite(persistenceWrite);
+  }
 }

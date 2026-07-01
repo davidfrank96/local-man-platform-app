@@ -217,6 +217,22 @@ Block on skipped onboarding phases, invalid phone, invalid coordinates, unreview
 
 Verify:
 
+- admin login persistent protection evaluates before Supabase password grant
+- login success still sets HttpOnly admin cookies
+- invalid login attempts create persisted security events
+- repeated failures trigger progressive delay and temporary cooldown
+- IP, account, and IP+account login protection scopes remain independent
+- governed admin sessions are created on login
+- idle timeout and absolute timeout clear cookies and require re-authentication
+- session refresh preserves rotated Supabase tokens and updates session inventory
+- logout marks the current governed session logged out
+- forced logout helpers can revoke current, specific, or all sessions
+- forgot password returns generic success and never enumerates admin emails
+- reset password uses Supabase recovery tokens only and revokes all governed sessions after success
+- change password verifies current password through Supabase Auth and revokes other governed sessions
+- password policy remains centralized and enforced by reset/change routes
+- password audit events contain no raw passwords, reset tokens, access tokens, or refresh tokens
+- cookie-backed admin sessions cannot authenticate after revocation
 - vendor management
 - rider management
 - CSV intake and review modal

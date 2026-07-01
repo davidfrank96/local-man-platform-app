@@ -48,6 +48,18 @@ This document records Localman behavior that must not regress without an explici
 
 ## Admin
 
+- Admin login protection is persistent and distributed through `admin_login_security_events`.
+- Admin login protection must evaluate IP, account, and IP+account scopes before the Supabase password grant.
+- Admin login must not fall back to process-local memory rate limiting.
+- Cookie-backed admin sessions must use `admin_sessions` for inventory, idle timeout, absolute timeout, activity tracking, and revocation.
+- Admin session activity updates must remain throttled and must not write to the database on every request.
+- Admin logout must clear cookies and mark the current governed session logged out when a session id is present.
+- Forgot password must use Supabase Auth recovery and return generic success without account enumeration.
+- Reset password must consume Supabase recovery sessions only; Localman must not create or store reset tokens.
+- Successful password reset must revoke all governed sessions for the auth user.
+- Change password must require an authenticated admin, verify current password through Supabase Auth, and revoke other governed sessions.
+- Password policy must stay centralized in `lib/admin/password-policy.ts`.
+- Password audit events must not log raw passwords, recovery tokens, access tokens, refresh tokens, or service-role keys.
 - Dashboard cards use database aggregate totals, not loaded-page counts.
 - Vendor registry remains paginated and displays total-count metadata.
 - Admin analytics use aggregate queries or RPCs rather than fetching all vendors for counts.

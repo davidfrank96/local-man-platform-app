@@ -138,6 +138,18 @@ Public badge outputs are thresholded and positive-only. Raw rating signals and a
 
 Admin access uses Supabase Auth plus `admin_users` membership. Authenticated users without an admin membership row are denied workspace access.
 
+Admin login-abuse protection is persistent and distributed. `/api/admin/login` evaluates the Postgres-backed `admin_login_security_events` policy before the Supabase password grant, then records success, failure, progressive-delay, rate-limit, and cooldown events. Failed attempts are tracked across IP, account, and combined IP+account scopes. The old process-local memory limiter must not be used for admin login because it does not survive restarts or multi-instance deployments.
+
+Admin browser sessions are governed by `admin_sessions`. Cookie-backed sessions have an opaque HttpOnly session id, an idle timeout, an absolute lifetime, throttled activity updates, refresh-token rotation tracking, and revocation state. Supabase Auth and `admin_users` RBAC are still validated server-side on protected requests; the session inventory adds lifecycle control and forced-logout support.
+
+Admin password management remains Supabase Auth-owned:
+
+- forgot-password calls Supabase Auth recovery and always returns a generic success response
+- reset-password validates the Supabase recovery session, updates the Supabase Auth password, and revokes all governed sessions for that auth user
+- change-password verifies the current password through Supabase Auth, updates the password, and revokes other governed sessions
+- password policy is centralized in `lib/admin/password-policy.ts`
+- password events are recorded through structured operational audit events without raw tokens or passwords
+
 Admin capabilities include:
 
 - vendor creation and editing
@@ -154,6 +166,12 @@ Admin capabilities include:
 Admin dashboard totals are database totals, not loaded-page counts. Vendor registry pagination remains in place and can display "showing N of total" without fetching every vendor.
 
 The admin edit workspace is keyed by selected vendor id so switching vendors remounts the form and clears uncontrolled/default input state. Image upload and save paths must use the current selected vendor id at the time of action.
+
+## Observability And Runtime Health
+
+Structured logging and operational-event persistence are observability aids, not request or render dependencies. `logStructuredEvent()` must never throw into application code. If console logging or `operational_events` persistence fails, the application falls back to guarded console logging and continues the original request or render path.
+
+Admin database consistency checks run at runtime to surface migration drift and missing schema dependencies. These checks return status objects for the admin warning UI. Pending migrations or health-check read failures display administrator warnings; they must not crash Admin Layout rendering or bypass authentication/session enforcement.
 
 ## PWA
 

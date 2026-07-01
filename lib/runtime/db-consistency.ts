@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { logStructuredEvent } from "../observability.ts";
+import { type LogLevel, logStructuredEvent } from "../observability.ts";
 
 export type DatabaseConsistencySeverity = "critical" | "high" | "medium" | "low";
 
@@ -42,6 +42,28 @@ function buildStatus(
     title,
     message,
   };
+}
+
+function logDatabaseConsistencyEvent(
+  level: LogLevel,
+  event: Parameters<typeof logStructuredEvent>[1],
+): void {
+  try {
+    logStructuredEvent(level, event);
+  } catch (error) {
+    try {
+      console.warn({
+        timestamp: new Date().toISOString(),
+        level: "warn",
+        event: "DB_CONSISTENCY_LOGGING_FAILED",
+        area: "db",
+        message: "Database consistency logging failed and was isolated from admin rendering.",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      });
+    } catch {
+      // Runtime health checks must not crash admin rendering because logging failed.
+    }
+  }
 }
 
 async function fetchAppliedMigrationNames(): Promise<string[]> {
@@ -106,13 +128,18 @@ async function computeMigrationConsistencyStatus(): Promise<MigrationConsistency
   }
 
   const message = `Database schema is behind repo migrations (${pendingMigrations.length} pending). Run db:migrate and db:check before using analytics or RBAC-dependent admin features.`;
-  logStructuredEvent("error", {
-    type: "DB_MIGRATION_MISMATCH",
+  logDatabaseConsistencyEvent("warn", {
+    event: "DB_MIGRATION_MISMATCH",
+    area: "db",
     pendingMigrations,
     message,
+    metadata: {
+      pendingMigrationCount: pendingMigrations.length,
+      pendingMigrations,
+    },
   });
 
-  return buildStatus("critical", "Database mismatch", message);
+  return buildStatus("high", "Database migration warning", message);
 }
 
 export async function getAdminDatabaseConsistencyStatus(): Promise<MigrationConsistencyStatus> {
@@ -134,12 +161,15 @@ export async function getAdminDatabaseConsistencyStatus(): Promise<MigrationCons
       .catch((error) => {
         const message =
           "Database consistency check failed. Run db:check to verify migrations, functions, and policies.";
-        logStructuredEvent("error", {
-          type: "DB_CONSISTENCY_CHECK_FAILED",
+        logDatabaseConsistencyEvent("warn", {
+          event: "DB_CONSISTENCY_CHECK_FAILED",
+          area: "db",
           message,
-          detail: error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            detail: error instanceof Error ? error.message : "Unknown error",
+          },
         });
-        return buildStatus("high", "Database check failed", message);
+        return buildStatus("high", "Database check warning", message);
       })
       .finally(() => {
         inFlightCheck = null;
@@ -152,4 +182,9 @@ export async function getAdminDatabaseConsistencyStatus(): Promise<MigrationCons
     status,
   };
   return status;
+}
+
+export function resetAdminDatabaseConsistencyStatusForTests(): void {
+  cachedStatus = null;
+  inFlightCheck = null;
 }

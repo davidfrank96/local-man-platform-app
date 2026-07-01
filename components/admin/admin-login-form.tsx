@@ -76,6 +76,9 @@ export function AdminLoginForm() {
             Back to app
           </Link>
         </div>
+        <p className="form-footnote">
+          <Link href="/admin/forgot-password">Forgot password?</Link>
+        </p>
       </form>
     </main>
   );

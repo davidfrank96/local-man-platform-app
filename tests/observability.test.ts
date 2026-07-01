@@ -319,3 +319,91 @@ test("logStructuredEvent persists sanitized operational events when enabled", as
     restoreEnv();
   }
 });
+
+test("logStructuredEvent isolates console logger failures", () => {
+  const restoreEnv = withEnv({
+    LOCALMAN_LOG_LEVEL: "info",
+    LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE: "false",
+  });
+  const originalInfo = console.info;
+  const originalWarn = console.warn;
+  const warnings: Array<Record<string, unknown>> = [];
+
+  console.info = (() => {
+    throw new Error("console unavailable");
+  }) as typeof console.info;
+  console.warn = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      warnings.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.warn;
+
+  try {
+    assert.doesNotThrow(() => {
+      logStructuredEvent("info", {
+        event: "TEST_CONSOLE_FAILURE",
+        area: "db",
+      });
+    });
+
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0]?.event, "STRUCTURED_LOG_CONSOLE_WRITE_FAILED");
+  } finally {
+    console.info = originalInfo;
+    console.warn = originalWarn;
+    restoreEnv();
+  }
+});
+
+test("failed operational event persistence falls back without rejecting request flow", async () => {
+  const restoreEnv = withEnv({
+    LOCALMAN_ENABLE_OPERATIONAL_EVENT_STORAGE: "true",
+    LOCALMAN_RUNTIME_ENVIRONMENT: "production",
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  });
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const warnings: Array<Record<string, unknown>> = [];
+
+  console.error = (() => {
+    throw new Error("console error unavailable");
+  }) as typeof console.error;
+  console.warn = ((record: unknown) => {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      warnings.push(record as Record<string, unknown>);
+    }
+  }) as typeof console.warn;
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+
+    if (url.pathname === "/rest/v1/operational_events") {
+      return Response.json({ message: "missing table" }, { status: 404 });
+    }
+
+    throw new Error(`Unexpected fetch: ${url.pathname}`);
+  }) as typeof fetch;
+
+  try {
+    assert.doesNotThrow(() => {
+      logStructuredEvent("error", {
+        event: "TEST_OPERATIONAL_STORAGE_FAILURE",
+        area: "db",
+      });
+    });
+
+    await flushOperationalEventWritesForTests();
+
+    assert.ok(
+      warnings.some(
+        (record) => record.event === "STRUCTURED_LOG_CONSOLE_WRITE_FAILED",
+      ),
+    );
+  } finally {
+    console.error = originalError;
+    console.warn = originalWarn;
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});

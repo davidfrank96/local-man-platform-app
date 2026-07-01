@@ -1,5 +1,6 @@
 import { apiSuccess } from "../../../../lib/api/responses.ts";
 import { getAdminAuthConfig } from "../../../../lib/admin/auth.ts";
+import { revokeAdminSession } from "../../../../lib/admin/session-governance.ts";
 import {
   appendClearedAdminSessionCookies,
   readAdminSessionCookies,
@@ -16,7 +17,18 @@ export async function POST(request: Request) {
     area: "auth",
   });
   const config = getAdminAuthConfig();
-  const { accessToken } = readAdminSessionCookies(request);
+  const { accessToken, adminSessionId } = readAdminSessionCookies(request);
+
+  if (config && adminSessionId) {
+    await revokeAdminSession(config, adminSessionId, "manual_logout").catch((error) => {
+      logRouteEvent("warn", routeLog, {
+        event: "ADMIN_LOGOUT_SESSION_REVOKE_FAILED",
+        status: 500,
+        message: "Admin logout continued after governed session revoke failed.",
+        error,
+      });
+    });
+  }
 
   if (config && accessToken) {
     const upstreamResponse = await fetch(new URL("/auth/v1/logout", config.supabaseUrl), {

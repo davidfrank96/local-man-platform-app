@@ -945,6 +945,23 @@ h2 {
   gap: 6px;
 }
 
+.form-footnote,
+.success-copy {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.form-footnote a {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.success-copy {
+  color: #166534;
+  font-weight: 700;
+}
+
 .session-summary span {
   color: var(--color-muted);
   font-size: 0.9rem;
