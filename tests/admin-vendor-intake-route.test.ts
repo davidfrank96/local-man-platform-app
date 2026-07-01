@@ -334,6 +334,44 @@ function createSizedPreviewRequestBody(): string {
   return body;
 }
 
+async function uploadRowsAndCaptureDishes(
+  rows: Array<ReturnType<typeof createFullVendorRow>>,
+): Promise<{
+  status: number;
+  body: {
+    success: boolean;
+    data: {
+      uploadedRows: unknown[];
+      failedRows: unknown[];
+    };
+  };
+  dishes: Array<Record<string, unknown>>;
+}> {
+  const restoreEnv = setAdminEnv();
+  const originalFetch = globalThis.fetch;
+  const createdDishBodies: Array<Array<Record<string, unknown>>> = [];
+  globalThis.fetch = createFetchMock([], { role: "agent", createdDishBodies });
+
+  try {
+    const response = await vendorIntakeRoute(
+      createRequest({
+        action: "upload",
+        rows,
+      }),
+    );
+    const body = await response.json();
+
+    return {
+      status: response.status,
+      body,
+      dishes: createdDishBodies[0] ?? [],
+    };
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+}
+
 test("CSV template headers expose the full vendor intake contract", () => {
   assert.ok(vendorCsvTemplateHeaders.includes("price_band"));
   assert.ok(!vendorCsvTemplateHeaders.includes("category"));
@@ -775,6 +813,156 @@ test("CSV upload inserts all three featured dish slots", async () => {
     globalThis.fetch = originalFetch;
     restoreEnv();
   }
+});
+
+test("CSV upload creates one featured dish when only dish slot 1 is supplied", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      dish_2_name: "",
+      dish_2_description: "",
+      dish_2_image_url: "",
+      dish_3_name: "",
+      dish_3_description: "",
+      dish_3_image_url: "",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.equal(result.body.data.uploadedRows.length, 1);
+  assert.deepEqual(
+    result.dishes.map((dish) => dish.dish_name),
+    ["Jollof Rice Bowl"],
+  );
+});
+
+test("CSV upload creates two featured dishes when only dish slots 1 and 2 are supplied", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      dish_3_name: "",
+      dish_3_description: "",
+      dish_3_image_url: "",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.deepEqual(
+    result.dishes.map((dish) => dish.dish_name),
+    ["Jollof Rice Bowl", "Chicken Suya Combo"],
+  );
+});
+
+test("CSV upload preserves three distinct featured dish slots", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      dish_1_name: "Bitter leave soup and fufu",
+      dish_1_description: "Bitter leave soup and fufu",
+      dish_2_name: "Egusi soup with Garri",
+      dish_2_description: "Egusi soup with Garri",
+      dish_3_name: "Jollof Rice",
+      dish_3_description: "Jollof Rice",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.deepEqual(
+    result.dishes.map((dish) => dish.dish_name),
+    ["Bitter leave soup and fufu", "Egusi soup with Garri", "Jollof Rice"],
+  );
+});
+
+test("CSV upload leaves missing dish slots absent instead of creating blank rows", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      dish_2_name: "",
+      dish_2_description: "",
+      dish_2_image_url: "",
+      dish_3_name: "",
+      dish_3_description: "",
+      dish_3_image_url: "",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.equal(result.dishes.length, 1);
+  assert.deepEqual(Object.keys(result.dishes[0]).sort(), [
+    "description",
+    "dish_name",
+    "image_url",
+    "is_featured",
+    "vendor_id",
+  ]);
+});
+
+test("CSV upload does not copy dish slot 1 into missing dish slots", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      dish_1_name: "Ofada Rice",
+      dish_1_description: "Ofada Rice",
+      dish_2_name: "",
+      dish_2_description: "",
+      dish_2_image_url: "",
+      dish_3_name: "",
+      dish_3_description: "",
+      dish_3_image_url: "",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.deepEqual(
+    result.dishes.map((dish) => dish.dish_name),
+    ["Ofada Rice"],
+  );
+  assert.equal(result.dishes.filter((dish) => dish.dish_name === "Ofada Rice").length, 1);
+});
+
+test("CSV upload keeps duplicate dish rows only when the source explicitly repeats them", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      dish_1_name: "Suya",
+      dish_1_description: "Suya",
+      dish_2_name: "Suya",
+      dish_2_description: "Suya",
+      dish_3_name: "Suya",
+      dish_3_description: "Suya",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.deepEqual(
+    result.dishes.map((dish) => dish.dish_name),
+    ["Suya", "Suya", "Suya"],
+  );
+});
+
+test("CSV upload preserves batch-style distinct dish values without fallback", async () => {
+  const result = await uploadRowsAndCaptureDishes([
+    createFullVendorRow({
+      vendor_name: "Gub's Kitchen",
+      dish_1_name: "Semo with Egusi soup",
+      dish_1_description: "Semo with Egusi soup",
+      dish_2_name: "White Rice and tomato sauce",
+      dish_2_description: "White Rice and tomato sauce",
+      dish_3_name: "Pounded Yam and okra soup",
+      dish_3_description: "Pounded Yam and okra soup",
+    }),
+  ]);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.deepEqual(
+    result.dishes.map((dish) => dish.dish_name),
+    [
+      "Semo with Egusi soup",
+      "White Rice and tomato sauce",
+      "Pounded Yam and okra soup",
+    ],
+  );
 });
 
 test("CSV preview accepts leading-zero and compact-meridiem hours", async () => {

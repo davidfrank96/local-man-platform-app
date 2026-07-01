@@ -20,10 +20,13 @@ Raw production collection data must flow through:
 12. Post-import validation
 13. Post-import duplicate coordinate audit
 14. Quality score and import history update
+15. Production baseline and override register update
 
 Do not import raw Jotform-style XLSX files directly. The admin importer expects CSV with Localman template headers.
 
 No production import may skip phases. Review artifacts must be generated before import, including the validation report, audit report, excluded vendors report, coordinate review package, release gate result, quality score, and import history entry.
+
+After a batch is imported and verified, production becomes the operational source of truth for that batch. Original workbooks remain historical source documents. Any approved post-import change must be recorded as an approved production override before future integrity certification may treat it as baseline.
 
 ## Production CSV Contract
 
@@ -268,4 +271,4 @@ After import, validate:
 - dashboard database totals and vendor registry pagination remain correct
 - post-import duplicate coordinate audit is complete
 
-Record every completed import in `docs/PRODUCTION_IMPORT_HISTORY.md`, including batch number, vendor count, warnings, manual reviews, coordinate corrections, and final quality score.
+Record every completed import in `docs/PRODUCTION_IMPORT_HISTORY.md`, including batch number, vendor count, warnings, manual reviews, coordinate corrections, and final quality score. Update `docs/PRODUCTION_DATA_BASELINE.md` and `docs/PRODUCTION_CHANGELOG.md` when approved production corrections become part of the certified baseline.

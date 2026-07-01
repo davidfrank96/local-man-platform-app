@@ -185,7 +185,20 @@ Marketplace data is operational data. Production vendor onboarding uses the docu
 10. Post-import validation
 11. Post-import quality audit
 12. Quality score and import history update
+13. Production baseline and override register update
 
 No production import may skip a phase. Batch imports are recorded in `docs/PRODUCTION_IMPORT_HISTORY.md`. Reset and release procedures are documented in `docs/MARKETPLACE_RESET.md`, `docs/OPERATIONS.md`, and `docs/MASTER_RELEASE_GATE.md`.
 
 Coordinates are production trust data. Duplicate coordinate audits are mandatory for every batch. Candidate coordinate corrections are prepared as human-review packages first; production coordinates are never automatically changed by import, geocoding, or discovery code.
+
+## Production Data Baseline
+
+Production Data v1.0 is governed as an operational baseline:
+
+- production is the operational source of truth after approved hardening
+- original onboarding workbooks remain historical source documents
+- approved production overrides are recorded in `docs/PRODUCTION_CHANGELOG.md`
+- integrity certification compares production against either the original workbook value or an approved production override
+- unexpected differences remain blockers until corrected or approved
+
+Future Codex and operator work must not treat every production/workbook difference as an automatic error. The required classification is `SOURCE_MATCH`, `APPROVED_PRODUCTION_OVERRIDE`, or `UNEXPECTED_CHANGE`.

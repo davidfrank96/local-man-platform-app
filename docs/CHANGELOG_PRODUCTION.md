@@ -1,6 +1,8 @@
-# Production Changelog
+# Historical Production Changelog
 
-This changelog records production-impacting fixes and hardening work completed during Localman stabilization and production onboarding.
+This file is retained for historical notes from earlier stabilization work.
+
+The current approved production override register is `docs/PRODUCTION_CHANGELOG.md`. Future production-data certification, baseline, and override decisions must use that file instead of this historical changelog.
 
 ## Category Preservation Fix
 

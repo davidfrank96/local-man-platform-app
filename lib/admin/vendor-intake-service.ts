@@ -180,6 +180,14 @@ type DayHoursDraft = {
   is_closed: boolean;
 };
 
+export type VendorDishSlotInput = {
+  slot: (typeof vendorCsvDishSlots)[number];
+  dishName: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  hasAnyValue: boolean;
+};
+
 const DUPLICATE_DISTANCE_KM = 0.2;
 const validPriceBands = new Set(["budget", "standard", "premium"]);
 
@@ -229,6 +237,26 @@ function collectCategoryInputs(row: VendorIntakeRowInput): Array<{
         slug: legacyCategory,
       }]
     : [];
+}
+
+export function readVendorDishSlotInputs(row: VendorIntakeRowInput): VendorDishSlotInput[] {
+  return vendorCsvDishSlots.map((slot) => {
+    const dishName = normalizeNullableText(row[`dish_${slot}_name` as keyof VendorIntakeRowInput]);
+    const description = normalizeNullableText(
+      row[`dish_${slot}_description` as keyof VendorIntakeRowInput],
+    );
+    const imageUrl = normalizeNullableText(
+      row[`dish_${slot}_image_url` as keyof VendorIntakeRowInput],
+    );
+
+    return {
+      slot,
+      dishName,
+      description,
+      imageUrl,
+      hasAnyValue: Boolean(dishName || description || imageUrl),
+    };
+  });
 }
 
 function normalizeCoordinate(value: string | number | null | undefined): number | null {
@@ -469,25 +497,17 @@ function createDishesDraft(
   rowNumber: number,
   issues: VendorIntakeIssue[],
 ): CreateVendorDishesRequest | null {
-  const dishes = vendorCsvDishSlots.flatMap((slot) => {
-    const dishName = normalizeNullableText(row[`dish_${slot}_name` as keyof VendorIntakeRowInput]);
-    const description = normalizeNullableText(
-      row[`dish_${slot}_description` as keyof VendorIntakeRowInput],
-    );
-    const imageUrl = normalizeNullableText(
-      row[`dish_${slot}_image_url` as keyof VendorIntakeRowInput],
-    );
-
-    if (!dishName && !description && !imageUrl) {
+  const dishes = readVendorDishSlotInputs(row).flatMap((slotInput) => {
+    if (!slotInput.hasAnyValue) {
       return [];
     }
 
-    if (!dishName) {
+    if (!slotInput.dishName) {
       issues.push(
         createIssue(
           rowNumber,
-          `dish_${slot}_name`,
-          `dish_${slot}_name is required when featured dish details are provided.`,
+          `dish_${slotInput.slot}_name`,
+          `dish_${slotInput.slot}_name is required when featured dish details are provided.`,
           "REQUIRED_FIELD",
         ),
       );
@@ -496,9 +516,9 @@ function createDishesDraft(
 
     return [
       {
-        dish_name: dishName,
-        description,
-        image_url: imageUrl,
+        dish_name: slotInput.dishName,
+        description: slotInput.description,
+        image_url: slotInput.imageUrl,
         is_featured: true,
       },
     ];

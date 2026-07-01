@@ -262,6 +262,23 @@ For imports, verify:
 
 Block on duplicate slugs, invalid phones, invalid coordinates, or missing required fields.
 
+For Production Data v1.0 and later, certification must respect approved production overrides:
+
+```text
+Original Workbook
+or
+Approved Production Override
+-> Certified Baseline
+```
+
+Do not fail a release gate only because production intentionally differs from a historical workbook. First classify the difference as:
+
+- `SOURCE_MATCH`
+- `APPROVED_PRODUCTION_OVERRIDE`
+- `UNEXPECTED_CHANGE`
+
+Block on `UNEXPECTED_CHANGE`, missing approval evidence, rejected overrides, pending-review rows used as certification evidence, or unreviewed production-data risk.
+
 ## 12. Post-Import Validation
 
 After any import, verify:
@@ -302,3 +319,4 @@ Before a deployment or import, verify `docs/PERMANENT_REGRESSION_LOCKS.md` still
 - admin edit-state reset
 - import governance and coordinate review
 - duplicate coordinate audit and human approval
+- approved production override policy

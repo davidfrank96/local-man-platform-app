@@ -40,6 +40,7 @@ Recommended vendor onboarding path:
 11. Run post-import validation.
 12. Run post-import duplicate coordinate audit and produce approved/review/revisit packages if needed.
 13. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
+14. Update the production baseline and approved override register when verified production changes become baseline.
 
 ## Rider Onboarding
 
@@ -102,6 +103,7 @@ After import:
 13. Run duplicate coordinate audit against production.
 14. Confirm map clusters and selected vendor behavior remain valid.
 15. Update import history.
+16. Update the production baseline and override register when the batch is certified.
 
 ## Launch Readiness
 
@@ -116,3 +118,4 @@ Launch only after:
 - ratings work
 - admin analytics and logs load
 - no console or hydration errors are observed in smoke testing
+- production baseline and approved override documentation is current

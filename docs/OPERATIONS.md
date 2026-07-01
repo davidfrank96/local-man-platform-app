@@ -69,6 +69,7 @@ Raw workbook
 -> post-import quality audit
 -> quality score
 -> import history update
+-> production baseline update
 ```
 
 Never import a raw field-collection workbook directly. Never skip a phase in `docs/PRODUCTION_IMPORT_STANDARD.md`.
@@ -102,6 +103,7 @@ After import:
 7. Create approved/review/revisit coordinate packages when duplicate groups remain.
 8. Record quality score and release verdict.
 9. Record the batch in `docs/PRODUCTION_IMPORT_HISTORY.md`.
+10. Update the production baseline and approved override register when approved production corrections become baseline.
 
 ## Rider Imports
 
@@ -139,6 +141,8 @@ Run the master release gate before:
 
 Use `docs/MASTER_RELEASE_GATE.md` as the canonical release-gate checklist.
 
+Release gates must respect the production override model. Production differences from historical workbooks pass only when they match an approved override in `docs/PRODUCTION_CHANGELOG.md`; undocumented differences remain blockers.
+
 ## Documentation Updates
 
 Update documentation when:
@@ -149,3 +153,5 @@ Update documentation when:
 - reset scope changes
 - release-gate checks change
 - a production batch is imported
+- a production override is approved
+- the production baseline changes

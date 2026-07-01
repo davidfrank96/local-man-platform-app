@@ -21,10 +21,11 @@ Raw workbook
 -> post-import quality audit
 -> quality score
 -> import history update
+-> production baseline update
 -> sign-off
 ```
 
-Do not import raw workbooks directly. Do not skip post-import verification.
+Do not import raw workbooks directly. Do not skip post-import verification. Do not skip production baseline and override documentation when verified production changes become baseline.
 Do not skip any phase in `docs/PRODUCTION_IMPORT_STANDARD.md`.
 
 ## Pre-Import
