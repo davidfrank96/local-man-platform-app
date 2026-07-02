@@ -71,6 +71,11 @@ This document records Localman behavior that must not regress without an explici
 - Edit workspace remounts or fully resets when selected vendor id changes.
 - Image uploads use the current selected vendor id.
 - Save paths use the current selected vendor identity and must not submit stale vendor data.
+- Admin Shell v2 surfaces must preserve operational visibility: authentication errors, migration warnings, database consistency warnings, validation errors, runtime diagnostics, structured logging, audit logging, and security telemetry must not be hidden or suppressed by visual changes.
+- Rider Connect admin workspace manual intake is visible by default; future UI work must not reintroduce a hidden `Add Rider` gate unless an explicit architecture decision changes the workflow.
+- Rider Connect create intake, review filters, selected-rider edits, duplicate conflict handling, and consent confirmation must remain separate state paths.
+- Rider visibility remains constrained by verification status; unverified riders must not become public suggestions.
+- Rider CSV upload remains future-state until an approved import pipeline exists; UI polish must not create an implicit rider import path.
 
 ## Coordinates
 

@@ -1,5 +1,28 @@
 # Local Man Release Notes
 
+## 2026-07 Admin Portal v2 Stabilization
+
+Admin Portal v2 stabilization aligns the implemented admin workspaces around a shared shell, preserves the Authentication Hardening v1.0 security baseline, and locks operational visibility as a release requirement.
+
+### Scope
+
+- Admin Shell v2, dashboard, vendor workspace, create vendor, Rider Connect, authentication pages, analytics, activity, logs, and team access remain under one operational workspace model.
+- This stabilization does not change discovery, public search, map behavior, ranking, onboarding, imports, production data, authentication logic, or database schema.
+- Visual refinements are allowed only when they preserve existing validation, warning, audit, telemetry, and diagnostics behavior.
+
+### Rider Connect Admin Workspace
+
+- `/admin/riders` uses the Admin Shell v2 workspace pattern with status banner, always-visible manual intake, future-state CSV upload card, workflow guidance, review queue, and selected-rider editor.
+- Manual rider intake is intentionally visible by default; there is no `Add Rider` pre-step.
+- Rider creation still requires consent confirmation, rejects duplicate phone/WhatsApp conflicts, and prevents visible riders unless verification status is `verified`.
+- Review filters, selected-rider edits, create intake, and feedback state remain separate so filtering or editing cannot mutate the create form unexpectedly.
+
+### Stabilization Locks
+
+- Authentication errors, validation errors, rate-limit errors, migration warnings, database consistency warnings, operational telemetry, structured logging, audit logging, runtime diagnostics, and development diagnostics must remain visible.
+- Logging and observability must remain non-blocking where designed; UI polish must never become a reason to suppress operational evidence.
+- Desktop, tablet, and mobile admin pages must be checked for overflow, clipping, broken grids, missing controls, and hydration/runtime warnings before release.
+
 ## 2026-07 Authentication Hardening v1.0
 
 Authentication Hardening v1.0 completes the Admin Portal v2 authentication foundation. This release is an authentication, security, session-governance, password-management, and authentication-UI hardening milestone. It does not add marketplace, discovery, import, map, ranking, or vendor-data behavior.

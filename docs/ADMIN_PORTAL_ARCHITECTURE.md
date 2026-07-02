@@ -1,10 +1,10 @@
 # Localman Admin Portal Architecture
 
-Status: Epic 1 planning blueprint
-Scope: Admin Shell architecture and information architecture only
-Last updated: 2026-07-01
+Status: Admin Shell v2 implemented; architecture remains the operating blueprint
+Scope: Admin Shell, implemented admin workspaces, and future module architecture
+Last updated: 2026-07-02
 
-This document defines the permanent Admin Portal shell architecture for Localman. It is a planning document. It does not change authentication, discovery, search, map behavior, vendor data, database records, or UI implementation.
+This document defines the permanent Admin Portal shell architecture for Localman. It records the implemented Admin Shell v2 baseline and the target architecture for future modules. It does not change authentication, discovery, search, map behavior, vendor data, database records, or import behavior.
 
 Authentication Hardening v1.0 is treated as frozen and production-ready. The Admin Shell must build on that baseline without weakening session governance, login protection, password management, audit logging, operational telemetry, or database consistency monitoring.
 
@@ -54,7 +54,7 @@ Current admin route surface:
 | `/admin/vendors` | Vendor registry and edit entry point | Admin and agent |
 | `/admin/vendors/new` | Create vendor workflow | Admin and agent |
 | `/admin/vendors/[id]` | Vendor edit workspace | Admin and agent |
-| `/admin/riders` | Rider application management | `riders:manage` |
+| `/admin/riders` | Rider Connect manual intake, review queue, and visibility control | `riders:manage` |
 | `/admin/analytics` | Usage and vendor engagement signals | `analytics:read` |
 | `/admin/activity` | Admin audit log review | `audit_logs:read` |
 | `/admin/logs` | Operational platform logs | `platform_logs:read` |
@@ -72,6 +72,26 @@ The current app uses:
 - `components/admin/admin-shell.tsx` for the sidebar, page title, intro, session block, logout action, and role-aware nav filtering.
 - Individual page wrappers that compose `AdminRouteGuard`, `AdminShell`, and the module component.
 - `AdminConsole` as a large vendor operations state container for dashboard, agent dashboard, registry, create, and edit modes.
+- Dedicated workspace modules for implemented Admin Portal v2 surfaces, including dashboard, vendor workspace, create vendor, and Rider Connect.
+
+### 2.2.1 Implemented Workspace Contracts
+
+Implemented workspaces must preserve the shared shell rhythm:
+
+- left sidebar remains persistent on desktop and collapses responsively
+- top search/profile row remains available without blocking workspace forms
+- status banners surface readiness, migration, database, and operational warnings
+- cards use the shared admin panel treatment, compact headings, and stable control sizing
+- mobile and tablet layouts stack without horizontal overflow
+
+Rider Connect workspace contract:
+
+- manual rider intake is visible by default; there is no hidden `Add Rider` pre-step
+- rider CSV upload remains a future-state card and must not execute imports
+- review queue search and filters remain separate from create intake state
+- selected rider verification and visibility edits remain scoped to the selected rider
+- operational feedback, duplicate conflict messages, and debug details remain visible to authorized admins
+- public rider privacy boundaries remain unchanged
 
 ### 2.3 Current Navigation
 
@@ -97,7 +117,7 @@ Current workflows include:
 - Vendor registry browsing, filtering, selection, editing, creation, image upload, hours updates, and featured dish updates.
 - CSV vendor intake from the vendor workspace.
 - Dashboard readiness counts.
-- Rider application review.
+- Rider Connect manual intake, duplicate-safe creation, review queue filtering, verification, visibility control, structured availability review, contact/report signal review, and external public application access.
 - Usage analytics review.
 - Audit log review.
 - Operational log review.
@@ -109,7 +129,7 @@ Observed architecture pain points:
 
 - Navigation is flat and will not scale cleanly as modules grow.
 - Shell concerns and module concerns are not cleanly separated yet.
-- `AdminConsole` owns too many workflows and modes.
+- `AdminConsole` owns many vendor workflows and should be split carefully only when a future module needs it.
 - Page wrappers repeat shell and route-guard composition.
 - Database consistency blocking logic is repeated in analytics, activity, and logs pages.
 - Breadcrumbs are not first-class.
@@ -117,7 +137,7 @@ Observed architecture pain points:
 - Notifications are not centralized.
 - Quick actions are page-local or implicit.
 - The sidebar session block is useful but not yet a full profile menu.
-- Dashboard currently mixes readiness statistics with task entry points; the future dashboard should prioritize what needs action today.
+- Dashboard v2 now prioritizes readiness, next actions, incomplete vendors, recent activity, and quick links; future work should keep answering what needs attention today rather than adding unrelated statistics.
 - Design tokens are implicit in CSS class usage rather than documented as reusable shell-level primitives.
 
 ### 2.6 Current Scalability Limits

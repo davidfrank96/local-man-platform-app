@@ -3416,7 +3416,7 @@ test.describe("Phase 3 browser smoke", () => {
     const errors = trackClientErrors(page);
 
     await page.goto("/admin/riders");
-    await expect(page.getByRole("heading", { name: "Admin login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
 
     await expectNoClientErrors(errors);
@@ -3456,14 +3456,24 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.goto("/admin/riders");
     const riderFiltersPanel = page.locator('section[aria-labelledby="rider-filters"]');
+    const createPanel = page.locator('section[aria-labelledby="rider-create"]');
+    const riderFilterSelects = riderFiltersPanel.locator("form.admin-rider-filter-form select");
+    const filterVerification = riderFilterSelects.nth(0);
+    const filterVisibility = riderFilterSelects.nth(1);
+    const selectedRiderEditor = riderFiltersPanel.locator("form.admin-rider-selected-editor");
+    const selectedRiderSelects = selectedRiderEditor.locator("select");
+    const selectedVerification = selectedRiderSelects.nth(0);
+    const selectedVisibility = selectedRiderSelects.nth(1);
     await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: "Riders" })).toBeVisible();
     await expect(page.locator(".admin-nav-link.active")).toContainText("Riders");
-    await expect(page.getByRole("button", { name: "Add Rider" })).toBeVisible();
+    await expect(createPanel.getByRole("heading", { name: "Create rider" })).toBeVisible();
+    await expect(
+      createPanel.getByText("Creating a rider profile does not make them a Localman employee"),
+    ).toBeVisible();
     await expect(riderFiltersPanel.getByLabel("Search by name, phone, or area")).toBeVisible();
-    await expect(riderFiltersPanel.getByLabel("Verification")).toBeVisible();
-    await expect(riderFiltersPanel.getByLabel("Visibility")).toBeVisible();
-    await expect(page.getByText("Riders are independent. Making a rider visible only allows them")).toBeVisible();
+    await expect(filterVerification).toBeVisible();
+    await expect(filterVisibility).toBeVisible();
     await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Pending");
     await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Hidden");
@@ -3477,10 +3487,12 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.getByRole("button", { name: "Clear" }).click();
     await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toBeVisible();
+    await page.getByRole("button", { name: /Mock Rider 1/ }).click();
+    await expect(selectedRiderEditor.getByRole("heading", { name: "Mock Rider 1" })).toBeVisible();
 
-    await page.getByLabel("Verification status").selectOption("verified");
-    await page.getByLabel("Visibility status").selectOption("visible");
-    await page.getByRole("button", { name: "Save rider" }).click();
+    await selectedVerification.selectOption("verified");
+    await selectedVisibility.selectOption("visible");
+    await selectedRiderEditor.getByRole("button", { name: "Save rider" }).click();
 
     await expect(page.locator(".admin-status-copy")).toContainText("Mock Rider 1 updated.");
     await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toContainText("Verified");
@@ -3491,11 +3503,6 @@ test.describe("Phase 3 browser smoke", () => {
       visibility_status: "visible",
     });
 
-    const createPanel = page.locator('section[aria-labelledby="rider-create"]');
-    await createPanel.getByRole("button", { name: "Add Rider" }).click();
-    await expect(
-      createPanel.getByText("Creating a rider profile does not make them a Localman employee"),
-    ).toBeVisible();
     const createVerificationStatus = createPanel.getByLabel("Initial verification status");
     const createVisibilityStatus = createPanel.getByLabel("Initial visibility status");
     await expect(createVisibilityStatus.locator('option[value="visible"]')).toHaveAttribute(
@@ -3584,7 +3591,7 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.goto("/admin/riders");
     const createPanel = page.locator('section[aria-labelledby="rider-create"]');
-    await createPanel.getByRole("button", { name: "Add Rider" }).click();
+    await expect(createPanel.getByRole("heading", { name: "Create rider" })).toBeVisible();
     await createPanel.getByLabel("Display name").fill("Duplicate Rider");
     await createPanel.getByLabel("Phone").fill("+2348100000001");
     await createPanel.getByLabel("WhatsApp").fill("+2348110000001");
@@ -3615,10 +3622,13 @@ test.describe("Phase 3 browser smoke", () => {
 
     await page.goto("/admin/riders");
     const riderFiltersPanel = page.locator('section[aria-labelledby="rider-filters"]');
+    const riderFilterSelects = riderFiltersPanel.locator("form.admin-rider-filter-form select");
+    const filterVerification = riderFilterSelects.nth(0);
+    const filterVisibility = riderFilterSelects.nth(1);
     await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
     await riderFiltersPanel.getByLabel("Search by name, phone, or area").fill("Wuse");
-    await riderFiltersPanel.getByLabel("Verification").selectOption("pending");
-    await riderFiltersPanel.getByLabel("Visibility").selectOption("hidden");
+    await filterVerification.selectOption("pending");
+    await filterVisibility.selectOption("hidden");
 
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect
@@ -3628,8 +3638,8 @@ test.describe("Phase 3 browser smoke", () => {
     await expect(page).toHaveURL(/\/admin\/riders$/);
     await expect(page.getByRole("heading", { name: "Riders", level: 1 })).toBeVisible();
     await expect(riderFiltersPanel.getByLabel("Search by name, phone, or area")).toHaveValue("Wuse");
-    await expect(riderFiltersPanel.getByLabel("Verification")).toHaveValue("pending");
-    await expect(riderFiltersPanel.getByLabel("Visibility")).toHaveValue("hidden");
+    await expect(filterVerification).toHaveValue("pending");
+    await expect(filterVisibility).toHaveValue("hidden");
     await expect(page.getByRole("button", { name: /Mock Rider 1/ })).toBeVisible();
 
     await expectNoClientErrors(errors);
