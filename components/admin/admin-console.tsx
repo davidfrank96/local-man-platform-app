@@ -633,6 +633,17 @@ export function AdminConsole({
     void refreshVendors(nextFilters);
   }
 
+  function changeVendorPage(offset: number) {
+    const nextFilters: AdminVendorFilters = {
+      ...filters,
+      limit: filters.limit ?? 100,
+      offset: Math.max(0, offset),
+    };
+
+    setFilters(nextFilters);
+    void refreshVendors(nextFilters);
+  }
+
   async function handleCreateVendor(
     data: CreateManagedVendorRequest,
     options?: {
@@ -999,6 +1010,7 @@ export function AdminConsole({
             selectedVendorId={selectedVendorId}
             totalCount={vendorTotalCount}
             vendors={vendors}
+            onChangePage={changeVendorPage}
             onSelectVendor={setSelectedVendorId}
             onSubmitFilters={submitFilters}
           />
@@ -1082,6 +1094,7 @@ export function AdminConsole({
             selectedVendorId={selectedVendorId}
             totalCount={vendorTotalCount}
             vendors={vendors}
+            onChangePage={changeVendorPage}
             onSelectVendor={setSelectedVendorId}
             onSubmitFilters={submitFilters}
           />
@@ -1100,6 +1113,7 @@ export function AdminConsole({
             onUpdateVendor={handleUpdateVendor}
             onDeactivateVendor={handleDeactivateVendor}
             onReplaceHours={handleReplaceHours}
+            onRefreshVendors={() => void refreshVendors()}
             onCreateImages={handleCreateImages}
             onDeleteImage={handleDeleteImage}
             onCreateDishes={handleCreateDishes}

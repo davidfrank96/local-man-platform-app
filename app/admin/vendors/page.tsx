@@ -6,6 +6,7 @@ export default function AdminVendorsPage() {
   return (
     <AdminRouteGuard>
       <AdminShell
+        hideWorkspaceHeader
         title="Manage vendors"
         intro="Search the vendor registry, review completeness, and move directly into editing."
       >

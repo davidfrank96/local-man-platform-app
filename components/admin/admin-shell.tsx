@@ -16,6 +16,7 @@ type AdminShellProps = {
   title: string;
   intro: string;
   children: ReactNode;
+  hideWorkspaceHeader?: boolean;
 };
 
 type AdminNavItem = {
@@ -30,7 +31,7 @@ type AdminNavSection = {
   label: string;
 };
 
-export function AdminShell({ title, intro, children }: AdminShellProps) {
+export function AdminShell({ title, intro, children, hideWorkspaceHeader = false }: AdminShellProps) {
   const pathname = usePathname();
   const { session, signOut } = useAdminSession();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -93,6 +94,7 @@ export function AdminShell({ title, intro, children }: AdminShellProps) {
     "admin-workspace-shell",
     isSidebarCollapsed ? "admin-workspace-shell-collapsed" : "",
     isMobileSidebarOpen ? "admin-workspace-shell-menu-open" : "",
+    hideWorkspaceHeader ? "admin-workspace-shell-hidden-header" : "",
   ].filter(Boolean).join(" ");
   const closeMobileSidebar = () => setIsMobileSidebarOpen(false);
 
@@ -244,17 +246,21 @@ export function AdminShell({ title, intro, children }: AdminShellProps) {
             </details>
           </div>
         </header>
-        <header className="admin-workspace-header">
-          <div className="admin-workspace-header-copy">
-            <p className="eyebrow">Operations workspace</p>
-            <h1>{title}</h1>
-            <p className="page-intro">{intro}</p>
-          </div>
-          <div className="admin-workspace-header-meta">
-            <span>Internal operations</span>
-            <strong>{getAdminRoleLabel(role)}</strong>
-          </div>
-        </header>
+        {hideWorkspaceHeader ? (
+          <h1 className="sr-only">{title}</h1>
+        ) : (
+          <header className="admin-workspace-header">
+            <div className="admin-workspace-header-copy">
+              <p className="eyebrow">Operations workspace</p>
+              <h1>{title}</h1>
+              <p className="page-intro">{intro}</p>
+            </div>
+            <div className="admin-workspace-header-meta">
+              <span>Internal operations</span>
+              <strong>{getAdminRoleLabel(role)}</strong>
+            </div>
+          </header>
+        )}
         {children}
       </section>
     </main>

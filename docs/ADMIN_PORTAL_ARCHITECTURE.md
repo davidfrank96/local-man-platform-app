@@ -689,8 +689,8 @@ Purpose:
 
 Submodules:
 
-- Registry.
-- Detail overview.
+- Registry with search, area, price-band, status filters, and pagination.
+- Detail overview with read-only operational status, completeness, linked data, and signals.
 - Identity editor.
 - Hours editor.
 - Featured dishes.
@@ -699,6 +699,13 @@ Submodules:
 - Quality signals.
 - Rating signals.
 - Public preview.
+
+Current implementation note:
+
+- Vendor management uses a split workspace: the registry remains in the left column and the selected vendor workspace remains in the right column.
+- The selected vendor workspace opens to an overview first, then keeps existing edit forms behind workspace sections for details, hours, featured dishes, images, signals, and activity.
+- The admin shell page heading is visually hidden on vendor workspace routes to match the operations workspace layout while preserving an accessible `h1`.
+- Presentation changes must not modify vendor API behavior, search, discovery, import, map, audit logging, or authentication.
 
 ### 14.3 Media Management
 

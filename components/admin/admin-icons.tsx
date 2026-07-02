@@ -14,6 +14,7 @@ export type AdminIconName =
   | "link"
   | "lock"
   | "menu"
+  | "more"
   | "panel"
   | "plus"
   | "refresh"
@@ -138,6 +139,14 @@ function renderAdminIconPath(name: AdminIconName) {
           <path d="M4 7h16" {...strokeProps} />
           <path d="M4 12h16" {...strokeProps} />
           <path d="M4 17h16" {...strokeProps} />
+        </>
+      );
+    case "more":
+      return (
+        <>
+          <circle cx="6.5" cy="12" r="1.2" fill="currentColor" />
+          <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+          <circle cx="17.5" cy="12" r="1.2" fill="currentColor" />
         </>
       );
     case "panel":
