@@ -117,3 +117,54 @@ test("dedicated edit pages prefer the route vendor id over cached selection", ()
     /initialSelectedVendorId \?\? workspaceCacheSnapshot\.selectedVendorId/,
   );
 });
+
+test("vendor workspace uses the split registry and operational workspace presentation", () => {
+  const source = readRepoFile("components/admin/admin-vendor-workspace-sections.tsx");
+  const workspace = sliceBetween(
+    source,
+    "export function EditVendorWorkspace",
+    "function RatingSignalInsightsPanel",
+  );
+
+  assert.match(workspace, /className="admin-v2-workspace"/);
+  assert.match(workspace, /<VendorWorkspaceHeader/);
+  assert.match(workspace, /<VendorWorkspaceTabs activeTab=\{activeTab\} onChangeTab=\{setActiveTab\} \/>/);
+  assert.match(workspace, /<VendorOverview/);
+  assert.match(workspace, /<VendorSignals/);
+  assert.match(workspace, /<VendorActivity \/>/);
+  assert.match(workspace, /activeTab === "details"/);
+  assert.match(workspace, /activeTab === "hours"/);
+  assert.match(workspace, /activeTab === "dishes"/);
+  assert.match(workspace, /activeTab === "images"/);
+});
+
+test("vendor registry exposes filters and pagination without changing vendor data sources", () => {
+  const source = readRepoFile("components/admin/admin-vendor-workspace-sections.tsx");
+  const registry = sliceBetween(
+    source,
+    "export const VendorRegistryPanel",
+    "export const VendorRegistryList",
+  );
+  const consoleSource = readRepoFile("components/admin/admin-console.tsx");
+
+  assert.match(registry, /className="admin-panel admin-registry-panel admin-v2-registry-panel"/);
+  assert.match(registry, /name="search" placeholder="Search vendors\.\.\."/);
+  assert.match(registry, /name="area" placeholder="All areas"/);
+  assert.match(registry, /name="price_band"/);
+  assert.match(registry, /name="is_active"/);
+  assert.match(registry, /onChangePage\?: \(offset: number\) => void/);
+  assert.match(registry, /aria-label="Vendor registry pagination"/);
+  assert.match(consoleSource, /function changeVendorPage\(offset: number\)/);
+  assert.match(consoleSource, /onChangePage=\{changeVendorPage\}/);
+});
+
+test("vendor workspace pages hide the old page header while keeping an accessible heading", () => {
+  const shellSource = readRepoFile("components/admin/admin-shell.tsx");
+  const vendorsPage = readRepoFile("app/admin/vendors/page.tsx");
+  const editPage = readRepoFile("app/admin/vendors/[id]/page.tsx");
+
+  assert.match(shellSource, /hideWorkspaceHeader\?: boolean/);
+  assert.match(shellSource, /<h1 className="sr-only">\{title\}<\/h1>/);
+  assert.match(vendorsPage, /<AdminShell\s+hideWorkspaceHeader/);
+  assert.match(editPage, /<AdminShell\s+hideWorkspaceHeader/);
+});

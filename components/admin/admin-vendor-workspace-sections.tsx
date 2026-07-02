@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   type AdminVendorFilters,
   type AdminVendorSummary,
@@ -36,6 +37,7 @@ import {
 } from "../../lib/location/area-governance.ts";
 import { slugPattern } from "../../lib/validation/common.ts";
 import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
+import { AdminIcon, type AdminIconName } from "./admin-icons.tsx";
 import type {
   AdminRatingSignalSummary,
   CreateManagedVendorRequest,
@@ -112,6 +114,7 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
   selectedVendorId,
   totalCount,
   vendors,
+  onChangePage,
   onSelectVendor,
   onSubmitFilters,
 }: {
@@ -120,32 +123,40 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
   selectedVendorId: string | null;
   totalCount: number | null;
   vendors: AdminVendorSummary[];
+  onChangePage?: (offset: number) => void;
   onSelectVendor: (vendorId: string) => void;
   onSubmitFilters: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const limit = Math.max(1, filters.limit ?? 100);
+  const offset = Math.max(0, filters.offset ?? 0);
+  const currentPage = Math.floor(offset / limit) + 1;
+  const totalPages = totalCount && totalCount > 0 ? Math.max(1, Math.ceil(totalCount / limit)) : 1;
+  const canGoPrevious = offset > 0;
+  const canGoNext = totalCount !== null && offset + vendors.length < totalCount;
   const registryCountLabel = totalCount === null
     ? `${vendors.length} loaded`
     : `Showing ${vendors.length} of ${totalCount}`;
 
   return (
-    <section className="admin-panel admin-registry-panel" aria-labelledby="vendor-registry">
+    <section className="admin-panel admin-registry-panel admin-v2-registry-panel" aria-labelledby="vendor-registry">
       <div className="admin-section-header">
         <div>
           <p className="eyebrow">Vendor registry</p>
-          <h2 id="vendor-registry">Manage vendors</h2>
+          <h2 id="vendor-registry">Vendors</h2>
         </div>
         <span>{registryCountLabel}</span>
       </div>
 
-      <form className="admin-form" onSubmit={onSubmitFilters}>
-        <div className="admin-filter-grid">
-          <label className="field field-wide">
-            <span>Search</span>
-            <input defaultValue={filters.search ?? ""} name="search" placeholder="Vendor name, area, or cue" />
-          </label>
+      <form className="admin-form admin-v2-registry-form" onSubmit={onSubmitFilters}>
+        <label className="field field-wide admin-v2-registry-search">
+          <span className="sr-only">Search vendors</span>
+          <AdminIcon name="search" />
+          <input defaultValue={filters.search ?? ""} name="search" placeholder="Search vendors..." />
+        </label>
+        <div className="admin-filter-grid admin-v2-registry-filter-grid">
           <label className="field">
             <span>Area</span>
-            <input defaultValue={filters.area ?? ""} name="area" placeholder="Wuse" />
+            <input defaultValue={filters.area ?? ""} name="area" placeholder="All areas" />
           </label>
           <label className="field">
             <span>Price band</span>
@@ -161,15 +172,14 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
           <label className="field">
             <span>Status</span>
             <select defaultValue={filters.is_active === undefined ? "all" : String(filters.is_active)} name="is_active">
-              <option value="all">All vendors</option>
+              <option value="all">All</option>
               <option value="true">Active only</option>
               <option value="false">Inactive only</option>
             </select>
           </label>
-        </div>
-        <div className="action-row">
-          <button className="button-primary" disabled={disabled} type="submit">
-            Apply
+          <button className="button-secondary admin-v2-filter-button" disabled={disabled} type="submit">
+            <AdminIcon name="refresh" />
+            <span>Filters</span>
           </button>
         </div>
       </form>
@@ -182,6 +192,27 @@ export const VendorRegistryPanel = memo(function VendorRegistryPanel({
           emptyMessage="No vendors matched the current filters."
         />
       </AdminScrollPanel>
+      {totalCount !== null && totalCount > limit && onChangePage ? (
+        <nav className="admin-v2-pagination" aria-label="Vendor registry pagination">
+          <button
+            aria-label="Previous vendor page"
+            disabled={disabled || !canGoPrevious}
+            type="button"
+            onClick={() => onChangePage(Math.max(0, offset - limit))}
+          >
+            <AdminIcon name="chevron-down" />
+          </button>
+          <span>Page {currentPage} of {totalPages}</span>
+          <button
+            aria-label="Next vendor page"
+            disabled={disabled || !canGoNext}
+            type="button"
+            onClick={() => onChangePage(offset + limit)}
+          >
+            <AdminIcon name="chevron-down" />
+          </button>
+        </nav>
+      ) : null}
     </section>
   );
 });
@@ -207,23 +238,27 @@ export const VendorRegistryList = memo(function VendorRegistryList({
     <ul className={compact ? "admin-list admin-list-compact" : "admin-list"}>
       {vendors.map((vendor) => {
         const labels = getVendorSummaryStatusLabels(vendor);
+        const warningLabels = labels.filter((label) => label.startsWith("Missing"));
 
         return (
           <li key={vendor.id}>
             <button
-              className={selectedVendorId === vendor.id ? "admin-list-item selected" : "admin-list-item"}
+              className={selectedVendorId === vendor.id ? "admin-list-item admin-v2-vendor-row selected" : "admin-list-item admin-v2-vendor-row"}
               type="button"
               onClick={() => onSelectVendor(vendor.id)}
             >
               <div className="admin-list-item-copy">
                 <div className="admin-list-item-topline">
                   <strong>{vendor.name}</strong>
-                  <span className="admin-list-item-edit">Review</span>
+                  <span className={vendor.is_active ? "admin-v2-status-pill active" : "admin-v2-status-pill pending"}>
+                    {vendor.is_active ? "Active" : "Pending"}
+                  </span>
                 </div>
-                <span>{vendor.area ?? "Area missing"}</span>
+                <span>{vendor.area ?? "Area missing"}, Abuja</span>
+                <small>{warningLabels.length > 0 ? "Review required" : "Ready for review"}</small>
               </div>
-              <div className="admin-list-badges" aria-label={`${vendor.name} status`}>
-                {labels.map((label) => (
+              <div className="admin-list-badges admin-v2-row-warnings" aria-label={`${vendor.name} status`}>
+                {warningLabels.map((label) => (
                   <span className="admin-badge" key={label}>
                     {label}
                   </span>
@@ -352,17 +387,13 @@ export function AdminCreateVendorSection({
   }
 
   return (
-    <section className="admin-panel" aria-labelledby="create-vendor">
-      <p className="eyebrow">Create vendor</p>
-      <h2 id="create-vendor">New vendor</h2>
-      <p className="form-note">Add the vendor&apos;s basic details, hours, featured dishes, and images.</p>
-      <form className="admin-form" onSubmit={submitCreateVendor}>
-        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-basic-details">
-          <div className="admin-section-header">
-            <div>
-              <p className="eyebrow">Section 1</p>
-              <h3 id="create-basic-details">Basic details</h3>
-            </div>
+    <section className="admin-panel admin-create-workspace-card" aria-labelledby="create-basic-details">
+      <form className="admin-form admin-create-workspace-form" onSubmit={submitCreateVendor}>
+        <section className="admin-subsection admin-create-section-card admin-create-basic-card" aria-labelledby="create-basic-details">
+          <div className="admin-create-section-heading">
+            <p className="eyebrow">Section 1 of 4</p>
+            <h2 id="create-basic-details">Basic details</h2>
+            <p className="form-note">Add the vendor&apos;s core identity information.</p>
           </div>
           <CreateVendorIdentityFields
             vendorCategories={vendorCategories}
@@ -378,12 +409,84 @@ export function AdminCreateVendorSection({
                 name: value,
               }))}
           />
+
+          <div className="admin-create-acknowledgement-card" aria-label="Missing linked data acknowledgements">
+            <p className="eyebrow">Linked data</p>
+            <p className="form-note">Acknowledge anything that will be completed after the base vendor record is created.</p>
+            <div className="admin-create-acknowledgement-grid">
+              <label className="checkbox-field">
+                <input
+                  checked={createSummary.missingHoursAcknowledged}
+                  name="missing-hours-acknowledged"
+                  type="checkbox"
+                  onChange={(event) =>
+                    setCreateSummary((current) => ({
+                      ...current,
+                      missingHoursAcknowledged: event.target.checked,
+                    }))}
+                />
+                <span>Hours will be added later.</span>
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={createSummary.missingFeaturedDishesAcknowledged}
+                  name="missing-featured-dishes-acknowledged"
+                  type="checkbox"
+                  onChange={(event) =>
+                    setCreateSummary((current) => ({
+                      ...current,
+                      missingFeaturedDishesAcknowledged: event.target.checked,
+                    }))}
+                />
+                <span>Featured dishes will be added later.</span>
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={createSummary.missingImagesAcknowledged}
+                  name="missing-images-acknowledged"
+                  type="checkbox"
+                  onChange={(event) =>
+                    setCreateSummary((current) => ({
+                      ...current,
+                      missingImagesAcknowledged: event.target.checked,
+                    }))}
+                />
+                <span>Vendor images will be added later.</span>
+              </label>
+            </div>
+            {createIntentErrors.hours ? <span className="field-error">{createIntentErrors.hours}</span> : null}
+            {createIntentErrors.featured_dishes ? (
+              <span className="field-error">{createIntentErrors.featured_dishes}</span>
+            ) : null}
+            {createIntentErrors.images ? <span className="field-error">{createIntentErrors.images}</span> : null}
+          </div>
+
+          <div className="admin-create-form-actions">
+            <Link className="button-secondary" href="/admin/vendors">
+              Cancel
+            </Link>
+            <button className="button-primary" disabled={disabled} type="submit">
+              <span>Save &amp; continue</span>
+              <AdminIcon name="arrow-right" />
+            </button>
+          </div>
+        </section>
+
+        <section className="admin-create-linked-data-stack" aria-label="Optional linked vendor data">
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-address-details">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Location details</p>
+              <h3 id="create-address-details">Address defaults</h3>
+            </div>
+          </div>
+          <CreateVendorAddressFields fieldErrors={createFieldErrors} />
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-hours">
           <div className="admin-section-header">
             <div>
-              <p className="eyebrow">Section 2</p>
+              <p className="eyebrow">Linked data</p>
               <h3 id="create-hours">Opening hours</h3>
             </div>
           </div>
@@ -434,26 +537,12 @@ export function AdminCreateVendorSection({
             ))}
           </div>
           <span className="field-hint">Use format like 9 AM or 8:30 PM.</span>
-          <label className="checkbox-field">
-            <input
-              checked={createSummary.missingHoursAcknowledged}
-              name="missing-hours-acknowledged"
-              type="checkbox"
-              onChange={(event) =>
-                setCreateSummary((current) => ({
-                  ...current,
-                  missingHoursAcknowledged: event.target.checked,
-                }))}
-            />
-            <span>I do not have this vendor&apos;s opening hours yet.</span>
-          </label>
-          {createIntentErrors.hours ? <span className="field-error">{createIntentErrors.hours}</span> : null}
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-dishes">
           <div className="admin-section-header">
             <div>
-              <p className="eyebrow">Section 3</p>
+              <p className="eyebrow">Linked data</p>
               <h3 id="create-dishes">Featured dishes</h3>
             </div>
             <span>{dishRows.filter((dish) => dish.dish_name.trim().length > 0).length} ready</span>
@@ -539,28 +628,12 @@ export function AdminCreateVendorSection({
               Add another dish
             </button>
           </div>
-          <label className="checkbox-field">
-            <input
-              checked={createSummary.missingFeaturedDishesAcknowledged}
-              name="missing-featured-dishes-acknowledged"
-              type="checkbox"
-              onChange={(event) =>
-                setCreateSummary((current) => ({
-                  ...current,
-                  missingFeaturedDishesAcknowledged: event.target.checked,
-                }))}
-            />
-            <span>I do not have featured dishes yet.</span>
-          </label>
-          {createIntentErrors.featured_dishes ? (
-            <span className="field-error">{createIntentErrors.featured_dishes}</span>
-          ) : null}
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-images">
           <div className="admin-section-header">
             <div>
-              <p className="eyebrow">Section 4</p>
+              <p className="eyebrow">Linked data</p>
               <h3 id="create-images">Vendor images</h3>
             </div>
           </div>
@@ -595,20 +668,6 @@ export function AdminCreateVendorSection({
               <span>{pendingCreateVendorImageName ?? "Selected image preview"}</span>
             </div>
           ) : null}
-          <label className="checkbox-field">
-            <input
-              checked={createSummary.missingImagesAcknowledged}
-              name="missing-images-acknowledged"
-              type="checkbox"
-              onChange={(event) =>
-                setCreateSummary((current) => ({
-                  ...current,
-                  missingImagesAcknowledged: event.target.checked,
-                }))}
-            />
-            <span>I do not have vendor images yet.</span>
-          </label>
-          {createIntentErrors.images ? <span className="field-error">{createIntentErrors.images}</span> : null}
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-review">
@@ -671,10 +730,358 @@ export function AdminCreateVendorSection({
             </div>
           </dl>
         </section>
-        <button className="button-primary" disabled={disabled} type="submit">
-          Create vendor
-        </button>
+        </section>
       </form>
+    </section>
+  );
+}
+
+type VendorWorkspaceTab = "overview" | "details" | "hours" | "dishes" | "images" | "signals" | "activity";
+
+type CompletenessItem = {
+  id: string;
+  label: string;
+  status: "complete" | "warning";
+};
+
+const workspaceTabs: Array<{ id: VendorWorkspaceTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "details", label: "Details" },
+  { id: "hours", label: "Hours" },
+  { id: "dishes", label: "Featured dishes" },
+  { id: "images", label: "Images" },
+  { id: "signals", label: "Signals" },
+  { id: "activity", label: "Activity" },
+];
+
+function formatPriceBand(priceBand: AdminVendorSummary["price_band"]): string {
+  if (!priceBand) {
+    return "Price missing";
+  }
+
+  return priceBand[0].toUpperCase() + priceBand.slice(1);
+}
+
+function formatInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "V";
+}
+
+function buildCompletenessItems({
+  selectedVendor,
+  vendorDishes,
+  vendorHours,
+  vendorImages,
+}: {
+  selectedVendor: AdminVendorSummary;
+  vendorDishes: VendorFeaturedDish[];
+  vendorHours: VendorHours[];
+  vendorImages: VendorImage[];
+}): CompletenessItem[] {
+  const hasCoordinates = Number.isFinite(selectedVendor.latitude) && Number.isFinite(selectedVendor.longitude);
+
+  return [
+    {
+      id: "basic",
+      label: "Basic details",
+      status: selectedVendor.name && selectedVendor.slug && selectedVendor.area ? "complete" : "warning",
+    },
+    {
+      id: "hours",
+      label: "Hours",
+      status: vendorHours.length >= 7 || selectedVendor.hours_count >= 7 ? "complete" : "warning",
+    },
+    {
+      id: "dishes",
+      label: "Featured dishes",
+      status: vendorDishes.length > 0 || selectedVendor.featured_dishes_count > 0 ? "complete" : "warning",
+    },
+    {
+      id: "images",
+      label: "Images",
+      status: vendorImages.length > 0 || selectedVendor.images_count > 0 ? "complete" : "warning",
+    },
+    {
+      id: "signals",
+      label: "Signals",
+      status: hasCoordinates ? "complete" : "warning",
+    },
+  ];
+}
+
+function getCompletenessPercent(items: CompletenessItem[]): number {
+  if (items.length === 0) {
+    return 0;
+  }
+
+  const completeCount = items.filter((item) => item.status === "complete").length;
+  return Math.round((completeCount / items.length) * 100);
+}
+
+function WorkspaceIconTile({ icon }: { icon: AdminIconName }) {
+  return (
+    <span className="admin-v2-icon-tile" aria-hidden="true">
+      <AdminIcon name={icon} />
+    </span>
+  );
+}
+
+function VendorWorkspaceHeader({
+  disabled,
+  selectedVendor,
+  vendorImages,
+  onRefreshVendors,
+}: {
+  disabled: boolean;
+  selectedVendor: AdminVendorSummary;
+  vendorImages: VendorImage[];
+  onRefreshVendors: () => void;
+}) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const publicPath = `/vendors/${selectedVendor.slug}`;
+  const firstImage = vendorImages[0]?.image_url ?? null;
+
+  async function copyPublicLink() {
+    const href = typeof window === "undefined"
+      ? publicPath
+      : `${window.location.origin}${publicPath}`;
+
+    try {
+      await navigator.clipboard.writeText(href);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
+  return (
+    <section className="admin-v2-vendor-header" aria-labelledby="admin-v2-vendor-title">
+      <div className="admin-v2-vendor-identity">
+        <span className="admin-v2-vendor-avatar" aria-hidden="true">
+          {firstImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" src={firstImage} />
+          ) : (
+            formatInitials(selectedVendor.name)
+          )}
+        </span>
+        <div>
+          <h2 id="admin-v2-vendor-title">{selectedVendor.name}</h2>
+          <div className="admin-v2-meta-line">
+            <span className={selectedVendor.is_active ? "admin-v2-status-pill active" : "admin-v2-status-pill pending"}>
+              {selectedVendor.is_active ? "Active" : "Pending"}
+            </span>
+            <span>{selectedVendor.area ?? "Area missing"}, Abuja</span>
+            <span className="admin-v2-price-pill">{formatPriceBand(selectedVendor.price_band)}</span>
+          </div>
+          <div className="admin-v2-meta-line subtle">
+            <span>Last updated from registry data</span>
+            <span>Verified</span>
+          </div>
+        </div>
+      </div>
+      <div className="admin-v2-vendor-actions">
+        <Link className="button-secondary" href={publicPath} target="_blank">
+          <span>Open public page</span>
+          <AdminIcon name="link" />
+        </Link>
+        <button className="button-secondary" type="button" onClick={() => void copyPublicLink()}>
+          <AdminIcon name="link" />
+          <span>{copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy link"}</span>
+        </button>
+        <button className="button-secondary admin-v2-icon-button" disabled={disabled} type="button" onClick={onRefreshVendors}>
+          <AdminIcon name="refresh" />
+          <span className="sr-only">Refresh vendor list</span>
+        </button>
+        <details className="admin-v2-more-menu">
+          <summary aria-label="More vendor actions">
+            <AdminIcon name="more" />
+          </summary>
+          <div>
+            <Link href={`/admin/vendors/${selectedVendor.id}`}>Dedicated edit URL</Link>
+            <Link href={publicPath} target="_blank">Public profile</Link>
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function VendorWorkspaceTabs({
+  activeTab,
+  onChangeTab,
+}: {
+  activeTab: VendorWorkspaceTab;
+  onChangeTab: (tab: VendorWorkspaceTab) => void;
+}) {
+  return (
+    <nav className="admin-v2-workspace-tabs" aria-label="Vendor workspace sections">
+      {workspaceTabs.map((tab) => (
+        <button
+          aria-current={activeTab === tab.id ? "page" : undefined}
+          className={activeTab === tab.id ? "active" : ""}
+          key={tab.id}
+          type="button"
+          onClick={() => onChangeTab(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function VendorOverview({
+  completenessItems,
+  selectedVendor,
+  vendorDishes,
+  vendorHours,
+  vendorImages,
+}: {
+  completenessItems: CompletenessItem[];
+  selectedVendor: AdminVendorSummary;
+  vendorDishes: VendorFeaturedDish[];
+  vendorHours: VendorHours[];
+  vendorImages: VendorImage[];
+}) {
+  const completenessPercent = getCompletenessPercent(completenessItems);
+
+  return (
+    <div className="admin-v2-overview-layout">
+      <section className="admin-v2-card admin-v2-overview-card" aria-labelledby="admin-v2-overview-title">
+        <div className="admin-v2-card-heading">
+          <h3 id="admin-v2-overview-title">Vendor overview</h3>
+          <p>Key information and status at a glance.</p>
+        </div>
+        <dl className="admin-v2-fact-grid">
+          <div>
+            <WorkspaceIconTile icon="shield" />
+            <dt>Status</dt>
+            <dd>{selectedVendor.is_active ? "Active" : "Pending"}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="link" />
+            <dt>Public page</dt>
+            <dd>/vendors/{selectedVendor.slug}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="storefront" />
+            <dt>Area</dt>
+            <dd>{selectedVendor.area ?? "Area missing"}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="activity" />
+            <dt>Latitude</dt>
+            <dd>{selectedVendor.latitude}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="clipboard" />
+            <dt>Price band</dt>
+            <dd>{formatPriceBand(selectedVendor.price_band)}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="activity" />
+            <dt>Longitude</dt>
+            <dd>{selectedVendor.longitude}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="lock" />
+            <dt>Phone</dt>
+            <dd>{selectedVendor.phone_number ?? "Phone missing"}</dd>
+          </div>
+          <div>
+            <WorkspaceIconTile icon="file" />
+            <dt>Linked data</dt>
+            <dd>{vendorHours.length} hours, {vendorDishes.length} dishes, {vendorImages.length} images</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="admin-v2-card admin-v2-completeness-card" aria-labelledby="admin-v2-completeness-title">
+        <h3 id="admin-v2-completeness-title">Completeness</h3>
+        <div
+          aria-label={`${completenessPercent}% complete`}
+          className="admin-v2-progress-ring"
+          style={{ "--admin-v2-progress": `${completenessPercent}%` } as CSSProperties}
+        >
+          <strong>{completenessPercent}%</strong>
+          <span>Complete</span>
+        </div>
+        <ul className="admin-v2-completeness-list">
+          {completenessItems.map((item) => (
+            <li className={item.status} key={item.id}>
+              <span>{item.label}</span>
+              <AdminIcon name={item.status === "complete" ? "shield" : "activity"} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function VendorSignals({
+  isLoading,
+  summary,
+  error,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  summary: AdminRatingSignalSummary | null;
+}) {
+  const metrics: Array<[string, number, AdminIconName]> = summary
+    ? [
+        ["Positive signals", summary.positive_signal_count, "shield"],
+        ["Neutral signals", summary.neutral_signal_count, "lock"],
+        ["Negative signals", summary.negative_signal_count, "activity"],
+        ["Food safety", summary.food_safety_concern_count, "utensils"],
+        ["Poor hygiene", summary.poor_hygiene_count, "shield"],
+        ["Vendor unavailable", summary.vendor_unavailable_count, "activity"],
+        ["Recent 30 days", summary.recent_signal_count, "file"],
+      ]
+    : [];
+
+  return (
+    <section className="admin-v2-card admin-v2-signals-card" aria-labelledby="admin-v2-signals-title">
+      <div className="admin-v2-card-heading">
+        <h3 id="admin-v2-signals-title">Operational signals</h3>
+        <p>Aggregate counts for internal monitoring only.</p>
+      </div>
+      {isLoading ? (
+        <p className="empty-state">Loading signal summary…</p>
+      ) : error ? (
+        <p className="field-error">{error}</p>
+      ) : metrics.length > 0 ? (
+        <dl className="admin-v2-signal-grid">
+          {metrics.map(([label, value, icon]) => (
+            <div key={label}>
+              <WorkspaceIconTile icon={icon} />
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="empty-state">No rating signal data loaded yet.</p>
+      )}
+    </section>
+  );
+}
+
+function VendorActivity() {
+  return (
+    <section className="admin-v2-card admin-v2-activity-card" aria-labelledby="admin-v2-activity-title">
+      <div className="admin-v2-activity-heading">
+        <h3 id="admin-v2-activity-title">Recent activity</h3>
+        <Link className="button-secondary compact-button" href="/admin/activity">View all</Link>
+      </div>
+      <p className="empty-state">
+        Vendor-scoped activity is not loaded in this workspace yet. Open Activity for the complete audit trail.
+      </p>
     </section>
   );
 }
@@ -697,26 +1104,41 @@ export function EditVendorWorkspace({
   onDeleteImage,
   onCreateDishes,
   onDeleteDish,
+  onRefreshVendors,
 }: Omit<AdminFormProps, "onCreateVendor"> & {
   canDeleteVendor: boolean;
   canReadRatingSignals: boolean;
   isVendorSignalSummaryLoading: boolean;
+  onRefreshVendors: () => void;
   vendorSignalSummary: AdminRatingSignalSummary | null;
   vendorSignalSummaryError: string | null;
 }) {
+  const [activeTab, setActiveTab] = useState<VendorWorkspaceTab>("overview");
   const completenessLabels = useMemo(
     () =>
       getVendorCompletenessLabels({
         hours: vendorHours,
         images: vendorImages,
         dishes: vendorDishes,
-      }),
+    }),
     [vendorDishes, vendorHours, vendorImages],
+  );
+  const completenessItems = useMemo(
+    () =>
+      selectedVendor
+        ? buildCompletenessItems({
+            selectedVendor,
+            vendorDishes,
+            vendorHours,
+            vendorImages,
+          })
+        : [],
+    [selectedVendor, vendorDishes, vendorHours, vendorImages],
   );
 
   if (!selectedVendor) {
     return (
-      <section className="admin-panel" aria-labelledby="edit-vendor-empty">
+      <section className="admin-panel admin-v2-workspace-empty" aria-labelledby="edit-vendor-empty">
         <p className="eyebrow">Edit workspace</p>
         <h2 id="edit-vendor-empty">Select a vendor</h2>
         <p className="empty-state">
@@ -727,84 +1149,74 @@ export function EditVendorWorkspace({
   }
 
   return (
-    <section className="admin-stack">
-      <section className="admin-panel admin-identity-panel" aria-labelledby="edit-vendor-identity">
-        <div className="admin-section-header">
-          <div>
-            <p className="eyebrow">Edit workspace</p>
-            <h2 id="edit-vendor-identity">{selectedVendor.name}</h2>
-          </div>
-          <span>{selectedVendor.slug}</span>
-        </div>
-        <dl className="admin-summary-grid">
-          <div>
-            <dt>Area</dt>
-            <dd>{selectedVendor.area ?? "Area missing"}</dd>
-          </div>
-          <div>
-            <dt>Phone</dt>
-            <dd>{selectedVendor.phone_number ?? "Phone missing"}</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{selectedVendor.is_active ? "Active" : "Inactive"}</dd>
-          </div>
-          <div>
-            <dt>Public page</dt>
-            <dd>/vendors/{selectedVendor.slug}</dd>
-          </div>
-        </dl>
-        {completenessLabels.length > 0 ? (
-          <ul className="admin-completeness-list">
-            {completenessLabels.map((label) => (
-              <li key={label}>{label}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="form-note">This vendor currently has hours, images, and featured dishes.</p>
-        )}
-        {canReadRatingSignals ? (
-          <RatingSignalInsightsPanel
-            error={vendorSignalSummaryError}
-            isLoading={isVendorSignalSummaryLoading}
-            summary={vendorSignalSummary}
-          />
+    <section className="admin-v2-workspace" aria-labelledby="admin-v2-vendor-title">
+      <VendorWorkspaceHeader
+        disabled={disabled}
+        selectedVendor={selectedVendor}
+        vendorImages={vendorImages}
+        onRefreshVendors={onRefreshVendors}
+      />
+      <VendorWorkspaceTabs activeTab={activeTab} onChangeTab={setActiveTab} />
+      <div className="admin-v2-workspace-content">
+        {activeTab === "overview" ? (
+          <>
+            <VendorOverview
+              completenessItems={completenessItems}
+              selectedVendor={selectedVendor}
+              vendorDishes={vendorDishes}
+              vendorHours={vendorHours}
+              vendorImages={vendorImages}
+            />
+            <div className="admin-v2-lower-grid">
+              {canReadRatingSignals ? (
+                <VendorSignals
+                  error={vendorSignalSummaryError}
+                  isLoading={isVendorSignalSummaryLoading}
+                  summary={vendorSignalSummary}
+                />
+              ) : (
+                <section className="admin-v2-card" aria-labelledby="admin-v2-signals-locked">
+                  <h3 id="admin-v2-signals-locked">Operational signals</h3>
+                  <p className="empty-state">You do not have permission to view signal aggregates.</p>
+                </section>
+              )}
+              <VendorActivity />
+            </div>
+          </>
         ) : null}
-        <nav className="admin-section-tabs" aria-label="Vendor edit sections">
-          <a href="#edit-basic-details">Basic details</a>
-          <a href="#edit-hours">Hours</a>
-          <a href="#edit-dishes">Featured dishes</a>
-          <a href="#edit-images">Images</a>
-        </nav>
-      </section>
 
-      <div className="admin-edit-sections">
-        <div id="edit-basic-details">
-          <UpdateVendorSection
-            canDeleteVendor={canDeleteVendor}
-            disabled={disabled}
-            onDeactivateVendor={onDeactivateVendor}
-            onUpdateVendor={onUpdateVendor}
-            selectedVendor={selectedVendor}
-            completenessLabels={completenessLabels}
-          />
-        </div>
-        <div id="edit-hours">
-          <VendorHoursSection
-            key={`${selectedVendor.id}:${vendorHours
-              .map(
-                (hours) =>
-                  `${hours.day_of_week}:${hours.open_time ?? "closed"}:${hours.close_time ?? "closed"}:${hours.is_closed}`,
-              )
-              .join("|")}`}
-            disabled={disabled}
-            selectedVendor={selectedVendor}
-            vendorHours={vendorHours}
-            onReplaceHours={onReplaceHours}
-          />
-        </div>
-        <div className="admin-edit-split">
-          <div id="edit-dishes">
+        {activeTab === "details" ? (
+          <div id="edit-basic-details" className="admin-v2-section-panel">
+            <UpdateVendorSection
+              canDeleteVendor={canDeleteVendor}
+              disabled={disabled}
+              onDeactivateVendor={onDeactivateVendor}
+              onUpdateVendor={onUpdateVendor}
+              selectedVendor={selectedVendor}
+              completenessLabels={completenessLabels}
+            />
+          </div>
+        ) : null}
+
+        {activeTab === "hours" ? (
+          <div id="edit-hours" className="admin-v2-section-panel">
+            <VendorHoursSection
+              key={`${selectedVendor.id}:${vendorHours
+                .map(
+                  (hours) =>
+                    `${hours.day_of_week}:${hours.open_time ?? "closed"}:${hours.close_time ?? "closed"}:${hours.is_closed}`,
+                )
+                .join("|")}`}
+              disabled={disabled}
+              selectedVendor={selectedVendor}
+              vendorHours={vendorHours}
+              onReplaceHours={onReplaceHours}
+            />
+          </div>
+        ) : null}
+
+        {activeTab === "dishes" ? (
+          <div id="edit-dishes" className="admin-v2-section-panel">
             <FeaturedDishesSection
               disabled={disabled}
               selectedVendor={selectedVendor}
@@ -813,7 +1225,10 @@ export function EditVendorWorkspace({
               onDeleteDish={onDeleteDish}
             />
           </div>
-          <div id="edit-images">
+        ) : null}
+
+        {activeTab === "images" ? (
+          <div id="edit-images" className="admin-v2-section-panel">
             <VendorImagesSection
               key={`vendor-images:${selectedVendor.id}`}
               disabled={disabled}
@@ -823,7 +1238,30 @@ export function EditVendorWorkspace({
               onDeleteImage={onDeleteImage}
             />
           </div>
-        </div>
+        ) : null}
+
+        {activeTab === "signals" ? (
+          <div className="admin-v2-section-panel">
+            {canReadRatingSignals ? (
+              <RatingSignalInsightsPanel
+                error={vendorSignalSummaryError}
+                isLoading={isVendorSignalSummaryLoading}
+                summary={vendorSignalSummary}
+              />
+            ) : (
+              <section className="admin-panel">
+                <h2>Operational signals</h2>
+                <p className="empty-state">You do not have permission to view signal aggregates.</p>
+              </section>
+            )}
+          </div>
+        ) : null}
+
+        {activeTab === "activity" ? (
+          <div className="admin-v2-section-panel">
+            <VendorActivity />
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1309,7 +1747,7 @@ function CreateVendorIdentityFields({
           </span>
           <input
             name="name"
-            placeholder="Vendor name"
+            placeholder="Enter vendor name"
             required
             value={name}
             onChange={(event) => handleNameChange(event.target.value)}
@@ -1332,7 +1770,7 @@ function CreateVendorIdentityFields({
             autoComplete="off"
             name="slug"
             pattern={slugPattern.source}
-            placeholder="Generated from name"
+            placeholder="Auto-generated from name"
             title="Use lowercase words separated by hyphens."
             required
             spellCheck={false}
@@ -1351,7 +1789,7 @@ function CreateVendorIdentityFields({
             Category <span className="field-required" aria-hidden="true">*</span>
           </span>
           <select defaultValue="" name="category_slug" required>
-            <option value="">Select</option>
+            <option value="">Select category</option>
             {vendorCategories.map((category) => (
               <option key={category.id} value={category.slug}>
                 {category.name}
@@ -1368,7 +1806,7 @@ function CreateVendorIdentityFields({
         </label>
         <label className="field">
           <span>Phone</span>
-          <input autoComplete="tel" inputMode="tel" name="phone_number" placeholder="+234..." />
+          <input autoComplete="tel" inputMode="tel" name="phone_number" placeholder="+234 801 234 5678" />
           <span className="field-hint">Use international format if available.</span>
           {fieldErrors.phone_number ? (
             <span className="field-error">{fieldErrors.phone_number}</span>
@@ -1412,7 +1850,7 @@ function CreateVendorIdentityFields({
             Price band <span className="field-required" aria-hidden="true">*</span>
           </span>
           <select name="price_band" required>
-            <option value="">Select</option>
+            <option value="">Select price band</option>
             {priceBands.map((band) => (
               <option key={band} value={band}>
                 {band}
@@ -1435,7 +1873,7 @@ function CreateVendorIdentityFields({
           </span>
           <input
             name="latitude"
-            placeholder="9.0813"
+            placeholder="e.g. 9.0813"
             inputMode="decimal"
             min={-90}
             max={90}
@@ -1455,7 +1893,7 @@ function CreateVendorIdentityFields({
           </span>
           <input
             name="longitude"
-            placeholder="7.4694"
+            placeholder="e.g. 7.4694"
             inputMode="decimal"
             min={-180}
             max={180}
@@ -1472,11 +1910,22 @@ function CreateVendorIdentityFields({
       </div>
       <label className="field field-wide">
         <span>Short description</span>
-        <textarea name="short_description" placeholder="Short food or vendor cue" rows={3} />
+        <textarea name="short_description" placeholder="Describe the vendor or what they offer..." rows={3} />
         {fieldErrors.short_description ? (
           <span className="field-error">{fieldErrors.short_description}</span>
         ) : null}
       </label>
+    </>
+  );
+}
+
+function CreateVendorAddressFields({
+  fieldErrors,
+}: {
+  fieldErrors: AdminVendorFieldErrors;
+}) {
+  return (
+    <>
       <label className="field field-wide">
         <span>Address</span>
         <input name="address_text" placeholder="Street address" />

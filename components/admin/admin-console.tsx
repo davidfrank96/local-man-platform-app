@@ -33,6 +33,7 @@ import { useAdminSession } from "./admin-session-provider.tsx";
 import {
   VendorCsvUploadPanel,
 } from "./admin-vendor-intake.tsx";
+import { AdminIcon } from "./admin-icons.tsx";
 import {
   AdminCreateVendorSection,
   EditVendorWorkspace,
@@ -40,6 +41,7 @@ import {
   VendorRegistryList,
 } from "./admin-vendor-workspace-sections.tsx";
 import { AdminScrollPanel } from "./admin-scroll-panel.tsx";
+import { AdminDashboard } from "./admin-dashboard.tsx";
 import {
   fetchPublicCategories,
   type PublicCategory,
@@ -61,7 +63,6 @@ import type {
   VendorImage,
 } from "../../types/index.ts";
 import {
-  getAdminRoleLabel,
   hasAdminPermission,
 } from "../../lib/admin/rbac.ts";
 import {
@@ -245,6 +246,7 @@ export function AdminConsole({
   // These flags shape the visible workspace only. Any restricted read or
   // mutation still has to survive backend RBAC checks on `/api/admin/**`.
   const canReadAnalytics = hasAdminPermission(role, "analytics:read");
+  const canReadPlatformLogs = hasAdminPermission(role, "platform_logs:read");
   const canManageAdminUsers = hasAdminPermission(role, "admin_users:manage");
   const canDeleteVendor = hasAdminPermission(role, "vendor:delete");
 
@@ -632,6 +634,17 @@ export function AdminConsole({
     void refreshVendors(nextFilters);
   }
 
+  function changeVendorPage(offset: number) {
+    const nextFilters: AdminVendorFilters = {
+      ...filters,
+      limit: filters.limit ?? 100,
+      offset: Math.max(0, offset),
+    };
+
+    setFilters(nextFilters);
+    void refreshVendors(nextFilters);
+  }
+
   async function handleCreateVendor(
     data: CreateManagedVendorRequest,
     options?: {
@@ -866,129 +879,51 @@ export function AdminConsole({
 
   return (
     <div className={`admin-console admin-console-${mode}`}>
-      <section className={`admin-panel admin-status-panel admin-status-panel-${statusTone}`} aria-live="polite">
-        <div className="admin-status-heading">
-          <p className="eyebrow">Status</p>
-          <h2>{isLoading ? "Working" : "Ready"}</h2>
-        </div>
-        <p className="admin-status-copy">{status}</p>
-        <div className="action-row">
-          <button
-            className="button-secondary"
-            disabled={isLoading}
-            type="button"
-            onClick={() => void refreshVendors()}
-          >
-            Refresh vendors
-          </button>
-          <button className="button-secondary" type="button" onClick={() => void signOut()}>
-            Log out
-          </button>
-        </div>
-      </section>
+      {mode === "dashboard" ? null : (
+        <section className={`admin-panel admin-status-panel admin-status-panel-${statusTone}`} aria-live="polite">
+          <span className="admin-status-icon" aria-hidden="true">
+            <AdminIcon name={statusTone === "error" ? "activity" : "shield"} />
+          </span>
+          <div className="admin-status-heading">
+            <p className="eyebrow">Status</p>
+            <h2>{isLoading ? "Working" : "Ready"}</h2>
+          </div>
+          <p className="admin-status-copy">{status}</p>
+          <div className="action-row">
+            <button
+              className="button-secondary"
+              disabled={isLoading}
+              type="button"
+              onClick={() => void refreshVendors()}
+            >
+              <AdminIcon name="refresh" />
+              Refresh vendors
+            </button>
+            <button className="button-secondary" type="button" onClick={() => void signOut()}>
+              Log out
+            </button>
+          </div>
+        </section>
+      )}
 
       {mode === "dashboard" ? (
-        <>
-          <section className="admin-overview-grid" aria-label="Admin overview">
-            <article className="admin-metric-panel">
-              <span>Total vendors</span>
-              <strong>{totalVendorCount}</strong>
-              <small>{loadedVendorSummary}</small>
-            </article>
-            <article className="admin-metric-panel">
-              <span>Active vendors</span>
-              <strong>{dashboardMetricCounts.active_vendor_count}</strong>
-              <small>Available to users</small>
-            </article>
-            <article className="admin-metric-panel">
-              <span>Missing hours</span>
-              <strong>{dashboardMetricCounts.missing_hours_count}</strong>
-              <small>Need schedule completion</small>
-            </article>
-            <article className="admin-metric-panel">
-              <span>Missing images</span>
-              <strong>{dashboardMetricCounts.missing_images_count}</strong>
-              <small>Need profile media</small>
-            </article>
-            <article className="admin-metric-panel">
-              <span>Missing dishes</span>
-              <strong>{dashboardMetricCounts.missing_dishes_count}</strong>
-              <small>Need menu highlights</small>
-            </article>
-          </section>
-
-          <section className="admin-grid admin-grid-dashboard">
-            <div className="admin-stack">
-              <section className="admin-panel" aria-labelledby="admin-dashboard-actions">
-                <div className="admin-section-header">
-                  <div>
-                    <p className="eyebrow">Quick actions</p>
-                    <h2 id="admin-dashboard-actions">Next actions</h2>
-                  </div>
-                </div>
-                <div className="admin-action-cards">
-                  <Link className="admin-action-card" href="/admin/vendors/new">
-                    <strong>Create vendor</strong>
-                    <span>Add a new vendor record and acknowledge any missing data intentionally.</span>
-                  </Link>
-                  <Link className="admin-action-card" href="/admin/vendors">
-                    <strong>Manage vendors</strong>
-                    <span>Search the registry, inspect completeness, and open edit workspaces.</span>
-                  </Link>
-                  <Link className="admin-action-card" href="/admin/vendors">
-                    <strong>Review incomplete vendors</strong>
-                    <span>Focus on vendors still missing hours, images, or featured dishes.</span>
-                  </Link>
-                  {canReadAnalytics ? (
-                    <Link className="admin-action-card" href="/admin/analytics">
-                      <strong>Review analytics</strong>
-                      <span>Inspect usage signals, drop-off, and vendor engagement.</span>
-                    </Link>
-                  ) : null}
-                  {canManageAdminUsers ? (
-                    <Link className="admin-action-card" href="/admin/team">
-                      <strong>Manage team access</strong>
-                      <span>Create admin or agent accounts and keep roles explicit.</span>
-                    </Link>
-                  ) : null}
-                </div>
-              </section>
-
-              <section className="admin-panel" aria-labelledby="admin-dashboard-role">
-                <div className="admin-section-header">
-                  <div>
-                    <p className="eyebrow">Current role</p>
-                    <h2 id="admin-dashboard-role">{getAdminRoleLabel(role)}</h2>
-                  </div>
-                </div>
-                <p className="form-note">
-                  {role === "admin"
-                    ? "Full access: vendor operations, analytics, and team access management."
-                    : "Restricted access: vendor creation and editing only. Analytics and team access are hidden and blocked server-side."}
-                </p>
-              </section>
-            </div>
-
-            <section className="admin-panel" aria-labelledby="admin-dashboard-incomplete">
-              <div className="admin-section-header">
-                <div>
-                  <p className="eyebrow">Incomplete vendors</p>
-                  <h2 id="admin-dashboard-incomplete">Needs follow-up</h2>
-                </div>
-                <span>{dashboardMetricCounts.needs_follow_up_count} vendors</span>
-              </div>
-              <AdminScrollPanel className="admin-scroll-panel-vendors-compact" ariaLabelledBy="admin-dashboard-incomplete">
-                <VendorRegistryList
-                  vendors={incompleteVendors}
-                  selectedVendorId={selectedVendorId}
-                  onSelectVendor={setSelectedVendorId}
-                  emptyMessage="All loaded vendors have hours, images, and featured dishes."
-                  compact
-                />
-              </AdminScrollPanel>
-            </section>
-          </section>
-        </>
+        <AdminDashboard
+          canManageAdminUsers={canManageAdminUsers}
+          canReadAnalytics={canReadAnalytics}
+          canReadPlatformLogs={canReadPlatformLogs}
+          dashboardMetricCounts={dashboardMetricCounts}
+          incompleteVendors={incompleteVendors}
+          isLoading={isLoading}
+          loadedVendorSummary={loadedVendorSummary}
+          role={role}
+          selectedVendorId={selectedVendorId}
+          status={status}
+          statusTone={statusTone}
+          totalVendorCount={totalVendorCount}
+          vendorsLoadedCount={vendors.length}
+          onRefreshVendors={() => void refreshVendors()}
+          onSelectVendor={setSelectedVendorId}
+        />
       ) : null}
 
       {mode === "agent" ? (
@@ -1080,6 +1015,7 @@ export function AdminConsole({
             selectedVendorId={selectedVendorId}
             totalCount={vendorTotalCount}
             vendors={vendors}
+            onChangePage={changeVendorPage}
             onSelectVendor={setSelectedVendorId}
             onSubmitFilters={submitFilters}
           />
@@ -1136,22 +1072,43 @@ export function AdminConsole({
             onCreateVendor={handleCreateVendor}
             vendorCategories={vendorCategories}
           />
-          <div className="admin-stack">
+          <aside className="admin-stack admin-create-operational-sidebar" aria-label="Create vendor operations">
             <VendorCsvUploadPanel
               disabled={isLoading}
               onVendorsUploaded={handleIntakeVendorsUploaded}
             />
-            <section className="admin-panel" aria-labelledby="create-vendor-guidance">
+            <section className="admin-panel admin-create-workflow-card" aria-labelledby="create-vendor-guidance">
               <p className="eyebrow">Workflow</p>
               <h2 id="create-vendor-guidance">Create flow</h2>
-              <ul className="admin-guidance-list">
-                <li>Basic vendor identity is created first.</li>
-                <li>Hours, images, and featured dishes can be added immediately after creation.</li>
-                <li>Missing-data acknowledgements prevent accidental incomplete records.</li>
-                <li>Uploaded vendor images appear on the public vendor profile, not on dish cards.</li>
-              </ul>
+              <ol className="admin-create-flow-list">
+                <li>
+                  <span aria-hidden="true">1</span>
+                  <div>
+                    <strong>Basic details</strong>
+                    <p>Vendor identity is created first.</p>
+                  </div>
+                </li>
+                <li>
+                  <span aria-hidden="true">2</span>
+                  <div>
+                    <strong>Hours, dishes, images</strong>
+                    <p>Add operating hours, featured dishes, and vendor images.</p>
+                  </div>
+                </li>
+                <li>
+                  <span aria-hidden="true">3</span>
+                  <div>
+                    <strong>Review &amp; publish</strong>
+                    <p>Acknowledge missing data and publish when ready.</p>
+                  </div>
+                </li>
+              </ol>
+              <div className="admin-create-guidance-note">
+                <AdminIcon name="activity" />
+                <span>Missing-data acknowledgements prevent accidental incomplete records.</span>
+              </div>
             </section>
-          </div>
+          </aside>
         </section>
       ) : null}
 
@@ -1163,6 +1120,7 @@ export function AdminConsole({
             selectedVendorId={selectedVendorId}
             totalCount={vendorTotalCount}
             vendors={vendors}
+            onChangePage={changeVendorPage}
             onSelectVendor={setSelectedVendorId}
             onSubmitFilters={submitFilters}
           />
@@ -1181,6 +1139,7 @@ export function AdminConsole({
             onUpdateVendor={handleUpdateVendor}
             onDeactivateVendor={handleDeactivateVendor}
             onReplaceHours={handleReplaceHours}
+            onRefreshVendors={() => void refreshVendors()}
             onCreateImages={handleCreateImages}
             onDeleteImage={handleDeleteImage}
             onCreateDishes={handleCreateDishes}

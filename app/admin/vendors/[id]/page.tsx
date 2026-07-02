@@ -16,6 +16,7 @@ export default async function AdminVendorEditPage({
   return (
     <AdminRouteGuard>
       <AdminShell
+        hideWorkspaceHeader
         title="Edit vendor"
         intro="Manage one vendor across details, hours, featured dishes, and profile images from a dedicated editing workspace."
       >

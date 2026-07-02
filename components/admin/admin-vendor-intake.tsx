@@ -19,6 +19,7 @@ import {
 import { createCsvText, parseCsvText } from "../../lib/csv.ts";
 import { handleAppError, showToast } from "../../lib/errors/ui-error.ts";
 import { useModalFocusTrap } from "../public/use-modal-focus-trap.ts";
+import { AdminIcon } from "./admin-icons.tsx";
 
 type CreatedVendorSummary = {
   id: string;
@@ -528,7 +529,8 @@ export function VendorCsvUploadPanel({
         Validate all rows first, then upload only the valid rows. This template creates full vendor records, including weekly hours, featured dishes, and remote image URLs.
       </p>
       <div className="action-row">
-        <button className="button-secondary" type="button" onClick={downloadTemplate}>
+        <button className="button-secondary admin-create-template-button" type="button" onClick={downloadTemplate}>
+          <AdminIcon name="arrow-right" />
           Download CSV template
         </button>
       </div>

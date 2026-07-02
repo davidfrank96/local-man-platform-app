@@ -217,6 +217,8 @@ Block on skipped onboarding phases, invalid phone, invalid coordinates, unreview
 
 Verify:
 
+- Admin Shell v2 visual alignment across authentication, dashboard, vendor workspace, create vendor, Rider Connect, analytics, activity, logs, and team access
+- desktop, tablet, and mobile admin layouts have no horizontal overflow, clipped controls, overlapping cards, or hidden critical actions
 - admin login persistent protection evaluates before Supabase password grant
 - login success still sets HttpOnly admin cookies
 - invalid login attempts create persisted security events
@@ -249,6 +251,11 @@ Verify:
 - edit workspace remounts or resets on selected vendor id change
 - image upload targets the current selected vendor id
 - save path submits the current selected vendor identity
+- Rider Connect manual intake is visible by default and does not require an `Add Rider` pre-step
+- Rider Connect duplicate phone/WhatsApp conflicts remain visible and do not create duplicate profiles
+- Rider Connect verification, visibility, consent, structured availability, contact counts, and unavailable-report counts remain reviewable
+- operational telemetry, audit logging, structured logging, runtime diagnostics, security monitoring, migration warnings, and database consistency warnings remain visible and non-blocking where designed
+- visual redesigns must not disable or suppress authentication errors, validation errors, rate-limit errors, session errors, warning banners, status indicators, developer diagnostics, or production-safe error reporting
 
 Block on runtime errors or broken admin navigation.
 

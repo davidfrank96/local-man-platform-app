@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { AppShell } from "../components/system/app-shell.tsx";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
+import "./admin-rider-workspace.css";
 
 export const metadata: Metadata = {
   title: "The Local Man",
