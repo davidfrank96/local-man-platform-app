@@ -387,17 +387,13 @@ export function AdminCreateVendorSection({
   }
 
   return (
-    <section className="admin-panel" aria-labelledby="create-vendor">
-      <p className="eyebrow">Create vendor</p>
-      <h2 id="create-vendor">New vendor</h2>
-      <p className="form-note">Add the vendor&apos;s basic details, hours, featured dishes, and images.</p>
-      <form className="admin-form" onSubmit={submitCreateVendor}>
-        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-basic-details">
-          <div className="admin-section-header">
-            <div>
-              <p className="eyebrow">Section 1</p>
-              <h3 id="create-basic-details">Basic details</h3>
-            </div>
+    <section className="admin-panel admin-create-workspace-card" aria-labelledby="create-basic-details">
+      <form className="admin-form admin-create-workspace-form" onSubmit={submitCreateVendor}>
+        <section className="admin-subsection admin-create-section-card admin-create-basic-card" aria-labelledby="create-basic-details">
+          <div className="admin-create-section-heading">
+            <p className="eyebrow">Section 1 of 4</p>
+            <h2 id="create-basic-details">Basic details</h2>
+            <p className="form-note">Add the vendor&apos;s core identity information.</p>
           </div>
           <CreateVendorIdentityFields
             vendorCategories={vendorCategories}
@@ -413,12 +409,84 @@ export function AdminCreateVendorSection({
                 name: value,
               }))}
           />
+
+          <div className="admin-create-acknowledgement-card" aria-label="Missing linked data acknowledgements">
+            <p className="eyebrow">Linked data</p>
+            <p className="form-note">Acknowledge anything that will be completed after the base vendor record is created.</p>
+            <div className="admin-create-acknowledgement-grid">
+              <label className="checkbox-field">
+                <input
+                  checked={createSummary.missingHoursAcknowledged}
+                  name="missing-hours-acknowledged"
+                  type="checkbox"
+                  onChange={(event) =>
+                    setCreateSummary((current) => ({
+                      ...current,
+                      missingHoursAcknowledged: event.target.checked,
+                    }))}
+                />
+                <span>Hours will be added later.</span>
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={createSummary.missingFeaturedDishesAcknowledged}
+                  name="missing-featured-dishes-acknowledged"
+                  type="checkbox"
+                  onChange={(event) =>
+                    setCreateSummary((current) => ({
+                      ...current,
+                      missingFeaturedDishesAcknowledged: event.target.checked,
+                    }))}
+                />
+                <span>Featured dishes will be added later.</span>
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={createSummary.missingImagesAcknowledged}
+                  name="missing-images-acknowledged"
+                  type="checkbox"
+                  onChange={(event) =>
+                    setCreateSummary((current) => ({
+                      ...current,
+                      missingImagesAcknowledged: event.target.checked,
+                    }))}
+                />
+                <span>Vendor images will be added later.</span>
+              </label>
+            </div>
+            {createIntentErrors.hours ? <span className="field-error">{createIntentErrors.hours}</span> : null}
+            {createIntentErrors.featured_dishes ? (
+              <span className="field-error">{createIntentErrors.featured_dishes}</span>
+            ) : null}
+            {createIntentErrors.images ? <span className="field-error">{createIntentErrors.images}</span> : null}
+          </div>
+
+          <div className="admin-create-form-actions">
+            <Link className="button-secondary" href="/admin/vendors">
+              Cancel
+            </Link>
+            <button className="button-primary" disabled={disabled} type="submit">
+              <span>Save &amp; continue</span>
+              <AdminIcon name="arrow-right" />
+            </button>
+          </div>
+        </section>
+
+        <section className="admin-create-linked-data-stack" aria-label="Optional linked vendor data">
+        <section className="admin-subsection admin-create-section-card" aria-labelledby="create-address-details">
+          <div className="admin-section-header">
+            <div>
+              <p className="eyebrow">Location details</p>
+              <h3 id="create-address-details">Address defaults</h3>
+            </div>
+          </div>
+          <CreateVendorAddressFields fieldErrors={createFieldErrors} />
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-hours">
           <div className="admin-section-header">
             <div>
-              <p className="eyebrow">Section 2</p>
+              <p className="eyebrow">Linked data</p>
               <h3 id="create-hours">Opening hours</h3>
             </div>
           </div>
@@ -469,26 +537,12 @@ export function AdminCreateVendorSection({
             ))}
           </div>
           <span className="field-hint">Use format like 9 AM or 8:30 PM.</span>
-          <label className="checkbox-field">
-            <input
-              checked={createSummary.missingHoursAcknowledged}
-              name="missing-hours-acknowledged"
-              type="checkbox"
-              onChange={(event) =>
-                setCreateSummary((current) => ({
-                  ...current,
-                  missingHoursAcknowledged: event.target.checked,
-                }))}
-            />
-            <span>I do not have this vendor&apos;s opening hours yet.</span>
-          </label>
-          {createIntentErrors.hours ? <span className="field-error">{createIntentErrors.hours}</span> : null}
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-dishes">
           <div className="admin-section-header">
             <div>
-              <p className="eyebrow">Section 3</p>
+              <p className="eyebrow">Linked data</p>
               <h3 id="create-dishes">Featured dishes</h3>
             </div>
             <span>{dishRows.filter((dish) => dish.dish_name.trim().length > 0).length} ready</span>
@@ -574,28 +628,12 @@ export function AdminCreateVendorSection({
               Add another dish
             </button>
           </div>
-          <label className="checkbox-field">
-            <input
-              checked={createSummary.missingFeaturedDishesAcknowledged}
-              name="missing-featured-dishes-acknowledged"
-              type="checkbox"
-              onChange={(event) =>
-                setCreateSummary((current) => ({
-                  ...current,
-                  missingFeaturedDishesAcknowledged: event.target.checked,
-                }))}
-            />
-            <span>I do not have featured dishes yet.</span>
-          </label>
-          {createIntentErrors.featured_dishes ? (
-            <span className="field-error">{createIntentErrors.featured_dishes}</span>
-          ) : null}
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-images">
           <div className="admin-section-header">
             <div>
-              <p className="eyebrow">Section 4</p>
+              <p className="eyebrow">Linked data</p>
               <h3 id="create-images">Vendor images</h3>
             </div>
           </div>
@@ -630,20 +668,6 @@ export function AdminCreateVendorSection({
               <span>{pendingCreateVendorImageName ?? "Selected image preview"}</span>
             </div>
           ) : null}
-          <label className="checkbox-field">
-            <input
-              checked={createSummary.missingImagesAcknowledged}
-              name="missing-images-acknowledged"
-              type="checkbox"
-              onChange={(event) =>
-                setCreateSummary((current) => ({
-                  ...current,
-                  missingImagesAcknowledged: event.target.checked,
-                }))}
-            />
-            <span>I do not have vendor images yet.</span>
-          </label>
-          {createIntentErrors.images ? <span className="field-error">{createIntentErrors.images}</span> : null}
         </section>
 
         <section className="admin-subsection admin-create-section-card" aria-labelledby="create-review">
@@ -706,9 +730,7 @@ export function AdminCreateVendorSection({
             </div>
           </dl>
         </section>
-        <button className="button-primary" disabled={disabled} type="submit">
-          Create vendor
-        </button>
+        </section>
       </form>
     </section>
   );
@@ -1725,7 +1747,7 @@ function CreateVendorIdentityFields({
           </span>
           <input
             name="name"
-            placeholder="Vendor name"
+            placeholder="Enter vendor name"
             required
             value={name}
             onChange={(event) => handleNameChange(event.target.value)}
@@ -1748,7 +1770,7 @@ function CreateVendorIdentityFields({
             autoComplete="off"
             name="slug"
             pattern={slugPattern.source}
-            placeholder="Generated from name"
+            placeholder="Auto-generated from name"
             title="Use lowercase words separated by hyphens."
             required
             spellCheck={false}
@@ -1767,7 +1789,7 @@ function CreateVendorIdentityFields({
             Category <span className="field-required" aria-hidden="true">*</span>
           </span>
           <select defaultValue="" name="category_slug" required>
-            <option value="">Select</option>
+            <option value="">Select category</option>
             {vendorCategories.map((category) => (
               <option key={category.id} value={category.slug}>
                 {category.name}
@@ -1784,7 +1806,7 @@ function CreateVendorIdentityFields({
         </label>
         <label className="field">
           <span>Phone</span>
-          <input autoComplete="tel" inputMode="tel" name="phone_number" placeholder="+234..." />
+          <input autoComplete="tel" inputMode="tel" name="phone_number" placeholder="+234 801 234 5678" />
           <span className="field-hint">Use international format if available.</span>
           {fieldErrors.phone_number ? (
             <span className="field-error">{fieldErrors.phone_number}</span>
@@ -1828,7 +1850,7 @@ function CreateVendorIdentityFields({
             Price band <span className="field-required" aria-hidden="true">*</span>
           </span>
           <select name="price_band" required>
-            <option value="">Select</option>
+            <option value="">Select price band</option>
             {priceBands.map((band) => (
               <option key={band} value={band}>
                 {band}
@@ -1851,7 +1873,7 @@ function CreateVendorIdentityFields({
           </span>
           <input
             name="latitude"
-            placeholder="9.0813"
+            placeholder="e.g. 9.0813"
             inputMode="decimal"
             min={-90}
             max={90}
@@ -1871,7 +1893,7 @@ function CreateVendorIdentityFields({
           </span>
           <input
             name="longitude"
-            placeholder="7.4694"
+            placeholder="e.g. 7.4694"
             inputMode="decimal"
             min={-180}
             max={180}
@@ -1888,11 +1910,22 @@ function CreateVendorIdentityFields({
       </div>
       <label className="field field-wide">
         <span>Short description</span>
-        <textarea name="short_description" placeholder="Short food or vendor cue" rows={3} />
+        <textarea name="short_description" placeholder="Describe the vendor or what they offer..." rows={3} />
         {fieldErrors.short_description ? (
           <span className="field-error">{fieldErrors.short_description}</span>
         ) : null}
       </label>
+    </>
+  );
+}
+
+function CreateVendorAddressFields({
+  fieldErrors,
+}: {
+  fieldErrors: AdminVendorFieldErrors;
+}) {
+  return (
+    <>
       <label className="field field-wide">
         <span>Address</span>
         <input name="address_text" placeholder="Street address" />

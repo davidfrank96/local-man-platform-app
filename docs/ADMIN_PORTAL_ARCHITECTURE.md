@@ -707,6 +707,13 @@ Current implementation note:
 - The admin shell page heading is visually hidden on vendor workspace routes to match the operations workspace layout while preserving an accessible `h1`.
 - Presentation changes must not modify vendor API behavior, search, discovery, import, map, audit logging, or authentication.
 
+Create vendor implementation note:
+
+- `/admin/vendors/new` uses the same Admin Shell and status banner as the rest of the operations workspace.
+- The create workspace is a guided two-column onboarding surface: the primary column captures the base vendor identity, area, coordinates, contact, and description, while the operational sidebar keeps CSV upload and workflow guidance visible on desktop.
+- Address defaults, opening hours, featured dishes, images, and review data remain in the existing form payload and validation path below the primary identity card.
+- The redesign is presentation-only; vendor creation, CSV preview/upload, validation, audit logging, RBAC, session governance, and operational telemetry continue to use the existing API contracts.
+
 ### 14.3 Media Management
 
 Purpose:

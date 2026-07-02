@@ -33,6 +33,7 @@ import { useAdminSession } from "./admin-session-provider.tsx";
 import {
   VendorCsvUploadPanel,
 } from "./admin-vendor-intake.tsx";
+import { AdminIcon } from "./admin-icons.tsx";
 import {
   AdminCreateVendorSection,
   EditVendorWorkspace,
@@ -880,6 +881,9 @@ export function AdminConsole({
     <div className={`admin-console admin-console-${mode}`}>
       {mode === "dashboard" ? null : (
         <section className={`admin-panel admin-status-panel admin-status-panel-${statusTone}`} aria-live="polite">
+          <span className="admin-status-icon" aria-hidden="true">
+            <AdminIcon name={statusTone === "error" ? "activity" : "shield"} />
+          </span>
           <div className="admin-status-heading">
             <p className="eyebrow">Status</p>
             <h2>{isLoading ? "Working" : "Ready"}</h2>
@@ -892,6 +896,7 @@ export function AdminConsole({
               type="button"
               onClick={() => void refreshVendors()}
             >
+              <AdminIcon name="refresh" />
               Refresh vendors
             </button>
             <button className="button-secondary" type="button" onClick={() => void signOut()}>
@@ -1067,22 +1072,43 @@ export function AdminConsole({
             onCreateVendor={handleCreateVendor}
             vendorCategories={vendorCategories}
           />
-          <div className="admin-stack">
+          <aside className="admin-stack admin-create-operational-sidebar" aria-label="Create vendor operations">
             <VendorCsvUploadPanel
               disabled={isLoading}
               onVendorsUploaded={handleIntakeVendorsUploaded}
             />
-            <section className="admin-panel" aria-labelledby="create-vendor-guidance">
+            <section className="admin-panel admin-create-workflow-card" aria-labelledby="create-vendor-guidance">
               <p className="eyebrow">Workflow</p>
               <h2 id="create-vendor-guidance">Create flow</h2>
-              <ul className="admin-guidance-list">
-                <li>Basic vendor identity is created first.</li>
-                <li>Hours, images, and featured dishes can be added immediately after creation.</li>
-                <li>Missing-data acknowledgements prevent accidental incomplete records.</li>
-                <li>Uploaded vendor images appear on the public vendor profile, not on dish cards.</li>
-              </ul>
+              <ol className="admin-create-flow-list">
+                <li>
+                  <span aria-hidden="true">1</span>
+                  <div>
+                    <strong>Basic details</strong>
+                    <p>Vendor identity is created first.</p>
+                  </div>
+                </li>
+                <li>
+                  <span aria-hidden="true">2</span>
+                  <div>
+                    <strong>Hours, dishes, images</strong>
+                    <p>Add operating hours, featured dishes, and vendor images.</p>
+                  </div>
+                </li>
+                <li>
+                  <span aria-hidden="true">3</span>
+                  <div>
+                    <strong>Review &amp; publish</strong>
+                    <p>Acknowledge missing data and publish when ready.</p>
+                  </div>
+                </li>
+              </ol>
+              <div className="admin-create-guidance-note">
+                <AdminIcon name="activity" />
+                <span>Missing-data acknowledgements prevent accidental incomplete records.</span>
+              </div>
             </section>
-          </div>
+          </aside>
         </section>
       ) : null}
 
